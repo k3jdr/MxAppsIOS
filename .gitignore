@@ -1,0 +1,6 @@
+## Ignore Eclipse Workspace Meta Data
+.metadata/
+log
+DerivedData/
+.DS_Store
+xc*serdata/
