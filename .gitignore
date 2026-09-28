@@ -4,3 +4,6 @@ log
 DerivedData/
 .DS_Store
 xc*serdata/
+
+## MxDataSRM workspaces (connection details)
+*.mxworkspace
