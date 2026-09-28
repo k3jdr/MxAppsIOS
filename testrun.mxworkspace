@@ -9,7 +9,7 @@
   },
   "formatVersion" : 1,
   "selectedTable" : {
-    "name" : "gicscodes",
+    "name" : "companies_lei_match",
     "schema" : "public"
   },
   "view" : {

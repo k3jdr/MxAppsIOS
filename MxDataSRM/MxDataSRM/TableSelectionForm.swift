@@ -64,6 +64,9 @@ struct TableSelectionForm: View {
                 Text("\(session.filteredTables.count) tables")
                     .foregroundStyle(.secondary)
                 Spacer()
+                Toggle("Open in New Window", isOn: $session.openInNewWindow)
+                    .toggleStyle(.checkbox)
+                    .help("Open the table in its own window, with its own connection")
                 Button("Open Table") { open(session.highlightedTableID) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(session.highlightedTableID == nil)
@@ -86,6 +89,7 @@ struct TableSelectionForm: View {
                     .padding(12)
             }
         }
+        .defaultScrollAnchor(.topLeading)
         .background(Color(nsColor: .textBackgroundColor))
     }
 

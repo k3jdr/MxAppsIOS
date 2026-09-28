@@ -35,6 +35,8 @@ final class WorkspaceSession {
     var highlightedTableID: TableSummary.ID?
     var highlightedDescription: TableDescription?
     var countingRows = false
+    /// DB Table Selection: open tables in their own window instead of the DB Table form.
+    var openInNewWindow = false
 
     var grid: GridData?
     var edits: [CellKey: CellEdit] = [:]

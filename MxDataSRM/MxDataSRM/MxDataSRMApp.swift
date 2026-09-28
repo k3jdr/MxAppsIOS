@@ -21,6 +21,15 @@ struct MxDataSRMApp: App {
         .commands {
             TableCommands()
         }
+
+        // Tables opened with "Open in New Window". Not restored at launch: they need the
+        // workspace's connection and password, which are only handed over in memory.
+        WindowGroup("Table", for: TableWindowID.self) { $id in
+            TableWindowView(id: id)
+        }
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
     }
 }
 

@@ -11,6 +11,7 @@ import SwiftUI
 struct ContentView: View {
     @Binding var document: WorkspaceDocument
     @State private var session = WorkspaceSession()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ZStack {
@@ -37,7 +38,11 @@ struct ContentView: View {
                     case .tableSelection:
                         TableSelectionForm(session: session) { ref in
                             document.workspace.selectedTable = ref
-                            await session.openTable(ref, limit: document.workspace.view.fetchLimit)
+                            if session.openInNewWindow {
+                                openTableWindow(ref)
+                            } else {
+                                await session.openTable(ref, limit: document.workspace.view.fetchLimit)
+                            }
                         }
                     case .table:
                         TableGridForm(session: session, view: $document.workspace.view)
@@ -71,6 +76,14 @@ struct ContentView: View {
         }
     }
 
+    /// Opens the DB Table form for `ref` in its own window, with its own connection.
+    private func openTableWindow(_ ref: TableRef) {
+        let id = TableWindows.register(TableWindowRequest(
+            settings: document.workspace.connection, password: session.password,
+            table: ref, view: document.workspace.view))
+        openWindow(value: id)
+    }
+
     /// After connecting, show the table list with the workspace's saved table highlighted.
     private func afterConnect() async {
         guard session.isConnected else { return }
@@ -81,7 +94,7 @@ struct ContentView: View {
     }
 }
 
-private struct StatusBar: View {
+struct StatusBar: View {
     let session: WorkspaceSession
     let settings: ConnectionSettings
 

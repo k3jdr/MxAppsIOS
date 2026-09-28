@@ -10,7 +10,7 @@ Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is 
 | Form | What it does |
 |------|--------------|
 | **DB Connection** | Host, port, user, database, password, SSL mode (`disable` / `prefer` / `require`, with no certificate verification, like libpq). |
-| **DB Table Selection** | Lists tables with a row count (`~` = planner estimate; **Count Rows** replaces it with `count(*)`) and size. The panel on the right shows a psql `\d` style description: columns, indexes, check constraints, foreign keys and "referenced by". Double-click a table or press **Open Table** to load it. |
+| **DB Table Selection** | Lists tables with a row count (`~` = planner estimate; **Count Rows** replaces it with `count(*)`) and size. The panel on the right shows a psql `\d` style description: columns, indexes, check constraints, foreign keys and "referenced by". Double-click a table or press **Open Table** to load it. With **Open in New Window** checked, the table opens in its own window instead (see below). |
 | **DB Table** | SQL box with **Run SQL** (see below) above an editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Right-click a cell to set it to NULL or revert it. |
 
 ## Run SQL
@@ -36,6 +36,19 @@ Results stay **editable** when every column comes from one table and its primary
 `SELECT id, name FROM customers WHERE balance > 20`. Joins, expressions and aggregates give a read-only
 grid. Running the table's unchanged default statement reloads the whole table, with row IDs and an
 exact row count.
+
+## Table windows
+
+With **Open in New Window** checked on DB Table Selection, **Open Table** (or a double-click) opens the
+table in a separate window. That window is the full DB Table form: SQL box and Run SQL, the editable grid,
+Reload, View… and Update…. The **Table** menu acts on whichever window is in front.
+
+- Each table window has **its own database connection**, so its transactions never mix with another window's.
+  It keeps working if the workspace window is closed.
+- Its view settings (rows, columns, fetch limit, column widths) start as a copy of the workspace's. Changes
+  made in the table window apply to that window only and are not saved to the workspace.
+- Table windows are not reopened when the app relaunches. The password is handed to them in memory only
+  and is never written to window state.
 
 ## Menus
 
@@ -82,5 +95,7 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `ConnectionForm.swift`, `TableSelectionForm.swift`, `TableGridForm.swift` | The three forms |
 | `DataGridView.swift` | Editable `NSTableView` grid with always-visible scroll bars |
 | `ViewSettingsDialog.swift`, `UpdateDialog.swift` | Table ▸ View… and Table ▸ Update… |
+| `TableWindow.swift` | Table opened with **Open in New Window** (own window and connection) |
+| `SQLTextView.swift` | Plain-text SQL editor (no smart quotes or autocorrect) |
 
 The document type is declared in `Info.plist`, which is merged with the Info.plist that Xcode generates.
