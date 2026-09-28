@@ -366,29 +366,76 @@ actor PostgresService {
     /// Without `allowWrites` it runs in a READ ONLY transaction and throws
     /// `WriteNotAllowed` if the statement tries to change data.
     func runQuery(_ sql: String, limit: Int, allowWrites: Bool) async throws -> QueryResult {
+        let limit = max(1, limit)
+        var columns: [QueryColumn] = []
+        var result: [[String?]] = []
+        // One row past the limit tells whether more rows were available.
+        try await streamQuery(sql, limit: limit + 1, allowWrites: allowWrites) {
+            columns = $0
+        } row: {
+            result.append($0)
+        }
+        return QueryResult(columns: columns, rows: Array(result.prefix(limit)), hasMore: result.count > limit)
+    }
+
+    /// Streams every row of the read-only query `sql` into a CSV file (header row first)
+    /// without holding the rows in memory. Returns the number of data rows written.
+    func exportCSV(_ sql: String, to url: URL) async throws -> Int {
+        guard FileManager.default.createFile(atPath: url.path, contents: nil),
+              let file = try? FileHandle(forWritingTo: url) else {
+            throw DatabaseError(message: "Could not create \(url.lastPathComponent).")
+        }
+        var buffer = Data()
+        var count = 0
+        do {
+            try await streamQuery(sql, limit: nil, allowWrites: false) { columns in
+                buffer.append(csvLine(columns.map(\.name)))
+            } row: { values in
+                buffer.append(csvLine(values))
+                count += 1
+                if buffer.count >= 1 << 20 {
+                    try file.write(contentsOf: buffer)
+                    buffer.removeAll(keepingCapacity: true)
+                }
+            }
+            try file.write(contentsOf: buffer)
+            try file.close()
+            return count
+        } catch {
+            try? file.close()
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+    }
+
+    /// Runs `sql` wrapped in a CTE and hands over the column metadata, then each row
+    /// as text values. Without `allowWrites` it runs in a READ ONLY transaction and
+    /// throws `WriteNotAllowed` if the statement tries to change data.
+    private func streamQuery(_ sql: String, limit: Int?, allowWrites: Bool,
+                             columns onColumns: ([QueryColumn]) throws -> Void,
+                             row onRow: ([String?]) throws -> Void) async throws {
         // Each row comes back as its composite text form, mx_q::text, so every column is
         // decoded as text whatever its type. mx_q.* only supplies the column metadata.
-        let wrapped = Self.queryPrefix + sql + "\n) SELECT mx_q::text, mx_q.* FROM mx_q LIMIT \(max(1, limit) + 1)"
+        let wrapped = Self.queryPrefix + sql + "\n) SELECT mx_q::text, mx_q.* FROM mx_q"
+            + (limit.map { " LIMIT \($0)" } ?? "")
         _ = try await rows(allowWrites ? "BEGIN" : "BEGIN READ ONLY")
         do {
             let sequence = try await connection.query(PostgresQuery(unsafeSQL: wrapped), logger: logger)
-            let columns = sequence.columns.dropFirst().map {
+            let metadata = sequence.columns.dropFirst()
+            try onColumns(metadata.map {
                 QueryColumn(name: $0.name, tableOID: UInt32(bitPattern: $0.tableOID),
                             attnum: Int($0.columnAttributeNumber), type: $0.dataType.knownSQLName ?? "oid \($0.dataType.rawValue)")
-            }
+            })
             // Record output writes booleans as t/f; bool::text (used everywhere else) gives true/false.
-            let boolColumns = sequence.columns.dropFirst().enumerated().filter { $0.element.dataType == .bool }.map(\.offset)
-            var result: [[String?]] = []
+            let boolColumns = metadata.enumerated().filter { $0.element.dataType == .bool }.map(\.offset)
             for try await row in sequence {
-                var values = parseRecord(try row.first!.decode(String.self), fieldCount: columns.count)
+                var values = parseRecord(try row.first!.decode(String.self), fieldCount: metadata.count)
                 for index in boolColumns {
                     values[index] = values[index].map { $0 == "t" ? "true" : $0 == "f" ? "false" : $0 }
                 }
-                result.append(values)
+                try onRow(values)
             }
             _ = try await rows("COMMIT")
-            let hasMore = result.count > max(1, limit)
-            return QueryResult(columns: columns, rows: Array(result.prefix(max(1, limit))), hasMore: hasMore)
         } catch {
             _ = try? await rows("ROLLBACK")
             let error = DatabaseError.from(error)

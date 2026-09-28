@@ -37,6 +37,17 @@ Results stay **editable** when every column comes from one table and its primary
 grid. Running the table's unchanged default statement reloads the whole table, with row IDs and an
 exact row count.
 
+## Export CSV
+
+**Export CSV…** on the DB Table form (also **Table ▸ Export CSV…**, ⇧⌘E) saves the grid as a CSV file:
+UTF-8, a header row of column names, comma-separated, with CRLF line ends (RFC 4180). A NULL is an empty
+field and an empty string is `""`. Values containing commas, quotes or line breaks are quoted.
+
+- **Loaded rows**: exactly what the grid shows, including edits you haven't applied yet.
+- **All rows**: offered in the Save panel when the table or query has more rows than were fetched. The
+  grid's query runs again, read-only, and is streamed to the file, so large tables do not need to fit in
+  memory. It is not offered for results of a statement that changed data.
+
 ## Table windows
 
 With **Open in New Window** checked on DB Table Selection, **Open Table** (or a double-click) opens the
@@ -97,6 +108,7 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `DataGridView.swift` | Editable `NSTableView` grid with always-visible scroll bars |
 | `ViewSettingsDialog.swift`, `UpdateDialog.swift` | Table ▸ View… and Table ▸ Update… |
 | `TableWindow.swift` | Table opened with **Open in New Window** (own window and connection) |
+| `CSVExport.swift` | Export CSV… (Save panel, CSV formatting) |
 | `SQLTextView.swift` | Plain-text SQL editor (no smart quotes or autocorrect) |
 
 The document type is declared in `Info.plist`, which is merged with the Info.plist that Xcode generates.

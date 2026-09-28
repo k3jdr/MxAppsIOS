@@ -62,6 +62,8 @@ final class WorkspaceSession {
     private(set) var openedTable: TableDescription?
 
     private var service: PostgresService?
+    /// The open connection, for features in other files (CSV export).
+    var currentService: PostgresService? { service }
 
     var isConnected: Bool {
         if case .connected = status { true } else { false }

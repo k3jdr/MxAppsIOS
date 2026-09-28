@@ -50,6 +50,14 @@ struct TableCommands: Commands {
             }
             .keyboardShortcut("u", modifiers: [.command, .option])
             .disabled(!(session?.grid?.isEditable ?? false))
+
+            Divider()
+
+            Button("Export CSV…") {
+                if let session { CSVExport.begin(for: session) }
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(session?.grid == nil)
         }
     }
 }

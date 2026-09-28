@@ -112,6 +112,10 @@ struct TableGridForm: View {
                 Task { await session.reloadGrid(limit: view.fetchLimit) }
             }
             Button("View…") { session.showViewDialog = true }
+            Button("Export CSV…", systemImage: "square.and.arrow.up") {
+                CSVExport.begin(for: session)
+            }
+            .disabled(session.busy)
             Spacer()
             Button("Discard Edits") { session.discardEdits() }
                 .disabled(session.edits.isEmpty)
