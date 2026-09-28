@@ -45,8 +45,9 @@ Reload, View… and Update…. The **Table** menu acts on whichever window is in
 
 - Each table window has **its own database connection**, so its transactions never mix with another window's.
   It keeps working if the workspace window is closed.
-- Its view settings (rows, columns, fetch limit, column widths) start as a copy of the workspace's. Changes
-  made in the table window apply to that window only and are not saved to the workspace.
+- Its view settings (rows, columns, fetch limit, column widths) start as a copy of the workspace's.
+  **Column widths** you set in a table window are saved to the workspace while its window is open (save the
+  workspace to keep them). Rows, columns and fetch limit changed in a table window apply to that window only.
 - Table windows are not reopened when the app relaunches. The password is handed to them in memory only
   and is never written to window state.
 

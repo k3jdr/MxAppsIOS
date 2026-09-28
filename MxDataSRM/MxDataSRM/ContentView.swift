@@ -12,6 +12,8 @@ struct ContentView: View {
     @Binding var document: WorkspaceDocument
     @State private var session = WorkspaceSession()
     @Environment(\.openWindow) private var openWindow
+    /// Receives column widths from table windows opened from this workspace.
+    @State private var widthSink = ColumnWidthSink()
 
     var body: some View {
         ZStack {
@@ -57,6 +59,7 @@ struct ContentView: View {
         .focusedSceneValue(\.workspaceSession, session)
         .task { session.loadSavedPassword(for: document.workspace.connection) }
         .onDisappear {
+            widthSink.save = nil
             let session = session
             Task { await session.disconnect() }
         }
@@ -78,9 +81,13 @@ struct ContentView: View {
 
     /// Opens the DB Table form for `ref` in its own window, with its own connection.
     private func openTableWindow(_ ref: TableRef) {
+        let document = $document
+        widthSink.save = { table, widths in
+            document.wrappedValue.workspace.view.columnWidths[table] = widths
+        }
         let id = TableWindows.register(TableWindowRequest(
-            settings: document.workspace.connection, password: session.password,
-            table: ref, view: document.workspace.view))
+            settings: document.wrappedValue.workspace.connection, password: session.password,
+            table: ref, view: document.wrappedValue.workspace.view, widthSink: widthSink))
         openWindow(value: id)
     }
 

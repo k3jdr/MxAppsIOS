@@ -5,7 +5,8 @@
 //  "Open in New Window" from DB Table Selection: the DB Table form (SQL box,
 //  editable grid, Update, View, Reload) in its own window. Each table window
 //  has its own WorkspaceSession and therefore its own database connection, so
-//  its transactions never interleave with another window's.
+//  its transactions never interleave with another window's. Column widths set in a
+//  table window are saved to its workspace while that workspace window is open.
 //
 
 import SwiftUI
@@ -22,6 +23,15 @@ struct TableWindowRequest {
     var password: String
     var table: TableRef
     var view: GridViewSettings
+    /// Saves column widths into the workspace the window was opened from. Weak: once
+    /// that workspace window closes, widths stay local to the table window.
+    weak var widthSink: ColumnWidthSink?
+}
+
+/// Owned by a workspace window; writes column widths into its document while it is open.
+final class ColumnWidthSink {
+    /// Table ("schema.name") → column widths, or nil to clear them.
+    var save: ((_ table: String, _ widths: [String: Double]?) -> Void)?
 }
 
 enum TableWindows {
@@ -61,6 +71,14 @@ struct TableWindowView: View {
         .navigationTitle(title)
         .focusedSceneValue(\.workspaceSession, session)
         .task { await start() }
+        .onChange(of: view.columnWidths) { old, new in
+            // Column widths also go to the workspace, like widths set in its own DB Table form.
+            // Skipped while starting: that change is the copy of the workspace's own widths.
+            guard started else { return }
+            for table in Set(old.keys).union(new.keys) where old[table] != new[table] {
+                request?.widthSink?.save?(table, new[table])
+            }
+        }
         .onDisappear {
             let session = session
             Task { await session.disconnect() }
