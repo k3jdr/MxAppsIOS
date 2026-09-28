@@ -7,3 +7,4 @@ xc*serdata/
 
 ## MxDataSRM workspaces (connection details)
 *.mxworkspace
+*.csv
