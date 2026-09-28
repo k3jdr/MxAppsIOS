@@ -27,9 +27,11 @@ nonisolated struct TableSummary: Identifiable, Hashable, Sendable {
 nonisolated struct ColumnInfo: Hashable, Sendable {
     var name: String
     var type: String
-    var collation: String
-    var notNull: Bool
-    var defaultExpr: String
+    var collation: String = ""
+    var notNull: Bool = false
+    var defaultExpr: String = ""
+    /// pg_attribute.attnum of the table column; 0 for computed query columns.
+    var attnum: Int = 0
 }
 
 nonisolated struct TableDescription: Sendable {
@@ -40,6 +42,8 @@ nonisolated struct TableDescription: Sendable {
     var checks: [String]
     var foreignKeys: [String]
     var referencedBy: [String]
+    /// `SELECT * FROM schema.table ORDER BY <primary key>`, identifiers quoted by the server.
+    var defaultSQL: String
 
     func column(named name: String) -> ColumnInfo? {
         columns.first { $0.name == name }
@@ -87,15 +91,29 @@ nonisolated func formatAligned(headers: [String], rows: [[String]]) -> String {
 /// Rows loaded into the DB Table grid. Every value is its PostgreSQL text
 /// representation (`col::text`); nil is SQL NULL.
 nonisolated struct GridData: Sendable {
-    var description: TableDescription
+    /// Table the rows can be edited against; nil for read-only query results.
+    var description: TableDescription?
+    /// Table name, or "Query result".
+    var title: String
+    var columns: [ColumnInfo]
     var rows: [[String?]]
-    /// `ctid` of each row, used as the row key for tables without a primary key.
-    var rowIDs: [String]
-    var totalRows: Int
+    /// `ctid` of each row (whole-table loads only), the row key for tables without a primary key.
+    var rowIDs: [String] = []
+    /// Rows in the table; nil when the rows came from custom SQL.
+    var totalRows: Int?
+    /// More rows were available than the fetch limit allowed.
+    var hasMore = false
+    /// The SQL typed by the user, when the rows did not come from opening a table.
+    var customSQL: String?
     var loadedAt = Date()
 
-    var ref: TableRef { description.summary.ref }
-    var columns: [ColumnInfo] { description.columns }
+    var ref: TableRef? { description?.summary.ref }
+    var isEditable: Bool {
+        guard let description else { return false }
+        return !description.primaryKey.isEmpty || !rowIDs.isEmpty
+    }
+    /// Key under which the user's column widths are saved in the workspace.
+    var widthKey: String { ref?.displayName ?? "(query)" }
 }
 
 nonisolated struct CellKey: Hashable, Sendable {

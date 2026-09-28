@@ -13,38 +13,42 @@ struct ContentView: View {
     @State private var session = WorkspaceSession()
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("Form", selection: $session.form) {
-                ForEach(WorkspaceForm.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .padding(10)
-
-            Divider()
-
-            Group {
-                switch session.form {
-                case .connection:
-                    ConnectionForm(settings: $document.workspace.connection, session: session) {
-                        await afterConnect()
-                    }
-                case .tableSelection:
-                    TableSelectionForm(session: session) { ref in
-                        document.workspace.selectedTable = ref
-                        await session.openTable(ref, limit: document.workspace.view.fetchLimit)
-                    }
-                case .table:
-                    TableGridForm(session: session, view: $document.workspace.view)
+        ZStack {
+            // Window floor of 760 x 520; unlike .frame(minHeight:), this still lets a form that
+            // needs more height (DB Table) raise the window minimum.
+            Color.clear.frame(minWidth: 760, minHeight: 520)
+            VStack(spacing: 0) {
+                Picker("Form", selection: $session.form) {
+                    ForEach(WorkspaceForm.allCases) { Text($0.rawValue).tag($0) }
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .padding(10)
 
-            Divider()
-            StatusBar(session: session, settings: document.workspace.connection)
+                Divider()
+
+                Group {
+                    switch session.form {
+                    case .connection:
+                        ConnectionForm(settings: $document.workspace.connection, session: session) {
+                            await afterConnect()
+                        }
+                    case .tableSelection:
+                        TableSelectionForm(session: session) { ref in
+                            document.workspace.selectedTable = ref
+                            await session.openTable(ref, limit: document.workspace.view.fetchLimit)
+                        }
+                    case .table:
+                        TableGridForm(session: session, view: $document.workspace.view)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Divider()
+                StatusBar(session: session, settings: document.workspace.connection)
+            }
         }
-        .frame(minWidth: 760, minHeight: 520)
         .focusedSceneValue(\.workspaceSession, session)
         .task { session.loadSavedPassword(for: document.workspace.connection) }
         .onDisappear {

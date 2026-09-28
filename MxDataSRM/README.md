@@ -11,7 +11,31 @@ Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is 
 |------|--------------|
 | **DB Connection** | Host, port, user, database, password, SSL mode (`disable` / `prefer` / `require`, with no certificate verification, like libpq). |
 | **DB Table Selection** | Lists tables with a row count (`~` = planner estimate; **Count Rows** replaces it with `count(*)`) and size. The panel on the right shows a psql `\d` style description: columns, indexes, check constraints, foreign keys and "referenced by". Double-click a table or press **Open Table** to load it. |
-| **DB Table** | Editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Right-click a cell to set it to NULL or revert it. |
+| **DB Table** | SQL box with **Run SQL** (see below) above an editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Right-click a cell to set it to NULL or revert it. |
+
+## Run SQL
+
+Above the grid on the DB Table form is an SQL box. Opening a table fills it with the statement that loads
+the grid, e.g. `SELECT * FROM public.customers ORDER BY id`. Edit it and click **Run SQL** (⌘↩).
+The grid then shows the results, up to the **Rows to fetch** limit (default 1000; Table ▸ View…).
+
+Pre-flight checks run before anything executes. Problems are shown in red above the SQL box, psql style,
+with the line and a caret under the error position:
+
+1. The statement is not empty and is a SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE or MERGE.
+   DDL and transaction commands are refused.
+2. There are no pending grid edits, which the new results would replace.
+3. The server parses and analyses the statement with `PREPARE` without running it. This catches syntax
+   errors, unknown tables or columns, several statements, and `$1` parameters.
+
+Queries run in a **read-only transaction**. A statement that changes data, whether it is an
+INSERT/UPDATE/DELETE or a query that writes, asks for confirmation first. It then runs in its own
+transaction and is committed if it succeeds. After a write without `RETURNING`, the opened table is reloaded.
+
+Results stay **editable** when every column comes from one table and its primary key is included, e.g.
+`SELECT id, name FROM customers WHERE balance > 20`. Joins, expressions and aggregates give a read-only
+grid. Running the table's unchanged default statement reloads the whole table, with row IDs and an
+exact row count.
 
 ## Menus
 

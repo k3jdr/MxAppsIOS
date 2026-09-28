@@ -18,7 +18,7 @@ struct UpdateDialog: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let grid = session.grid, !session.edits.isEmpty {
-                Text("Update \(grid.ref.displayName)").font(.headline)
+                Text("Update \(grid.ref?.displayName ?? grid.title)").font(.headline)
                 changesList(grid)
                 keyOptions(grid)
                 behaviourOptions
@@ -38,7 +38,9 @@ struct UpdateDialog: View {
         .frame(width: 620)
         .disabled(applying)
         .onAppear {
-            if session.grid?.description.primaryKey.isEmpty ?? false { options.keyMode = .rowID }
+            if let grid = session.grid, grid.description?.primaryKey.isEmpty ?? false {
+                options.keyMode = grid.rowIDs.isEmpty ? .columns : .rowID
+            }
         }
     }
 
@@ -82,7 +84,8 @@ struct UpdateDialog: View {
         GroupBox("Identify each row by") {
             VStack(alignment: .leading, spacing: 8) {
                 Picker("Row key", selection: $options.keyMode) {
-                    ForEach(RowKeyMode.allCases) { mode in
+                    // Row IDs exist only when the whole table was loaded, not for query results.
+                    ForEach(RowKeyMode.allCases.filter { $0 != .rowID || !grid.rowIDs.isEmpty }) { mode in
                         Text(label(for: mode, grid)).tag(mode)
                     }
                 }
@@ -110,9 +113,9 @@ struct UpdateDialog: View {
     private func label(for mode: RowKeyMode, _ grid: GridData) -> String {
         switch mode {
         case .primaryKey:
-            grid.description.primaryKey.isEmpty
+            (grid.description?.primaryKey ?? []).isEmpty
                 ? "Primary key (none on this table)"
-                : "Primary key (\(grid.description.primaryKey.joined(separator: ", ")))"
+                : "Primary key (\(grid.description!.primaryKey.joined(separator: ", ")))"
         case .rowID: "Physical row ID (ctid, as loaded)"
         case .columns: "Loaded values of selected columns"
         }

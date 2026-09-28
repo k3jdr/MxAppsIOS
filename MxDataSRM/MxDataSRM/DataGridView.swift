@@ -100,7 +100,7 @@ struct DataGridView: NSViewRepresentable {
         var visibleColumns = 3
         var onWidthsChanged: ([String: Double]) -> Void = { _ in }
         private var loadedVersion: Int?
-        private var loadedTable: TableRef?
+        private var loadedWidthKey: String?
         /// Widths of columns the user resized, by column name. Never overwritten by fitColumns().
         private var userWidths: [String: CGFloat] = [:]
         /// Set while widths are changed in code, so only user drags count as resizes.
@@ -114,17 +114,27 @@ struct DataGridView: NSViewRepresentable {
             self.session = session
         }
 
-        private var grid: GridData? { session.grid }
+        /// The rows the table view is showing. It is replaced only here, together with
+        /// reloadData(), so the table view never asks for rows or columns that the data lacks,
+        /// even if it redraws after `session.grid` changed and before SwiftUI calls updateNSView.
+        private var grid: GridData?
 
         func reloadIfNeeded(version: Int, savedWidths: [String: Double]) {
             guard let tableView, version != loadedVersion else { return }
             loadedVersion = version
-            if grid?.ref != loadedTable {
-                loadedTable = grid?.ref
+            let fresh = session.grid
+            if fresh?.widthKey != loadedWidthKey {
+                loadedWidthKey = fresh?.widthKey
                 userWidths = savedWidths.mapValues { CGFloat($0) }
             }
             adjustingWidths = true
             defer { adjustingWidths = false }
+
+            // A cell being edited belongs to the old rows; drop it rather than commit it to the new ones.
+            tableView.abortEditing()
+            // Empty the table before changing columns: column changes redraw the visible rows.
+            grid = nil
+            tableView.reloadData()
             tableView.tableColumns.forEach(tableView.removeTableColumn)
 
             let rowNumber = NSTableColumn(identifier: Self.rowNumberID)
@@ -133,7 +143,7 @@ struct DataGridView: NSViewRepresentable {
             rowNumber.resizingMask = []
             tableView.addTableColumn(rowNumber)
 
-            for (index, column) in (grid?.columns ?? []).enumerated() {
+            for (index, column) in (fresh?.columns ?? []).enumerated() {
                 let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("c\(index)"))
                 tableColumn.title = column.name
                 tableColumn.headerToolTip = column.type + (column.notNull ? " not null" : "")
@@ -142,6 +152,7 @@ struct DataGridView: NSViewRepresentable {
                 tableColumn.resizingMask = .userResizingMask
                 tableView.addTableColumn(tableColumn)
             }
+            grid = fresh
             tableView.reloadData()
         }
 
@@ -215,9 +226,10 @@ struct DataGridView: NSViewRepresentable {
             }
 
             let column = columnIndex(of: tableColumn)
+            guard grid.rows.indices.contains(row), grid.columns.indices.contains(column) else { return nil }
             let edit = session.edits[CellKey(row: row, column: column)]
             let value = edit.map(\.value) ?? grid.rows[row][column]
-            field.isEditable = true
+            field.isEditable = grid.isEditable
             field.alignment = .left
             field.textColor = .labelColor
             field.stringValue = value ?? ""
@@ -252,6 +264,7 @@ struct DataGridView: NSViewRepresentable {
             let tableColumnIndex = tableView.column(for: sender)
             guard row >= 0, tableColumnIndex > 0 else { return }
             let column = columnIndex(of: tableView.tableColumns[tableColumnIndex])
+            guard grid.rows.indices.contains(row), grid.columns.indices.contains(column) else { return }
             let key = CellKey(row: row, column: column)
             let current = session.edits[key].map(\.value) ?? grid.rows[row][column]
             // An empty field on a NULL cell means "left alone", not ''.
@@ -270,6 +283,7 @@ struct DataGridView: NSViewRepresentable {
 
         func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
             if menuItem.action == #selector(resetColumnWidths(_:)) { return !userWidths.isEmpty }
+            guard grid?.isEditable == true else { return false }
             guard let cell = clickedCell() else { return false }
             if menuItem.action == #selector(revertCell(_:)) {
                 return session.edits[CellKey(row: cell.row, column: cell.column)] != nil

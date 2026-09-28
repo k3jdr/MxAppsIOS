@@ -15,6 +15,9 @@ struct MxDataSRMApp: App {
         DocumentGroup(newDocument: WorkspaceDocument()) { file in
             ContentView(document: file.$document)
         }
+        // The window cannot be made smaller than its content needs, so the form buttons,
+        // the SQL box and the grid's command buttons always stay visible.
+        .windowResizability(.contentMinSize)
         .commands {
             TableCommands()
         }
@@ -37,7 +40,7 @@ struct TableCommands: Commands {
                 session?.showUpdateDialog = true
             }
             .keyboardShortcut("u", modifiers: [.command, .option])
-            .disabled(session?.grid == nil)
+            .disabled(!(session?.grid?.isEditable ?? false))
         }
     }
 }

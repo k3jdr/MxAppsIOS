@@ -37,26 +37,32 @@ nonisolated struct PlannedUpdate: Sendable {
 }
 
 nonisolated enum UpdatePlanError: LocalizedError {
+    case readOnly
     case noPrimaryKey
+    case noRowIDs
     case noMatchColumns
 
     var errorDescription: String? {
         switch self {
+        case .readOnly: "These rows are a read-only query result."
         case .noPrimaryKey: "The table has no primary key. Choose Row ID (ctid) or Match columns."
+        case .noRowIDs: "Row IDs are only available when the whole table is loaded. Choose another row key."
         case .noMatchColumns: "Select at least one column to match rows on."
         }
     }
 }
 
 nonisolated func planUpdates(grid: GridData, edits: [CellKey: CellEdit], options: UpdateOptions) throws -> [PlannedUpdate] {
+    guard let description = grid.description else { throw UpdatePlanError.readOnly }
     let columns = grid.columns
     let keyColumns: [String]
     switch options.keyMode {
     case .primaryKey:
-        keyColumns = grid.description.primaryKey
+        keyColumns = description.primaryKey
         if keyColumns.isEmpty { throw UpdatePlanError.noPrimaryKey }
     case .rowID:
         keyColumns = []
+        if grid.rowIDs.isEmpty { throw UpdatePlanError.noRowIDs }
     case .columns:
         keyColumns = columns.map(\.name).filter { options.matchColumns.contains($0) }
         if keyColumns.isEmpty { throw UpdatePlanError.noMatchColumns }
@@ -106,7 +112,7 @@ nonisolated func planUpdates(grid: GridData, edits: [CellKey: CellEdit], options
             }
         }
 
-        let sql = "UPDATE \(grid.ref.qualifiedSQL) SET " + assignments.joined(separator: ", ")
+        let sql = "UPDATE \(description.summary.ref.qualifiedSQL) SET " + assignments.joined(separator: ", ")
             + " WHERE " + conditions.joined(separator: " AND ") + " RETURNING 1"
         return PlannedUpdate(row: row, sql: sql, binds: binds, rowLabel: labelParts.joined(separator: ", "))
     }
