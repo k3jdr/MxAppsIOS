@@ -13,6 +13,7 @@ import SwiftUI
 enum GridMetrics {
     static let rowNumberWidth: CGFloat = 56
     static let columnWidth: CGFloat = 160
+    static let minColumnWidth: CGFloat = 60
     static let rowHeight: CGFloat = 22
     static let intercell = NSSize(width: 3, height: 2)
     static let headerHeight: CGFloat = 28
@@ -30,6 +31,12 @@ struct DataGridView: NSViewRepresentable {
     let session: WorkspaceSession
     /// Changes whenever the grid data is replaced or edits are discarded.
     let version: Int
+    /// Number of data columns sized to span the visible width.
+    let visibleColumns: Int
+    /// Widths the user set for this table's columns (column name → width); these are not re-fitted.
+    let savedWidths: [String: Double]
+    /// Called (debounced) with all user-set widths for the table after a column is resized or reset.
+    let onWidthsChanged: ([String: Double]) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
 
@@ -52,7 +59,13 @@ struct DataGridView: NSViewRepresentable {
         menu.items.forEach { $0.target = context.coordinator }
         table.menu = menu
 
-        let scroll = NSScrollView()
+        let headerMenu = NSMenu()
+        headerMenu.addItem(withTitle: "Reset Column Widths", action: #selector(Coordinator.resetColumnWidths(_:)), keyEquivalent: "")
+        headerMenu.items.forEach { $0.target = context.coordinator }
+        table.headerView?.menu = headerMenu
+
+        let scroll = GridScrollView()
+        scroll.onResize = { [weak coordinator = context.coordinator] in coordinator?.fitColumns() }
         scroll.documentView = table
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
@@ -64,13 +77,35 @@ struct DataGridView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        context.coordinator.reloadIfNeeded(version: version)
+        context.coordinator.visibleColumns = visibleColumns
+        context.coordinator.onWidthsChanged = onWidthsChanged
+        context.coordinator.reloadIfNeeded(version: version, savedWidths: savedWidths)
+        context.coordinator.fitColumns()
+    }
+
+    /// Scroll view that reports size changes so the columns can be re-fitted.
+    final class GridScrollView: NSScrollView {
+        var onResize: (() -> Void)?
+
+        override func setFrameSize(_ newSize: NSSize) {
+            let changed = newSize.width != frame.width
+            super.setFrameSize(newSize)
+            if changed { onResize?() }
+        }
     }
 
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuItemValidation {
         let session: WorkspaceSession
         weak var tableView: NSTableView?
+        var visibleColumns = 3
+        var onWidthsChanged: ([String: Double]) -> Void = { _ in }
         private var loadedVersion: Int?
+        private var loadedTable: TableRef?
+        /// Widths of columns the user resized, by column name. Never overwritten by fitColumns().
+        private var userWidths: [String: CGFloat] = [:]
+        /// Set while widths are changed in code, so only user drags count as resizes.
+        private var adjustingWidths = false
+        private var pendingSave: DispatchWorkItem?
 
         private static let rowNumberID = NSUserInterfaceItemIdentifier("rownum")
         private static let cellID = NSUserInterfaceItemIdentifier("cell")
@@ -81,9 +116,15 @@ struct DataGridView: NSViewRepresentable {
 
         private var grid: GridData? { session.grid }
 
-        func reloadIfNeeded(version: Int) {
+        func reloadIfNeeded(version: Int, savedWidths: [String: Double]) {
             guard let tableView, version != loadedVersion else { return }
             loadedVersion = version
+            if grid?.ref != loadedTable {
+                loadedTable = grid?.ref
+                userWidths = savedWidths.mapValues { CGFloat($0) }
+            }
+            adjustingWidths = true
+            defer { adjustingWidths = false }
             tableView.tableColumns.forEach(tableView.removeTableColumn)
 
             let rowNumber = NSTableColumn(identifier: Self.rowNumberID)
@@ -96,12 +137,61 @@ struct DataGridView: NSViewRepresentable {
                 let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("c\(index)"))
                 tableColumn.title = column.name
                 tableColumn.headerToolTip = column.type + (column.notNull ? " not null" : "")
-                tableColumn.width = GridMetrics.columnWidth
                 tableColumn.minWidth = 40
+                tableColumn.width = userWidths[column.name] ?? GridMetrics.columnWidth
                 tableColumn.resizingMask = .userResizingMask
                 tableView.addTableColumn(tableColumn)
             }
             tableView.reloadData()
+        }
+
+        /// Sizes the columns the user has not resized so that the first `visibleColumns`
+        /// columns span the visible width; user-resized columns keep their width.
+        func fitColumns() {
+            guard let tableView, let clipWidth = tableView.enclosingScrollView?.contentView.bounds.width,
+                  clipWidth > 0 else { return }
+            let dataColumns = tableView.tableColumns.filter { $0.identifier != Self.rowNumberID }
+            guard !dataColumns.isEmpty else { return }
+            let spacing = GridMetrics.intercell.width
+            let available = clipWidth - GridMetrics.rowNumberWidth - spacing
+            let visible = dataColumns.prefix(max(1, visibleColumns))
+            let fixed = visible.compactMap { userWidths[$0.title] }
+            let flexibleCount = visible.count - fixed.count
+            let width = flexibleCount > 0
+                ? (available - fixed.reduce(0, +) - CGFloat(visible.count) * spacing) / CGFloat(flexibleCount)
+                : available / CGFloat(visible.count) - spacing
+            let fitted = max(GridMetrics.minColumnWidth, width.rounded(.down))
+
+            adjustingWidths = true
+            defer { adjustingWidths = false }
+            for column in dataColumns {
+                let target = userWidths[column.title] ?? fitted
+                if column.width != target { column.width = target }
+            }
+        }
+
+        func tableViewColumnDidResize(_ notification: Notification) {
+            guard !adjustingWidths,
+                  let column = notification.userInfo?["NSTableColumn"] as? NSTableColumn,
+                  column.identifier != Self.rowNumberID else { return }
+            userWidths[column.title] = column.width
+            fitColumns()
+            saveWidthsSoon()
+        }
+
+        @objc func resetColumnWidths(_ sender: Any?) {
+            userWidths = [:]
+            fitColumns()
+            saveWidthsSoon()
+        }
+
+        /// Writes the widths to the workspace once a drag settles, not on every pixel.
+        private func saveWidthsSoon() {
+            pendingSave?.cancel()
+            let widths = userWidths.mapValues { Double($0) }
+            let work = DispatchWorkItem { [weak self] in self?.onWidthsChanged(widths) }
+            pendingSave = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
         }
 
         // MARK: Data source / delegate
@@ -179,6 +269,7 @@ struct DataGridView: NSViewRepresentable {
         }
 
         func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+            if menuItem.action == #selector(resetColumnWidths(_:)) { return !userWidths.isEmpty }
             guard let cell = clickedCell() else { return false }
             if menuItem.action == #selector(revertCell(_:)) {
                 return session.edits[CellKey(row: cell.row, column: cell.column)] != nil

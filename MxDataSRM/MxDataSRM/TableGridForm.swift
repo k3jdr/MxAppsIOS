@@ -2,24 +2,30 @@
 //  TableGridForm.swift
 //  MxDataSRM
 //
-//  Form 3 — DB Table: the loaded rows in an editable grid whose viewport
-//  shows View ▸ rows × columns (default 10 × 3); scroll bars reach the rest.
+//  Form 3 — DB Table: the loaded rows in an editable grid that fills the
+//  form. View ▸ columns (default 3) are sized to span its width and View ▸ rows
+//  (default 10) set its minimum height; scroll bars reach the rest. Columns the
+//  user resized keep their width, saved per table in the workspace.
 //
 
 import SwiftUI
 
 struct TableGridForm: View {
     let session: WorkspaceSession
-    let view: GridViewSettings
+    @Binding var view: GridViewSettings
 
     var body: some View {
         if let grid = session.grid {
             VStack(alignment: .leading, spacing: 10) {
                 header(grid)
 
-                let size = GridMetrics.viewport(rows: view.visibleRows, columns: view.visibleColumns)
-                DataGridView(session: session, version: session.gridVersion)
-                    .frame(maxWidth: size.width, maxHeight: size.height)
+                // Fills the form; View ▸ columns fit across its width, View ▸ rows set its minimum height.
+                DataGridView(session: session, version: session.gridVersion, visibleColumns: view.visibleColumns,
+                             savedWidths: view.columnWidths[grid.ref.displayName] ?? [:]) { widths in
+                    view.columnWidths[grid.ref.displayName] = widths.isEmpty ? nil : widths
+                }
+                    .frame(minHeight: min(GridMetrics.viewport(rows: view.visibleRows, columns: 0).height, 600),
+                           maxHeight: .infinity)
 
                 HStack {
                     Button("Reload", systemImage: "arrow.clockwise") {
@@ -33,12 +39,10 @@ struct TableGridForm: View {
                         .keyboardShortcut(.defaultAction)
                         .disabled(session.edits.isEmpty)
                 }
-                .frame(maxWidth: max(size.width, 520))
 
                 Text("Click a cell in the selected row to edit it; press Return to keep the change. Right-click a cell to set it to NULL.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)

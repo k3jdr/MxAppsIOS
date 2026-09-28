@@ -36,7 +36,7 @@ struct ContentView: View {
                         await session.openTable(ref, limit: document.workspace.view.fetchLimit)
                     }
                 case .table:
-                    TableGridForm(session: session, view: document.workspace.view)
+                    TableGridForm(session: session, view: $document.workspace.view)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

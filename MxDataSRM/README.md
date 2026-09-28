@@ -11,12 +11,12 @@ Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is 
 |------|--------------|
 | **DB Connection** | Host, port, user, database, password, SSL mode (`disable` / `prefer` / `require`, with no certificate verification, like libpq). |
 | **DB Table Selection** | Lists tables with a row count (`~` = planner estimate; **Count Rows** replaces it with `count(*)`) and size. The panel on the right shows a psql `\d` style description: columns, indexes, check constraints, foreign keys and "referenced by". Double-click a table or press **Open Table** to load it. |
-| **DB Table** | Editable grid. The viewport shows *rows × columns* (default **10 × 3**). Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Right-click a cell to set it to NULL or revert it. |
+| **DB Table** | Editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Right-click a cell to set it to NULL or revert it. |
 
 ## Menus
 
 - **File**: New, Open, Save (plus the standard Save As, Duplicate, Revert and Open Recent). Files are workspaces.
-- **Table ▸ View…** (⌥⌘L): rows and columns shown in the grid viewport, and how many rows to fetch.
+- **Table ▸ View…** (⌥⌘L): columns fitted across the grid, rows guaranteed visible, and how many rows to fetch.
 - **Table ▸ Update…** (⌥⌘U): the same dialog as the **Update…** button on the DB Table form. It:
   - lists every changed cell (old value → new value);
   - asks how to identify each row: the **primary key**, the **physical row ID** (`ctid`, used by default for tables with no primary key), or the **loaded values of columns you pick**;
@@ -25,7 +25,7 @@ Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is 
 
 ## What a workspace saves
 
-The connection parameters, the last opened table and the view settings. The **password is not saved in
+The connection parameters, the last opened table, the view settings and the column widths you set. The **password is not saved in
 the file**. When "Save password in Keychain" is on, it is kept in the login Keychain under
 `MxDataSRM: user@host:port/database`.
 

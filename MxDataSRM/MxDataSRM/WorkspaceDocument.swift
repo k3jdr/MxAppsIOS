@@ -47,6 +47,20 @@ nonisolated struct GridViewSettings: Codable, Equatable, Sendable {
     var visibleColumns = 3
     /// Maximum number of rows fetched from the table.
     var fetchLimit = 1000
+    /// Column widths the user set by dragging: table ("schema.name") → column → width.
+    var columnWidths: [String: [String: Double]] = [:]
+}
+
+nonisolated extension GridViewSettings {
+    // Tolerates keys missing from workspaces saved by earlier versions.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = GridViewSettings()
+        visibleRows = try container.decodeIfPresent(Int.self, forKey: .visibleRows) ?? defaults.visibleRows
+        visibleColumns = try container.decodeIfPresent(Int.self, forKey: .visibleColumns) ?? defaults.visibleColumns
+        fetchLimit = try container.decodeIfPresent(Int.self, forKey: .fetchLimit) ?? defaults.fetchLimit
+        columnWidths = try container.decodeIfPresent([String: [String: Double]].self, forKey: .columnWidths) ?? [:]
+    }
 }
 
 nonisolated struct Workspace: Codable, Equatable, Sendable {
