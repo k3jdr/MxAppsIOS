@@ -1,0 +1,48 @@
+{
+  "connection" : {
+    "database" : "srm",
+    "host" : "192.168.0.223",
+    "port" : 5432,
+    "savePasswordInKeychain" : true,
+    "sslMode" : "disable",
+    "user" : "postgres"
+  },
+  "formatVersion" : 1,
+  "selectedTable" : {
+    "name" : "gicscodes",
+    "schema" : "public"
+  },
+  "view" : {
+    "columnWidths" : {
+      "public.gicscodes" : {
+        "gics_id" : 117,
+        "gics_name" : 230,
+        "gics_sector_id" : 429
+      },
+      "public.gleif_lei" : {
+        "category" : 503,
+        "entity_status" : 503,
+        "hq_country" : 503,
+        "hq_region" : 503,
+        "jurisdiction" : 503,
+        "legal_city" : 503,
+        "legal_country" : 503,
+        "legal_form" : 503,
+        "legal_name" : 260,
+        "legal_region" : 503,
+        "lei" : 237,
+        "name_norm" : 285,
+        "other_names" : 503,
+        "registration_status" : 503
+      },
+      "public.gleif_lei_name" : {
+        "lei" : 218,
+        "name" : 408,
+        "name_norm" : 409
+      }
+    },
+    "fetchLimit" : 1000,
+    "visibleColumns" : 3,
+    "visibleRows" : 10
+  }
+}
