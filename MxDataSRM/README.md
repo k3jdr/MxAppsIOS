@@ -37,6 +37,20 @@ Results stay **editable** when every column comes from one table and its primary
 grid. Running the table's unchanged default statement reloads the whole table, with row IDs and an
 exact row count.
 
+## Pages
+
+The grid shows one page of rows. A page is **Rows to fetch** long (Table ▸ View…, default 1000). **Previous**
+and **Next**, in the button row under the grid, load the page before or after. The header shows which rows
+are on screen, e.g. "Rows 1,001–2,000 of 5,432", and the `#` column numbers rows across pages.
+
+- **Previous** is disabled on the first page. **Next** is disabled on the last page. Each re-enables when you
+  move to a page that has one before or after it.
+- Opening a table or running new SQL starts at page 1. **Reload** and **Update…** reload the current page.
+- Tables page in primary-key order (row ID order if there is no primary key). Custom SQL is paged with
+  `OFFSET`/`LIMIT`, so give it an `ORDER BY` for stable pages.
+- Pending edits must be applied or discarded before changing page.
+- Results of a statement that changed data (e.g. `UPDATE … RETURNING`) are not paged: that would run it again.
+
 ## Export CSV
 
 **Export CSV…** on the DB Table form (also **Table ▸ Export CSV…**, ⇧⌘E) saves the grid as a CSV file:

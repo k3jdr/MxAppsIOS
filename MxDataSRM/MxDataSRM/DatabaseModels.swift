@@ -105,7 +105,20 @@ nonisolated struct GridData: Sendable {
     var hasMore = false
     /// The SQL typed by the user, when the rows did not come from opening a table.
     var customSQL: String?
+    /// Rows skipped before this page (0 on the first page); pages are View ▸ Rows to fetch long.
+    var offset = 0
+    /// The rows came from a statement that changed data; it is not run again to page.
+    var isWriteResult = false
     var loadedAt = Date()
+
+    /// A page before this one exists.
+    var hasPreviousPage: Bool { offset > 0 && !isWriteResult }
+    /// A page after this one exists: the table has more rows, or the query returned more than a page.
+    var hasNextPage: Bool {
+        guard !isWriteResult else { return false }
+        if let totalRows { return offset + rows.count < totalRows }
+        return hasMore
+    }
 
     var ref: TableRef? { description?.summary.ref }
     var isEditable: Bool {

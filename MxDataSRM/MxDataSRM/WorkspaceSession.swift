@@ -152,8 +152,9 @@ final class WorkspaceSession {
 
     // MARK: DB Table
 
-    /// Loads the whole table into the grid. `resetSQL` puts the table's default SELECT in the SQL box.
-    func openTable(_ ref: TableRef, limit: Int, resetSQL: Bool = true) async {
+    /// Loads the table into the grid, one page of `limit` rows from `offset`.
+    /// `resetSQL` puts the table's default SELECT in the SQL box.
+    func openTable(_ ref: TableRef, limit: Int, offset: Int = 0, resetSQL: Bool = true) async {
         guard let service else { return }
         if tables.isEmpty { await refreshTables() }
         guard let summary = tables.first(where: { $0.ref == ref }) else {
@@ -162,7 +163,7 @@ final class WorkspaceSession {
         }
         await run {
             let description = try await service.describe(summary)
-            self.setGrid(try await service.fetchGrid(description, limit: limit))
+            self.setGrid(try await service.fetchGrid(description, limit: limit, offset: offset))
             self.openedTable = description
             self.infoMessage = nil
             if resetSQL {
@@ -173,11 +174,28 @@ final class WorkspaceSession {
         }
     }
 
+    /// Loads the current page again.
     func reloadGrid(limit: Int) async {
+        let offset = grid?.offset ?? 0
         if let sql = grid?.customSQL {
-            await runSQL(sql, limit: limit)
+            await runSQL(sql, limit: limit, offset: offset)
         } else if let ref = grid?.ref {
-            await openTable(ref, limit: limit, resetSQL: false)
+            await openTable(ref, limit: limit, offset: offset, resetSQL: false)
+        }
+    }
+
+    /// Next or Previous: loads the neighbouring page of `limit` rows (View ▸ Rows to fetch).
+    func showPage(next: Bool, limit: Int) async {
+        guard let grid, next ? grid.hasNextPage : grid.hasPreviousPage else { return }
+        guard edits.isEmpty else {
+            errorMessage = "\(edits.count) pending edit\(edits.count == 1 ? "" : "s") on this page. Apply with Update… or use Discard Edits before changing page."
+            return
+        }
+        let offset = next ? grid.offset + grid.rows.count : max(0, grid.offset - limit)
+        if let sql = grid.customSQL {
+            await runSQL(sql, limit: limit, offset: offset)
+        } else if let ref = grid.ref {
+            await openTable(ref, limit: limit, offset: offset, resetSQL: false)
         }
     }
 
@@ -236,7 +254,7 @@ final class WorkspaceSession {
 
     /// Pre-flights and runs `sql` (default: the SQL box), then shows its rows in the grid.
     /// Statements that change data wait in `pendingWriteSQL` until the user confirms.
-    func runSQL(_ sql: String? = nil, limit: Int, confirmedWrite: Bool = false) async {
+    func runSQL(_ sql: String? = nil, limit: Int, offset: Int = 0, confirmedWrite: Bool = false) async {
         let sql = Self.statementBody(sql ?? sqlText)
         sqlError = nil
         infoMessage = nil
@@ -253,7 +271,7 @@ final class WorkspaceSession {
             return
         }
         if let table = openedTable, Self.normalized(sql) == Self.normalized(table.defaultSQL) {
-            await openTable(table.summary.ref, limit: limit, resetSQL: false)
+            await openTable(table.summary.ref, limit: limit, offset: offset, resetSQL: false)
             return
         }
 
@@ -275,15 +293,19 @@ final class WorkspaceSession {
             }
             let result: QueryResult
             do {
-                result = try await service.runQuery(sql, limit: limit, allowWrites: confirmedWrite)
+                result = try await service.runQuery(sql, limit: limit, offset: offset, allowWrites: confirmedWrite)
             } catch is WriteNotAllowed {
                 pendingWriteSQL = sql
                 return
             }
-            setGrid(try await queryGrid(result, sql: sql, service: service))
+            var grid = try await queryGrid(result, sql: sql, service: service)
+            grid.offset = offset
+            grid.isWriteResult = confirmedWrite
+            setGrid(grid)
             form = .table
             infoMessage = "Query returned \(result.rows.count.formatted()) row\(result.rows.count == 1 ? "" : "s")"
-                + (result.hasMore ? " (fetch limit reached)." : ".")
+                + (offset > 0 ? " from row \((offset + 1).formatted())" : "")
+                + (result.hasMore ? " (more on the next page)." : ".")
         } catch {
             sqlError = Self.describeSQLError(DatabaseError.from(error), in: sql)
         }

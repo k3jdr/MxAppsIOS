@@ -59,7 +59,7 @@ struct UpdateDialog: View {
                     .foregroundStyle(.secondary)
                     ForEach(sortedEdits, id: \.key) { key, edit in
                         GridRow {
-                            Text("\(key.row + 1)").monospacedDigit()
+                            Text("\(grid.offset + key.row + 1)").monospacedDigit()
                             Text(grid.columns[key.column].name)
                             Text(grid.rows[key.row][key.column] ?? "NULL").foregroundStyle(.secondary)
                             Text(displayNew(edit.value))

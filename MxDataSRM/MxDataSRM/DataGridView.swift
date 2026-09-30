@@ -217,7 +217,7 @@ struct DataGridView: NSViewRepresentable {
 
             if tableColumn.identifier == Self.rowNumberID {
                 field.isEditable = false
-                field.stringValue = "\(row + 1)"
+                field.stringValue = "\(grid.offset + row + 1)"
                 field.alignment = .right
                 field.textColor = .secondaryLabelColor
                 field.placeholderString = nil

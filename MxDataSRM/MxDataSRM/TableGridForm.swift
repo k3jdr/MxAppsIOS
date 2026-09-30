@@ -117,6 +117,21 @@ struct TableGridForm: View {
             }
             .disabled(session.busy)
             Spacer()
+            Button("Previous", systemImage: "chevron.left") {
+                Task { await session.showPage(next: false, limit: view.fetchLimit) }
+            }
+            .disabled(!grid.hasPreviousPage || session.busy || session.runningSQL)
+            .help("Load the previous \(view.fetchLimit.formatted()) rows")
+            Button {
+                Task { await session.showPage(next: true, limit: view.fetchLimit) }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Next")
+                    Image(systemName: "chevron.right")
+                }
+            }
+            .disabled(!grid.hasNextPage || session.busy || session.runningSQL)
+            .help("Load the next \(view.fetchLimit.formatted()) rows")
             Button("Discard Edits") { session.discardEdits() }
                 .disabled(session.edits.isEmpty)
             Button("Update…") { session.showUpdateDialog = true }
@@ -154,10 +169,15 @@ struct TableGridForm: View {
         }
     }
 
+    /// "Rows 1,001–2,000 of 5,432"; without a known total, "(more on the next page)".
     private func rowsText(_ grid: GridData) -> String {
-        if let total = grid.totalRows {
-            return "\(grid.rows.count.formatted()) of \(total.formatted()) rows loaded"
+        guard !grid.rows.isEmpty else {
+            return grid.offset > 0 ? "No rows after row \(grid.offset.formatted())" : "No rows"
         }
-        return "\(grid.rows.count.formatted()) rows" + (grid.hasMore ? " (fetch limit reached)" : "")
+        let range = "Rows \((grid.offset + 1).formatted())–\((grid.offset + grid.rows.count).formatted())"
+        if let total = grid.totalRows {
+            return range + " of \(total.formatted())"
+        }
+        return range + (grid.hasMore ? " (more on the next page)" : "")
     }
 }

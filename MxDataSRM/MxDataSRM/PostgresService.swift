@@ -269,7 +269,8 @@ actor PostgresService {
 
     // MARK: DB Table
 
-    func fetchGrid(_ description: TableDescription, limit: Int) async throws -> GridData {
+    /// One page of the table: `limit` rows after skipping `offset`, in primary-key (or ctid) order.
+    func fetchGrid(_ description: TableDescription, limit: Int, offset: Int = 0) async throws -> GridData {
         let ref = description.summary.ref
         let selectList = (["t.ctid::text"] + description.columns.map { "t." + quoteIdent($0.name) + "::text" })
             .joined(separator: ", ")
@@ -277,14 +278,15 @@ actor PostgresService {
         let orderBy = description.primaryKey.isEmpty
             ? "t.ctid"
             : description.primaryKey.map { "t." + quoteIdent($0) }.joined(separator: ", ")
-        let result = try await rows("SELECT \(selectList) FROM \(ref.qualifiedSQL) AS t ORDER BY \(orderBy) LIMIT \(max(1, limit))")
+        let result = try await rows("SELECT \(selectList) FROM \(ref.qualifiedSQL) AS t ORDER BY \(orderBy) LIMIT \(max(1, limit)) OFFSET \(max(0, offset))")
         let total = try await exactRowCount(ref)
         return GridData(description: description,
                         title: ref.displayName,
                         columns: description.columns,
                         rows: result.map { Array($0.dropFirst()) },
                         rowIDs: result.map { $0[0] ?? "" },
-                        totalRows: total)
+                        totalRows: total,
+                        offset: max(0, offset))
     }
 
     /// Runs the planned UPDATEs. Each statement must touch exactly one row;
@@ -365,12 +367,12 @@ actor PostgresService {
     /// Runs a statement that returns rows and fetches at most `limit` of them.
     /// Without `allowWrites` it runs in a READ ONLY transaction and throws
     /// `WriteNotAllowed` if the statement tries to change data.
-    func runQuery(_ sql: String, limit: Int, allowWrites: Bool) async throws -> QueryResult {
+    func runQuery(_ sql: String, limit: Int, offset: Int = 0, allowWrites: Bool) async throws -> QueryResult {
         let limit = max(1, limit)
         var columns: [QueryColumn] = []
         var result: [[String?]] = []
         // One row past the limit tells whether more rows were available.
-        try await streamQuery(sql, limit: limit + 1, allowWrites: allowWrites) {
+        try await streamQuery(sql, limit: limit + 1, offset: offset, allowWrites: allowWrites) {
             columns = $0
         } row: {
             result.append($0)
@@ -388,7 +390,7 @@ actor PostgresService {
         var buffer = Data()
         var count = 0
         do {
-            try await streamQuery(sql, limit: nil, allowWrites: false) { columns in
+            try await streamQuery(sql, limit: nil, offset: 0, allowWrites: false) { columns in
                 buffer.append(csvLine(columns.map(\.name)))
             } row: { values in
                 buffer.append(csvLine(values))
@@ -411,13 +413,14 @@ actor PostgresService {
     /// Runs `sql` wrapped in a CTE and hands over the column metadata, then each row
     /// as text values. Without `allowWrites` it runs in a READ ONLY transaction and
     /// throws `WriteNotAllowed` if the statement tries to change data.
-    private func streamQuery(_ sql: String, limit: Int?, allowWrites: Bool,
+    private func streamQuery(_ sql: String, limit: Int?, offset: Int, allowWrites: Bool,
                              columns onColumns: ([QueryColumn]) throws -> Void,
                              row onRow: ([String?]) throws -> Void) async throws {
         // Each row comes back as its composite text form, mx_q::text, so every column is
         // decoded as text whatever its type. mx_q.* only supplies the column metadata.
         let wrapped = Self.queryPrefix + sql + "\n) SELECT mx_q::text, mx_q.* FROM mx_q"
             + (limit.map { " LIMIT \($0)" } ?? "")
+            + (offset > 0 ? " OFFSET \(offset)" : "")
         _ = try await rows(allowWrites ? "BEGIN" : "BEGIN READ ONLY")
         do {
             let sequence = try await connection.query(PostgresQuery(unsafeSQL: wrapped), logger: logger)
