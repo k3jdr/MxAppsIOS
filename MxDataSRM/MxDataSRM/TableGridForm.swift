@@ -40,7 +40,9 @@ struct TableGridForm: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { sql in
-                Text("This statement can insert, update or delete rows. It runs in its own transaction, which is committed if it succeeds.\n\n\(String(sql.prefix(400)))")
+                Text(WorkspaceSession.isCall(sql)
+                     ? "This calls a stored procedure, which can change data. Its work is committed if it succeeds.\n\n\(String(sql.prefix(400)))"
+                     : "This statement can insert, update or delete rows. It runs in its own transaction, which is committed if it succeeds.\n\n\(String(sql.prefix(400)))")
             }
         }
     }

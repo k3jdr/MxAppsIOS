@@ -317,6 +317,20 @@ final class WorkspaceSession {
         runningSQL = true
         defer { runningSQL = false }
         do {
+            // PREPARE can't take a CALL, so a CALL skips the server pre-flight; like any write it
+            // waits for confirmation, then runs as sent (errors still come back psql style).
+            if Self.isCall(sql) {
+                guard confirmedWrite else {
+                    pendingWriteSQL = sql
+                    return
+                }
+                try await service.call(sql)
+                infoMessage = "Procedure executed."
+                if let table = openedTable {
+                    await openTable(table.summary.ref, limit: limit, resetSQL: false)
+                }
+                return
+            }
             let preflight = try await service.preflight(sql)
             guard preflight.returnsRows else {
                 guard confirmedWrite else {
@@ -426,7 +440,7 @@ final class WorkspaceSession {
         sql.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
-    private static let runnableKeywords: Set = ["select", "with", "values", "table", "insert", "update", "delete", "merge"]
+    private static let runnableKeywords: Set = ["select", "with", "values", "table", "insert", "update", "delete", "merge", "call"]
 
     /// Checks made before asking the server (which then parses the statement with PREPARE).
     static func localPreflight(_ sql: String) -> String? {
@@ -437,9 +451,13 @@ final class WorkspaceSession {
             return "The statement must start with a SQL keyword such as SELECT."
         }
         guard runnableKeywords.contains(keyword) else {
-            return "\(keyword.uppercased()) statements cannot be run here. Use SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE or MERGE."
+            return "\(keyword.uppercased()) statements cannot be run here. Use SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE, MERGE or CALL."
         }
         return nil
+    }
+
+    static func isCall(_ sql: String) -> Bool {
+        leadingKeyword(sql) == "call"
     }
 
     /// First word of the statement, skipping whitespace, comments and opening parentheses.

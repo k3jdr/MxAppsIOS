@@ -529,6 +529,18 @@ actor PostgresService {
         }
     }
 
+    /// Runs a CALL statement as sent, outside an explicit transaction block: a procedure may then
+    /// COMMIT or ROLLBACK itself, which PostgreSQL refuses inside BEGIN ... COMMIT. Without its own
+    /// transaction control the procedure's work is committed when the CALL succeeds. Any OUT/INOUT
+    /// values it sends back are not shown.
+    func call(_ sql: String) async throws {
+        do {
+            for try await _ in try await connection.query(PostgresQuery(unsafeSQL: sql), logger: logger) {}
+        } catch {
+            throw DatabaseError.from(error)
+        }
+    }
+
     private static func mismatch(_ update: PlannedUpdate, _ count: Int) -> String {
         count == 0
             ? "Row \(update.rowLabel): not found, or changed since it was loaded."

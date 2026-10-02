@@ -22,7 +22,7 @@ The grid then shows the results, up to the **Rows to fetch** limit (default 1000
 Pre-flight checks run before anything executes. Problems are shown in red above the SQL box, psql style,
 with the line and a caret under the error position:
 
-1. The statement is not empty and is a SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE or MERGE.
+1. The statement is not empty and is a SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE, MERGE or CALL.
    DDL and transaction commands are refused.
 2. There are no pending grid edits, which the new results would replace.
 3. The server parses and analyses the statement with `PREPARE` without running it. This catches syntax
@@ -31,6 +31,11 @@ with the line and a caret under the error position:
 Queries run in a **read-only transaction**. A statement that changes data, whether it is an
 INSERT/UPDATE/DELETE or a query that writes, asks for confirmation first. It then runs in its own
 transaction and is committed if it succeeds. After a write without `RETURNING`, the opened table is reloaded.
+
+**CALL** runs a stored procedure, e.g. `CALL refresh_master_lei_country_count()`. PostgreSQL can't `PREPARE`
+a CALL, so check 3 is skipped and errors are reported when it runs. It always asks for confirmation, then
+runs outside an explicit transaction, so a procedure may `COMMIT` or `ROLLBACK` itself; otherwise its work
+is committed when the CALL succeeds. OUT/INOUT values the procedure returns are not shown.
 
 Results stay **editable** when every column comes from one table and either:
 
