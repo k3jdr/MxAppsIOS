@@ -11,7 +11,7 @@ Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is 
 |------|--------------|
 | **DB Connection** | Host, port, user, database, password, SSL mode (`disable` / `prefer` / `require`, with no certificate verification, like libpq). |
 | **DB Table Selection** | Lists tables with a row count (`~` = planner estimate; **Count Rows** replaces it with `count(*)`) and size. The panel on the right shows a psql `\d` style description: columns, indexes, check constraints, foreign keys and "referenced by". Double-click a table or press **Open Table** to load it. With **Open in New Window** checked, the table opens in its own window instead (see below). |
-| **DB Table** | SQL box with **Run SQL** (see below) above an editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Right-click a cell to set it to NULL or revert it. |
+| **DB Table** | SQL box with **Run SQL** (see below) above an editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Cells can be selected and copied (see **Selecting and copying cells**). |
 
 ## Run SQL
 
@@ -36,6 +36,22 @@ Results stay **editable** when every column comes from one table and its primary
 `SELECT id, name FROM customers WHERE balance > 20`. Joins, expressions and aggregates give a read-only
 grid. Running the table's unchanged default statement reloads the whole table, with row IDs and an
 exact row count.
+
+## Selecting and copying cells
+
+The grid selects cells like a spreadsheet:
+
+- **Click** a cell; **shift-click** or **drag** to select a range; **arrow keys** move the selection
+  (shift extends it) and **Tab** moves across. Click a **#** row number for the whole row, a **column header**
+  for the whole column, or press **⌘A** for every cell on the page.
+- **Copy** (⌘C, Edit ▸ Copy, or right-click ▸ Copy): one cell copies as its plain value; a range copies as
+  tab-separated rows, so it pastes into Numbers or Excel as cells. NULL copies as an empty value.
+  Right-click ▸ **Copy with Column Names** adds a header line.
+- **Paste** (⌘V) puts the clipboard into the grid as pending edits, starting at the top-left selected cell; a
+  single value fills every selected cell. Paste is **only enabled on editable grids**. On read-only results,
+  such as joins, expressions and aggregates, it stays disabled because their cells do not map back to one table.
+- **Edit** a cell in place with a double-click or **Return**. Right-click ▸ **Set to NULL** and **Revert**
+  apply to every selected cell.
 
 ## Pages
 
@@ -119,7 +135,7 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `TableUpdate.swift` | Builds UPDATE statements from the pending edits |
 | `DatabaseModels.swift` | Table, column and grid value types; psql-style `\d` formatting |
 | `ConnectionForm.swift`, `TableSelectionForm.swift`, `TableGridForm.swift` | The three forms |
-| `DataGridView.swift` | Editable `NSTableView` grid with always-visible scroll bars |
+| `DataGridView.swift` | Editable `NSTableView` grid with always-visible scroll bars, cell selection, copy and paste |
 | `ViewSettingsDialog.swift`, `UpdateDialog.swift` | Table ▸ View… and Table ▸ Update… |
 | `TableWindow.swift` | Table opened with **Open in New Window** (own window and connection) |
 | `CSVExport.swift` | Export CSV… (Save panel, CSV formatting) |

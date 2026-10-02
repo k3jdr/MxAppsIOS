@@ -139,8 +139,8 @@ struct TableGridForm: View {
         }
 
         Text(grid.isEditable
-             ? "Click a cell in the selected row to edit it; press Return to keep the change. Right-click a cell to set it to NULL."
-             : "Read-only result. To edit rows, query a single table and include its primary key columns.")
+             ? "Click, shift-click or drag to select cells; ⌘C copies and ⌘V pastes. Double-click a cell or press Return to edit it. Right-click for NULL and Revert."
+             : "Read-only result: select cells and press ⌘C to copy. To edit rows, query a single table and include its primary key columns.")
             .font(.footnote)
             .foregroundStyle(.secondary)
     }
