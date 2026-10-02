@@ -3,7 +3,8 @@
 //  MxDataSRM
 //
 //  Plain-text, monospaced SQL editor. Wraps NSTextView so smart quotes, smart
-//  dashes and autocorrection can be turned off; they would corrupt SQL.
+//  dashes and autocorrection can be turned off; they would corrupt SQL. Its
+//  right-click menu starts with `menuItems` (Open / Save SQL file, ...).
 //
 
 import AppKit
@@ -11,6 +12,8 @@ import SwiftUI
 
 struct SQLTextView: NSViewRepresentable {
     @Binding var text: String
+    /// Items put above the standard text items of the right-click menu.
+    var menuItems: () -> [NSMenuItem] = { [] }
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
@@ -37,6 +40,7 @@ struct SQLTextView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.text = $text
+        context.coordinator.menuItems = menuItems
         let textView = scroll.documentView as! NSTextView
         if textView.string != text {
             textView.string = text
@@ -45,6 +49,7 @@ struct SQLTextView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        var menuItems: () -> [NSMenuItem] = { [] }
 
         init(text: Binding<String>) {
             self.text = text
@@ -53,6 +58,13 @@ struct SQLTextView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             text.wrappedValue = textView.string
+        }
+
+        func textView(_ view: NSTextView, menu: NSMenu, for event: NSEvent, at charIndex: Int) -> NSMenu? {
+            // The menu passed in may be shared by all text views: add to a copy.
+            let result = (menu.copy() as? NSMenu) ?? NSMenu()
+            for (index, item) in menuItems().enumerated() { result.insertItem(item, at: index) }
+            return result
         }
     }
 }

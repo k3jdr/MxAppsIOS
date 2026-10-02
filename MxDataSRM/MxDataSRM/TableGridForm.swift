@@ -67,7 +67,9 @@ struct TableGridForm: View {
             }
 
             HStack(alignment: .top, spacing: 8) {
-                SQLTextView(text: $session.sqlText)
+                SQLTextView(text: $session.sqlText) {
+                    session.sqlMenuItems { Task { await session.runSQL(limit: view.fetchLimit) } }
+                }
                     .frame(height: 76)
                 VStack(spacing: 6) {
                     Button {
@@ -85,9 +87,20 @@ struct TableGridForm: View {
                 }
             }
 
-            Text("Fetches up to \(view.fetchLimit.formatted()) rows (Table ▸ View…). Queries run read-only; statements that change data ask before they run.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if let name = session.sqlFileName {
+                    Label(name, systemImage: "doc.text")
+                        .help(session.sqlFileURL?.path ?? "")
+                    if session.sqlIsEdited {
+                        Text("— Edited").foregroundStyle(.orange)
+                    }
+                    Text("·")
+                }
+                Text("Right-click the SQL to open or save .sql files. Fetches up to \(view.fetchLimit.formatted()) rows (Table ▸ View…); queries run read-only, and statements that change data ask before they run.")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
         }
     }
 
@@ -143,7 +156,7 @@ struct TableGridForm: View {
 
         Text(grid.isEditable
              ? "Click, shift-click or drag to select cells; ⌘C copies and ⌘V pastes. Double-click a cell or press Return to edit it. Right-click for NULL and Revert."
-             : "Read-only result: select cells and press ⌘C to copy. To edit rows, query a single table and include its primary key columns.")
+             : "Read-only result: select cells and press ⌘C to copy. To edit rows, query one table with SELECT * (any WHERE / ORDER BY), or include its primary key columns.")
             .font(.footnote)
             .foregroundStyle(.secondary)
     }

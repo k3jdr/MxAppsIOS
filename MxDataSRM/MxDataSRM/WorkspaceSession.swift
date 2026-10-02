@@ -55,6 +55,10 @@ final class WorkspaceSession {
 
     /// Contents of the SQL box above the grid.
     var sqlText = ""
+    /// The .sql file the SQL box was opened from or saved to (see SQLFiles.swift).
+    var sqlFileURL: URL?
+    /// The SQL box's text when it was last opened or saved, to tell whether it has been edited.
+    var sqlSavedText: String?
     /// Pre-flight or execution error for the SQL box, shown in red above it.
     var sqlError: String?
     /// A statement that changes data, waiting for the user to confirm it.
@@ -160,6 +164,8 @@ final class WorkspaceSession {
     func openTable(_ ref: TableRef, limit: Int, offset: Int = 0, resetSQL: Bool = true,
                    options: GridQueryOptions? = nil) async {
         guard let service else { return }
+        // Opening a table replaces the SQL box; offer to save unsaved changes to its file first.
+        if resetSQL && !confirmReplacingSQL() { return }
         if tables.isEmpty { await refreshTables() }
         guard let summary = tables.first(where: { $0.ref == ref }) else {
             errorMessage = "Table \(ref.displayName) was not found."
@@ -173,6 +179,8 @@ final class WorkspaceSession {
             self.infoMessage = nil
             if resetSQL {
                 self.sqlText = description.defaultSQL
+                self.sqlFileURL = nil
+                self.sqlSavedText = nil
                 self.sqlError = nil
             }
             self.form = .table
@@ -322,15 +330,28 @@ final class WorkspaceSession {
                 }
                 return
             }
-            let result: QueryResult
+            var result: QueryResult
+            var rowIDs: [String]?
             do {
-                result = try await service.runQuery(sql, limit: limit, offset: offset, allowWrites: confirmedWrite,
-                                                    options: options, columns: grid?.columns ?? [])
+                // "SELECT * ..." is run with each row's ctid too, so a result with a table's full column
+                // layout can be edited even when the table has no primary key. Statements where PostgreSQL
+                // rejects the ctid (joins, views, subqueries) simply run as written.
+                if !confirmedWrite, let withRowID = Self.addingRowID(sql),
+                   let r = try? await service.runQuery(withRowID, limit: limit, offset: offset, allowWrites: false,
+                                                       options: options, columns: grid?.columns ?? []),
+                   r.columns.first?.name == Self.rowIDColumn {
+                    rowIDs = r.rows.map { $0[0] ?? "" }
+                    result = QueryResult(columns: Array(r.columns.dropFirst()), rows: r.rows.map { Array($0.dropFirst()) },
+                                         hasMore: r.hasMore)
+                } else {
+                    result = try await service.runQuery(sql, limit: limit, offset: offset, allowWrites: confirmedWrite,
+                                                        options: options, columns: grid?.columns ?? [])
+                }
             } catch is WriteNotAllowed {
                 pendingWriteSQL = sql
                 return
             }
-            var grid = try await queryGrid(result, sql: sql, service: service)
+            var grid = try await queryGrid(result, sql: sql, rowIDs: rowIDs, service: service)
             grid.offset = offset
             grid.isWriteResult = confirmedWrite
             grid.options = options
@@ -344,9 +365,11 @@ final class WorkspaceSession {
         }
     }
 
-    /// Grid for a query result. It is editable when every column is a plain column of
-    /// one table and the table's primary key is among them; otherwise it is read-only.
-    private func queryGrid(_ result: QueryResult, sql: String, service: PostgresService) async throws -> GridData {
+    /// Grid for a query result. It is editable when every column is a plain column of one table and
+    /// either the table's primary key is among them, or the result has the table's full column layout
+    /// (as SELECT * gives) and `rowIDs` (ctid of each row) identify the rows. Otherwise it is read-only.
+    private func queryGrid(_ result: QueryResult, sql: String, rowIDs: [String]? = nil,
+                           service: PostgresService) async throws -> GridData {
         var grid = GridData(description: nil, title: "Query result",
                             columns: result.columns.map { ColumnInfo(name: $0.name, type: $0.type.lowercased()) },
                             rows: result.rows, hasMore: result.hasMore, customSQL: sql)
@@ -355,12 +378,41 @@ final class WorkspaceSession {
               let summary = tables.first(where: { $0.oid == String(oid) }) else { return grid }
         let description = try await service.describe(summary)
         let columns = result.columns.compactMap { column in description.columns.first { $0.attnum == column.attnum } }
-        guard columns.count == result.columns.count, !description.primaryKey.isEmpty,
-              description.primaryKey.allSatisfy({ key in columns.contains { $0.name == key } }) else { return grid }
+        guard columns.count == result.columns.count else { return grid }
+        let hasKey = !description.primaryKey.isEmpty
+            && description.primaryKey.allSatisfy({ key in columns.contains { $0.name == key } })
+        let fullLayout = columns.map(\.attnum) == description.columns.map(\.attnum)
+        if fullLayout, let rowIDs, rowIDs.count == result.rows.count { grid.rowIDs = rowIDs }
+        guard hasKey || !grid.rowIDs.isEmpty else { return grid }
         grid.description = description
         grid.columns = columns
         grid.title = "\(summary.ref.displayName) (query)"
         return grid
+    }
+
+    static let rowIDColumn = "mx_row_ctid"
+
+    /// "SELECT * FROM t WHERE ..." -> "SELECT ctid::text AS mx_row_ctid, * FROM t WHERE ...";
+    /// nil for any statement that does not start with SELECT * (after comments).
+    static func addingRowID(_ sql: String) -> String? {
+        var rest = Substring(sql)
+        while true {
+            rest = rest.drop { $0.isWhitespace }
+            if rest.hasPrefix("--") {
+                rest = rest.drop { $0 != "\n" }
+            } else if rest.hasPrefix("/*") {
+                guard let end = rest.range(of: "*/") else { return nil }
+                rest = rest[end.upperBound...]
+            } else {
+                break
+            }
+        }
+        guard rest.prefix(6).lowercased() == "select" else { return nil }
+        let afterSelect = rest.dropFirst(6)
+        guard afterSelect.first?.isWhitespace == true else { return nil }
+        let star = afterSelect.drop { $0.isWhitespace }
+        guard star.first == "*", star.dropFirst().first.map({ $0.isWhitespace || $0 == "\n" }) ?? true else { return nil }
+        return String(sql[sql.startIndex..<rest.startIndex]) + "SELECT ctid::text AS \(rowIDColumn), *" + String(star.dropFirst())
     }
 
     /// The statement without trailing whitespace and semicolons.

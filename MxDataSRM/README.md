@@ -32,10 +32,39 @@ Queries run in a **read-only transaction**. A statement that changes data, wheth
 INSERT/UPDATE/DELETE or a query that writes, asks for confirmation first. It then runs in its own
 transaction and is committed if it succeeds. After a write without `RETURNING`, the opened table is reloaded.
 
-Results stay **editable** when every column comes from one table and its primary key is included, e.g.
-`SELECT id, name FROM customers WHERE balance > 20`. Joins, expressions and aggregates give a read-only
-grid. Running the table's unchanged default statement reloads the whole table, with row IDs and an
-exact row count.
+Results stay **editable** when every column comes from one table and either:
+
+- the result has the **table's full column layout**, as `SELECT * FROM table WHERE ...` (with any WHERE,
+  ORDER BY or LIMIT) gives. Such a statement is run with each row's physical row ID (`ctid`) as well, so
+  rows can be updated even when the table has **no primary key**, e.g.
+  `SELECT * FROM public.avt_form_code WHERE legal_form_name_en ILIKE '%liability%'`; or
+- the table's **primary key** is among the columns, e.g. `SELECT id, name FROM customers WHERE balance > 20`.
+
+Anything else is read-only: a subset of columns without the key, joins, views, subqueries, expressions and
+aggregates. Running the table's unchanged default statement reloads the whole table, with row IDs and an
+exact row count. A row ID changes when the row is updated; the grid reloads after **Update…**, so it always
+holds the current ones.
+
+## SQL files
+
+Right-click in the SQL box to save and recall `.sql` files. These items appear above the usual
+Cut / Copy / Paste:
+
+| Item | Does |
+|------|------|
+| **Run SQL** | Same as the Run SQL button (⌘↩) |
+| **New SQL** | Empties the SQL box (not tied to a file) |
+| **Open SQL File…** | Opens a `.sql` file into the SQL box |
+| **Open Recent ▸** | The last 10 SQL files opened or saved; **Clear Menu** |
+| **SQL Folder ▸** | Every `.sql` file in your SQL folder, to open with one click; **Show SQL Folder in Finder**; **Choose / Change SQL Folder…** |
+| **Save SQL** / **Save SQL As…** | Saves the SQL box (UTF-8). Save and Open panels start in the SQL folder |
+| **Revert to Saved** | Discards changes since the file was opened or saved |
+| **Show in Finder** | Reveals the current file |
+
+Under the SQL box, the current file's name is shown, with **— Edited** when it has unsaved changes. Opening
+another file, **New SQL**, or opening a table (which puts that table's SELECT in the box) first asks whether
+to save them. The SQL folder and recent files are remembered across launches for the whole app (as sandbox
+bookmarks, see `MxDataSRM.entitlements`). The current file is per window and is not saved in the workspace.
 
 ## Sorting and filtering
 
@@ -167,6 +196,7 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `ViewSettingsDialog.swift`, `UpdateDialog.swift` | Table ▸ View… and Table ▸ Update… |
 | `TableWindow.swift` | Table opened with **Open in New Window** (own window and connection) |
 | `CSVExport.swift` | Export CSV… (Save panel, CSV formatting) |
-| `SQLTextView.swift` | Plain-text SQL editor (no smart quotes or autocorrect) |
+| `SQLTextView.swift` | Plain-text SQL editor (no smart quotes or autocorrect) with an extensible right-click menu |
+| `SQLFiles.swift` | SQL files: folder and recent files (bookmarks), open / save / revert, the SQL box's right-click menu |
 
 The document type is declared in `Info.plist`, which is merged with the Info.plist that Xcode generates.
