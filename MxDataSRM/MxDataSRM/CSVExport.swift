@@ -102,7 +102,8 @@ extension WorkspaceSession {
                 guard let sql = grid.customSQL ?? grid.description?.defaultSQL else { return }
                 guard let service = currentService else { throw DatabaseError(message: "Not connected.") }
                 do {
-                    count = try await service.exportCSV(sql, to: url)
+                    // Same sorting and filters as the grid.
+                    count = try await service.exportCSV(sql, to: url, options: grid.options, columns: grid.columns)
                 } catch is WriteNotAllowed {
                     throw DatabaseError(message: "This statement changes data, so it is not run again. Export the loaded rows instead.")
                 }

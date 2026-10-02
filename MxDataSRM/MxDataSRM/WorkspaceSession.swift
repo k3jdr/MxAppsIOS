@@ -39,6 +39,9 @@ final class WorkspaceSession {
     var openInNewWindow = false
 
     var grid: GridData?
+    /// Excel-style sorting and filters of the loaded grid (applied on the server). Kept by
+    /// paging, Reload and Update; cleared when a table is opened or new SQL is run.
+    var gridOptions: GridQueryOptions { grid?.options ?? GridQueryOptions() }
     var edits: [CellKey: CellEdit] = [:]
     /// Bumped whenever `grid` is replaced or edits are discarded, so the grid view reloads.
     private(set) var gridVersion = 0
@@ -154,7 +157,8 @@ final class WorkspaceSession {
 
     /// Loads the table into the grid, one page of `limit` rows from `offset`.
     /// `resetSQL` puts the table's default SELECT in the SQL box.
-    func openTable(_ ref: TableRef, limit: Int, offset: Int = 0, resetSQL: Bool = true) async {
+    func openTable(_ ref: TableRef, limit: Int, offset: Int = 0, resetSQL: Bool = true,
+                   options: GridQueryOptions? = nil) async {
         guard let service else { return }
         if tables.isEmpty { await refreshTables() }
         guard let summary = tables.first(where: { $0.ref == ref }) else {
@@ -163,7 +167,8 @@ final class WorkspaceSession {
         }
         await run {
             let description = try await service.describe(summary)
-            self.setGrid(try await service.fetchGrid(description, limit: limit, offset: offset))
+            let options = options ?? (resetSQL ? GridQueryOptions() : self.gridOptions)
+            self.setGrid(try await service.fetchGrid(description, limit: limit, offset: offset, options: options))
             self.openedTable = description
             self.infoMessage = nil
             if resetSQL {
@@ -197,6 +202,29 @@ final class WorkspaceSession {
         } else if let ref = grid.ref {
             await openTable(ref, limit: limit, offset: offset, resetSQL: false)
         }
+    }
+
+    /// Applies new sorting / filters to the grid and reloads it from its first page.
+    func applyGridOptions(_ options: GridQueryOptions, limit: Int) async {
+        guard let grid, options != gridOptions else { return }
+        guard edits.isEmpty else {
+            errorMessage = "\(edits.count) pending edit\(edits.count == 1 ? "" : "s"). Apply with Update… or use Discard Edits before sorting or filtering."
+            return
+        }
+        if let sql = grid.customSQL {
+            await runSQL(sql, limit: limit, offset: 0, options: options)
+        } else if let ref = grid.ref {
+            await openTable(ref, limit: limit, offset: 0, resetSQL: false, options: options)
+        }
+    }
+
+    /// Distinct values of a grid column for its filter checklist (other columns' filters applied).
+    func distinctValues(column index: Int) async throws -> (values: [DistinctValue], truncated: Bool) {
+        guard let service, let grid, let source = grid.source, grid.columns.indices.contains(index) else {
+            return ([], false)
+        }
+        return try await service.distinctValues(source: source, column: grid.columns[index].name,
+                                                columns: grid.columns, options: gridOptions)
     }
 
     private func setGrid(_ data: GridData) {
@@ -254,7 +282,10 @@ final class WorkspaceSession {
 
     /// Pre-flights and runs `sql` (default: the SQL box), then shows its rows in the grid.
     /// Statements that change data wait in `pendingWriteSQL` until the user confirms.
-    func runSQL(_ sql: String? = nil, limit: Int, offset: Int = 0, confirmedWrite: Bool = false) async {
+    func runSQL(_ sql: String? = nil, limit: Int, offset: Int = 0, confirmedWrite: Bool = false,
+                options: GridQueryOptions? = nil) async {
+        // New SQL from the box, or a confirmed write, starts without sorting and filters.
+        let options = options ?? ((sql == nil || confirmedWrite) ? GridQueryOptions() : gridOptions)
         let sql = Self.statementBody(sql ?? sqlText)
         sqlError = nil
         infoMessage = nil
@@ -271,7 +302,7 @@ final class WorkspaceSession {
             return
         }
         if let table = openedTable, Self.normalized(sql) == Self.normalized(table.defaultSQL) {
-            await openTable(table.summary.ref, limit: limit, offset: offset, resetSQL: false)
+            await openTable(table.summary.ref, limit: limit, offset: offset, resetSQL: false, options: options)
             return
         }
 
@@ -293,7 +324,8 @@ final class WorkspaceSession {
             }
             let result: QueryResult
             do {
-                result = try await service.runQuery(sql, limit: limit, offset: offset, allowWrites: confirmedWrite)
+                result = try await service.runQuery(sql, limit: limit, offset: offset, allowWrites: confirmedWrite,
+                                                    options: options, columns: grid?.columns ?? [])
             } catch is WriteNotAllowed {
                 pendingWriteSQL = sql
                 return
@@ -301,6 +333,7 @@ final class WorkspaceSession {
             var grid = try await queryGrid(result, sql: sql, service: service)
             grid.offset = offset
             grid.isWriteResult = confirmedWrite
+            grid.options = options
             setGrid(grid)
             form = .table
             infoMessage = "Query returned \(result.rows.count.formatted()) row\(result.rows.count == 1 ? "" : "s")"

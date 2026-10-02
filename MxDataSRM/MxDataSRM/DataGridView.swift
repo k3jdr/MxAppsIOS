@@ -11,6 +11,9 @@
 //  only on editable grids, since read-only results (joins, expressions) do not
 //  map back to one table.
 //
+//  Each column header has an Excel-style filter button (sort and filter
+//  popover); the sorted column shows an arrow and filtered columns a funnel.
+//
 
 import AppKit
 import SwiftUI
@@ -41,6 +44,8 @@ struct DataGridView: NSViewRepresentable {
     /// Widths the user set for this table's columns (column name → width); these are not re-fitted.
     let savedWidths: [String: Double]
     /// Called (debounced) with all user-set widths for the table after a column is resized or reset.
+    /// Applies new sorting / filters chosen in a header popover (reloads the grid).
+    let onApplyOptions: (GridQueryOptions) -> Void
     let onWidthsChanged: ([String: Double]) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(session: session) }
@@ -72,10 +77,17 @@ struct DataGridView: NSViewRepresentable {
         menu.items.forEach { $0.target = context.coordinator }
         table.menu = menu
 
+        let header = GridHeaderView(frame: table.headerView?.frame ?? .zero)
+        header.coordinator = context.coordinator
+        table.headerView = header
+
         let headerMenu = NSMenu()
+        headerMenu.addItem(withTitle: "Clear Sort", action: #selector(Coordinator.clearSort(_:)), keyEquivalent: "")
+        headerMenu.addItem(withTitle: "Clear All Filters", action: #selector(Coordinator.clearFilters(_:)), keyEquivalent: "")
+        headerMenu.addItem(.separator())
         headerMenu.addItem(withTitle: "Reset Column Widths", action: #selector(Coordinator.resetColumnWidths(_:)), keyEquivalent: "")
         headerMenu.items.forEach { $0.target = context.coordinator }
-        table.headerView?.menu = headerMenu
+        header.menu = headerMenu
 
         let scroll = GridScrollView()
         scroll.onResize = { [weak coordinator = context.coordinator] in coordinator?.fitColumns() }
@@ -92,6 +104,7 @@ struct DataGridView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.visibleColumns = visibleColumns
         context.coordinator.onWidthsChanged = onWidthsChanged
+        context.coordinator.onApplyOptions = onApplyOptions
         context.coordinator.reloadIfNeeded(version: version, savedWidths: savedWidths)
         context.coordinator.fitColumns()
     }
@@ -112,6 +125,8 @@ struct DataGridView: NSViewRepresentable {
         weak var tableView: NSTableView?
         var visibleColumns = 3
         var onWidthsChanged: ([String: Double]) -> Void = { _ in }
+        var onApplyOptions: (GridQueryOptions) -> Void = { _ in }
+        private var popover: NSPopover?
         private var loadedVersion: Int?
         private var loadedWidthKey: String?
         /// Widths of columns the user resized, by column name. Never overwritten by fitColumns().
@@ -159,6 +174,11 @@ struct DataGridView: NSViewRepresentable {
 
             for (index, column) in (fresh?.columns ?? []).enumerated() {
                 let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("c\(index)"))
+                let headerCell = GridHeaderCell(textCell: column.name)
+                headerCell.showsFilterButton = fresh?.canFilter(column: index) ?? false
+                headerCell.isFiltered = fresh?.options.filters[column.name] != nil
+                headerCell.sortAscending = fresh?.options.sort?.column == column.name ? fresh?.options.sort?.ascending : nil
+                tableColumn.headerCell = headerCell
                 tableColumn.title = column.name
                 tableColumn.headerToolTip = column.type + (column.notNull ? " not null" : "")
                 tableColumn.minWidth = 40
@@ -301,6 +321,8 @@ struct DataGridView: NSViewRepresentable {
         func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
             switch menuItem.action {
             case #selector(resetColumnWidths(_:)): !userWidths.isEmpty
+            case #selector(clearSort(_:)): grid?.options.sort != nil
+            case #selector(clearFilters(_:)): !(grid?.options.filters.isEmpty ?? true)
             case #selector(copyCells(_:)), #selector(copyCellsWithNames(_:)): canCopy
             case #selector(pasteCells(_:)): canPaste
             case #selector(setNull(_:)): grid?.isEditable == true && selection != nil
@@ -318,6 +340,40 @@ struct DataGridView: NSViewRepresentable {
         @objc func revertCell(_ sender: Any?) {
             for key in selectedKeys { session.edits[key] = nil }
             reloadSelection()
+        }
+
+        // MARK: Sorting and filters
+
+        /// Opens the Excel-style sort / filter panel under a column header's button.
+        func showFilterPopover(tableColumn index: Int, relativeTo rect: NSRect, of view: NSView) {
+            guard let grid, index > 0 else { return }
+            let column = index - 1
+            guard grid.canFilter(column: column) else { return }
+            popover?.close()
+            let popover = NSPopover()
+            popover.behavior = .transient
+            let content = ColumnFilterPopover(
+                column: grid.columns[column], current: grid.options, pendingEdits: session.edits.count,
+                loadValues: { [session] in try await session.distinctValues(column: column) },
+                apply: { [weak self] in self?.onApplyOptions($0) },
+                close: { [weak popover] in popover?.performClose(nil) })
+            let host = NSHostingController(rootView: content)
+            host.sizingOptions = .preferredContentSize
+            popover.contentViewController = host
+            popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
+            self.popover = popover
+        }
+
+        @objc func clearSort(_ sender: Any?) {
+            guard var options = grid?.options else { return }
+            options.sort = nil
+            onApplyOptions(options)
+        }
+
+        @objc func clearFilters(_ sender: Any?) {
+            guard var options = grid?.options else { return }
+            options.filters = [:]
+            onApplyOptions(options)
         }
 
         // MARK: Cell selection
@@ -621,4 +677,69 @@ nonisolated func parseTSV(_ text: String) -> [[String]] {
     }
     if !field.isEmpty || !row.isEmpty { row.append(field); rows.append(row) }
     return rows
+}
+
+/// Column header with an Excel-style filter button at its right edge, a sort arrow
+/// for the sorted column and a filled funnel when the column is filtered.
+final class GridHeaderCell: NSTableHeaderCell {
+    var showsFilterButton = false
+    var isFiltered = false
+    /// nil when the grid is not sorted by this column.
+    var sortAscending: Bool?
+
+    static let buttonWidth: CGFloat = 18
+    static let arrowWidth: CGFloat = 12
+
+    func buttonRect(forBounds rect: NSRect) -> NSRect {
+        NSRect(x: rect.maxX - Self.buttonWidth - 2, y: rect.minY, width: Self.buttonWidth, height: rect.height)
+    }
+
+    override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {
+        guard showsFilterButton else { return super.drawInterior(withFrame: cellFrame, in: controlView) }
+        var titleFrame = cellFrame
+        titleFrame.size.width -= Self.buttonWidth + 2 + (sortAscending == nil ? 0 : Self.arrowWidth)
+        super.drawInterior(withFrame: titleFrame, in: controlView)
+
+        let button = buttonRect(forBounds: cellFrame)
+        if let ascending = sortAscending {
+            let arrow = NSRect(x: button.minX - Self.arrowWidth, y: cellFrame.minY, width: Self.arrowWidth, height: cellFrame.height)
+            Self.draw(symbol: ascending ? "arrow.up" : "arrow.down", in: arrow, colors: [.controlAccentColor], size: 9)
+        }
+        if isFiltered {   // white funnel lines on an accent disc, as in Mail
+            Self.draw(symbol: "line.3.horizontal.decrease.circle.fill", in: button,
+                      colors: [.white, .controlAccentColor], size: 12)
+        } else {
+            Self.draw(symbol: "chevron.down.square", in: button, colors: [.secondaryLabelColor], size: 11)
+        }
+    }
+
+    private static func draw(symbol: String, in rect: NSRect, colors: [NSColor], size: CGFloat) {
+        let config = NSImage.SymbolConfiguration(pointSize: size, weight: .semibold)
+            .applying(NSImage.SymbolConfiguration(paletteColors: colors))
+        guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config) else { return }
+        let origin = NSPoint(x: rect.midX - image.size.width / 2, y: rect.midY - image.size.height / 2)
+        image.draw(in: NSRect(origin: origin, size: image.size), from: .zero, operation: .sourceOver, fraction: 1,
+                   respectFlipped: true, hints: nil)
+    }
+}
+
+/// Header view that opens the sort / filter panel when a column's filter button is clicked;
+/// other clicks resize or select the column as before.
+final class GridHeaderView: NSTableHeaderView {
+    weak var coordinator: DataGridView.Coordinator?
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let index = column(at: point)
+        if index > 0, let tableView, let cell = tableView.tableColumns[index].headerCell as? GridHeaderCell,
+           cell.showsFilterButton {
+            let rect = headerRect(ofColumn: index)
+            if cell.buttonRect(forBounds: rect).insetBy(dx: -2, dy: 0).contains(point) {
+                coordinator?.showFilterPopover(tableColumn: index, relativeTo: rect, of: self)
+                return
+            }
+        }
+        super.mouseDown(with: event)
+    }
 }

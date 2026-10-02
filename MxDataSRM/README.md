@@ -37,6 +37,33 @@ Results stay **editable** when every column comes from one table and its primary
 grid. Running the table's unchanged default statement reloads the whole table, with row IDs and an
 exact row count.
 
+## Sorting and filtering
+
+Each column header has an Excel-style **▾** button. It opens a panel with:
+
+- **Sort** ascending or descending ("A to Z", "Smallest to Largest" or "Oldest to Newest", by column type), and
+  **Clear Sort**. The sorted column shows an arrow in its header.
+- **Filter by Values**: a checklist of the column's distinct values with row counts, a search box, **(Select All)**
+  and **(NULL)**. It honours the other columns' filters, as Excel does, and shows the first 1,000 values.
+- **Filter by Condition**: equals, does not equal, contains, does not contain, begins with, ends with, greater /
+  less than (or equal), between, is empty, is not empty. Text conditions ignore case; greater, less and between
+  compare as the column's type (numbers as numbers, dates as dates).
+
+Filtered columns show a funnel in their header. The line above the grid shows the sort and filters, e.g.
+"Rows 1–28 of 28 (filtered from 40)", with **Clear Filters**. Right-click a header for **Clear Sort**,
+**Clear All Filters** and **Reset Column Widths**.
+
+Sorting and filtering run **on the server**, as a WHERE and ORDER BY on the grid's query, so they cover the
+whole table or query, not just the loaded page. Paging, row counts and Export CSV (all rows) follow them.
+Values are always sent as parameters.
+
+- **Editing still works.** Rows are still identified by their key, so cells can be edited, pasted and updated
+  as usual. After **Update…** the grid reloads with the same sorting, filters and page.
+- Pending edits must be applied or discarded before changing the sort or a filter.
+- Opening a table or running new SQL clears the sort and filters; Reload, paging and Update keep them.
+- Not available on results of a statement that changed data (it would run again), or on a query column
+  whose name appears twice (e.g. two `id` columns from a join).
+
 ## Selecting and copying cells
 
 The grid selects cells like a spreadsheet:
@@ -135,7 +162,8 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `TableUpdate.swift` | Builds UPDATE statements from the pending edits |
 | `DatabaseModels.swift` | Table, column and grid value types; psql-style `\d` formatting |
 | `ConnectionForm.swift`, `TableSelectionForm.swift`, `TableGridForm.swift` | The three forms |
-| `DataGridView.swift` | Editable `NSTableView` grid with always-visible scroll bars, cell selection, copy and paste |
+| `DataGridView.swift` | Editable `NSTableView` grid with always-visible scroll bars, cell selection, copy and paste, header filter buttons |
+| `GridFilters.swift`, `ColumnFilterPopover.swift` | Sorting and filters: SQL for them, and the header panel |
 | `ViewSettingsDialog.swift`, `UpdateDialog.swift` | Table ▸ View… and Table ▸ Update… |
 | `TableWindow.swift` | Table opened with **Open in New Window** (own window and connection) |
 | `CSVExport.swift` | Export CSV… (Save panel, CSV formatting) |

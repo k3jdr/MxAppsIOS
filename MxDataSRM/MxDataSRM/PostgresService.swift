@@ -270,23 +270,79 @@ actor PostgresService {
     // MARK: DB Table
 
     /// One page of the table: `limit` rows after skipping `offset`, in primary-key (or ctid) order.
-    func fetchGrid(_ description: TableDescription, limit: Int, offset: Int = 0) async throws -> GridData {
+    /// With `options`, the page is taken from the sorted and filtered rows; totalRows is then
+    /// the filtered count and unfilteredTotal the table's.
+    func fetchGrid(_ description: TableDescription, limit: Int, offset: Int = 0,
+                   options: GridQueryOptions = GridQueryOptions()) async throws -> GridData {
         let ref = description.summary.ref
         let selectList = (["t.ctid::text"] + description.columns.map { "t." + quoteIdent($0.name) + "::text" })
             .joined(separator: ", ")
-        // Qualified with "t." so ORDER BY sorts the typed column, not its ::text output column.
-        let orderBy = description.primaryKey.isEmpty
-            ? "t.ctid"
-            : description.primaryKey.map { "t." + quoteIdent($0) }.joined(separator: ", ")
-        let result = try await rows("SELECT \(selectList) FROM \(ref.qualifiedSQL) AS t ORDER BY \(orderBy) LIMIT \(max(1, limit)) OFFSET \(max(0, offset))")
-        let total = try await exactRowCount(ref)
+        // Qualified with "t." so filters and ORDER BY use the typed column, not its ::text output column.
+        let expr = { (name: String) in "t." + quoteIdent(name) }
+        var binds = SQLBinds()
+        let whereSQL = GridSQL.whereClause(options, columns: description.columns, expr: expr, binds: &binds)
+        // The key comes last so pages stay stable under a sort with repeated values.
+        let key = description.primaryKey.isEmpty ? ["t.ctid"] : description.primaryKey.map(expr)
+        let orderBy = ([GridSQL.orderTerm(options, expr: expr)].compactMap { $0 } + key).joined(separator: ", ")
+        let from = "\(ref.qualifiedSQL) AS t\(whereSQL)"
+        let result = try await rows("SELECT \(selectList) FROM \(from) ORDER BY \(orderBy) LIMIT \(max(1, limit)) OFFSET \(max(0, offset))",
+                                    binds.values)
+        let unfiltered = try await exactRowCount(ref)
+        let total = whereSQL.isEmpty
+            ? unfiltered
+            : Int((try await rows("SELECT count(*)::text FROM \(from)", binds.values)).first?.first.flatMap { $0 } ?? "") ?? 0
         return GridData(description: description,
                         title: ref.displayName,
                         columns: description.columns,
                         rows: result.map { Array($0.dropFirst()) },
                         rowIDs: result.map { $0[0] ?? "" },
                         totalRows: total,
-                        offset: max(0, offset))
+                        offset: max(0, offset),
+                        options: options,
+                        unfilteredTotal: whereSQL.isEmpty ? nil : unfiltered)
+    }
+
+    /// Distinct values of `column` (with row counts) for the filter checklist, honouring the
+    /// other columns' filters. At most `limit` values; `truncated` when there are more.
+    func distinctValues(source: GridSource, column: String, columns: [ColumnInfo], options: GridQueryOptions,
+                        limit: Int = 1000) async throws -> (values: [DistinctValue], truncated: Bool) {
+        let alias = { (name: String) -> String in
+            switch source {
+            case .table: "t." + quoteIdent(name)
+            case .query: "mx_q." + quoteIdent(name)
+            }
+        }
+        var binds = SQLBinds()
+        let whereSQL = GridSQL.whereClause(options, columns: columns, except: column, expr: alias, binds: &binds)
+        let c = alias(column)
+        let prefix: String
+        let from: String
+        switch source {
+        case .table(let ref):
+            prefix = ""
+            from = "\(ref.qualifiedSQL) AS t"
+        case .query(let sql):
+            prefix = Self.queryPrefix + sql + "\n) "
+            from = "mx_q"
+        }
+        // Group and order by the typed value (numbers sort as numbers); types without ordering
+        // (e.g. json) fall back to their text.
+        let typed = prefix + "SELECT \(c)::text, count(*)::text FROM \(from)\(whereSQL) GROUP BY \(c) ORDER BY \(c) NULLS FIRST LIMIT \(limit + 1)"
+        let asText = prefix + "SELECT \(c)::text, count(*)::text FROM \(from)\(whereSQL) GROUP BY 1 ORDER BY 1 NULLS FIRST LIMIT \(limit + 1)"
+        var result: [[String?]] = []
+        for sql in [typed, asText] {
+            _ = try await rows("BEGIN READ ONLY")
+            do {
+                result = try await rows(sql, binds.values)
+                _ = try await rows("COMMIT")
+                break
+            } catch {
+                _ = try? await rows("ROLLBACK")
+                if sql == asText { throw DatabaseError.from(error) }
+            }
+        }
+        let values = result.prefix(limit).map { DistinctValue(value: $0[0], count: Int($0[1] ?? "") ?? 0) }
+        return (values, result.count > limit)
     }
 
     /// Runs the planned UPDATEs. Each statement must touch exactly one row;
@@ -367,12 +423,14 @@ actor PostgresService {
     /// Runs a statement that returns rows and fetches at most `limit` of them.
     /// Without `allowWrites` it runs in a READ ONLY transaction and throws
     /// `WriteNotAllowed` if the statement tries to change data.
-    func runQuery(_ sql: String, limit: Int, offset: Int = 0, allowWrites: Bool) async throws -> QueryResult {
+    func runQuery(_ sql: String, limit: Int, offset: Int = 0, allowWrites: Bool,
+                  options: GridQueryOptions = GridQueryOptions(), columns filterColumns: [ColumnInfo] = []) async throws -> QueryResult {
         let limit = max(1, limit)
         var columns: [QueryColumn] = []
         var result: [[String?]] = []
         // One row past the limit tells whether more rows were available.
-        try await streamQuery(sql, limit: limit + 1, offset: offset, allowWrites: allowWrites) {
+        try await streamQuery(sql, limit: limit + 1, offset: offset, allowWrites: allowWrites,
+                              options: options, filterColumns: filterColumns) {
             columns = $0
         } row: {
             result.append($0)
@@ -382,7 +440,8 @@ actor PostgresService {
 
     /// Streams every row of the read-only query `sql` into a CSV file (header row first)
     /// without holding the rows in memory. Returns the number of data rows written.
-    func exportCSV(_ sql: String, to url: URL) async throws -> Int {
+    func exportCSV(_ sql: String, to url: URL, options: GridQueryOptions = GridQueryOptions(),
+                   columns filterColumns: [ColumnInfo] = []) async throws -> Int {
         guard FileManager.default.createFile(atPath: url.path, contents: nil),
               let file = try? FileHandle(forWritingTo: url) else {
             throw DatabaseError(message: "Could not create \(url.lastPathComponent).")
@@ -390,7 +449,8 @@ actor PostgresService {
         var buffer = Data()
         var count = 0
         do {
-            try await streamQuery(sql, limit: nil, offset: 0, allowWrites: false) { columns in
+            try await streamQuery(sql, limit: nil, offset: 0, allowWrites: false,
+                                  options: options, filterColumns: filterColumns) { columns in
                 buffer.append(csvLine(columns.map(\.name)))
             } row: { values in
                 buffer.append(csvLine(values))
@@ -414,16 +474,26 @@ actor PostgresService {
     /// as text values. Without `allowWrites` it runs in a READ ONLY transaction and
     /// throws `WriteNotAllowed` if the statement tries to change data.
     private func streamQuery(_ sql: String, limit: Int?, offset: Int, allowWrites: Bool,
+                             options: GridQueryOptions = GridQueryOptions(), filterColumns: [ColumnInfo] = [],
                              columns onColumns: ([QueryColumn]) throws -> Void,
                              row onRow: ([String?]) throws -> Void) async throws {
         // Each row comes back as its composite text form, mx_q::text, so every column is
         // decoded as text whatever its type. mx_q.* only supplies the column metadata.
-        let wrapped = Self.queryPrefix + sql + "\n) SELECT mx_q::text, mx_q.* FROM mx_q"
+        // Sorting and filters apply to the CTE's columns by name.
+        let expr = { (name: String) in "mx_q." + quoteIdent(name) }
+        var binds = SQLBinds()
+        let whereSQL = GridSQL.whereClause(options, columns: filterColumns, expr: expr, binds: &binds)
+        let orderSQL = GridSQL.orderTerm(options, expr: expr).map { " ORDER BY " + $0 } ?? ""
+        let wrapped = Self.queryPrefix + sql + "\n) SELECT mx_q::text, mx_q.* FROM mx_q" + whereSQL + orderSQL
             + (limit.map { " LIMIT \($0)" } ?? "")
             + (offset > 0 ? " OFFSET \(offset)" : "")
+        var bindings = PostgresBindings()
+        for value in binds.values {
+            if let value { bindings.append(value) } else { bindings.appendNull() }
+        }
         _ = try await rows(allowWrites ? "BEGIN" : "BEGIN READ ONLY")
         do {
-            let sequence = try await connection.query(PostgresQuery(unsafeSQL: wrapped), logger: logger)
+            let sequence = try await connection.query(PostgresQuery(unsafeSQL: wrapped, binds: bindings), logger: logger)
             let metadata = sequence.columns.dropFirst()
             try onColumns(metadata.map {
                 QueryColumn(name: $0.name, tableOID: UInt32(bitPattern: $0.tableOID),

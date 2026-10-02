@@ -98,7 +98,10 @@ struct TableGridForm: View {
 
         // Fills the form; View ▸ columns fit across its width, View ▸ rows set its minimum height.
         DataGridView(session: session, version: session.gridVersion, visibleColumns: view.visibleColumns,
-                     savedWidths: view.columnWidths[grid.widthKey] ?? [:]) { widths in
+                     savedWidths: view.columnWidths[grid.widthKey] ?? [:],
+                     onApplyOptions: { options in
+                         Task { await session.applyGridOptions(options, limit: view.fetchLimit) }
+                     }) { widths in
             view.columnWidths[grid.widthKey] = widths.isEmpty ? nil : widths
         }
             // At least View ▸ rows are visible (up to 10, so the window still fits on a small
@@ -163,6 +166,23 @@ struct TableGridForm: View {
                     Text("\(session.edits.count) pending edit\(session.edits.count == 1 ? "" : "s")")
                         .foregroundStyle(.orange)
                 }
+                if let sort = grid.options.sort {
+                    Label("sorted by \(sort.column)", systemImage: sort.ascending ? "arrow.up" : "arrow.down")
+                        .foregroundStyle(Color.accentColor)
+                }
+                if !grid.options.filters.isEmpty {
+                    let names = grid.options.filters.keys.sorted().joined(separator: ", ")
+                    Label("filtered: \(names)", systemImage: "line.3.horizontal.decrease.circle.fill")
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                    Button("Clear Filters") {
+                        var options = grid.options
+                        options.filters = [:]
+                        Task { await session.applyGridOptions(options, limit: view.fetchLimit) }
+                    }
+                    .buttonStyle(.link)
+                    .disabled(session.busy)
+                }
             }
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -175,6 +195,9 @@ struct TableGridForm: View {
             return grid.offset > 0 ? "No rows after row \(grid.offset.formatted())" : "No rows"
         }
         let range = "Rows \((grid.offset + 1).formatted())–\((grid.offset + grid.rows.count).formatted())"
+        if let total = grid.totalRows, let unfiltered = grid.unfilteredTotal {
+            return range + " of \(total.formatted()) (filtered from \(unfiltered.formatted()))"
+        }
         if let total = grid.totalRows {
             return range + " of \(total.formatted())"
         }

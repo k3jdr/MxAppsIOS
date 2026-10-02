@@ -109,6 +109,10 @@ nonisolated struct GridData: Sendable {
     var offset = 0
     /// The rows came from a statement that changed data; it is not run again to page.
     var isWriteResult = false
+    /// Sorting and filters the rows were loaded with.
+    var options = GridQueryOptions()
+    /// Rows before filtering, when filters are active and the count is known (tables).
+    var unfilteredTotal: Int?
     var loadedAt = Date()
 
     /// A page before this one exists.
@@ -127,6 +131,26 @@ nonisolated struct GridData: Sendable {
     }
     /// Key under which the user's column widths are saved in the workspace.
     var widthKey: String { ref?.displayName ?? "(query)" }
+
+    /// Where the rows come from, for re-querying with other sorting or filters.
+    var source: GridSource? {
+        if let customSQL { return .query(customSQL) }
+        if let ref { return .table(ref) }
+        return nil
+    }
+
+    /// Whether a column can be sorted and filtered: not on results of a statement that changed
+    /// data (it would run again), nor on a query column whose name appears twice.
+    func canFilter(column index: Int) -> Bool {
+        guard !isWriteResult, source != nil, columns.indices.contains(index) else { return false }
+        let name = columns[index].name
+        return columns.filter { $0.name == name }.count == 1
+    }
+}
+
+nonisolated enum GridSource: Equatable, Sendable {
+    case table(TableRef)
+    case query(String)
 }
 
 nonisolated struct CellKey: Hashable, Sendable {
