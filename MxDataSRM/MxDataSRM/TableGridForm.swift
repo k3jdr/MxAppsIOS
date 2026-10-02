@@ -14,6 +14,10 @@ import SwiftUI
 struct TableGridForm: View {
     @Bindable var session: WorkspaceSession
     @Binding var view: GridViewSettings
+    /// Height of the SQL box, set by dragging the bar between it and the grid (all windows, remembered).
+    @AppStorage("sqlEditorHeight") private var sqlHeight: Double = GridSplit.defaultSQLHeight
+    @State private var dragStartHeight: Double?
+    @State private var formHeight: CGFloat = 0
 
     var body: some View {
         if !session.isConnected {
@@ -22,6 +26,7 @@ struct TableGridForm: View {
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 sqlBar
+                splitter
                 if let grid = session.grid {
                     gridSection(grid)
                 } else {
@@ -31,6 +36,7 @@ struct TableGridForm: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { formHeight = $0 }
             .confirmationDialog("Run a statement that changes data?",
                                 isPresented: Binding(get: { session.pendingWriteSQL != nil },
                                                      set: { if !$0 { session.pendingWriteSQL = nil } }),
@@ -72,7 +78,7 @@ struct TableGridForm: View {
                 SQLTextView(text: $session.sqlText) {
                     session.sqlMenuItems { Task { await session.runSQL(limit: view.fetchLimit) } }
                 }
-                    .frame(height: 76)
+                    .frame(height: clampedSQLHeight)
                 VStack(spacing: 6) {
                     Button {
                         Task { await session.runSQL(limit: view.fetchLimit) }
@@ -104,6 +110,47 @@ struct TableGridForm: View {
             .foregroundStyle(.secondary)
             .lineLimit(2)
         }
+    }
+
+    // MARK: Resize bar
+
+    /// SQL box height limited so the grid keeps its minimum rows and its buttons stay visible.
+    private var clampedSQLHeight: CGFloat {
+        min(max(sqlHeight, GridSplit.minSQLHeight), maxSQLHeight)
+    }
+
+    private var maxSQLHeight: CGFloat {
+        // Until the form has been measured, don't let a large saved height inflate the window.
+        guard formHeight > 0 else { return max(min(sqlHeight, 400), GridSplit.minSQLHeight) }
+        let gridMin = GridMetrics.viewport(rows: min(view.visibleRows, 10), columns: 0).height
+        let others = GridSplit.reservedHeight + (session.sqlError == nil ? 0 : 90)
+        return max(GridSplit.minSQLHeight, formHeight - gridMin - others)
+    }
+
+    /// The bar between the SQL box and the grid: drag to share the height, double-click to reset.
+    private var splitter: some View {
+        ZStack {
+            Rectangle().fill(Color.clear)
+            Capsule()
+                .fill(Color.secondary.opacity(dragStartHeight == nil ? 0.35 : 0.7))
+                .frame(width: 44, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 8)
+        .contentShape(Rectangle())
+        .pointerStyle(.rowResize)
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag in
+                    let start = dragStartHeight ?? Double(clampedSQLHeight)
+                    dragStartHeight = start
+                    sqlHeight = min(max(start + drag.translation.height, GridSplit.minSQLHeight), maxSQLHeight)
+                }
+                .onEnded { _ in dragStartHeight = nil }
+        )
+        .onTapGesture(count: 2) { sqlHeight = GridSplit.defaultSQLHeight }
+        .help("Drag to give the SQL box more or less room; double-click to reset")
+        .accessibilityLabel("Resize SQL box")
     }
 
     // MARK: Grid
@@ -218,4 +265,12 @@ struct TableGridForm: View {
         }
         return range + (grid.hasMore ? " (more on the next page)" : "")
     }
+}
+
+enum GridSplit {
+    static let defaultSQLHeight: Double = 76
+    static let minSQLHeight: Double = 40
+    /// Form height used by everything except the SQL box and the grid: padding, run-button column,
+    /// caption, resize bar, grid header, button row, footnote and spacing.
+    static let reservedHeight: CGFloat = 230
 }

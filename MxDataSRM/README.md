@@ -50,6 +50,16 @@ aggregates. Running the table's unchanged default statement reloads the whole ta
 exact row count. A row ID changes when the row is updated; the grid reloads after **Update…**, so it always
 holds the current ones.
 
+## SQL box: colours and size
+
+The SQL box colours SQL as VS Code does (Light+ and Dark+ colours, following the system appearance):
+keywords, data types (also after `::`), function calls, strings (including `E'...'` and `$$ ... $$`),
+numbers, comments (`--` and nested `/* */`), "quoted identifiers" and `$1` parameters.
+
+The bar between the SQL box and the grid can be **dragged** to give the SQL box more or less of the form's
+height; **double-click** it to go back to the default. The height is remembered (for all windows) and is
+limited so the grid always keeps its minimum rows and its buttons.
+
 ## SQL files
 
 Right-click in the SQL box to save and recall `.sql` files. These items appear above the usual
@@ -202,6 +212,7 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `TableWindow.swift` | Table opened with **Open in New Window** (own window and connection) |
 | `CSVExport.swift` | Export CSV… (Save panel, CSV formatting) |
 | `SQLTextView.swift` | Plain-text SQL editor (no smart quotes or autocorrect) with an extensible right-click menu |
+| `SQLHighlighter.swift` | SQL syntax colouring (PostgreSQL-aware scanner, VS Code colours) |
 | `SQLFiles.swift` | SQL files: folder and recent files (bookmarks), open / save / revert, the SQL box's right-click menu |
 
 The document type is declared in `Info.plist`, which is merged with the Info.plist that Xcode generates.

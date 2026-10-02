@@ -4,7 +4,8 @@
 //
 //  Plain-text, monospaced SQL editor. Wraps NSTextView so smart quotes, smart
 //  dashes and autocorrection can be turned off; they would corrupt SQL. Its
-//  right-click menu starts with `menuItems` (Open / Save SQL file, ...).
+//  right-click menu starts with `menuItems` (Open / Save SQL file, ...). The SQL is
+//  syntax-coloured by SQLHighlighter after every change.
 //
 
 import AppKit
@@ -33,6 +34,7 @@ struct SQLTextView: NSViewRepresentable {
         textView.isContinuousSpellCheckingEnabled = false
         textView.isGrammarCheckingEnabled = false
         textView.smartInsertDeleteEnabled = false
+        textView.textStorage?.delegate = context.coordinator
         textView.string = text
         textView.delegate = context.coordinator
         return scroll
@@ -47,12 +49,19 @@ struct SQLTextView: NSViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    final class Coordinator: NSObject, NSTextViewDelegate, NSTextStorageDelegate {
         var text: Binding<String>
         var menuItems: () -> [NSMenuItem] = { [] }
 
         init(text: Binding<String>) {
             self.text = text
+        }
+
+        /// Recolours the SQL when its characters change (attribute-only edits are ignored).
+        func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+                         range editedRange: NSRange, changeInLength delta: Int) {
+            guard editedMask.contains(.editedCharacters) else { return }
+            SQLHighlighter.apply(to: textStorage)
         }
 
         func textDidChange(_ notification: Notification) {
