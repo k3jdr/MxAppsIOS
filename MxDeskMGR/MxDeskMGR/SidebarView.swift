@@ -19,9 +19,17 @@ struct SidebarView: View {
     var body: some View {
         List {
             Section("Favorites") {
+                if let iCloud = AppSettings.iCloudDriveURL, !settings.favorites.contains(iCloud.path) {
+                    row(title: "iCloud Drive", icon: "icloud", url: iCloud)
+                        .contextMenu {
+                            Button("Open in New Tab") { workspace.activePane.newTab(iCloud) }
+                            Button("Open in Other Pane") { workspace.otherTab.navigate(to: iCloud) }
+                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([iCloud]) }
+                        }
+                }
                 ForEach(settings.favorites, id: \.self) { path in
                     let url = URL(fileURLWithPath: path)
-                    row(title: FileManager.default.displayName(atPath: path), icon: icon(forFavorite: path), url: url)
+                    row(title: title(forFavorite: path), icon: icon(forFavorite: path), url: url)
                         .contextMenu {
                             Button("Open in New Tab") { workspace.activePane.newTab(url) }
                             Button("Open in Other Pane") { workspace.otherTab.navigate(to: url) }
@@ -96,8 +104,13 @@ struct SidebarView: View {
         .help(url.path)
     }
 
+    private func title(forFavorite path: String) -> String {
+        path == AppSettings.iCloudDriveURL?.path ? "iCloud Drive" : FileManager.default.displayName(atPath: path)
+    }
+
     private func icon(forFavorite path: String) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path == AppSettings.iCloudDriveURL?.path { return "icloud" }
         switch path {
         case home: return "house"
         case home + "/Desktop": return "menubar.dock.rectangle"

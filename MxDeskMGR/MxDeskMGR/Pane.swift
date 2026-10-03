@@ -67,8 +67,13 @@ final class BrowserTab: Identifiable {
         loadTask?.cancel()
     }
 
-    var title: String {
-        url.path == "/" ? FileManager.default.displayName(atPath: "/") : url.lastPathComponent
+    var title: String { BrowserTab.displayName(of: url) }
+
+    /// Folder name as shown in tabs and the path bar ("Macintosh HD" for /, "iCloud Drive").
+    static func displayName(of url: URL) -> String {
+        if url.path == "/" { return FileManager.default.displayName(atPath: "/") }
+        if url.path == AppSettings.iCloudDriveURL?.path { return "iCloud Drive" }
+        return url.lastPathComponent
     }
     var canGoBack: Bool { !backStack.isEmpty }
     var canGoForward: Bool { !forwardStack.isEmpty }

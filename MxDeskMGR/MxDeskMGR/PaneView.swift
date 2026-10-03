@@ -146,7 +146,7 @@ private struct PathBar: View {
         var result: [(String, URL)] = []
         var current = url.standardizedFileURL
         while true {
-            let name = current.path == "/" ? FileManager.default.displayName(atPath: "/") : current.lastPathComponent
+            let name = BrowserTab.displayName(of: current)
             result.insert((name, current), at: 0)
             if current.path == "/" { break }
             current = current.deletingLastPathComponent()

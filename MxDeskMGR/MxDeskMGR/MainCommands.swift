@@ -96,6 +96,9 @@ struct MainCommands: Commands {
             item("Downloads", "l", [.command, .option]) { $0.go(to: .downloadsDirectory) }
             item("Applications", "a", [.command, .shift]) { $0.go(to: URL(fileURLWithPath: "/Applications")) }
             item("Computer", "c", [.command, .shift]) { $0.go(to: URL(fileURLWithPath: "/")) }
+            item("iCloud Drive") { workspace in
+                if let url = AppSettings.iCloudDriveURL { workspace.go(to: url) } else { Alerts.message("iCloud Drive isn't turned on.", info: "Turn it on in System Settings ▸ Apple Account ▸ iCloud.") }
+            }
             Menu("Favorites") {
                 ForEach(AppSettings.shared.favorites, id: \.self) { path in
                     item(FileManager.default.displayName(atPath: path)) { $0.go(to: URL(fileURLWithPath: path)) }

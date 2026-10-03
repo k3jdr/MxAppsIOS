@@ -11,7 +11,7 @@ Security to skip those prompts.
 
 | Part | What it does |
 |------|--------------|
-| **Sidebar** | **Favorites**: drop folders here to add them, drag to reorder, right-click to remove. **Locations**: mounted volumes, with an eject button. **Servers**: Connect to Server… and recent servers. |
+| **Sidebar** | **Favorites**: **iCloud Drive** first (when iCloud Drive is on; also Go ▸ iCloud Drive), then your folders. Drop folders here to add them, drag to reorder, right-click to remove. **Locations**: mounted volumes, with an eject button. **Servers**: Connect to Server… and recent servers. |
 | **Two panes** | Each pane has **tabs** (a tab strip appears with 2+ tabs), Back / Forward / Up, a clickable **breadcrumb** path (right-click: Copy Path, Go to Folder…), a **quick filter**, the file list and a status line (items, selection size, free space). The active pane has an accent line on top. |
 | **File list** | Columns Name, Ext, Size, Date Modified, Kind. Click a header to sort, drag to reorder or resize (remembered). Folders show `<DIR>` until you use **Calculate Folder Sizes**. The `..` row goes up. Hidden items are dimmed and symlinks are in italics. Folders update by themselves when their contents change. |
 | **Transfer panel** | Running copies, moves, deletes and archive jobs, with progress and **Stop**. Jobs that hit problems stay listed, with the errors, until dismissed. |

@@ -70,6 +70,13 @@ final class AppSettings {
         recentServers = defaults.stringArray(forKey: "recentServers") ?? []
     }
 
+    /// The local iCloud Drive folder, when iCloud Drive is turned on for this account.
+    static var iCloudDriveURL: URL? {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
+        return FileOps.isRealDirectory(url) ? url : nil
+    }
+
     func addFavorite(_ url: URL) {
         let path = url.fsPath
         if !favorites.contains(path) { favorites.append(path) }
