@@ -15,7 +15,7 @@ extension Notification.Name {
     static let mxFilesChanged = Notification.Name("MxDeskMGR.filesChanged")
 }
 
-/// A cloud storage root (iCloud Drive, OneDrive) with the name to show for it.
+/// A cloud storage root (iCloud Drive, OneDrive, Google Drive) with the name to show for it.
 struct CloudLocation: Identifiable {
     let name: String
     let icon: String
@@ -87,16 +87,34 @@ final class AppSettings {
 
     /// OneDrive accounts synced by the OneDrive app (File Provider folders in ~/Library/CloudStorage):
     /// "OneDrive-Personal" and "OneDrive-<Organisation>" for work or school accounts.
-    static var oneDriveURLs: [URL] {
+    static var oneDriveURLs: [URL] { cloudStorageFolders(prefix: "OneDrive") }
+
+    /// Google Drive accounts: "GoogleDrive-<email>" in ~/Library/CloudStorage (Google Drive for desktop),
+    /// or the older /Volumes/GoogleDrive (streaming) and ~/Google Drive (Backup and Sync) folders.
+    static var googleDriveURLs: [URL] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let legacy = [URL(fileURLWithPath: "/Volumes/GoogleDrive"), home.appendingPathComponent("Google Drive")]
+        return cloudStorageFolders(prefix: "GoogleDrive") + legacy.filter(FileOps.isRealDirectory)
+    }
+
+    /// Account folders in ~/Library/CloudStorage whose names start with `prefix`.
+    private static func cloudStorageFolders(prefix: String) -> [URL] {
         let storage = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/CloudStorage")
         let names = (try? FileManager.default.contentsOfDirectory(atPath: storage.path)) ?? []
-        return names.filter { $0.hasPrefix("OneDrive") }
+        return names.filter { $0.hasPrefix(prefix) }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
             .map { storage.appendingPathComponent($0) }
             .filter(FileOps.isRealDirectory)
     }
 
-    /// iCloud Drive and OneDrive accounts present on this Mac, shown at the top of Favorites.
+    /// Display name for a Google Drive folder: "Google Drive", or "Google Drive – <email>" when there are several.
+    static func googleDriveName(_ url: URL, accounts: Int) -> String {
+        let folder = url.lastPathComponent
+        guard folder.hasPrefix("GoogleDrive-"), accounts > 1 else { return "Google Drive" }
+        return "Google Drive – " + folder.dropFirst("GoogleDrive-".count)
+    }
+
+    /// iCloud Drive, OneDrive and Google Drive accounts present on this Mac, shown at the top of Favorites.
     /// Re-scanned at most every few seconds (the path bar asks on every redraw).
     static var cloudLocations: [CloudLocation] {
         if let cached = cloudCache, Date().timeIntervalSince(cached.time) < 5 { return cached.list }
@@ -106,6 +124,10 @@ final class AppSettings {
             let account = url.lastPathComponent.dropFirst("OneDrive".count).drop { $0 == "-" || $0 == " " }
             let name = account.isEmpty || account == "Personal" ? "OneDrive" : "OneDrive – \(account)"
             list.append(CloudLocation(name: name, icon: "cloud", url: url))
+        }
+        let google = googleDriveURLs
+        for url in google {
+            list.append(CloudLocation(name: googleDriveName(url, accounts: google.count), icon: "triangle", url: url))
         }
         cloudCache = (Date(), list)
         return list
