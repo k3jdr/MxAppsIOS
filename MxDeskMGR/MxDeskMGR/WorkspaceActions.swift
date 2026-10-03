@@ -399,4 +399,20 @@ enum Alerts {
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
     }
+
+    /// Asks for one line of text; nil when cancelled or left empty.
+    static func prompt(_ text: String, info: String = "", initial: String = "", ok: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = text
+        alert.informativeText = info
+        let field = NSTextField(string: initial)
+        field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: ok)
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let value = field.stringValue.trimmingCharacters(in: .whitespaces)
+        return value.isEmpty ? nil : value
+    }
 }
