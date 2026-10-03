@@ -15,7 +15,7 @@ extension Notification.Name {
     static let mxFilesChanged = Notification.Name("MxDeskMGR.filesChanged")
 }
 
-/// A cloud storage root (iCloud Drive, OneDrive, Google Drive, Dropbox) with the name to show for it.
+/// A cloud storage root (iCloud Drive, OneDrive, Google Drive, Dropbox, Box) with the name to show for it.
 struct CloudLocation: Identifiable {
     let name: String
     let icon: String
@@ -128,6 +128,22 @@ final class AppSettings {
         return account.isEmpty ? "Dropbox" : "Dropbox – \(account)"
     }
 
+    /// Box Drive: "Box-Box" in ~/Library/CloudStorage (current Box Drive) or the older ~/Box folder.
+    /// Symlinks are resolved so the account is listed once.
+    static var boxURLs: [URL] {
+        let candidates = cloudStorageFolders(prefix: "Box-")
+            + [FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Box")]
+        var seen = Set<String>()
+        return candidates.map { $0.resolvingSymlinksInPath() }
+            .filter { FileOps.isRealDirectory($0) && seen.insert($0.path).inserted }
+    }
+
+    /// "Box" for Box Drive's "Box-Box" or ~/Box; "Box – <name>" for any other "Box-<name>" folder.
+    static func boxName(_ url: URL) -> String {
+        let account = url.lastPathComponent.dropFirst("Box".count).trimmingCharacters(in: CharacterSet(charactersIn: "- "))
+        return account.isEmpty || account == "Box" ? "Box" : "Box – \(account)"
+    }
+
     /// Account folders in ~/Library/CloudStorage whose names start with `prefix`.
     private static func cloudStorageFolders(prefix: String) -> [URL] {
         let storage = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/CloudStorage")
@@ -145,7 +161,7 @@ final class AppSettings {
         return "Google Drive – " + folder.dropFirst("GoogleDrive-".count)
     }
 
-    /// iCloud Drive, OneDrive, Google Drive and Dropbox accounts present on this Mac, shown at the top of Favorites.
+    /// iCloud Drive, OneDrive, Google Drive, Dropbox and Box accounts present on this Mac, shown at the top of Favorites.
     /// Re-scanned at most every few seconds (the path bar asks on every redraw).
     static var cloudLocations: [CloudLocation] {
         if let cached = cloudCache, Date().timeIntervalSince(cached.time) < 5 { return cached.list }
@@ -162,6 +178,9 @@ final class AppSettings {
         }
         for url in dropboxURLs {
             list.append(CloudLocation(name: dropboxName(url), icon: "shippingbox", url: url))
+        }
+        for url in boxURLs {
+            list.append(CloudLocation(name: boxName(url), icon: "archivebox", url: url))
         }
         cloudCache = (Date(), list)
         return list
