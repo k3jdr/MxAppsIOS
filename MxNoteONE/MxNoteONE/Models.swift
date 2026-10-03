@@ -1,0 +1,402 @@
+//
+//  Models.swift
+//  MxNoteONE
+//
+//  The notebook data model. A notebook is a folder (Name.mxnotebook) holding
+//  notebook.json (the section tree and recycle bin), one sections/<id>.json
+//  per section (its page list and search index), one pages/<id>.json per page
+//  (the free-form page content) and an assets/ folder for pictures, file
+//  attachments and audio recordings. Password-protected sections keep their
+//  section, page and asset files encrypted.
+//
+
+import AppKit
+import SwiftUI
+
+// MARK: - Colours
+
+/// Colour of a notebook or section tab.
+enum NoteColor: String, Codable, CaseIterable, Identifiable {
+    case blue, teal, green, yellow, orange, red, pink, purple, indigo, gray
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+
+    var nsColor: NSColor {
+        switch self {
+        case .blue: NSColor(srgbRed: 0.22, green: 0.46, blue: 0.84, alpha: 1)
+        case .teal: NSColor(srgbRed: 0.10, green: 0.60, blue: 0.62, alpha: 1)
+        case .green: NSColor(srgbRed: 0.30, green: 0.62, blue: 0.27, alpha: 1)
+        case .yellow: NSColor(srgbRed: 0.88, green: 0.70, blue: 0.10, alpha: 1)
+        case .orange: NSColor(srgbRed: 0.93, green: 0.48, blue: 0.16, alpha: 1)
+        case .red: NSColor(srgbRed: 0.84, green: 0.24, blue: 0.24, alpha: 1)
+        case .pink: NSColor(srgbRed: 0.86, green: 0.36, blue: 0.62, alpha: 1)
+        case .purple: NSColor(srgbRed: 0.47, green: 0.30, blue: 0.70, alpha: 1)
+        case .indigo: NSColor(srgbRed: 0.30, green: 0.32, blue: 0.70, alpha: 1)
+        case .gray: NSColor(srgbRed: 0.50, green: 0.52, blue: 0.56, alpha: 1)
+        }
+    }
+
+    var color: Color { Color(nsColor: nsColor) }
+}
+
+/// A colour that can be stored in JSON.
+struct RGBA: Codable, Hashable {
+    var r: Double
+    var g: Double
+    var b: Double
+    var a: Double
+
+    init(r: Double, g: Double, b: Double, a: Double = 1) {
+        self.r = r; self.g = g; self.b = b; self.a = a
+    }
+
+    init(_ color: NSColor) {
+        let c = color.usingColorSpace(.sRGB) ?? .black
+        r = c.redComponent; g = c.greenComponent; b = c.blueComponent; a = c.alphaComponent
+    }
+
+    var nsColor: NSColor { NSColor(srgbRed: r, green: g, blue: b, alpha: a) }
+
+    static let black = RGBA(r: 0, g: 0, b: 0)
+}
+
+/// Background colour of a page.
+enum PageColor: String, Codable, CaseIterable, Identifiable {
+    case none, cream, yellow, green, blue, purple, pink, orange, gray
+
+    var id: String { rawValue }
+    var title: String { self == .none ? "No Color" : rawValue.capitalized }
+
+    var nsColor: NSColor {
+        switch self {
+        case .none: .white
+        case .cream: NSColor(srgbRed: 1.00, green: 0.98, blue: 0.92, alpha: 1)
+        case .yellow: NSColor(srgbRed: 1.00, green: 0.97, blue: 0.78, alpha: 1)
+        case .green: NSColor(srgbRed: 0.90, green: 0.97, blue: 0.88, alpha: 1)
+        case .blue: NSColor(srgbRed: 0.88, green: 0.94, blue: 1.00, alpha: 1)
+        case .purple: NSColor(srgbRed: 0.94, green: 0.91, blue: 0.99, alpha: 1)
+        case .pink: NSColor(srgbRed: 1.00, green: 0.91, blue: 0.94, alpha: 1)
+        case .orange: NSColor(srgbRed: 1.00, green: 0.93, blue: 0.86, alpha: 1)
+        case .gray: NSColor(srgbRed: 0.94, green: 0.94, blue: 0.95, alpha: 1)
+        }
+    }
+}
+
+/// Rule lines or grid drawn on a page.
+enum RuleLines: String, Codable, CaseIterable, Identifiable {
+    case none, narrow, college, wide, smallGrid, mediumGrid, largeGrid
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: "None"
+        case .narrow: "Narrow Ruled"
+        case .college: "College Ruled"
+        case .wide: "Wide Ruled"
+        case .smallGrid: "Small Grid"
+        case .mediumGrid: "Medium Grid"
+        case .largeGrid: "Large Grid"
+        }
+    }
+
+    var spacing: CGFloat? {
+        switch self {
+        case .none: nil
+        case .narrow: 18
+        case .college: 24
+        case .wide: 32
+        case .smallGrid: 12
+        case .mediumGrid: 24
+        case .largeGrid: 40
+        }
+    }
+
+    var isGrid: Bool { self == .smallGrid || self == .mediumGrid || self == .largeGrid }
+}
+
+// MARK: - Tags
+
+/// Note tags, written as a symbol at the start of a paragraph (⌘1 – ⌘9).
+enum TagKind: String, Codable, CaseIterable, Identifiable {
+    case todo, important, question, critical, idea, remember, definition, contact, discuss
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .todo: "To Do"
+        case .important: "Important"
+        case .question: "Question"
+        case .critical: "Critical"
+        case .idea: "Idea"
+        case .remember: "Remember for Later"
+        case .definition: "Definition"
+        case .contact: "Phone Number"
+        case .discuss: "Discuss with Team"
+        }
+    }
+
+    /// Symbol written into the text. To Do uses ☐ / ☑.
+    var symbol: String {
+        switch self {
+        case .todo: "☐"
+        case .important: "⭐"
+        case .question: "❓"
+        case .critical: "❗"
+        case .idea: "💡"
+        case .remember: "📌"
+        case .definition: "📖"
+        case .contact: "📞"
+        case .discuss: "💬"
+        }
+    }
+
+    static let todoDone = "☑"
+
+    /// Every symbol that marks this tag, with whether it means "done".
+    var symbols: [(String, Bool)] {
+        self == .todo ? [(symbol, false), (Self.todoDone, true)] : [(symbol, false)]
+    }
+
+    /// ⌘ digit shortcut.
+    var shortcutDigit: Character {
+        Character(String((TagKind.allCases.firstIndex(of: self) ?? 0) + 1))
+    }
+}
+
+struct TagItem: Codable, Hashable {
+    var kind: TagKind
+    var text: String
+    var done: Bool = false
+}
+
+// MARK: - Notebook structure
+
+/// Password protection of a section: PBKDF2 salt and a key verifier.
+struct Protection: Codable, Hashable {
+    var salt: Data
+    var verifier: Data
+    var hint: String = ""
+}
+
+/// A section or a section group in a notebook's section tree.
+struct SectionNode: Codable, Identifiable, Hashable {
+    enum Kind: String, Codable { case section, group }
+
+    var id = UUID()
+    var kind: Kind
+    var name: String
+    var color: NoteColor = .blue
+    /// Members of a section group (nil for sections).
+    var children: [SectionNode]?
+    var protection: Protection?
+
+    var isGroup: Bool { kind == .group }
+    var isProtected: Bool { protection != nil }
+}
+
+struct NotebookManifest: Codable {
+    var formatVersion = 1
+    var id = UUID()
+    var name: String
+    var color: NoteColor
+    var created = Date()
+    var sections: [SectionNode] = []
+    var trash: [TrashedItem] = []
+}
+
+/// A page in a section's page list, with the search index for the page.
+struct PageMeta: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var title: String = ""
+    /// 0 = page, 1 = subpage, 2 = sub-subpage.
+    var level: Int = 0
+    var created = Date()
+    var modified = Date()
+    /// Subpages hidden in the page list.
+    var collapsed = false
+    var plainText: String = ""
+    var tags: [TagItem] = []
+
+    var displayTitle: String { title.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled Page" : title }
+}
+
+struct SectionContent: Codable {
+    var pages: [PageMeta] = []
+}
+
+/// A deleted page or section, kept in the notebook's Recycle Bin for 60 days.
+struct TrashedItem: Codable, Identifiable {
+    enum Kind: String, Codable { case page, section }
+
+    var id = UUID()
+    var kind: Kind
+    var deleted = Date()
+    var name: String
+    /// Deleted page and the section it came from.
+    var page: PageMeta?
+    var fromSectionID: UUID?
+    var fromSectionName: String = ""
+    /// The page file is encrypted with its section's key.
+    var encrypted = false
+    /// Deleted section or section group (its files stay on disk until emptied).
+    var section: SectionNode?
+}
+
+// MARK: - Page content
+
+struct PageStyle: Codable, Hashable {
+    var color: PageColor = .none
+    var rules: RuleLines = .none
+}
+
+struct TableData: Codable, Hashable {
+    var rows: [[String]]
+    var columnWidths: [Double]
+    var headerRow: Bool = true
+
+    init(rows: Int, columns: Int, width: Double = 480) {
+        self.rows = Array(repeating: Array(repeating: "", count: columns), count: rows)
+        columnWidths = Array(repeating: width / Double(columns), count: columns)
+    }
+
+    var columnCount: Int { rows.first?.count ?? 0 }
+}
+
+/// A container placed anywhere on the page.
+struct PageElement: Codable, Identifiable {
+    enum Kind: String, Codable { case text, image, file, audio, table }
+
+    var id = UUID()
+    var kind: Kind
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double = 0
+    /// Rich text (RTFD) of a text container.
+    var rtfd: Data?
+    /// File name in the notebook's assets folder (image, file, audio).
+    var asset: String?
+    /// Original name of an attached file or recording.
+    var fileName: String?
+    var table: TableData?
+
+    var frame: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+}
+
+/// Ink: pen and highlighter strokes and shapes.
+struct InkStroke: Codable, Identifiable, Hashable {
+    enum Tool: String, Codable { case pen, highlighter, line, arrow, rectangle, ellipse }
+
+    var id = UUID()
+    var tool: Tool
+    var color: RGBA
+    var width: Double
+    var points: [CGPoint]
+}
+
+struct PageContent: Codable {
+    var id: UUID
+    var title: String
+    var created: Date
+    var style = PageStyle()
+    var elements: [PageElement] = []
+    var strokes: [InkStroke] = []
+}
+
+// MARK: - References
+
+struct SectionRef: Hashable, Codable {
+    var notebookID: UUID
+    var sectionID: UUID
+}
+
+struct PageRef: Hashable, Codable {
+    var notebookID: UUID
+    var sectionID: UUID
+    var pageID: UUID
+
+    var section: SectionRef { SectionRef(notebookID: notebookID, sectionID: sectionID) }
+}
+
+enum SidebarItem: Hashable {
+    case section(SectionRef)
+    case group(SectionRef)
+}
+
+// MARK: - Section tree helpers
+
+extension Array where Element == SectionNode {
+    func find(_ id: UUID) -> SectionNode? {
+        for node in self {
+            if node.id == id { return node }
+            if let found = node.children?.find(id) { return found }
+        }
+        return nil
+    }
+
+    @discardableResult
+    mutating func modify(_ id: UUID, _ body: (inout SectionNode) -> Void) -> Bool {
+        for i in indices {
+            if self[i].id == id { body(&self[i]); return true }
+            if self[i].children != nil, self[i].children!.modify(id, body) { return true }
+        }
+        return false
+    }
+
+    mutating func removeNode(_ id: UUID) -> SectionNode? {
+        if let i = firstIndex(where: { $0.id == id }) { return remove(at: i) }
+        for i in indices where self[i].children != nil {
+            if let removed = self[i].children!.removeNode(id) { return removed }
+        }
+        return nil
+    }
+
+    /// Sections (not groups), in display order.
+    var flattenedSections: [SectionNode] {
+        flatMap { $0.isGroup ? ($0.children ?? []).flattenedSections : [$0] }
+    }
+
+    /// Section groups, in display order.
+    var flattenedGroups: [SectionNode] {
+        flatMap { $0.isGroup ? [$0] + ($0.children ?? []).flattenedGroups : [] }
+    }
+
+    @discardableResult
+    mutating func moveSibling(_ id: UUID, by delta: Int) -> Bool {
+        if let i = firstIndex(where: { $0.id == id }) {
+            let j = i + delta
+            if indices.contains(j) { swapAt(i, j) }
+            return true
+        }
+        for i in indices where self[i].children != nil {
+            if self[i].children!.moveSibling(id, by: delta) { return true }
+        }
+        return false
+    }
+
+    mutating func append(_ node: SectionNode, toGroup groupID: UUID?) {
+        if let groupID, modify(groupID, { $0.children = ($0.children ?? []) + [node] }) { return }
+        append(node)
+    }
+
+    /// Names of the groups leading to a node.
+    func path(to id: UUID) -> [String]? {
+        for node in self {
+            if node.id == id { return [] }
+            if let sub = node.children?.path(to: id) { return [node.name] + sub }
+        }
+        return nil
+    }
+
+    /// The group whose children contain the node (nil at top level).
+    func parentGroup(of id: UUID) -> SectionNode? {
+        for node in self where node.isGroup {
+            if node.children?.contains(where: { $0.id == id }) == true { return node }
+            if let found = node.children?.parentGroup(of: id) { return found }
+        }
+        return nil
+    }
+}
