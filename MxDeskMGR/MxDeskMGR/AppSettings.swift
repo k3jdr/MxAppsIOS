@@ -15,7 +15,7 @@ extension Notification.Name {
     static let mxFilesChanged = Notification.Name("MxDeskMGR.filesChanged")
 }
 
-/// A cloud storage root (iCloud Drive, OneDrive, Google Drive) with the name to show for it.
+/// A cloud storage root (iCloud Drive, OneDrive, Google Drive, Dropbox) with the name to show for it.
 struct CloudLocation: Identifiable {
     let name: String
     let icon: String
@@ -97,6 +97,37 @@ final class AppSettings {
         return cloudStorageFolders(prefix: "GoogleDrive") + legacy.filter(FileOps.isRealDirectory)
     }
 
+    /// Dropbox folders: the paths Dropbox records in ~/.dropbox/info.json (personal and business),
+    /// "Dropbox…" folders in ~/Library/CloudStorage, and the older ~/Dropbox, ~/Dropbox (Personal),
+    /// ~/Dropbox (Team) folders. Symlinks are resolved so each account is listed once.
+    static var dropboxURLs: [URL] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        var candidates: [URL] = []
+        if let data = try? Data(contentsOf: home.appendingPathComponent(".dropbox/info.json")),
+           let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["personal", "business"] {
+                if let account = info[key] as? [String: Any], let path = account["path"] as? String {
+                    candidates.append(URL(fileURLWithPath: path))
+                }
+            }
+        }
+        candidates += cloudStorageFolders(prefix: "Dropbox")
+        let homeNames = (try? FileManager.default.contentsOfDirectory(atPath: home.path)) ?? []
+        candidates += homeNames.filter { $0 == "Dropbox" || $0.hasPrefix("Dropbox (") }
+            .sorted().map { home.appendingPathComponent($0) }
+        var seen = Set<String>()
+        return candidates.map { $0.resolvingSymlinksInPath() }
+            .filter { FileOps.isRealDirectory($0) && seen.insert($0.path).inserted }
+    }
+
+    /// "Dropbox" for a personal folder, "Dropbox – Acme" for "Dropbox-Acme" or "Dropbox (Acme)".
+    static func dropboxName(_ url: URL) -> String {
+        var account = url.lastPathComponent.dropFirst("Dropbox".count)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-() "))
+        if account.caseInsensitiveCompare("Personal") == .orderedSame { account = "" }
+        return account.isEmpty ? "Dropbox" : "Dropbox – \(account)"
+    }
+
     /// Account folders in ~/Library/CloudStorage whose names start with `prefix`.
     private static func cloudStorageFolders(prefix: String) -> [URL] {
         let storage = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/CloudStorage")
@@ -114,7 +145,7 @@ final class AppSettings {
         return "Google Drive – " + folder.dropFirst("GoogleDrive-".count)
     }
 
-    /// iCloud Drive, OneDrive and Google Drive accounts present on this Mac, shown at the top of Favorites.
+    /// iCloud Drive, OneDrive, Google Drive and Dropbox accounts present on this Mac, shown at the top of Favorites.
     /// Re-scanned at most every few seconds (the path bar asks on every redraw).
     static var cloudLocations: [CloudLocation] {
         if let cached = cloudCache, Date().timeIntervalSince(cached.time) < 5 { return cached.list }
@@ -128,6 +159,9 @@ final class AppSettings {
         let google = googleDriveURLs
         for url in google {
             list.append(CloudLocation(name: googleDriveName(url, accounts: google.count), icon: "triangle", url: url))
+        }
+        for url in dropboxURLs {
+            list.append(CloudLocation(name: dropboxName(url), icon: "shippingbox", url: url))
         }
         cloudCache = (Date(), list)
         return list

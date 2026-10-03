@@ -106,6 +106,9 @@ struct MainCommands: Commands {
             item("Google Drive") { workspace in
                 if let url = AppSettings.googleDriveURLs.first { workspace.go(to: url) } else { Alerts.message("Google Drive isn't set up on this Mac.", info: "Install Google Drive for desktop and sign in; its folder then appears under Favorites.") }
             }
+            item("Dropbox") { workspace in
+                if let url = AppSettings.dropboxURLs.first { workspace.go(to: url) } else { Alerts.message("Dropbox isn't set up on this Mac.", info: "Install the Dropbox app and sign in; its folder then appears under Favorites.") }
+            }
             Menu("Favorites") {
                 ForEach(AppSettings.shared.favorites, id: \.self) { path in
                     item(FileManager.default.displayName(atPath: path)) { $0.go(to: URL(fileURLWithPath: path)) }
