@@ -99,6 +99,9 @@ struct MainCommands: Commands {
             item("iCloud Drive") { workspace in
                 if let url = AppSettings.iCloudDriveURL { workspace.go(to: url) } else { Alerts.message("iCloud Drive isn't turned on.", info: "Turn it on in System Settings ▸ Apple Account ▸ iCloud.") }
             }
+            item("OneDrive") { workspace in
+                if let url = AppSettings.oneDriveURLs.first { workspace.go(to: url) } else { Alerts.message("OneDrive isn't set up on this Mac.", info: "Install the OneDrive app and sign in; its folder then appears under Favorites.") }
+            }
             Menu("Favorites") {
                 ForEach(AppSettings.shared.favorites, id: \.self) { path in
                     item(FileManager.default.displayName(atPath: path)) { $0.go(to: URL(fileURLWithPath: path)) }

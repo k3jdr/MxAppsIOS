@@ -19,12 +19,12 @@ struct SidebarView: View {
     var body: some View {
         List {
             Section("Favorites") {
-                if let iCloud = AppSettings.iCloudDriveURL, !settings.favorites.contains(iCloud.path) {
-                    row(title: "iCloud Drive", icon: "icloud", url: iCloud)
+                ForEach(AppSettings.cloudLocations.filter { !settings.favorites.contains($0.url.path) }) { cloud in
+                    row(title: cloud.name, icon: cloud.icon, url: cloud.url)
                         .contextMenu {
-                            Button("Open in New Tab") { workspace.activePane.newTab(iCloud) }
-                            Button("Open in Other Pane") { workspace.otherTab.navigate(to: iCloud) }
-                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([iCloud]) }
+                            Button("Open in New Tab") { workspace.activePane.newTab(cloud.url) }
+                            Button("Open in Other Pane") { workspace.otherTab.navigate(to: cloud.url) }
+                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cloud.url]) }
                         }
                 }
                 ForEach(settings.favorites, id: \.self) { path in
@@ -105,12 +105,12 @@ struct SidebarView: View {
     }
 
     private func title(forFavorite path: String) -> String {
-        path == AppSettings.iCloudDriveURL?.path ? "iCloud Drive" : FileManager.default.displayName(atPath: path)
+        AppSettings.cloudLocation(at: path)?.name ?? FileManager.default.displayName(atPath: path)
     }
 
     private func icon(forFavorite path: String) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if path == AppSettings.iCloudDriveURL?.path { return "icloud" }
+        if let cloud = AppSettings.cloudLocation(at: path) { return cloud.icon }
         switch path {
         case home: return "house"
         case home + "/Desktop": return "menubar.dock.rectangle"

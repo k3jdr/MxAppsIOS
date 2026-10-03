@@ -69,10 +69,10 @@ final class BrowserTab: Identifiable {
 
     var title: String { BrowserTab.displayName(of: url) }
 
-    /// Folder name as shown in tabs and the path bar ("Macintosh HD" for /, "iCloud Drive").
+    /// Folder name as shown in tabs and the path bar ("Macintosh HD" for /, "iCloud Drive", "OneDrive").
     static func displayName(of url: URL) -> String {
         if url.path == "/" { return FileManager.default.displayName(atPath: "/") }
-        if url.path == AppSettings.iCloudDriveURL?.path { return "iCloud Drive" }
+        if let cloud = AppSettings.cloudLocation(at: url.path) { return cloud.name }
         return url.lastPathComponent
     }
     var canGoBack: Bool { !backStack.isEmpty }

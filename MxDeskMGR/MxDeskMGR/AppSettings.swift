@@ -15,6 +15,14 @@ extension Notification.Name {
     static let mxFilesChanged = Notification.Name("MxDeskMGR.filesChanged")
 }
 
+/// A cloud storage root (iCloud Drive, OneDrive) with the name to show for it.
+struct CloudLocation: Identifiable {
+    let name: String
+    let icon: String
+    let url: URL
+    var id: String { url.path }
+}
+
 @Observable
 final class AppSettings {
     static let shared = AppSettings()
@@ -75,6 +83,39 @@ final class AppSettings {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
         return FileOps.isRealDirectory(url) ? url : nil
+    }
+
+    /// OneDrive accounts synced by the OneDrive app (File Provider folders in ~/Library/CloudStorage):
+    /// "OneDrive-Personal" and "OneDrive-<Organisation>" for work or school accounts.
+    static var oneDriveURLs: [URL] {
+        let storage = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/CloudStorage")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: storage.path)) ?? []
+        return names.filter { $0.hasPrefix("OneDrive") }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            .map { storage.appendingPathComponent($0) }
+            .filter(FileOps.isRealDirectory)
+    }
+
+    /// iCloud Drive and OneDrive accounts present on this Mac, shown at the top of Favorites.
+    /// Re-scanned at most every few seconds (the path bar asks on every redraw).
+    static var cloudLocations: [CloudLocation] {
+        if let cached = cloudCache, Date().timeIntervalSince(cached.time) < 5 { return cached.list }
+        var list: [CloudLocation] = []
+        if let iCloud = iCloudDriveURL { list.append(CloudLocation(name: "iCloud Drive", icon: "icloud", url: iCloud)) }
+        for url in oneDriveURLs {
+            let account = url.lastPathComponent.dropFirst("OneDrive".count).drop { $0 == "-" || $0 == " " }
+            let name = account.isEmpty || account == "Personal" ? "OneDrive" : "OneDrive – \(account)"
+            list.append(CloudLocation(name: name, icon: "cloud", url: url))
+        }
+        cloudCache = (Date(), list)
+        return list
+    }
+
+    private static var cloudCache: (time: Date, list: [CloudLocation])?
+
+    /// The cloud location whose root is `path`, if any.
+    static func cloudLocation(at path: String) -> CloudLocation? {
+        cloudLocations.first { $0.url.path == path }
     }
 
     func addFavorite(_ url: URL) {
