@@ -11,12 +11,12 @@
 //
 
 import AppKit
-import os
 import SwiftUI
 import UniformTypeIdentifiers
 
-nonisolated struct S3Entry: Identifiable, Hashable, Sendable {
-    /// Full key; folders (common prefixes) end with "/".
+/// An object or folder in S3 or Azure Blob Storage.
+nonisolated struct RemoteEntry: Identifiable, Hashable, Sendable {
+    /// Full key / blob name; folders (common prefixes) end with "/".
     let key: String
     let name: String
     let isFolder: Bool
@@ -67,77 +67,26 @@ nonisolated enum AWSCLI {
 
     static var isAvailable: Bool { path != nil && !profiles.isEmpty }
 
-    static func environment() -> [String: String] {
-        var env = ProcessInfo.processInfo.environment
-        env["AWS_PAGER"] = ""
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
-        return env
-    }
+    static func environment() -> [String: String] { CLITool.environment(["AWS_PAGER": ""]) }
 
     /// Runs `aws <args> --profile <profile>` and returns stdout.
     static func run(_ args: [String], profile: String) async throws -> Data {
         guard let path else { throw AWSCLIError(message: "The AWS CLI isn't installed.") }
-        return try await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: path)
-            process.arguments = args + ["--profile", profile, "--no-cli-pager"]
-            process.environment = environment()
-            let out = Pipe(), err = Pipe()
-            process.standardOutput = out
-            process.standardError = err
-            let errData = OSAllocatedUnfairLock(initialState: Data())
-            err.fileHandleForReading.readabilityHandler = { handle in
-                let chunk = handle.availableData
-                errData.withLock { $0.append(chunk) }
-            }
-            try process.run()
-            let data = out.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            err.fileHandleForReading.readabilityHandler = nil
-            guard process.terminationStatus == 0 else {
-                let text = String(decoding: errData.withLock { $0 }, as: UTF8.self)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                throw AWSCLIError(message: text.isEmpty ? "aws exited with status \(process.terminationStatus)" : text)
-            }
-            return data
-        }.value
+        do {
+            return try await CLITool.run(path, args + ["--profile", profile, "--no-cli-pager"], environment: environment())
+        } catch let error as CLIToolError {
+            throw AWSCLIError(message: error.message)
+        }
     }
 
     /// Runs a transfer command in a job, turning "Completed 1.2 MiB/10.0 MiB" output into progress.
     @discardableResult
     static func runTransfer(_ args: [String], profile: String, reporter: ProgressReporter) -> Bool {
         guard let path else { reporter.error("The AWS CLI isn't installed."); return false }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = args + ["--profile", profile, "--no-cli-pager"]
-        process.environment = environment()
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        out.fileHandleForReading.readabilityHandler = { handle in
-            let text = String(decoding: handle.availableData, as: UTF8.self)
-            for line in text.split(whereSeparator: { $0 == "\r" || $0 == "\n" }) {
-                if let (done, total) = parseProgress(String(line)) {
-                    reporter.progress(done: done, of: total, String(line))
-                }
-            }
+        return CLITool.runJob(path, args + ["--profile", profile, "--no-cli-pager"], environment: environment(),
+                              reporter: reporter) { line in
+            if let (done, total) = parseProgress(line) { reporter.progress(done: done, of: total, line) }
         }
-        do { try process.run() } catch {
-            reporter.error(error.localizedDescription)
-            return false
-        }
-        while process.isRunning {
-            if reporter.isCancelled { process.terminate() }
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        out.fileHandleForReading.readabilityHandler = nil
-        if process.terminationStatus != 0, !reporter.isCancelled {
-            let text = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            reporter.error(text.isEmpty ? "aws exited with status \(process.terminationStatus)" : text)
-            return false
-        }
-        return process.terminationStatus == 0
     }
 
     /// "Completed 1.2 MiB/~10.0 MiB (3.1 MiB/s) with 2 file(s) remaining" -> (done, total) bytes.
@@ -155,14 +104,7 @@ nonisolated enum AWSCLI {
         return (done, total)
     }
 
-    static func parseDate(_ text: String?) -> Date {
-        guard let text else { return .distantPast }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: text) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        return f.date(from: text) ?? .distantPast
-    }
+    static func parseDate(_ text: String?) -> Date { CLITool.parseISODate(text) }
 }
 
 @Observable
@@ -180,7 +122,7 @@ final class S3Model {
         didSet { if bucket != oldValue { prefix = ""; selection = []; Task { await list() } } }
     }
     private(set) var prefix = ""
-    private(set) var entries: [S3Entry] = []
+    private(set) var entries: [RemoteEntry] = []
     private(set) var truncated = false
     private(set) var loading = false
     private(set) var errorText: String?
@@ -197,14 +139,14 @@ final class S3Model {
         profile = saved.flatMap { names.contains($0) ? $0 : nil } ?? names.first ?? "default"
     }
 
-    var visibleEntries: [S3Entry] {
+    var visibleEntries: [RemoteEntry] {
         let f = filter.trimmingCharacters(in: .whitespaces)
         guard !f.isEmpty else { return entries }
         let matcher = NameMatcher(f, substringIfPlain: true)
         return entries.filter { matcher.matches($0.name) }
     }
 
-    var selectedEntries: [S3Entry] { entries.filter { selection.contains($0.key) } }
+    var selectedEntries: [RemoteEntry] { entries.filter { selection.contains($0.key) } }
 
     func uri(_ key: String = "") -> String { "s3://\(bucket ?? "")/\(key)" }
 
@@ -240,15 +182,15 @@ final class S3Model {
             let data = try await AWSCLI.run(args, profile: profile)
             guard requested == (self.bucket ?? "", self.prefix) else { return }
             let json = (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-            var result: [S3Entry] = []
+            var result: [RemoteEntry] = []
             for p in json["CommonPrefixes"] as? [[String: Any]] ?? [] {
                 guard let key = p["Prefix"] as? String else { continue }
                 let name = String(key.dropFirst(prefix.count).dropLast())
-                result.append(S3Entry(key: key, name: name, isFolder: true, size: 0, modified: .distantPast, storageClass: ""))
+                result.append(RemoteEntry(key: key, name: name, isFolder: true, size: 0, modified: .distantPast, storageClass: ""))
             }
             for o in json["Contents"] as? [[String: Any]] ?? [] {
                 guard let key = o["Key"] as? String, key != prefix else { continue }   // skip the folder marker itself
-                result.append(S3Entry(key: key, name: String(key.dropFirst(prefix.count)), isFolder: false,
+                result.append(RemoteEntry(key: key, name: String(key.dropFirst(prefix.count)), isFolder: false,
                                       size: (o["Size"] as? NSNumber)?.int64Value ?? 0,
                                       modified: AWSCLI.parseDate(o["LastModified"] as? String),
                                       storageClass: o["StorageClass"] as? String ?? ""))
@@ -265,7 +207,7 @@ final class S3Model {
         }
     }
 
-    func open(_ entry: S3Entry) {
+    func open(_ entry: RemoteEntry) {
         guard entry.isFolder else { return }
         go(to: entry.key)
     }
@@ -311,7 +253,7 @@ final class S3Model {
     // MARK: Transfers (background jobs)
 
     /// Downloads the selection into `folder` (folders recursively).
-    func download(_ items: [S3Entry], to folder: URL) {
+    func download(_ items: [RemoteEntry], to folder: URL) {
         guard !items.isEmpty, bucket != nil else { return }
         let profile = profile
         let jobs: [(String, URL, Bool)] = items.map { item in
@@ -366,7 +308,7 @@ final class S3Model {
         } catch { report(error) }
     }
 
-    func rename(_ item: S3Entry) async {
+    func rename(_ item: RemoteEntry) async {
         guard let name = Alerts.prompt("Rename", info: uri(item.key), initial: item.name, ok: "Rename"),
               name != item.name, !name.contains("/") else { return }
         if entries.contains(where: { $0.name == name }) {
@@ -384,7 +326,7 @@ final class S3Model {
     }
 
     /// Deletes objects (folders with everything in them). S3 has no trash, so this asks first.
-    func delete(_ items: [S3Entry]) async {
+    func delete(_ items: [RemoteEntry]) async {
         guard !items.isEmpty else { return }
         let folders = items.filter(\.isFolder).count
         let what = items.count == 1 ? "“\(items[0].name)”" : Fmt.count(items.count, "item")
@@ -406,13 +348,13 @@ final class S3Model {
         selection = []
     }
 
-    func copyURIs(_ items: [S3Entry]) {
+    func copyURIs(_ items: [RemoteEntry]) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(items.map { uri($0.key) }.joined(separator: "\n"), forType: .string)
     }
 
     /// Copies a presigned HTTPS link (valid 7 days) for each selected file.
-    func copyPresignedLinks(_ items: [S3Entry]) async {
+    func copyPresignedLinks(_ items: [RemoteEntry]) async {
         var links: [String] = []
         for item in items where !item.isFolder {
             do {

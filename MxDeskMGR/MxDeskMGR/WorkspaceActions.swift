@@ -349,6 +349,11 @@ extension Workspace {
         openWindow?(id: "s3")
     }
 
+    /// Opens the Azure Blob Storage browser window.
+    func openAzure() {
+        openWindow?(id: "azure")
+    }
+
     func search() {
         openWindow?(value: SearchRequest(root: activeTab.url))
     }

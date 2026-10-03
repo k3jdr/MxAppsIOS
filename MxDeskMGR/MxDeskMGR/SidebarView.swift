@@ -47,6 +47,13 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                     .help("Browse Amazon S3 buckets with your AWS CLI profiles")
                 }
+                Button {
+                    workspace.openAzure()
+                } label: {
+                    Label("Azure Blob Storage", systemImage: "cylinder.split.1x2").lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .help("Browse Azure Blob Storage with the Azure CLI (az login)")
                 ForEach(settings.favorites, id: \.self) { path in
                     let url = URL(fileURLWithPath: path)
                     row(title: title(forFavorite: path), icon: icon(forFavorite: path), url: url)

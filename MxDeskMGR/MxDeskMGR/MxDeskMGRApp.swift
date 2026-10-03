@@ -71,6 +71,13 @@ struct MxDeskMGRApp: App {
         .restorationBehavior(.disabled)
         .commandsRemoved()
 
+        Window("Azure Blob Storage", id: "azure") {
+            AzureView()
+        }
+        .defaultSize(width: 1050, height: 680)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Settings {
             SettingsView()
         }
