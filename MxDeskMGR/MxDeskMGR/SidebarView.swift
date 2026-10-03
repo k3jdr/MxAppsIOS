@@ -13,6 +13,7 @@ struct SidebarView: View {
     let workspace: Workspace
     private var settings = AppSettings.shared
     private var volumes = VolumeMonitor.shared
+    private let showPhotos = PhotosModel.libraryExists
 
     init(workspace: Workspace) { self.workspace = workspace }
 
@@ -26,6 +27,15 @@ struct SidebarView: View {
                             Button("Open in Other Pane") { workspace.otherTab.navigate(to: cloud.url) }
                             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cloud.url]) }
                         }
+                }
+                if showPhotos {
+                    Button {
+                        workspace.openPhotos()
+                    } label: {
+                        Label("iCloud Photos", systemImage: "photo.on.rectangle").lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Browse iCloud Photos and export originals into the active pane's folder")
                 }
                 ForEach(settings.favorites, id: \.self) { path in
                     let url = URL(fileURLWithPath: path)

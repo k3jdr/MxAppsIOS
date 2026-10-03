@@ -57,6 +57,13 @@ struct MxDeskMGRApp: App {
         .restorationBehavior(.disabled)
         .commandsRemoved()
 
+        Window("iCloud Photos", id: "photos") {
+            PhotosView()
+        }
+        .defaultSize(width: 1000, height: 700)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Settings {
             SettingsView()
         }

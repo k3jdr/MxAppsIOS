@@ -339,6 +339,11 @@ extension Workspace {
         activeTab.calculateFolderSizes(marked)
     }
 
+    /// Opens the iCloud Photos browser window.
+    func openPhotos() {
+        openWindow?(id: "photos")
+    }
+
     func search() {
         openWindow?(value: SearchRequest(root: activeTab.url))
     }
