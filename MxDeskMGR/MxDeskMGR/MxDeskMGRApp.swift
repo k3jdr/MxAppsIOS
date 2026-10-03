@@ -64,6 +64,13 @@ struct MxDeskMGRApp: App {
         .restorationBehavior(.disabled)
         .commandsRemoved()
 
+        Window("Amazon S3", id: "s3") {
+            S3View()
+        }
+        .defaultSize(width: 1050, height: 680)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Settings {
             SettingsView()
         }

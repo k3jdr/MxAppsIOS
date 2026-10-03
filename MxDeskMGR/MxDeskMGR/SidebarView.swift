@@ -14,6 +14,7 @@ struct SidebarView: View {
     private var settings = AppSettings.shared
     private var volumes = VolumeMonitor.shared
     private let showPhotos = PhotosModel.libraryExists
+    private let showS3 = AWSCLI.isAvailable
 
     init(workspace: Workspace) { self.workspace = workspace }
 
@@ -36,6 +37,15 @@ struct SidebarView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Browse iCloud Photos and export originals into the active pane's folder")
+                }
+                if showS3 {
+                    Button {
+                        workspace.openS3()
+                    } label: {
+                        Label("Amazon S3", systemImage: "server.rack").lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Browse Amazon S3 buckets with your AWS CLI profiles")
                 }
                 ForEach(settings.favorites, id: \.self) { path in
                     let url = URL(fileURLWithPath: path)

@@ -344,6 +344,11 @@ extension Workspace {
         openWindow?(id: "photos")
     }
 
+    /// Opens the Amazon S3 browser window.
+    func openS3() {
+        openWindow?(id: "s3")
+    }
+
     func search() {
         openWindow?(value: SearchRequest(root: activeTab.url))
     }

@@ -92,6 +92,12 @@ nonisolated final class ProgressReporter: @unchecked Sendable {
         post(force: false)
     }
 
+    /// Absolute progress reported by an external tool (e.g. the AWS CLI).
+    func progress(done bytes: Int64, of totalBytes: Int64, _ detail: String) {
+        lock.withLock { total = totalBytes; done = bytes; current = 0; name = detail }
+        post(force: false)
+    }
+
     func step(_ index: Int, of count: Int, _ fileName: String) {
         lock.withLock { total = Int64(count); done = Int64(index); current = 0; name = fileName }
         post(force: false)
