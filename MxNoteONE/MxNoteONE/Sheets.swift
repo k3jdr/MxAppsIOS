@@ -19,6 +19,7 @@ struct SheetView: View {
         case .movePage(let ref): MovePageSheet(ref: ref)
         case .insertTable: InsertTableSheet()
         case .insertLink: LinkSheet()
+        case .oneDriveOpen: OneDriveOpenSheet()
         }
     }
 }
@@ -87,11 +88,21 @@ struct NewNotebookSheet: View {
                             .truncationMode(.middle)
                             .help(folder.path(percentEncoded: false))
                         Spacer()
-                        Button("Choose…") { chooseFolder() }
+                        Menu("Choose") {
+                            Button("Documents") { folder = Prefs.notebooksFolder }
+                            ForEach(Prefs.oneDriveFolders, id: \.self) { url in
+                                Button(url.lastPathComponent.replacingOccurrences(of: "OneDrive-", with: "OneDrive – ")) {
+                                    folder = url.appending(path: "MxNoteONE Notebooks", directoryHint: .isDirectory)
+                                }
+                            }
+                            Divider()
+                            Button("Other Folder…") { chooseFolder() }
+                        }
+                        .fixedSize()
                     }
                 }
             }
-            Text("Tip: create the notebook in an iCloud Drive, OneDrive or Dropbox folder to use it on your other Macs.")
+            Text("Tip: put the notebook in your OneDrive folder to use it on your other Macs, or use File ▸ OneDrive ▸ Save Notebook to OneDrive to open it in Microsoft OneNote.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

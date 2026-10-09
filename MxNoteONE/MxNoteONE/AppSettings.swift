@@ -55,6 +55,20 @@ enum Prefs {
         defaults.object(forKey: autoLockKey) == nil ? 10 : defaults.integer(forKey: autoLockKey)
     }
 
+    /// Folders of the OneDrive accounts signed in with the OneDrive app.
+    static var oneDriveFolders: [URL] {
+        let cloud = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/CloudStorage")
+        let items = (try? FileManager.default.contentsOfDirectory(at: cloud, includingPropertiesForKeys: nil)) ?? []
+        return items.filter { $0.lastPathComponent.hasPrefix("OneDrive") }.sorted { $0.path < $1.path }
+    }
+
+    static let oneDriveAutoSyncKey = "oneDriveAutoSyncMinutes"
+
+    /// Sync OneDrive notebooks automatically every so many minutes (0 = only when asked).
+    static var oneDriveAutoSyncMinutes: Int {
+        defaults.integer(forKey: oneDriveAutoSyncKey)
+    }
+
     static var openNotebookPaths: [String] {
         get { defaults.stringArray(forKey: openNotebooksKey) ?? [] }
         set { defaults.set(newValue, forKey: openNotebooksKey) }
@@ -162,6 +176,24 @@ enum Palette {
     static let pen: [(String, NSColor)] = text + [
         ("Yellow", NSColor(srgbRed: 0.95, green: 0.80, blue: 0.05, alpha: 1)),
         ("Pink", NSColor(srgbRed: 0.90, green: 0.30, blue: 0.60, alpha: 1)),
+    ]
+
+    /// Table cell shading.
+    static let shading: [(String, NSColor)] = [
+        ("Light Gray", NSColor(srgbRed: 0.93, green: 0.93, blue: 0.93, alpha: 1)),
+        ("Gray", NSColor(srgbRed: 0.80, green: 0.80, blue: 0.80, alpha: 1)),
+        ("Light Blue", NSColor(srgbRed: 0.85, green: 0.91, blue: 0.99, alpha: 1)),
+        ("Blue", NSColor(srgbRed: 0.62, green: 0.77, blue: 0.95, alpha: 1)),
+        ("Light Green", NSColor(srgbRed: 0.87, green: 0.95, blue: 0.85, alpha: 1)),
+        ("Green", NSColor(srgbRed: 0.66, green: 0.85, blue: 0.62, alpha: 1)),
+        ("Light Yellow", NSColor(srgbRed: 1.00, green: 0.97, blue: 0.80, alpha: 1)),
+        ("Yellow", NSColor(srgbRed: 1.00, green: 0.90, blue: 0.45, alpha: 1)),
+        ("Light Orange", NSColor(srgbRed: 1.00, green: 0.90, blue: 0.80, alpha: 1)),
+        ("Light Red", NSColor(srgbRed: 0.99, green: 0.84, blue: 0.84, alpha: 1)),
+        ("Light Purple", NSColor(srgbRed: 0.91, green: 0.87, blue: 0.98, alpha: 1)),
+        ("Purple", NSColor(srgbRed: 0.47, green: 0.30, blue: 0.70, alpha: 1)),
+        ("Dark Blue", NSColor(srgbRed: 0.16, green: 0.31, blue: 0.56, alpha: 1)),
+        ("Dark Gray", NSColor(srgbRed: 0.30, green: 0.30, blue: 0.32, alpha: 1)),
     ]
 
     static func swatch(_ color: NSColor, size: CGFloat = 12) -> NSImage {

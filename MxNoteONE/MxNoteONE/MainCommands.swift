@@ -38,6 +38,28 @@ struct MainCommands: Commands {
             Divider()
             Button("Open Notebook…") { store.openNotebookPanel() }
                 .keyboardShortcut("o")
+            Button("Save Notebook As…") {
+                if let nb = store.currentNotebook { store.saveNotebookAs(nb.id) }
+            }
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+            Menu("OneDrive") {
+                Button("Open Notebook from OneDrive…") { store.sheet = .oneDriveOpen }
+                if let nb = store.currentNotebook {
+                    if nb.manifest.oneNote == nil {
+                        Button("Save “\(nb.name)” to OneDrive") { OneDriveSync.shared.save(nb) }
+                    } else {
+                        Button("Sync “\(nb.name)”") { OneDriveSync.shared.sync(nb) }
+                    }
+                }
+                Button("Sync All OneDrive Notebooks") { OneDriveSync.shared.syncAll() }
+                    .keyboardShortcut("s", modifiers: [.command, .control])
+                Divider()
+                if OneDriveAuth.shared.isSignedIn {
+                    Button("Sign Out of \(OneDriveAuth.shared.account ?? "OneDrive")") { OneDriveAuth.shared.signOut() }
+                } else {
+                    Button("Sign In…") { OneDriveSync.shared.signIn() }
+                }
+            }
         }
         CommandGroup(replacing: .saveItem) {
             Button("Close Notebook") {

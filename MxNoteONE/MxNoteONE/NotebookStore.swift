@@ -54,6 +54,7 @@ enum ActiveSheet: Identifiable {
     case movePage(PageRef)
     case insertTable
     case insertLink
+    case oneDriveOpen
 
     var id: String {
         switch self {
@@ -64,6 +65,7 @@ enum ActiveSheet: Identifiable {
         case .movePage(let ref): "movePage-\(ref.pageID)"
         case .insertTable: "insertTable"
         case .insertLink: "insertLink"
+        case .oneDriveOpen: "oneDriveOpen"
         }
     }
 }
@@ -282,6 +284,8 @@ final class NotebookStore {
         persistOpenNotebooks()
         expandedNotebooks = Set(notebooks.map(\.id))
         if sidebarSelection == nil { selectFirstSection(of: notebooks.first) }
+        OneDriveSync.shared.scheduleAutoSync()
+        if Prefs.oneDriveAutoSyncMinutes > 0, OneDriveAuth.shared.isSignedIn { OneDriveSync.shared.syncAll(quiet: true) }
     }
 
     private func selectFirstSection(of nb: Notebook?) {
@@ -337,7 +341,7 @@ final class NotebookStore {
     }
 
     @discardableResult
-    func createNotebook(name: String, color: NoteColor, in folder: URL, firstSection: String = "New Section 1",
+    func createNotebook(name: String, color: NoteColor, in folder: URL, firstSection: String? = "New Section 1",
                         template: PageTemplate = .blank) -> Notebook? {
         let fm = FileManager.default
         let safe = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
@@ -356,7 +360,7 @@ final class NotebookStore {
             notebooks.append(nb)
             expandedNotebooks.insert(nb.id)
             persistOpenNotebooks()
-            addSection(to: nb.id, name: firstSection, template: template)
+            if let firstSection { addSection(to: nb.id, name: firstSection, template: template) }
             return nb
         } catch {
             report("Couldn't create the notebook.", error)
@@ -385,6 +389,33 @@ final class NotebookStore {
         updateHistoryFlags()
         persistOpenNotebooks()
         if sidebarSelection == nil { selectFirstSection(of: notebooks.first) }
+    }
+
+    /// File ▸ Save Notebook As…: copies the notebook folder to a new place (a OneDrive folder, for example)
+    /// and keeps working there. The original folder is left as it was.
+    func saveNotebookAs(_ id: UUID) {
+        guard let nb = notebook(id) else { return }
+        canvas?.flush()
+        let panel = NSSavePanel()
+        panel.title = "Save Notebook As"
+        panel.message = "Choose where to keep “\(nb.name)” — on this Mac or in your OneDrive folder. The original stays where it is."
+        panel.nameFieldStringValue = nb.url.lastPathComponent
+        panel.canCreateDirectories = true
+        panel.directoryURL = Prefs.oneDriveFolders.first ?? Prefs.notebooksFolder
+        guard panel.runModal() == .OK, var destination = panel.url else { return }
+        if destination.pathExtension != "mxnotebook" { destination.appendPathExtension("mxnotebook") }
+        guard destination.standardizedFileURL != nb.url.standardizedFileURL else { return }
+        do {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                showAlert("Can't save the notebook", "\(destination.lastPathComponent) already exists there.")
+                return
+            }
+            try FileManager.default.copyItem(at: nb.url, to: destination)
+            nb.url = destination.standardizedFileURL
+            persistOpenNotebooks()
+        } catch {
+            report("Couldn't save the notebook.", error)
+        }
     }
 
     func renameNotebook(_ id: UUID, to name: String) {
@@ -563,6 +594,31 @@ final class NotebookStore {
         nb.sections[ref.sectionID]!.pages[i].plainText = plainText
         nb.sections[ref.sectionID]!.pages[i].tags = tags
         saveSection(nb, ref.sectionID)
+    }
+
+    /// Writes a page that came from OneDrive: replaces the local page with the same ID, or appends it.
+    func storeImportedPage(_ content: PageContent, meta: PageMeta, in section: SectionRef) {
+        guard let nb = notebook(section.notebookID), nb.sections[section.sectionID] != nil else { return }
+        let isOpen = canvas?.ref?.pageID == meta.id
+        if isOpen { canvas?.flush() }
+        do {
+            try writePage(content, nb: nb, key: nb.keys[section.sectionID])
+        } catch {
+            report("Couldn't save a page from OneDrive.", error)
+            return
+        }
+        if let i = nb.sections[section.sectionID]!.pages.firstIndex(where: { $0.id == meta.id }) {
+            nb.sections[section.sectionID]!.pages[i] = meta
+        } else {
+            nb.sections[section.sectionID]!.pages.append(meta)
+        }
+        saveSection(nb, section.sectionID)
+        if isOpen { reloadToken += 1 }
+    }
+
+    /// Removes a page deleted in OneNote (it goes to the Recycle Bin).
+    func removeSyncedPage(_ ref: PageRef) {
+        deletePage(ref)
     }
 
     /// Live title update while typing (saved with the page).

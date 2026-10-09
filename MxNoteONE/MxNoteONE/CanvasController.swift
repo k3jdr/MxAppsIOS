@@ -267,6 +267,84 @@ final class CanvasController: NSObject {
         markDirty()
     }
 
+    /// A container grew or shrank: containers sitting just below it (and overlapping it horizontally) move with it.
+    func pushElements(below view: ElementView, oldMaxY: CGFloat, delta: CGFloat) {
+        guard abs(delta) > 0.5 else { return }
+        var moved: Set<ObjectIdentifier> = [ObjectIdentifier(view)]
+        var queue: [(ElementView, CGFloat)] = [(view, oldMaxY)]
+        while let (source, bottom) = queue.first {
+            queue.removeFirst()
+            for other in canvas.elementViews where !moved.contains(ObjectIdentifier(other)) {
+                let f = other.frame
+                guard f.minY >= bottom - 1, f.minY <= bottom + 24,
+                      f.maxX > source.frame.minX, f.minX < source.frame.maxX else { continue }
+                moved.insert(ObjectIdentifier(other))
+                other.setFrameOrigin(NSPoint(x: f.minX, y: max(0, f.minY + delta)))
+                queue.append((other, f.maxY))
+            }
+        }
+        if moved.count > 1 {
+            canvas.updateSize()
+            markDirty()
+        }
+    }
+
+    /// OneNote-style: text followed by Tab turns the paragraph into a two-column table
+    /// (the text goes in the first cell, the cursor in the second). Text after it moves below the table.
+    func convertParagraphToTable(_ view: TextElementView, paragraph: NSRange) {
+        let tv = view.textView
+        guard let storage = tv.textStorage, let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+        let ns = storage.string as NSString
+        var text = ns.substring(with: paragraph)
+        if text.hasSuffix("\n") { text.removeLast() }
+        text = text.trimmingCharacters(in: .whitespaces)
+        let font = storage.attribute(.font, at: paragraph.location, effectiveRange: nil) as? NSFont ?? Prefs.defaultFont
+        let firstWidth = min(max(ceil((text as NSString).size(withAttributes: [.font: font]).width) + 28, 90), 360)
+        var table = TableData(rows: 1, columns: 2)
+        table.headerRow = false
+        table.rows[0][0] = text
+        table.columnWidths = [Double(firstWidth), 120]
+
+        let glyphs = lm.glyphRange(forCharacterRange: paragraph, actualCharacterRange: nil)
+        let rect = lm.boundingRect(forGlyphRange: glyphs, in: tc)
+        let paragraphTop = view.frame.minY + ElementView.gripHeight + tv.textContainerOrigin.y + rect.minY
+        let after = NSRange(location: NSMaxRange(paragraph), length: ns.length - NSMaxRange(paragraph))
+        let trailing = after.length > 0 ? storage.attributedSubstring(from: after) : nil
+        let x = view.frame.minX
+
+        undoManager?.beginUndoGrouping()
+        let tableY: CGFloat
+        if paragraph.location == 0 && trailing == nil {
+            tableY = view.frame.minY
+            removeElement(view)
+        } else {
+            var cut = NSRange(location: paragraph.location, length: ns.length - paragraph.location)
+            if cut.location > 0 {
+                cut.location -= 1
+                cut.length += 1
+            }
+            if paragraph.location == 0 {
+                removeElement(view)
+            } else if tv.shouldChangeText(in: cut, replacementString: "") {
+                storage.replaceCharacters(in: cut, with: "")
+                tv.didChangeText()
+            }
+            tableY = paragraphTop - ElementView.gripHeight + 2
+        }
+        var element = PageElement(kind: .table, x: x, y: max(0, tableY), width: Double(firstWidth) + 120)
+        element.table = table
+        let tableView = addElement(element) as? TableElementView
+        if let trailing, let tableView {
+            var rest = PageElement(kind: .text, x: x, y: tableView.frame.maxY + 14, width: view.frame.width)
+            rest.rtfd = trailing.rtfd(from: NSRange(location: 0, length: trailing.length), documentAttributes: [:])
+            addElement(rest)
+        }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName("Table")
+        canvas.selectedElement = nil
+        tableView?.beginEditing(CellRef(row: 0, column: 1))
+    }
+
     func bringToFront(_ view: ElementView) {
         canvas.addSubview(view, positioned: .below, relativeTo: canvas.inkView)
         markDirty()

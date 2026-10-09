@@ -28,6 +28,8 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+            OneDriveStatusView()
             HStack(spacing: 12) {
                 Menu {
                     Button("New Section") { store.addSectionToCurrentNotebook() }
@@ -37,6 +39,7 @@ struct SidebarView: View {
                     Divider()
                     Button("New Notebook…") { store.sheet = .newNotebook }
                     Button("Open Notebook…") { store.openNotebookPanel() }
+                    Button("Open Notebook from OneDrive…") { store.sheet = .oneDriveOpen }
                 } label: {
                     Label("Add", systemImage: "plus")
                 }
@@ -63,6 +66,7 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            }
         }
     }
 
@@ -86,6 +90,12 @@ struct NotebookHeader: View {
                 .foregroundStyle(notebook.manifest.color.color)
             Text(notebook.name)
                 .lineLimit(1)
+            if notebook.manifest.oneNote != nil {
+                Image(systemName: "icloud")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("Synced with OneNote on OneDrive")
+            }
         }
         .contextMenu {
             Button("New Section") { store.addSection(to: notebook.id) }
@@ -102,6 +112,10 @@ struct NotebookHeader: View {
                 }
             }
             Button("Show in Finder") { store.showInFinder(notebook.id) }
+            Button("Save Notebook As…") { store.saveNotebookAs(notebook.id) }
+            Divider()
+            OneDriveNotebookMenu(notebook: notebook)
+            Divider()
             Button("Recycle Bin") {
                 store.recycleBinNotebookID = notebook.id
                 openWindow(id: "trash")

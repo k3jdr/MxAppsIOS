@@ -205,6 +205,31 @@ struct NotebookManifest: Codable {
     var created = Date()
     var sections: [SectionNode] = []
     var trash: [TrashedItem] = []
+    /// Set when the notebook is synced with a OneNote notebook on OneDrive.
+    var oneNote: OneNoteLink?
+}
+
+/// How a notebook maps onto a OneNote notebook on OneDrive.
+struct OneNoteLink: Codable {
+    var notebookID: String
+    var name: String
+    var account: String = ""
+    var clientURL: String?
+    var webURL: String?
+    /// Local section / section group ID → OneNote section / section group ID.
+    var nodes: [String: String] = [:]
+    /// Local page ID → its OneNote page.
+    var pages: [String: SyncedPage] = [:]
+    var lastSync: Date?
+}
+
+struct SyncedPage: Codable {
+    var remoteID: String
+    var remoteSectionID: String
+    /// OneNote's lastModifiedDateTime when last uploaded or downloaded.
+    var remoteModified: Date
+    /// The local page's modified date at that time.
+    var localModified: Date
 }
 
 /// A page in a section's page list, with the search index for the page.
@@ -263,6 +288,36 @@ struct TableData: Codable, Hashable {
     }
 
     var columnCount: Int { rows.first?.count ?? 0 }
+
+    /// Cell shading (background colours), row by row; nil = none.
+    var shading: [[RGBA?]]?
+
+    /// Background of a cell: its shading, else light gray for the header row, else nil (white).
+    func shade(_ row: Int, _ column: Int) -> RGBA? {
+        if let shading, shading.indices.contains(row), shading[row].indices.contains(column), let color = shading[row][column] {
+            return color
+        }
+        return headerRow && row == 0 ? RGBA(r: 0.91, g: 0.91, b: 0.91) : nil
+    }
+
+    /// Black or white text, whichever reads better on the cell's shading.
+    func textIsLight(_ row: Int, _ column: Int) -> Bool {
+        guard let c = shade(row, column) else { return false }
+        return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b < 0.5
+    }
+
+    /// Shading grid sized to the table.
+    mutating func padShading() {
+        var grid = shading ?? []
+        let columns = columnCount
+        grid = Array(grid.prefix(rows.count))
+        while grid.count < rows.count { grid.append([]) }
+        for r in grid.indices {
+            grid[r] = Array(grid[r].prefix(columns))
+            while grid[r].count < columns { grid[r].append(nil) }
+        }
+        shading = grid
+    }
 }
 
 /// A container placed anywhere on the page.

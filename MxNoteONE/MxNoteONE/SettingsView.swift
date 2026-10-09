@@ -16,6 +16,16 @@ struct SettingsView: View {
     @AppStorage(Prefs.autoLockKey) private var autoLockMinutes = 10
 
     var body: some View {
+        TabView {
+            general
+                .tabItem { Label("General", systemImage: "gearshape") }
+            OneDriveSettingsView()
+                .tabItem { Label("OneDrive", systemImage: "cloud") }
+        }
+        .frame(width: 580)
+    }
+
+    private var general: some View {
         Form {
             Section("New Text") {
                 Picker("Default font:", selection: $fontName) {
@@ -54,8 +64,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func chooseFolder() {

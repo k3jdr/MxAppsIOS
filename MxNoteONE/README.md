@@ -21,7 +21,21 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Bullets and numbering**: Return continues the list, Return on an empty item ends it, Tab / Shift-Tab indent items.
 - **Tags**: ☐ To Do, ⭐ Important, ❓ Question, ❗ Critical, 💡 Idea, 📌 Remember for Later, 📖 Definition, 📞 Phone Number,
   💬 Discuss with Team (⌘1 – ⌘9, ⌘0 removes). Click ☐ to check it off; Return after a To Do starts another.
-- **Tables**: right-click a cell to insert or delete rows and columns, sort by a column, or turn the header row on/off.
+- **Tables, OneNote style**: type some text and press **Tab** — the paragraph becomes a table with your text in the
+  first cell. While the table has one row, **Tab** in a filled last cell adds a column; **Return** in the last row adds
+  a row; **Tab** in the last cell of the last row adds a row; **⌘Return** inserts a row below; **⇧Tab** goes back;
+  **⌥Return** starts a new line inside a cell; **⌥Tab** types a real tab in text. Pressed Tab or Return once too
+  often? **Backspace** in the empty new cell removes the empty column (or row) again. Text after the paragraph moves
+  below the table, and a growing table (or text container) pushes the container right under it down.
+- **Selecting cells**: click a cell to type in it; **drag** across cells, **⇧-click**, or **⇧-arrow keys** to select a
+  block, **⌘-click** to add single cells; selected cells are highlighted. With cells selected (press Escape while
+  typing to get there): typing replaces the cell, Delete clears the cells, Return edits, ⌘C / ⌘X / ⌘V copy, cut and
+  paste cells as tab-separated text, ⌘A selects the whole table; Escape again selects the table container.
+- **Cell shading and table commands**: right-click a cell — also while typing in it — for **Shade Selected Cells**,
+  **Header Row**, **Row**, **Column** and **Table Shading** (a colour palette, or No Color), inserting and deleting rows
+  and columns (for all selected rows / columns), clearing cells, sorting by a column and the header row switch. Text
+  turns white on dark shades. Shading moves with its row when sorting, new columns take the shading of the column
+  beside them, and it prints, exports to PDF and syncs with OneNote.
 - **Pictures**: double-click to open in a viewer; right-click to copy, save, or reset to original size.
 - **Attachments** keep a copy of the file inside the notebook; double-click to open. **Recordings** play in place.
 - **Ink**: pen and highlighter strokes, lines, arrows, rectangles and ellipses (hold Shift for 45° lines, squares, circles).
@@ -59,11 +73,46 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 | Lock All Protected Sections | ⌃⌘L |
 | Export Page as PDF… / Print Page… | ⇧⌘E / ⌘P |
 | Reload Notebooks | ⇧⌘R |
+| Save Notebook As… | ⇧⌘S |
+| Sync All OneDrive Notebooks | ⌃⌘S |
+
+## OneDrive and Microsoft OneNote
+
+Notebooks sync with **OneNote notebooks on OneDrive** through Microsoft's OneNote API, so the same notebook opens in
+OneNote for Mac, Windows, iPad and the web (OneNote for Mac only opens notebooks kept on OneDrive or SharePoint).
+
+- **File ▸ OneDrive ▸ Save “Notebook” to OneDrive** creates the OneNote notebook and uploads its sections, section
+  groups and pages. After that, **Sync** (or ⌃⌘S for all OneDrive notebooks, or automatic sync in Settings) works both ways.
+- **File ▸ OneDrive ▸ Open Notebook from OneDrive…** lists your OneNote notebooks and downloads one into a local notebook.
+- Right-click a synced notebook (☁︎ in the sidebar) for **Sync**, **Open in OneNote**, **Open in OneNote for the Web**
+  and **Stop Syncing**.
+
+Page by page: changed only here → uploaded; changed only in OneNote → downloaded; changed in both → the OneNote
+version comes down as a separate “(OneDrive copy)” page and the local version goes up; deleted on one side and
+unchanged on the other → deleted on both (locally into the Recycle Bin).
+
+What carries over: page titles, positions of containers, text formatting (fonts, sizes, colours, highlight, bold,
+italic, underline, strikethrough, superscript/subscript, alignment), bullets and numbering, links, tags (To Do with
+its check mark, Important, Question, Critical, Idea, Remember for Later, Definition, Phone Number, Discuss), tables,
+pictures and attached files. Ink is uploaded as a picture. Not possible through the OneNote API: renaming or deleting
+sections, setting subpage levels in OneNote, page colours and rule lines. **Password-protected sections stay on this
+Mac** and are never uploaded.
+
+**One-time setup** (Settings ▸ OneDrive has the same steps):
+
+1. In the [Azure portal](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade), App
+   registrations ▸ New registration; supported accounts: any organizational directory and personal Microsoft accounts.
+2. Authentication ▸ Add a platform ▸ iOS / macOS, bundle ID `com.k3jdr.MxNoteONE` (redirect URI
+   `msauth.com.k3jdr.MxNoteONE://auth`).
+3. API permissions ▸ Microsoft Graph ▸ Delegated: `Notes.ReadWrite`, `User.Read`.
+4. Paste the Application (client) ID into Settings ▸ OneDrive and Sign In. The sign-in is remembered in the Keychain.
 
 ## Notebooks on disk
 
 A notebook is a folder named `Name.mxnotebook`, so it can live in iCloud Drive, OneDrive, Google Drive or Dropbox and
-be opened on another Mac with File ▸ Open Notebook… (use **Reload Notebooks** after a sync).
+be opened on another Mac with **File ▸ Open Notebook…** (⌘O; use **Reload Notebooks** after a sync).
+**File ▸ Save Notebook As…** (⇧⌘S) copies a notebook to another place — on this Mac or in your OneDrive folder — and
+keeps working with the copy; **New Notebook…** offers your OneDrive folders as locations.
 
 ```
 Name.mxnotebook/

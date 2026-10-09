@@ -509,6 +509,14 @@ enum TextFormatter {
         guard let storage = tv.textStorage else { return false }
         let paragraphs = paragraphRanges(tv)
         let infos = paragraphs.map { parseParagraph(paragraphText(storage, $0)) }
+        // OneNote: text followed by Tab starts a table (⌥Tab types a tab character).
+        if !outdent, paragraphs.count == 1, tv.selectedRange().length == 0, infos[0].list == nil, infos[0].tag == nil,
+           let paragraph = paragraphs.first, tv.selectedRange().location > paragraph.location,
+           !paragraphText(storage, paragraph).trimmingCharacters(in: .whitespaces).isEmpty,
+           let owner = (tv as? NoteTextView)?.owner, let controller = owner.controller {
+            controller.convertParagraphToTable(owner, paragraph: paragraph)
+            return true
+        }
         guard infos.contains(where: { $0.list != nil || $0.tag != nil }) || outdent else { return false }
         var edits: [(NSRange, String)] = []
         for (range, info) in zip(paragraphs, infos) {
