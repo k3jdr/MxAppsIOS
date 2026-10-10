@@ -171,6 +171,15 @@ actor PostgresService {
         }
     }
 
+    /// Databases on the server this user may connect to, by name.
+    func databases() async throws -> [String] {
+        try await rows("""
+            SELECT datname::text FROM pg_database
+            WHERE datallowconn AND NOT datistemplate AND has_database_privilege(datname, 'CONNECT')
+            ORDER BY 1
+            """).compactMap { $0[0] }
+    }
+
     func serverVersion() async throws -> String {
         try await rows("SELECT current_setting('server_version')").first?.first.flatMap { $0 } ?? "?"
     }

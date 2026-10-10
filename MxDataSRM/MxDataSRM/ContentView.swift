@@ -21,12 +21,17 @@ struct ContentView: View {
             // needs more height (DB Table) raise the window minimum.
             Color.clear.frame(minWidth: 760, minHeight: 520)
             VStack(spacing: 0) {
-                Picker("Form", selection: $session.form) {
-                    ForEach(WorkspaceForm.allCases) { Text($0.rawValue).tag($0) }
+                HStack(spacing: 14) {
+                    if session.isConnected || !session.databases.isEmpty {
+                        databasePicker
+                    }
+                    Picker("Form", selection: $session.form) {
+                        ForEach(WorkspaceForm.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
                 .padding(10)
 
                 Divider()
@@ -77,6 +82,30 @@ struct ContentView: View {
         } message: {
             Text(session.errorMessage ?? "")
         }
+    }
+
+    /// Database on the connected server; choosing another reconnects (same server, user and
+    /// password) and refreshes the table list and the \\d description. Kept in the workspace.
+    private var databasePicker: some View {
+        Picker(selection: Binding(
+            get: { document.workspace.connection.database },
+            set: { name in
+                let settings = document.workspace.connection
+                Task {
+                    if await session.switchDatabase(to: name, settings: settings) {
+                        document.workspace.connection.database = name
+                    }
+                }
+            })
+        ) {
+            ForEach(session.databases, id: \.self) { Text($0).tag($0) }
+        } label: {
+            Label("Database", systemImage: "cylinder.split.1x2")
+        }
+        .pickerStyle(.menu)
+        .fixedSize()
+        .disabled(!session.isConnected || session.busy || session.runningSQL)
+        .help("Database on \(document.workspace.connection.host); choosing another reconnects with the same user and password")
     }
 
     /// Opens the DB Table form for `ref` in its own window, with its own connection.

@@ -13,6 +13,18 @@ Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is 
 | **DB Table Selection** | Lists tables with a row count (`~` = planner estimate; **Count Rows** replaces it with `count(*)`) and size. The panel on the right shows a psql `\d` style description: columns, indexes, check constraints, foreign keys and "referenced by". Double-click a table or press **Open Table** to load it. With **Open in New Window** checked, the table opens in its own window instead (see below). |
 | **DB Table** | SQL box with **Run SQL** (see below) above an editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Cells can be selected and copied (see **Selecting and copying cells**). |
 
+### Switching databases
+
+While connected, a **Database** drop-down sits to the left of the three form buttons. It lists the databases on
+the server that your user may connect to. Choosing one reconnects to that database on the **same server, with the
+same user and password**, then refreshes DB Table Selection (schema, table, rows, size) and the `\d` description
+on the right: the same schema.table stays highlighted when the new database has it, otherwise the first table is.
+
+- The workspace remembers the chosen database (save it to keep it).
+- The open table closes; pending grid edits are confirmed first. The SQL box keeps its text.
+- If the new database can't be reached, the previous one is reconnected and the error is shown.
+- Table windows opened with **Open in New Window** keep their own connection and database.
+
 ## Run SQL
 
 Above the grid on the DB Table form is an SQL box. Opening a table fills it with the statement that loads

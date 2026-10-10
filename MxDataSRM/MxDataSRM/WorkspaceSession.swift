@@ -31,6 +31,9 @@ final class WorkspaceSession {
     var status: ConnectionStatus = .disconnected
 
     var tables: [TableSummary] = []
+    /// Databases on the connected server (for the Database picker); the connected one is `connectedDatabase`.
+    var databases: [String] = []
+    private(set) var connectedDatabase: String?
     var tableFilter = ""
     var highlightedTableID: TableSummary.ID?
     var highlightedDescription: TableDescription?
@@ -101,6 +104,9 @@ final class WorkspaceSession {
             if settings.savePasswordInKeychain, !password.isEmpty {
                 Keychain.setPassword(password, for: settings.keychainAccount)
             }
+            connectedDatabase = settings.database
+            let list = (try? await service.databases()) ?? []
+            databases = list.contains(settings.database) ? list : (list + [settings.database]).sorted()
             await refreshTables()
         } catch {
             status = .failed(DatabaseError.from(error).message)
@@ -111,6 +117,7 @@ final class WorkspaceSession {
         if let service { await service.close() }
         service = nil
         status = .disconnected
+        connectedDatabase = nil
         tables = []
         highlightedDescription = nil
         grid = nil
@@ -118,6 +125,40 @@ final class WorkspaceSession {
         gridVersion += 1
         openedTable = nil
         sqlError = nil
+    }
+
+    /// Connects to another database on the same server with the same user and password, then
+    /// refreshes the table list and the highlighted table's description (the same schema.table
+    /// when the new database has it, else the first table). On failure the previous database is
+    /// reconnected. Returns whether the switch happened.
+    func switchDatabase(to name: String, settings: ConnectionSettings) async -> Bool {
+        guard isConnected, name != connectedDatabase else { return false }
+        if !edits.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Discard \(edits.count) pending edit\(edits.count == 1 ? "" : "s")?"
+            alert.informativeText = "Switching to database \(name) closes the open table, and edits not applied with Update… are lost."
+            alert.addButton(withTitle: "Switch Database")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        }
+        let previousTable = tables.first { $0.id == highlightedTableID }?.ref
+        var target = settings
+        target.database = name
+        await connect(target)
+        guard isConnected else {
+            let reason: String
+            if case .failed(let message) = status { reason = message } else { reason = "unknown error" }
+            await connect(settings)
+            highlightedTableID = tables.first { $0.ref == previousTable }?.id ?? tables.first?.id
+            await describeHighlighted()
+            errorMessage = "Could not connect to database \(name).\n\n\(reason)"
+            return false
+        }
+        highlightedDescription = nil
+        highlightedTableID = tables.first { $0.ref == previousTable }?.id ?? tables.first?.id
+        await describeHighlighted()
+        infoMessage = "Switched to database \(name)."
+        return true
     }
 
     // MARK: DB Table Selection
