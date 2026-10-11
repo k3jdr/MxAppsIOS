@@ -102,6 +102,20 @@ another file, **New SQL**, or opening a table (which puts that table's SELECT in
 to save them. The SQL folder and recent files are remembered across launches for the whole app (as sandbox
 bookmarks, see `MxDataSRM.entitlements`). The current file is per window and is not saved in the workspace.
 
+## Viewing JSON cells
+
+Right-click a cell that holds JSON (a `json` / `jsonb` column, or text that is a JSON object or array) and choose
+**View JSON…**. A resizable sheet shows the value formatted like VS Code's **Format Document** (each member on
+its own line, `"key": value`, empty `{}` / `[]` kept together; key order and number spellings unchanged) and
+coloured with VS Code's JSON colours (Light+ / Dark+): property keys, string values, numbers and
+`true` / `false` / `null`.
+
+- The text can be edited; it is re-coloured as you type. **Format** re-indents it (2 or 4 spaces, remembered),
+  and invalid JSON is reported with its line and column. **Copy** copies it.
+- On editable grids, **Apply to Cell** checks the JSON and makes it the cell's pending edit (written to the table
+  with **Update…**, like any other edit). Read-only results only show the JSON.
+- `jsonb` values come back from PostgreSQL with its own key order (shorter keys first); `json` and text keep theirs.
+
 ## Sorting and filtering
 
 Each column header has an Excel-style **▾** button. It opens a panel with:
@@ -233,6 +247,7 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `TableWindow.swift` | Table opened with **Open in New Window** (own window and connection) |
 | `CSVExport.swift` | Export CSV… (Save panel, CSV formatting) |
 | `SQLTextView.swift` | Plain-text SQL editor (no smart quotes or autocorrect) with an extensible right-click menu |
+| `JSONFormatter.swift`, `JSONViewer.swift` | View JSON…: formatting and colouring like VS Code, and the sheet |
 | `SQLHighlighter.swift` | SQL syntax colouring (PostgreSQL-aware scanner, VS Code colours) |
 | `SQLFiles.swift` | SQL files: folder and recent files (bookmarks), open / save / revert, the SQL box's right-click menu |
 

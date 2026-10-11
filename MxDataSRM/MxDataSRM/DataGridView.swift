@@ -68,6 +68,8 @@ struct DataGridView: NSViewRepresentable {
         table.delegate = context.coordinator
 
         let menu = NSMenu()
+        menu.addItem(withTitle: "View JSON…", action: #selector(Coordinator.viewJSON(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Copy", action: #selector(Coordinator.copyCells(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Copy with Column Names", action: #selector(Coordinator.copyCellsWithNames(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Paste", action: #selector(Coordinator.pasteCells(_:)), keyEquivalent: "")
@@ -278,7 +280,7 @@ struct DataGridView: NSViewRepresentable {
         }
 
         private func makeField() -> NSTextField {
-            let field = NSTextField()
+            let field = GridCellField()
             field.identifier = Self.cellID
             field.isBordered = false
             field.lineBreakMode = .byTruncatingTail
@@ -326,9 +328,34 @@ struct DataGridView: NSViewRepresentable {
             case #selector(copyCells(_:)), #selector(copyCellsWithNames(_:)): canCopy
             case #selector(pasteCells(_:)): canPaste
             case #selector(setNull(_:)): grid?.isEditable == true && selection != nil
+            case #selector(viewJSON(_:)): jsonCell != nil
             case #selector(revertCell(_:)): selectedKeys.contains { session.edits[$0] != nil }
             default: true
             }
+        }
+
+        /// The right-clicked cell (or the selection's cursor) when it holds JSON.
+        private var jsonCell: (key: CellKey, value: String)? {
+            guard let grid, let key = contextKey ?? selection?.cursor,
+                  grid.rows.indices.contains(key.row), grid.columns.indices.contains(key.column),
+                  let value = displayed(row: key.row, column: key.column),
+                  JSONFormatter.looksLikeJSON(value, columnType: grid.columns[key.column].type) else { return nil }
+            return (key, value)
+        }
+
+        /// Opens the cell's JSON formatted and coloured; on editable grids its text can be applied back.
+        @objc func viewJSON(_ sender: Any?) {
+            guard let grid, let cell = jsonCell, let window = tableView?.window else { return }
+            let column = grid.columns[cell.key.column]
+            let rowNumber = grid.offset + cell.key.row + 1
+            let apply: ((String) -> Void)? = grid.isEditable ? { [weak self] text in
+                guard let self else { return }
+                self.session.setCell(row: cell.key.row, column: cell.key.column, to: text)
+                self.reload(row: cell.key.row, tableColumn: cell.key.column + 1)
+            } : nil
+            JSONViewerPresenter.show(on: window, title: column.name,
+                                     subtitle: "\(grid.title) · row \(rowNumber) · \(column.type)",
+                                     json: cell.value, apply: apply)
         }
 
         @objc func setNull(_ sender: Any?) {
@@ -423,10 +450,15 @@ struct DataGridView: NSViewRepresentable {
 
         func clearSelection() { setSelection(nil) }
 
+        /// The cell under the last right-click (View JSON… works on it, even within a larger selection).
+        private var contextKey: CellKey?
+
         /// Right-click: select the clicked cell unless it is already selected.
         func prepareContextMenu(row: Int, tableColumn: Int) {
+            contextKey = nil
             guard row >= 0, tableColumn > 0 else { return }
             let key = CellKey(row: row, column: tableColumn - 1)
+            contextKey = key
             if !(selection?.contains(key) ?? false) { select(key, extend: false) }
         }
 
@@ -741,5 +773,26 @@ final class GridHeaderView: NSTableHeaderView {
             }
         }
         super.mouseDown(with: event)
+    }
+}
+
+/// Text field used for grid cells. A right-click on a cell (not being edited) opens the grid's menu
+/// (View JSON…, Copy, Paste, Set to NULL, ...) rather than the text field's own Cut / Copy / Paste menu.
+final class GridCellField: NSTextField {
+    private var table: NSTableView? {
+        var view: NSView? = superview
+        while let current = view, !(current is NSTableView) { view = current.superview }
+        return view as? NSTableView
+    }
+
+    // An editable text field handles a right-click itself (it starts its field editor, whose text
+    // menu then appears), so hand the click to the grid unless this cell is being edited.
+    override func rightMouseDown(with event: NSEvent) {
+        if currentEditor() == nil, let table { table.rightMouseDown(with: event) } else { super.rightMouseDown(with: event) }
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        if currentEditor() == nil, let table { return table.menu(for: event) }
+        return super.menu(for: event)
     }
 }
