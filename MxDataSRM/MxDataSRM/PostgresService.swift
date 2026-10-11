@@ -538,6 +538,14 @@ actor PostgresService {
         }
     }
 
+    /// Runs a CREATE, ALTER or DROP statement as sent, as its own transaction (autocommit), so a failing
+    /// statement leaves nothing behind, and statements PostgreSQL refuses inside BEGIN ... COMMIT
+    /// (CREATE / DROP DATABASE, CREATE INDEX CONCURRENTLY, ALTER SYSTEM, ...) work too. One statement only: the
+    /// extended query protocol rejects several.
+    func runDDL(_ sql: String) async throws {
+        try await call(sql)
+    }
+
     /// Runs a CALL statement as sent, outside an explicit transaction block: a procedure may then
     /// COMMIT or ROLLBACK itself, which PostgreSQL refuses inside BEGIN ... COMMIT. Without its own
     /// transaction control the procedure's work is committed when the CALL succeeds. Any OUT/INOUT

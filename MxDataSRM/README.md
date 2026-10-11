@@ -34,8 +34,8 @@ The grid then shows the results, up to the **Rows to fetch** limit (default 1000
 Pre-flight checks run before anything executes. Problems are shown in red above the SQL box, psql style,
 with the line and a caret under the error position:
 
-1. The statement is not empty and is a SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE, MERGE or CALL.
-   DDL and transaction commands are refused.
+1. The statement is not empty and is a SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE, MERGE, CALL,
+   CREATE, ALTER or DROP. Other commands (TRUNCATE, GRANT, BEGIN / COMMIT, ...) are refused.
 2. There are no pending grid edits, which the new results would replace.
 3. The server parses and analyses the statement with `PREPARE` without running it. This catches syntax
    errors, unknown tables or columns, several statements, and `$1` parameters.
@@ -48,6 +48,15 @@ transaction and is committed if it succeeds. After a write without `RETURNING`, 
 a CALL, so check 3 is skipped and errors are reported when it runs. It always asks for confirmation, then
 runs outside an explicit transaction, so a procedure may `COMMIT` or `ROLLBACK` itself; otherwise its work
 is committed when the CALL succeeds. OUT/INOUT values the procedure returns are not shown.
+
+**CREATE**, **ALTER** and **DROP** (tables, columns, views, indexes, functions, schemas, databases, ...) can also be run. PostgreSQL
+can't `PREPARE` them, so check 3 is skipped and errors are reported when the statement runs, psql style.
+They always ask for confirmation first; DROP warns that it permanently deletes the objects and their data,
+and ALTER that some changes (such as dropping a column) delete data.
+The statement then runs as its own transaction, so one that fails leaves nothing behind; statements that
+can't run inside a transaction block work too (CREATE / DROP DATABASE, CREATE INDEX CONCURRENTLY, ALTER SYSTEM). Run one
+statement at a time. Afterwards the table list, the `\d` description and the **Database** drop-down are
+refreshed; the open table is reloaded with its new columns, or closed if it was dropped or renamed.
 
 Results stay **editable** when every column comes from one table and either:
 

@@ -37,23 +37,45 @@ struct TableGridForm: View {
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { formHeight = $0 }
-            .confirmationDialog("Run a statement that changes data?",
+            .confirmationDialog(confirmationTitle,
                                 isPresented: Binding(get: { session.pendingWriteSQL != nil },
                                                      set: { if !$0 { session.pendingWriteSQL = nil } }),
                                 presenting: session.pendingWriteSQL) { sql in
-                Button("Run and Commit", role: .destructive) {
+                Button(WorkspaceSession.isDrop(sql) ? "Drop" : "Run and Commit", role: .destructive) {
                     Task { await session.runSQL(sql, limit: view.fetchLimit, confirmedWrite: true) }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { sql in
-                Text(WorkspaceSession.isCall(sql)
-                     ? "This calls a stored procedure, which can change data. Its work is committed if it succeeds.\n\n\(String(sql.prefix(400)))"
-                     : "This statement can insert, update or delete rows. It runs in its own transaction, which is committed if it succeeds.\n\n\(String(sql.prefix(400)))")
+                Text(confirmationMessage(sql) + "\n\n\(String(sql.prefix(400)))")
             }
         }
     }
 
     // MARK: SQL
+
+    private var confirmationTitle: String {
+        guard let sql = session.pendingWriteSQL else { return "Run a statement that changes data?" }
+        if WorkspaceSession.isDrop(sql) { return "Permanently drop?" }
+        if WorkspaceSession.isAlter(sql) { return "Run this ALTER statement?" }
+        if WorkspaceSession.isDDL(sql) { return "Run this CREATE statement?" }
+        return "Run a statement that changes data?"
+    }
+
+    private func confirmationMessage(_ sql: String) -> String {
+        if WorkspaceSession.isDrop(sql) {
+            return "This DROP statement permanently deletes database objects, and the data in them, on \(session.connectedDatabase ?? "the database"). It can't be undone."
+        }
+        if WorkspaceSession.isAlter(sql) {
+            return "This statement changes the definition of database objects on \(session.connectedDatabase ?? "the database"). Some changes, such as dropping a column, delete data and can't be undone. It runs as its own transaction and is committed if it succeeds."
+        }
+        if WorkspaceSession.isDDL(sql) {
+            return "This statement creates database objects on \(session.connectedDatabase ?? "the database"). It runs as its own transaction and is committed if it succeeds."
+        }
+        if WorkspaceSession.isCall(sql) {
+            return "This calls a stored procedure, which can change data. Its work is committed if it succeeds."
+        }
+        return "This statement can insert, update or delete rows. It runs in its own transaction, which is committed if it succeeds."
+    }
 
     private var sqlBar: some View {
         VStack(alignment: .leading, spacing: 6) {

@@ -372,6 +372,19 @@ final class WorkspaceSession {
                 }
                 return
             }
+            // PREPARE can't take CREATE, ALTER or DROP either: confirm, run the statement as its own
+            // transaction, then refresh what may have changed (tables, databases, the open table).
+            if Self.isDDL(sql) {
+                guard confirmedWrite else {
+                    pendingWriteSQL = sql
+                    return
+                }
+                try await service.runDDL(sql)
+                let keyword = (Self.leadingKeyword(sql) ?? "").uppercased()
+                await afterSchemaChange(limit: limit)
+                infoMessage = "\(keyword) statement completed."
+                return
+            }
             let preflight = try await service.preflight(sql)
             guard preflight.returnsRows else {
                 guard confirmedWrite else {
@@ -416,7 +429,37 @@ final class WorkspaceSession {
                 + (offset > 0 ? " from row \((offset + 1).formatted())" : "")
                 + (result.hasMore ? " (more on the next page)." : ".")
         } catch {
-            sqlError = Self.describeSQLError(DatabaseError.from(error), in: sql)
+            var error = DatabaseError.from(error)
+            if error.message.contains("cannot insert multiple commands into a prepared statement") {
+                error.message = "Only one statement can be run at a time. Run each statement separately."
+            }
+            sqlError = Self.describeSQLError(error, in: sql)
+        }
+    }
+
+    /// After CREATE / ALTER / DROP: reloads the database list, the table list and the highlighted table's
+    /// description; reloads the open table, or closes it when it no longer exists.
+    private func afterSchemaChange(limit: Int) async {
+        guard let service else { return }
+        if let list = try? await service.databases() {
+            databases = list.contains(connectedDatabase ?? "") ? list : (list + [connectedDatabase].compactMap { $0 }).sorted()
+        }
+        let highlighted = tables.first { $0.id == highlightedTableID }?.ref
+        await refreshTables()
+        highlightedTableID = tables.first { $0.ref == highlighted }?.id
+        await describeHighlighted()
+        guard let table = openedTable else { return }
+        if tables.contains(where: { $0.ref == table.summary.ref }) {
+            if grid?.customSQL == nil {
+                await openTable(table.summary.ref, limit: limit, resetSQL: false)
+            }
+        } else {
+            openedTable = nil
+            if grid?.ref == table.summary.ref || grid?.customSQL == nil {
+                grid = nil
+                edits = [:]
+                gridVersion += 1
+            }
         }
     }
 
@@ -481,7 +524,8 @@ final class WorkspaceSession {
         sql.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
-    private static let runnableKeywords: Set = ["select", "with", "values", "table", "insert", "update", "delete", "merge", "call"]
+    private static let runnableKeywords: Set = ["select", "with", "values", "table", "insert", "update", "delete", "merge", "call",
+                                                "create", "drop", "alter"]
 
     /// Checks made before asking the server (which then parses the statement with PREPARE).
     static func localPreflight(_ sql: String) -> String? {
@@ -492,9 +536,22 @@ final class WorkspaceSession {
             return "The statement must start with a SQL keyword such as SELECT."
         }
         guard runnableKeywords.contains(keyword) else {
-            return "\(keyword.uppercased()) statements cannot be run here. Use SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE, MERGE or CALL."
+            return "\(keyword.uppercased()) statements cannot be run here. Use SELECT, WITH, VALUES, TABLE, INSERT, UPDATE, DELETE, MERGE, CALL, CREATE, ALTER or DROP."
         }
         return nil
+    }
+
+    /// CREATE, ALTER or DROP (DDL): no PREPARE pre-flight, confirmation, then runs as its own transaction.
+    static func isDDL(_ sql: String) -> Bool {
+        ["create", "alter", "drop"].contains(leadingKeyword(sql) ?? "")
+    }
+
+    static func isAlter(_ sql: String) -> Bool {
+        leadingKeyword(sql) == "alter"
+    }
+
+    static func isDrop(_ sql: String) -> Bool {
+        leadingKeyword(sql) == "drop"
     }
 
     static func isCall(_ sql: String) -> Bool {
