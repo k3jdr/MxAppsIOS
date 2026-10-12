@@ -710,7 +710,65 @@ final class TableGridView: NSView, NSTextViewDelegate {
         return (block.column..<(block.column + block.columns)).reduce(0) { $0 + model.columnWidth($1) }
     }
 
+    // MARK: Frozen header row
+
+    /// How far the pinned header row is drawn below the table's top (0 = not pinned).
+    var stickyOffset: CGFloat = 0 {
+        didSet { if oldValue != stickyOffset { needsDisplay = true } }
+    }
+
+    var headerHeight: CGFloat { rowHeights.first ?? 0 }
+    var tableHeight: CGFloat { rowTops.last ?? 0 }
+    private var stickyActive: Bool { stickyOffset > 0 && model.data.headerRow && model.rowCount > 1 }
+
+    /// A point on the pinned header counts as a point in the real header row.
+    private func unpinned(_ point: NSPoint) -> NSPoint {
+        guard stickyActive, point.y >= stickyOffset, point.y < stickyOffset + headerHeight else { return point }
+        return NSPoint(x: point.x, y: point.y - stickyOffset)
+    }
+
+    private func drawStickyHeader() {
+        guard stickyActive else { return }
+        let width = columnLefts.last ?? 0
+        let band = NSRect(x: 0, y: stickyOffset, width: width, height: headerHeight)
+        NSColor.white.setFill()
+        band.fill()
+        let shadow = NSRect(x: 0, y: band.maxY, width: width, height: 4)
+        NSGradient(starting: NSColor(white: 0, alpha: 0.18), ending: NSColor(white: 0, alpha: 0))?.draw(in: shadow, angle: 90)
+        let grid = NSBezierPath()
+        for c in 0..<model.columnCount where !model.data.isCovered(0, c) {
+            let cell = CellRef(row: 0, column: c)
+            var rect = cellRect(cell)
+            rect.origin.y = stickyOffset
+            rect.size.height = headerHeight
+            if let shade = model.data.shade(0, c) {
+                shade.nsColor.setFill()
+                rect.fill()
+            }
+            model.displayText(cell, fitting: rect.width - 2 * Self.padX)
+                .draw(with: rect.insetBy(dx: Self.padX, dy: Self.padY), options: [.usesLineFragmentOrigin, .usesFontLeading])
+            grid.appendRect(rect)
+        }
+        grid.lineWidth = 0.75
+        Self.borderColor.setStroke()
+        if !(model.data.hideBorders ?? false) { grid.stroke() }
+    }
+
+    /// Selects a cell and scrolls it into view (paragraph links).
+    func reveal(_ cell: CellRef) {
+        let cell = model.master(cell)
+        guard model.contains(cell) else { return }
+        endEditing()
+        selection = [cell]
+        anchor = cell
+        becameActive()
+        window?.makeFirstResponder(self)
+        scrollToVisible(cellRect(cell).insetBy(dx: 0, dy: -24))
+        needsDisplay = true
+    }
+
     private func cell(at point: NSPoint) -> CellRef? {
+        let point = unpinned(point)
         guard model.rowCount > 0, model.columnCount > 0 else { return nil }
         let row = max(0, min(model.rowCount - 1, (rowTops.lastIndex { $0 <= point.y } ?? 0)))
         let column = max(0, min(model.columnCount - 1, (columnLefts.lastIndex { $0 <= point.x } ?? 0)))
@@ -771,6 +829,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         rowTops = [0]
         for height in rowHeights { rowTops.append(rowTops.last! + height) }
         owner?.fitTableHeight(rowTops.last ?? 0)
+        owner?.controller?.updateStickyHeaders()
         positionEditor()
         window?.invalidateCursorRects(for: self)
         needsDisplay = true
@@ -874,6 +933,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         let grid = NSBezierPath()
         for cell in visible { grid.appendRect(cellRect(cell)) }
+        defer { drawStickyHeader() }
         if hideBorders {
             guard !isExport, editing != nil || !selection.isEmpty else { return drawSelectionOutline(showSelection) }
             grid.lineWidth = 0.5
@@ -974,6 +1034,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
         if editor.superview !== self { addSubview(editor) }
         becameActive()
         relayout()
+        // Typing in a header cell while it's pinned: bring the real header row into view.
+        if stickyActive, cell.row == 0 { scrollToVisible(cellRect(cell).insetBy(dx: 0, dy: -12)) }
         window?.makeFirstResponder(editor)
         if let point {
             let index = editor.characterIndexForInsertion(at: editor.convert(point, from: self))
@@ -1082,8 +1144,20 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func textView(_ view: NSTextView, menu: NSMenu, for event: NSEvent, at charIndex: Int) -> NSMenu? {
         guard let cell = editing else { return menu }
         let table = tableMenu(for: cell)
-        let items = table.items
+        var items = table.items
         table.removeAllItems()
+        if let owner, let ref = owner.controller?.ref {
+            let ns = view.string as NSString
+            let index = min(max(charIndex, 0), max(ns.length - 1, 0))
+            let range = ns.length == 0 ? NSRange(location: 0, length: 0) : ns.paragraphRange(for: NSRange(location: index, length: 0))
+            let paragraph = ns.substring(to: range.location).components(separatedBy: "\n").count - 1
+            let text = ns.substring(with: range)
+            let elementID = owner.element.id
+            items.insert(ClosureMenuItem("Copy Link to this Paragraph") {
+                NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: paragraph, cell: cell, text: text)
+            }, at: 0)
+            items.insert(.separator(), at: 1)
+        }
         for (i, item) in items.enumerated() { menu.insertItem(item, at: i) }
         menu.insertItem(.separator(), at: items.count)
         return menu
@@ -1410,6 +1484,16 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     func tableMenu(for cell: CellRef) -> NSMenu {
         let menu = NSMenu()
+        if editing == nil, let owner, let ref = owner.controller?.ref {
+            let text = model.text(model.master(cell))
+            let first = text.components(separatedBy: "\n").first ?? ""
+            let elementID = owner.element.id
+            let target = model.master(cell)
+            menu.addItem(ClosureMenuItem("Copy Link to this Paragraph") {
+                NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: 0, cell: target, text: first)
+            })
+            menu.addItem(.separator())
+        }
         let count = targetCells.count
         menu.addItem(paletteItem(count > 1 ? "Shade Selected Cells (\(count))" : "Cell Shading") { [weak self] in self?.shadeCells($0) })
         if model.data.headerRow || cell.row == 0 {
@@ -1507,6 +1591,16 @@ final class TableElementView: ElementView {
             model.width = content.width
             grid.relayout()
         }
+    }
+
+    /// Pins the header row while the table's top is above the visible area and some of its body is still in view.
+    func updateStickyHeader(visibleTop: CGFloat) {
+        guard model.data.headerRow, model.rowCount > 1 else {
+            grid.stickyOffset = 0
+            return
+        }
+        let offset = visibleTop - (frame.minY + Self.gripHeight)
+        grid.stickyOffset = offset > 0 ? min(offset, max(0, grid.tableHeight - grid.headerHeight)) : 0
     }
 
     func fitTableHeight(_ height: CGFloat) {

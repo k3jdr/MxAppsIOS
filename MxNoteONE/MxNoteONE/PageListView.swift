@@ -172,7 +172,7 @@ struct PageMenu: View {
         Divider()
         Button("Move or Copy…") { store.sheet = .movePage(ref) }
         Button("Duplicate Page") { store.duplicatePage(ref) }
-        Button("Copy Link to Page") { store.copyLink(ref) }
+        Button("Copy Link to this Page") { store.copyLink(ref) }
         Divider()
         Button("Export as PDF…") { PageExporter.exportPDF([ref], suggestedName: meta.displayTitle) }
         Button("Export as Markdown…") { PageExporter.exportMarkdown(ref) }

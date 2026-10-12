@@ -554,6 +554,23 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         }
     }
 
+    /// Right-click in the text: Copy Link to this Paragraph comes first.
+    func textView(_ view: NSTextView, menu: NSMenu, for event: NSEvent, at charIndex: Int) -> NSMenu? {
+        guard let ref = controller?.ref else { return menu }
+        let ns = view.string as NSString
+        let index = min(max(charIndex, 0), max(ns.length - 1, 0))
+        let range = ns.length == 0 ? NSRange(location: 0, length: 0) : ns.paragraphRange(for: NSRange(location: index, length: 0))
+        let paragraph = ns.substring(to: range.location).components(separatedBy: "\n").count - 1
+        let text = ns.substring(with: range)
+        let elementID = element.id
+        menu.insertItem(ClosureMenuItem("Copy Link to this Paragraph") {
+            NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: paragraph, cell: nil, text: text)
+        }, at: 0)
+        menu.insertItem(ClosureMenuItem("Copy Link to this Page") { NotebookStore.shared.copyLink(ref) }, at: 1)
+        menu.insertItem(.separator(), at: 2)
+        return menu
+    }
+
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
         let url = (link as? URL) ?? (link as? String).flatMap { URL(string: $0) }
         if let url, url.scheme == NotebookStore.linkScheme {

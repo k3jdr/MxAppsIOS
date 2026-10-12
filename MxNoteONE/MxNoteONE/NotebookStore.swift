@@ -72,6 +72,25 @@ enum ActiveSheet: Identifiable {
     }
 }
 
+/// Where a paragraph link points: a container (and table cell), the paragraph's position and its first words.
+struct ParagraphTarget {
+    var element: UUID
+    var paragraph: Int
+    var cell: CellRef?
+    var text: String
+
+    init?(_ url: URL) {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+        guard let element = value("e").flatMap(UUID.init(uuidString:)) else { return nil }
+        self.element = element
+        paragraph = Int(value("p") ?? "") ?? 0
+        let parts = (value("c") ?? "").split(separator: ",").compactMap { Int($0) }
+        cell = parts.count == 2 ? CellRef(row: parts[0], column: parts[1]) : nil
+        text = value("t") ?? ""
+    }
+}
+
 struct SearchHit: Identifiable {
     var id: PageRef { ref }
     let ref: PageRef
@@ -116,6 +135,8 @@ final class NotebookStore {
     @ObservationIgnored weak var canvas: CanvasController?
     /// Text to find on the page that opens next (from search and the tag summary).
     @ObservationIgnored var pendingFind: String?
+    /// Paragraph to show on the page that opens next (from a paragraph link).
+    @ObservationIgnored var pendingReveal: ParagraphTarget?
     /// Put the cursor in the title of the page that opens next (new pages).
     @ObservationIgnored var focusTitleOnLoad = false
     @ObservationIgnored private var lastPageInSection: [UUID: UUID] = [:]
@@ -1311,18 +1332,78 @@ final class NotebookStore {
     }
 
     func openLink(_ url: URL) {
-        if let ref = resolve(url) {
+        guard url.scheme == Self.linkScheme else { return }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        switch url.host() {
+        case "section":
+            guard parts.count >= 2, let nbID = UUID(uuidString: parts[0]), let nodeID = UUID(uuidString: parts[1]),
+                  let nb = notebook(nbID), let node = nb.manifest.sections.find(nodeID) else {
+                return showAlert("Section not found", "The linked section may have been deleted, or its notebook isn't open.")
+            }
+            expandedNotebooks.insert(nbID)
+            let target = node.isGroup ? [node].flattenedSections.first : node
+            if let target {
+                selectSidebar(.section(SectionRef(notebookID: nbID, sectionID: target.id)))
+            } else {
+                selectSidebar(.group(SectionRef(notebookID: nbID, sectionID: node.id)))
+            }
+        case "notebook":
+            guard let nbID = parts.first.flatMap(UUID.init(uuidString:)), let nb = notebook(nbID) else {
+                return showAlert("Notebook not open", "Open the notebook first (File ▸ Open Notebook…).")
+            }
+            expandedNotebooks.insert(nbID)
+            if let first = nb.manifest.sections.flattenedSections.first {
+                selectSidebar(.section(SectionRef(notebookID: nbID, sectionID: first.id)))
+            }
+        default:
+            guard let ref = resolve(url) else {
+                return showAlert("Page not found", "The linked page may have been deleted, or it is in a locked section or a notebook that isn't open.")
+            }
+            pendingReveal = ParagraphTarget(url)
             open(ref)
-        } else {
-            showAlert("Page not found", "The linked page may have been deleted, or it is in a locked section or a notebook that isn't open.")
+            if pendingReveal != nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.canvas?.applyPendingReveal() }
+            }
         }
     }
 
-    func copyLink(_ ref: PageRef) {
-        let title = meta(ref)?.displayTitle ?? "Page"
+    private func copyLink(_ url: URL, title: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.writeObjects([NSAttributedString(string: title, attributes: [.link: link(for: ref), .font: Prefs.defaultFont])])
+        pb.writeObjects([NSAttributedString(string: title, attributes: [.link: url, .font: Prefs.defaultFont])])
+    }
+
+    func copyLink(_ ref: PageRef) {
+        copyLink(link(for: ref), title: meta(ref)?.displayTitle ?? "Page")
+    }
+
+    func sectionLink(_ ref: SectionRef) -> URL {
+        URL(string: "\(Self.linkScheme)://section/\(ref.notebookID.uuidString)/\(ref.sectionID.uuidString)")!
+    }
+
+    func copySectionLink(_ ref: SectionRef) {
+        copyLink(sectionLink(ref), title: node(ref)?.name ?? "Section")
+    }
+
+    func copyNotebookLink(_ id: UUID) {
+        copyLink(URL(string: "\(Self.linkScheme)://notebook/\(id.uuidString)")!, title: notebook(id)?.name ?? "Notebook")
+    }
+
+    /// A link to one paragraph: its container (and table cell), its position, and its first words to find it again.
+    func paragraphLink(_ ref: PageRef, element: UUID, paragraph: Int, cell: CellRef?, text: String) -> URL {
+        var components = URLComponents(url: link(for: ref), resolvingAgainstBaseURL: false)!
+        var items = [URLQueryItem(name: "e", value: element.uuidString), URLQueryItem(name: "p", value: String(paragraph))]
+        if let cell { items.append(URLQueryItem(name: "c", value: "\(cell.row),\(cell.column)")) }
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { items.append(URLQueryItem(name: "t", value: String(words.prefix(60)))) }
+        components.queryItems = items
+        return components.url!
+    }
+
+    func copyParagraphLink(_ ref: PageRef, element: UUID, paragraph: Int, cell: CellRef?, text: String) {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = words.isEmpty ? (meta(ref)?.displayTitle ?? "Paragraph") : String(words.prefix(80)) + (words.count > 80 ? "…" : "")
+        copyLink(paragraphLink(ref, element: element, paragraph: paragraph, cell: cell, text: text), title: title)
     }
 
     /// Link for [[Page Name]]: an existing page in the current notebook, or a new page in the current section.

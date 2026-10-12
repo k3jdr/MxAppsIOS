@@ -102,6 +102,7 @@ struct NotebookHeader: View {
             Button("New Section Group") { store.addSectionGroup(to: notebook.id) }
             Divider()
             Button("Rename Notebook…") { store.sheet = .renameNotebook(notebook.id) }
+            Button("Copy Link to this Notebook") { store.copyNotebookLink(notebook.id) }
             Menu("Notebook Color") {
                 ForEach(NoteColor.allCases) { color in
                     Button {
@@ -163,6 +164,7 @@ struct SectionRow: View {
             Button("New Section Group in Group") { store.addSectionGroup(to: notebook.id, inGroup: node.id) }
             Divider()
             Button("Rename Section Group…") { store.sheet = .renameNode(ref) }
+            Button("Copy Link to this Section Group") { store.copySectionLink(ref) }
         } else {
             Button("New Page") {
                 store.selectSidebar(.section(ref))
@@ -170,6 +172,7 @@ struct SectionRow: View {
             }
             Divider()
             Button("Rename Section…") { store.sheet = .renameNode(ref) }
+            Button("Copy Link to this Section") { store.copySectionLink(ref) }
         }
         Menu(node.isGroup ? "Group Color" : "Section Color") {
             ForEach(NoteColor.allCases) { color in

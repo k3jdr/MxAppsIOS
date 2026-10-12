@@ -71,6 +71,10 @@ final class CanvasController: NSObject {
                                         queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.canvas.updateSize() }
         })
+        observers.append(nc.addObserver(forName: NSView.boundsDidChangeNotification, object: scrollView.contentView,
+                                        queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateStickyHeaders() }
+        })
         observers.append(nc.addObserver(forName: NSScrollView.didEndLiveMagnifyNotification, object: scrollView,
                                         queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -115,6 +119,8 @@ final class CanvasController: NSObject {
             }
         }
         applyPendingFind()
+        applyPendingReveal()
+        updateStickyHeaders()
     }
 
     func loadForExport(_ page: PageContent, ref: PageRef) {
@@ -778,6 +784,71 @@ final class CanvasController: NSObject {
         }
         findMatches = []
         findIndex = -1
+    }
+
+    // MARK: - Frozen header rows
+
+    /// Tables whose header row has scrolled above the visible area keep it pinned at the top of the view.
+    func updateStickyHeaders() {
+        guard mode == .live else { return }
+        let top = scrollView.documentVisibleRect.minY
+        for view in canvas.elementViews {
+            (view as? TableElementView)?.updateStickyHeader(visibleTop: top)
+        }
+    }
+
+    // MARK: - Paragraph links
+
+    /// Shows the paragraph a link points to: scrolls to it and selects it.
+    func applyPendingReveal() {
+        guard let target = store.pendingReveal, ref != nil, ref == store.currentPageRef else { return }
+        store.pendingReveal = nil
+        if let table = canvas.elementViews.first(where: { $0.element.id == target.element }) as? TableElementView,
+           let cell = target.cell {
+            table.grid.reveal(cell)
+            return
+        }
+        let texts = canvas.elementViews.compactMap { $0 as? TextElementView }
+        if let view = texts.first(where: { $0.element.id == target.element }),
+           let range = paragraphRange(in: view.textView.string, index: target.paragraph, matching: target.text) {
+            return select(range, in: view)
+        }
+        // The paragraph moved or its container was replaced: look for its words.
+        guard !target.text.isEmpty else { return }
+        for view in texts {
+            let ns = view.textView.string as NSString
+            let found = ns.range(of: target.text)
+            if found.location != NSNotFound {
+                return select(ns.paragraphRange(for: found), in: view)
+            }
+        }
+    }
+
+    /// The paragraph at a position, or the one starting with the given words.
+    private func paragraphRange(in text: String, index: Int, matching words: String) -> NSRange? {
+        let ns = text as NSString
+        var paragraphs: [NSRange] = []
+        var location = 0
+        while location < ns.length {
+            let range = ns.paragraphRange(for: NSRange(location: location, length: 0))
+            paragraphs.append(range)
+            location = NSMaxRange(range)
+        }
+        let matches: (NSRange) -> Bool = { range in
+            words.isEmpty || ns.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(words)
+        }
+        if paragraphs.indices.contains(index), matches(paragraphs[index]) { return paragraphs[index] }
+        return paragraphs.first(where: matches) ?? (paragraphs.indices.contains(index) ? paragraphs[index] : nil)
+    }
+
+    private func select(_ range: NSRange, in view: TextElementView) {
+        var range = range
+        let ns = view.textView.string as NSString
+        while range.length > 0, ns.character(at: NSMaxRange(range) - 1) == 0x0A { range.length -= 1 }
+        view.window?.makeFirstResponder(view.textView)
+        view.textView.setSelectedRange(range)
+        view.textView.scrollRangeToVisible(range)
+        view.textView.showFindIndicator(for: range)
     }
 
     func applyPendingFind() {

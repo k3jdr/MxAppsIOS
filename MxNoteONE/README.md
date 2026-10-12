@@ -46,6 +46,8 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Pointer**: ↔ on column borders (resize), open hand on the table's top, left and bottom edges (drag to move the
   table), pointing hand on links (click to follow; ⌥-click to type in the cell instead), text cursor in cells. Links in
   text boxes show the pointing hand as well.
+- **Frozen header row**: in a table with a header row, the header stays pinned at the top of the view while you scroll
+  through the table, and scrolls away with its last row. Clicking a pinned header cell scrolls back to type in it.
 - **Formatting selected cells**: with cells selected (not typing), the Home ribbon's font, size, bold, colours and
   alignment apply to the text in every selected cell.
 - **Merge and split cells**: select neighbouring cells, then right-click ▸ **Merge Cells** (or Table tab ▸ Merge Cells);
@@ -69,6 +71,10 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   place (or in view). Pasted items arrive selected, ready to drag; one undo removes a paste. The copy also carries the
   text and a picture of the selection, for pasting into other apps.
   The eraser removes whole strokes. Press Escape to go back to typing.
+- **Copy links**: right-click a page, section, section group or notebook ▸ **Copy Link to this Page / Section /
+  Section Group / Notebook**; right-click text in a text box or a table cell ▸ **Copy Link to this Paragraph**. Paste
+  the link anywhere in your notes — clicking it opens the place (a paragraph link scrolls to the paragraph and selects
+  it, and still finds it after edits move it; a cell link selects the cell).
 - **Links**: type `[[Page Name]]` to link to a page in the notebook (it is created if it doesn't exist), or use ⌘K for
   web links and links to any page. Right-click a page ▸ Copy Link to Page and paste it anywhere in your notes.
 - **Templates**: To Do List, Meeting Notes, Project Overview, Lecture Notes (Cornell), Daily Journal, Weekly Planner, Decision Log.

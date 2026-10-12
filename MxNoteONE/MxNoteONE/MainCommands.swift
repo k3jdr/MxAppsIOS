@@ -90,7 +90,7 @@ struct MainCommands: Commands {
         // Edit
         CommandGroup(after: .pasteboard) {
             Divider()
-            Button("Copy Link to Page") {
+            Button("Copy Link to this Page") {
                 if let ref = store.currentPageRef { store.copyLink(ref) }
             }
             Button("Delete Page") {
