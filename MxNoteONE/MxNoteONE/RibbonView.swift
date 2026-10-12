@@ -16,12 +16,13 @@ struct RibbonView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 2) {
-                ForEach(RibbonTab.allCases) { tab in
+                ForEach(RibbonTab.allCases.filter { $0 != .table || editor.tableActive }) { tab in
                     Button {
                         editor.ribbonTab = tab
                     } label: {
                         Text(tab.rawValue)
                             .font(.system(size: 12, weight: editor.ribbonTab == tab ? .semibold : .regular))
+                            .foregroundStyle(tab == .table ? Color.accentColor : Color.primary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
                             .background(editor.ribbonTab == tab ? Color.accentColor.opacity(0.16) : .clear,
@@ -55,6 +56,8 @@ struct RibbonView: View {
                     case .insert: InsertRibbon()
                     case .draw: DrawRibbon()
                     case .view: ViewRibbon()
+                    case .table:
+                        if editor.tableActive { TableRibbon() } else { HomeRibbon() }
                     }
                 }
                 .padding(.horizontal, 10)
@@ -410,6 +413,62 @@ struct ViewRibbon: View {
                 store.recycleBinNotebookID = store.currentNotebook?.id
                 openWindow(id: "trash")
             }
+        }
+    }
+}
+
+// MARK: - Table (shown while a table is being edited or has selected cells)
+
+struct TableRibbon: View {
+    private var grid: TableGridView? { TableGridView.active }
+
+    private func palette(_ apply: @escaping (NSColor?) -> Void) -> some View {
+        Group {
+            ForEach(Palette.shading, id: \.0) { name, color in
+                Button { apply(color) } label: { Label { Text(name) } icon: { swatch(color) } }
+            }
+            Divider()
+            Button("No Color") { apply(nil) }
+        }
+    }
+
+    var body: some View {
+        RibbonGroup("Insert") {
+            RibbonButton("Insert Above", "arrow.up.square", large: true) { grid?.insertRowAbove() }
+            RibbonButton("Insert Below", "arrow.down.square", large: true) { grid?.insertRowBelow() }
+            RibbonButton("Insert Left", "arrow.left.square", large: true) { grid?.insertColumnLeft() }
+            RibbonButton("Insert Right", "arrow.right.square", large: true) { grid?.insertColumnRight() }
+        }
+        RibbonGroup("Delete") {
+            RibbonButton("Rows", "minus.rectangle", large: true) { grid?.deleteRows() }
+            RibbonButton("Columns", "minus.rectangle.portrait", large: true) { grid?.deleteColumns() }
+            RibbonButton("Table", "trash", large: true) { grid?.deleteTable() }
+        }
+        RibbonGroup("Shading") {
+            RibbonMenu("Cells", "paintbrush.fill") { palette { grid?.shadeCells($0) } }
+            RibbonMenu("Rows", "line.3.horizontal") { palette { grid?.shadeRows($0) } }
+            RibbonMenu("Columns", "rectangle.split.3x1") { palette { grid?.shadeColumns($0) } }
+            RibbonMenu("Header", "rectangle.topthird.inset.filled") { palette { grid?.shadeHeaderRow($0) } }
+            RibbonMenu("Banded Rows", "list.bullet.rectangle") { palette { grid?.bandRows($0) } }
+        }
+        RibbonGroup("Cell Text") {
+            RibbonButton("Bold", "bold") { TextFormatter.toggleBold() }
+            RibbonButton("Italic", "italic") { TextFormatter.toggleItalic() }
+            RibbonMenu("Text Color", "paintpalette", showTitle: false) {
+                ForEach(Palette.text, id: \.0) { name, color in
+                    Button { TextFormatter.setTextColor(color) } label: { Label { Text(name) } icon: { swatch(color) } }
+                }
+            }
+            RibbonButton("Align Left", "text.alignleft") { TextFormatter.setAlignment(.left) }
+            RibbonButton("Center", "text.aligncenter") { TextFormatter.setAlignment(.center) }
+            RibbonButton("Align Right", "text.alignright") { TextFormatter.setAlignment(.right) }
+        }
+        RibbonGroup("Table") {
+            RibbonButton("Header Row", "rectangle.topthird.inset.filled", large: true) { grid?.toggleHeaderRow() }
+            RibbonButton("Hide Borders", "square.dashed", large: true) { grid?.toggleBorders() }
+            RibbonButton("Sort A→Z", "arrow.up", large: true) { grid?.sort(ascending: true) }
+            RibbonButton("Sort Z→A", "arrow.down", large: true) { grid?.sort(ascending: false) }
+            RibbonButton("Select Table", "tablecells", large: true) { grid?.selectTable() }
         }
     }
 }

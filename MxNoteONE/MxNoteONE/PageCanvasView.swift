@@ -101,7 +101,7 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
         case .file, .audio:
             view = FileElementView(element: element)
         case .table:
-            view = isExport ? TableSnapshotView(element: element) : TableElementView(element: element)
+            view = TableElementView(element: element)
         }
         view.canvas = self
         if isExport { view.prepareForExport() }

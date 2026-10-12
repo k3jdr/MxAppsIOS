@@ -55,10 +55,15 @@ enum OneNoteHTML {
                         var cellStyle = "width:\(width)px"
                         if let shade = table.shade(r, c) { cellStyle += ";background-color:\(hex(shade.nsColor))" }
                         if table.textIsLight(r, c) { cellStyle += ";color:#FFFFFF" }
+                        if table.hideBorders == true { cellStyle += ";border:none" }
                         body += "<td style=\"\(cellStyle)\">"
-                        let lines = cell.components(separatedBy: "\n").map { escape($0) }
-                        let content = lines.joined(separator: "<br />")
-                        body += header ? "<span style=\"font-weight:bold\">\(content)</span>" : content
+                        if let rtf = table.richData(r, c), let rich = NSAttributedString(rtf: rtf, documentAttributes: nil) {
+                            body += textHTML(rich, parts: &parts)
+                        } else {
+                            let lines = cell.components(separatedBy: "\n").map { escape($0) }
+                            let content = lines.joined(separator: "<br />")
+                            body += header ? "<span style=\"font-weight:bold\">\(content)</span>" : content
+                        }
                         body += "</td>"
                     }
                     body += "</tr>"
@@ -513,6 +518,7 @@ enum OneNoteHTML {
             let rows = ((try? element.nodes(forXPath: ".//*[local-name()='tr']")) ?? []).compactMap { $0 as? XMLElement }
             guard !rows.isEmpty else { return nil }
             var data: [[String]] = []
+            var rich: [[Data?]] = []
             var shading: [[RGBA?]] = []
             var widths: [Double] = []
             var header = false
@@ -526,6 +532,7 @@ enum OneNoteHTML {
                 shading.append(cells.map { cell in
                     Context.color(Context.styleMap(cell.attribute(forName: "style")?.stringValue)["background-color"]).map { RGBA($0) }
                 })
+                var rowRich: [Data?] = []
                 data.append(cells.map { cell in
                     let text = NSMutableAttributedString()
                     let builder = TextBuilder(resources: resources, out: text)
@@ -537,9 +544,15 @@ enum OneNoteHTML {
                             builder.inline(child, context)
                         }
                     }
+                    while let last = text.string.last, last == "\n" || last == " " {
+                        text.deleteCharacters(in: NSRange(location: text.length - 1, length: 1))
+                    }
+                    rowRich.append(TableModel.isPlain(text, header: header && r == 0)
+                        ? nil : text.rtf(from: NSRange(location: 0, length: text.length), documentAttributes: [:]))
                     return text.string.trimmingCharacters(in: .whitespacesAndNewlines)
                         .replacingOccurrences(of: "\u{FFFC}", with: "")
                 })
+                rich.append(rowRich)
             }
             let columns = max(data.map(\.count).max() ?? 1, 1)
             data = data.map { $0 + Array(repeating: "", count: columns - $0.count) }
@@ -548,6 +561,9 @@ enum OneNoteHTML {
             table.rows = data
             table.columnWidths = Array(widths.prefix(columns))
             table.headerRow = header
+            if rich.contains(where: { $0.contains { $0 != nil } }) {
+                table.rich = TableData.padded(rich, rows: data.count, columns: columns)
+            }
             if shading.contains(where: { $0.contains { $0 != nil } }) {
                 table.shading = shading
                 table.padShading()

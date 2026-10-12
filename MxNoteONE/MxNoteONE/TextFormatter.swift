@@ -96,6 +96,8 @@ enum TextFormatter {
 
     static func perform(_ body: (NoteTextView) -> Void) {
         guard let tv = target else {
+            // Cells selected in a table: format each cell's text.
+            if let grid = TableGridView.active, grid.applyToSelection(body) { return }
             NSSound.beep()
             return
         }
@@ -318,8 +320,10 @@ enum TextFormatter {
         perform { tv in
             changeAttributes(tv, actionName: "Font Color") { storage, range in
                 storage.addAttribute(.foregroundColor, value: color, range: range)
+                storage.removeAttribute(.mxAutoColor, range: range)
             } typing: { attrs in
                 attrs[.foregroundColor] = color
+                attrs[.mxAutoColor] = nil
             }
         }
     }

@@ -291,6 +291,10 @@ struct TableData: Codable, Hashable {
 
     /// Cell shading (background colours), row by row; nil = none.
     var shading: [[RGBA?]]?
+    /// Formatted text (RTF) of cells that have formatting, row by row; nil = plain text in `rows`.
+    var rich: [[Data?]]?
+    /// Table borders hidden (OneNote: Hide Borders).
+    var hideBorders: Bool?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {

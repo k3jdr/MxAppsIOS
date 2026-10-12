@@ -31,11 +31,18 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   block, **⌘-click** to add single cells; selected cells are highlighted. With cells selected (press Escape while
   typing to get there): typing replaces the cell, Delete clears the cells, Return edits, ⌘C / ⌘X / ⌘V copy, cut and
   paste cells as tab-separated text, ⌘A selects the whole table; Escape again selects the table container.
-- **Cell shading and table commands**: right-click a cell — also while typing in it — for **Shade Selected Cells**,
-  **Header Row**, **Row**, **Column** and **Table Shading** (a colour palette, or No Color), inserting and deleting rows
-  and columns (for all selected rows / columns), clearing cells, sorting by a column and the header row switch. Text
-  turns white on dark shades. Shading moves with its row when sorting, new columns take the shading of the column
-  beside them, and it prints, exports to PDF and syncs with OneNote.
+- **Formatting cells**: cell text is rich text — the Home ribbon (font, size, bold, italic, underline, colours,
+  highlight, alignment…) formats the text you're typing, or every selected cell at once (select a column, then
+  Bold or a colour).
+- **Table ribbon tab**: appears whenever you're in a table — insert rows above/below and columns left/right, delete
+  rows, columns or the table, shading for cells, rows, columns, the header row and **banded rows**, cell text
+  bold / italic / colour / alignment, header row, **hide borders**, sort, select table.
+- **Shading and table commands by right-click** (also while typing in a cell): Shade Selected Cells, Header Row,
+  Row, Column, Banded Rows and Table Shading (colour palette or No Color), Text Color, insert / delete rows and
+  columns, clear cells, delete table, sort, header row, hide borders. Text turns white on dark shades unless you
+  gave it a colour. Shading moves with its row when sorting; new columns take the shading of the column beside them.
+- **Column widths**: drag a column border to resize that column; the table grows or shrinks with it.
+- Tables print, export to PDF and sync with OneNote with their shading and cell formatting.
 - **Pictures**: double-click to open in a viewer; right-click to copy, save, or reset to original size.
 - **Attachments** keep a copy of the file inside the notebook; double-click to open. **Recordings** play in place.
 - **Ink**: pen and highlighter strokes, lines, arrows, rectangles and ellipses (hold Shift for 45° lines, squares, circles).

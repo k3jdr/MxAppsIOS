@@ -76,7 +76,7 @@ enum Prefs {
 }
 
 enum RibbonTab: String, CaseIterable, Identifiable {
-    case home = "Home", insert = "Insert", draw = "Draw", view = "View"
+    case home = "Home", insert = "Insert", draw = "Draw", view = "View", table = "Table"
     var id: String { rawValue }
 }
 
@@ -130,6 +130,8 @@ enum CanvasTool: String, CaseIterable, Identifiable {
 @Observable
 final class EditorState {
     var ribbonTab: RibbonTab = .home
+    /// A table is being edited or has selected cells (shows the Table ribbon tab).
+    var tableActive = false
     var showRibbon = true
     var tool: CanvasTool = .type {
         didSet { NotebookStore.shared.canvas?.toolChanged() }
