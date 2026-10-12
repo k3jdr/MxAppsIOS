@@ -177,8 +177,18 @@ struct OneDriveNotebookMenu: View {
 /// Sync progress shown at the bottom of the sidebar.
 struct OneDriveStatusView: View {
     @Bindable private var sync = OneDriveSync.shared
+    @Bindable private var importer = ImportActivity.shared
 
     var body: some View {
+        if importer.busy {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(importer.status).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+        }
         if sync.busy || !sync.status.isEmpty {
             HStack(spacing: 6) {
                 if sync.busy {

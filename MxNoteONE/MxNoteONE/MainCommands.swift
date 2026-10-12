@@ -69,6 +69,12 @@ struct MainCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .importExport) {
+            Menu("Import") {
+                Button("OneNote Package (.onepkg)…") { ImportActivity.shared.importPackage() }
+                Button("OneNote Sections (.one)…") { ImportActivity.shared.importSections() }
+                Button("OneNote Notebook Folder…") { ImportActivity.shared.importFolder() }
+            }
+            Divider()
             Button("Export Page as PDF…") { PageExporter.exportCurrentPagePDF() }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
             Button("Export Section as PDF…") {

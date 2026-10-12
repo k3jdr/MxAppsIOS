@@ -295,6 +295,8 @@ struct TableData: Codable, Hashable {
     var rich: [[Data?]]?
     /// Table borders hidden (OneNote: Hide Borders).
     var hideBorders: Bool?
+    /// Merged cells: each span is drawn as one cell, its text kept in the top-left cell.
+    var merges: [CellSpan]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {
@@ -321,6 +323,18 @@ struct TableData: Codable, Hashable {
             while grid[r].count < columns { grid[r].append(nil) }
         }
         shading = grid
+    }
+}
+
+/// A block of merged table cells, starting at its top-left cell.
+struct CellSpan: Codable, Hashable {
+    var row: Int
+    var column: Int
+    var rows: Int
+    var columns: Int
+
+    func contains(_ r: Int, _ c: Int) -> Bool {
+        r >= row && r < row + rows && c >= column && c < column + columns
     }
 }
 

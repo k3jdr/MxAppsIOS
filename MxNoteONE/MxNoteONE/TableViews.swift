@@ -70,6 +70,11 @@ extension TableData {
         rows.insert(Array(repeating: "", count: columns), at: i)
         shading?.insert(Array(repeating: nil, count: columns), at: i)
         rich?.insert(Array(repeating: nil, count: columns), at: i)
+        merges = merges?.map { span in
+            var s = span
+            if s.row >= i { s.row += 1 } else if i < s.row + s.rows { s.rows += 1 }
+            return s
+        }
     }
 
     /// Inserts a column; it takes the shading of the column beside it.
@@ -87,23 +92,68 @@ extension TableData {
         if rich != nil { for r in rich!.indices { rich![r].insert(nil, at: i) } }
         let average = columnWidths.isEmpty ? 120 : columnWidths.reduce(0, +) / Double(columnWidths.count)
         columnWidths.insert(average, at: min(i, columnWidths.count))
+        merges = merges?.map { span in
+            var s = span
+            if s.column >= i { s.column += 1 } else if i < s.column + s.columns { s.columns += 1 }
+            return s
+        }
     }
 
     mutating func removeRow(at index: Int) {
         normalize()
         guard rows.count > 1, rows.indices.contains(index) else { return }
+        // A merged cell starting on the removed row keeps its text in the row below.
+        for span in merges ?? [] where span.row == index && span.rows > 1 {
+            rows[index + 1][span.column] = rows[index][span.column]
+            if rich != nil { rich![index + 1][span.column] = rich![index][span.column] }
+            if shading != nil { shading![index + 1][span.column] = shading![index][span.column] }
+        }
         rows.remove(at: index)
         _ = shading?.remove(at: index)
         _ = rich?.remove(at: index)
+        merges = merges?.compactMap { span in
+            var s = span
+            if s.row > index { s.row -= 1 } else if index < s.row + s.rows { s.rows -= 1 }
+            return s.rows * s.columns > 1 ? s : nil
+        }
+        if merges?.isEmpty == true { merges = nil }
     }
 
     mutating func removeColumn(at index: Int) {
         normalize()
         guard columnCount > 1, index < columnCount else { return }
+        for span in merges ?? [] where span.column == index && span.columns > 1 {
+            rows[span.row][index + 1] = rows[span.row][index]
+            if rich != nil { rich![span.row][index + 1] = rich![span.row][index] }
+            if shading != nil { shading![span.row][index + 1] = shading![span.row][index] }
+        }
         for r in rows.indices { rows[r].remove(at: index) }
+        merges = merges?.compactMap { span in
+            var s = span
+            if s.column > index { s.column -= 1 } else if index < s.column + s.columns { s.columns -= 1 }
+            return s.rows * s.columns > 1 ? s : nil
+        }
+        if merges?.isEmpty == true { merges = nil }
         if shading != nil { for r in shading!.indices { shading![r].remove(at: index) } }
         if rich != nil { for r in rich!.indices { rich![r].remove(at: index) } }
         columnWidths.remove(at: index)
+    }
+
+    /// The merged block a cell belongs to.
+    func span(_ row: Int, _ column: Int) -> CellSpan? {
+        merges?.first { $0.contains(row, column) }
+    }
+
+    /// The cell that holds the text of a (possibly merged) cell.
+    func master(_ row: Int, _ column: Int) -> (row: Int, column: Int) {
+        if let s = span(row, column) { return (s.row, s.column) }
+        return (row, column)
+    }
+
+    /// True for cells hidden inside a merged block.
+    func isCovered(_ row: Int, _ column: Int) -> Bool {
+        guard let s = span(row, column) else { return false }
+        return s.row != row || s.column != column
     }
 
     /// Puts the rows in a new order (indices of the old rows).
@@ -144,6 +194,21 @@ final class TableModel {
 
     func contains(_ cell: CellRef) -> Bool {
         data.rows.indices.contains(cell.row) && cell.column >= 0 && cell.column < columnCount
+    }
+
+    /// The visible cell for any cell (a merged block's top-left cell).
+    func master(_ cell: CellRef) -> CellRef {
+        let m = data.master(cell.row, cell.column)
+        return CellRef(row: m.row, column: m.column)
+    }
+
+    func span(_ cell: CellRef) -> CellSpan {
+        data.span(cell.row, cell.column) ?? CellSpan(row: cell.row, column: cell.column, rows: 1, columns: 1)
+    }
+
+    /// Visible cells in reading order.
+    var visibleCells: [CellRef] {
+        (0..<rowCount).flatMap { r in (0..<columnCount).compactMap { c in data.isCovered(r, c) ? nil : CellRef(row: r, column: c) } }
     }
 
     func text(_ cell: CellRef) -> String {
@@ -298,21 +363,21 @@ final class TableModel {
     /// Tab in the last cell of the last row adds a row. Shift-Tab goes back.
     func tab(from cell: CellRef, backward: Bool) {
         let rows = rowCount, columns = columnCount
+        let cell = master(cell)
+        let order = visibleCells
+        let position = order.firstIndex(of: cell) ?? 0
         if backward {
-            if cell.column > 0 {
-                focusRequest = CellRef(row: cell.row, column: cell.column - 1)
-            } else if cell.row > 0 {
-                focusRequest = CellRef(row: cell.row - 1, column: columns - 1)
-            }
+            if position > 0 { focusRequest = order[position - 1] }
             return
         }
-        if cell.column < columns - 1 {
-            focusRequest = CellRef(row: cell.row, column: cell.column + 1)
+        let last = span(cell)
+        if last.column + last.columns < columns {
+            focusRequest = order[min(position + 1, order.count - 1)]
         } else if rows == 1, !text(cell).trimmingCharacters(in: .whitespaces).isEmpty {
             addColumn(at: columns)
             focusRequest = CellRef(row: 0, column: columns)
-        } else if cell.row < rows - 1 {
-            focusRequest = CellRef(row: cell.row + 1, column: 0)
+        } else if position + 1 < order.count {
+            focusRequest = order[position + 1]
         } else {
             insertRow(at: rows)
             focusRequest = CellRef(row: rows, column: 0)
@@ -321,13 +386,16 @@ final class TableModel {
 
     /// Return: in the last row adds a row; elsewhere moves down. ⌘Return inserts a row below.
     func newline(from cell: CellRef, insertBelow: Bool) {
-        if insertBelow || cell.row == rowCount - 1 {
-            insertRow(at: cell.row + 1)
-            focusRequest = CellRef(row: cell.row + 1, column: insertBelow ? cell.column : 0)
+        let block = span(master(cell))
+        let below = block.row + block.rows
+        if insertBelow || below >= rowCount {
+            insertRow(at: below)
+            focusRequest = CellRef(row: below, column: insertBelow ? cell.column : 0)
         } else {
-            focusRequest = CellRef(row: cell.row + 1, column: cell.column)
+            focusRequest = master(CellRef(row: below, column: cell.column))
         }
     }
+
 
     /// Backspace in an empty cell takes back an extra Tab or Return: removes the empty last column, or the
     /// empty last row. Returns the cell to continue in, or nil if nothing was removed.
@@ -355,7 +423,11 @@ final class TableModel {
         changed()
     }
 
+    /// Tables with cells merged across rows can't be sorted.
+    var canSort: Bool { !(data.merges ?? []).contains { $0.rows > 1 } }
+
     func sort(byColumn column: Int, ascending: Bool) {
+        guard canSort else { return NSSound.beep() }
         let skip = data.headerRow && rowCount > 0 ? 1 : 0
         var body = Array(skip..<rowCount)
         body.sort {
@@ -371,6 +443,115 @@ final class TableModel {
             data.rows[cell.row][cell.column] = ""
             if data.rich != nil { data.rich![cell.row][cell.column] = nil }
         }
+        changed()
+    }
+
+    // MARK: Merge and split
+
+    /// Merges the block covering the cells into one cell; the texts are joined in the top-left cell.
+    func merge(_ cells: Set<CellRef>) {
+        let block = bounds(of: cells)
+        guard block.rows * block.columns > 1 else { return }
+        let combined = NSMutableAttributedString()
+        for r in block.row..<(block.row + block.rows) {
+            for c in block.column..<(block.column + block.columns) where !data.isCovered(r, c) {
+                let text = storedText(CellRef(row: r, column: c))
+                guard !text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                if combined.length > 0 { combined.append(NSAttributedString(string: "\n", attributes: [.font: baseFont(block.row)])) }
+                combined.append(text)
+            }
+        }
+        let top = CellRef(row: block.row, column: block.column)
+        for r in block.row..<(block.row + block.rows) {
+            for c in block.column..<(block.column + block.columns) where (r, c) != (top.row, top.column) {
+                data.rows[r][c] = ""
+                if data.rich != nil { data.rich![r][c] = nil }
+            }
+        }
+        storedCache.removeAll()
+        store(combined, in: top)
+        var merges = (data.merges ?? []).filter { !(block.contains($0.row, $0.column)) }
+        merges.append(block)
+        data.merges = merges
+        changed()
+    }
+
+    /// The smallest block holding the cells and every merged block they touch.
+    func bounds(of cells: Set<CellRef>) -> CellSpan {
+        guard let first = cells.first else { return CellSpan(row: 0, column: 0, rows: 0, columns: 0) }
+        var top = first.row, left = first.column, bottom = first.row, right = first.column
+        for cell in cells {
+            let s = span(cell)
+            top = min(top, s.row); left = min(left, s.column)
+            bottom = max(bottom, s.row + s.rows - 1); right = max(right, s.column + s.columns - 1)
+        }
+        var changed = true
+        while changed {
+            changed = false
+            for s in data.merges ?? [] where s.row <= bottom && s.row + s.rows - 1 >= top
+                && s.column <= right && s.column + s.columns - 1 >= left {
+                let (t, l, b, r) = (min(top, s.row), min(left, s.column),
+                                    max(bottom, s.row + s.rows - 1), max(right, s.column + s.columns - 1))
+                if (t, l, b, r) != (top, left, bottom, right) {
+                    (top, left, bottom, right) = (t, l, b, r)
+                    changed = true
+                }
+            }
+        }
+        return CellSpan(row: top, column: left, rows: bottom - top + 1, columns: right - left + 1)
+    }
+
+    /// Unmerges a merged cell (its text stays in the top-left cell).
+    func unmerge(_ cell: CellRef) {
+        let s = span(master(cell))
+        data.merges = data.merges?.filter { $0 != s }
+        if data.merges?.isEmpty == true { data.merges = nil }
+        changed()
+    }
+
+    /// Splits a cell in two side by side: a column is added and the other rows keep one cell across both.
+    func splitIntoColumns(_ cell: CellRef) {
+        let cell = master(cell)
+        let block = span(cell)
+        let new = block.column + block.columns
+        let half = Double(columnWidth(block.column + block.columns - 1)) / 2
+        freezeColumnWidths()
+        data.insertColumn(at: new)
+        data.columnWidths[new - 1] = max(half, 30)
+        data.columnWidths[new] = max(half, 30)
+        var merges = data.merges ?? []
+        var handled: Set<CellSpan> = []
+        for r in 0..<rowCount where !(r >= block.row && r < block.row + block.rows) {
+            if let i = merges.firstIndex(where: { $0.contains(r, new - 1) }) {
+                if merges[i].contains(r, new) || handled.contains(merges[i]) { continue }
+                merges[i].columns += 1
+                handled.insert(merges[i])
+            } else {
+                merges.append(CellSpan(row: r, column: new - 1, rows: 1, columns: 2))
+            }
+        }
+        data.merges = merges.isEmpty ? nil : merges
+        changed()
+    }
+
+    /// Splits a cell in two, one above the other: a row is added and the other columns keep one cell across both.
+    func splitIntoRows(_ cell: CellRef) {
+        let cell = master(cell)
+        let block = span(cell)
+        let new = block.row + block.rows
+        data.insertRow(at: new)
+        var merges = data.merges ?? []
+        var handled: Set<CellSpan> = []
+        for c in 0..<columnCount where !(c >= block.column && c < block.column + block.columns) {
+            if let i = merges.firstIndex(where: { $0.contains(new - 1, c) }) {
+                if merges[i].contains(new, c) || handled.contains(merges[i]) { continue }
+                merges[i].rows += 1
+                handled.insert(merges[i])
+            } else {
+                merges.append(CellSpan(row: new - 1, column: c, rows: 2, columns: 1))
+            }
+        }
+        data.merges = merges.isEmpty ? nil : merges
         changed()
     }
 
@@ -478,18 +659,26 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     // MARK: Geometry
 
+    /// The rectangle of a cell — the whole block for a merged cell.
     func cellRect(_ cell: CellRef) -> NSRect {
-        guard cell.row + 1 < rowTops.count, cell.column + 1 < columnLefts.count else { return .zero }
-        return NSRect(x: columnLefts[cell.column], y: rowTops[cell.row],
-                      width: columnLefts[cell.column + 1] - columnLefts[cell.column],
-                      height: rowTops[cell.row + 1] - rowTops[cell.row])
+        let block = model.span(model.master(cell))
+        let lastRow = block.row + block.rows, lastColumn = block.column + block.columns
+        guard lastRow < rowTops.count, lastColumn < columnLefts.count else { return .zero }
+        return NSRect(x: columnLefts[block.column], y: rowTops[block.row],
+                      width: columnLefts[lastColumn] - columnLefts[block.column],
+                      height: rowTops[lastRow] - rowTops[block.row])
+    }
+
+    private func blockWidth(_ cell: CellRef) -> CGFloat {
+        let block = model.span(model.master(cell))
+        return (block.column..<(block.column + block.columns)).reduce(0) { $0 + model.columnWidth($1) }
     }
 
     private func cell(at point: NSPoint) -> CellRef? {
         guard model.rowCount > 0, model.columnCount > 0 else { return nil }
         let row = max(0, min(model.rowCount - 1, (rowTops.lastIndex { $0 <= point.y } ?? 0)))
         let column = max(0, min(model.columnCount - 1, (columnLefts.lastIndex { $0 <= point.x } ?? 0)))
-        return CellRef(row: row, column: column)
+        return model.master(CellRef(row: row, column: column))
     }
 
     /// Index of the column whose right border is under the point (for resizing).
@@ -502,7 +691,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private func measure(_ cell: CellRef) -> CGFloat {
         if editing != cell, let cached = heightCache[cell] { return cached }
         let text = editing == cell ? (editor.textStorage ?? NSAttributedString()) : model.displayText(cell)
-        let width = max(model.columnWidth(cell.column) - 2 * Self.padX, 10)
+        let width = max(blockWidth(cell) - 2 * Self.padX, 10)
         var height = text.length == 0 ? model.baseFont(cell.row).boundingRectForFont.height
             : text.boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
                                 options: [.usesLineFragmentOrigin, .usesFontLeading]).height
@@ -530,8 +719,18 @@ final class TableGridView: NSView, NSTextViewDelegate {
         columnLefts = [0]
         for c in 0..<model.columnCount { columnLefts.append(columnLefts[c] + model.columnWidth(c)) }
         rowHeights = (0..<model.rowCount).map { r in
-            let tallest = (0..<model.columnCount).map { measure(CellRef(row: r, column: $0)) }.max() ?? 0
+            let tallest = (0..<model.columnCount).compactMap { c -> CGFloat? in
+                let cell = CellRef(row: r, column: c)
+                guard !model.data.isCovered(r, c), model.span(cell).rows == 1 else { return nil }
+                return measure(cell)
+            }.max() ?? 0
             return max(Self.minRowHeight, tallest + 2 * Self.padY)
+        }
+        // A merged cell taller than its rows makes its last row taller.
+        for block in model.data.merges ?? [] where block.rows > 1 && block.row + block.rows <= rowHeights.count {
+            let needed = measure(CellRef(row: block.row, column: block.column)) + 2 * Self.padY
+            let have = rowHeights[block.row..<(block.row + block.rows)].reduce(0, +)
+            if needed > have { rowHeights[block.row + block.rows - 1] += needed - have }
         }
         rowTops = [0]
         for height in rowHeights { rowTops.append(rowTops.last! + height) }
@@ -554,9 +753,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     override func draw(_ dirtyRect: NSRect) {
         let showSelection = !isExport && (selection.count > 1 || (editing == nil && !selection.isEmpty))
         let hideBorders = model.data.hideBorders ?? false
-        for r in 0..<model.rowCount {
-            for c in 0..<model.columnCount {
-                let cell = CellRef(row: r, column: c)
+        let visible = model.visibleCells
+        for cell in visible {
+            do {
+                let (r, c) = (cell.row, cell.column)
                 let rect = cellRect(cell)
                 guard rect.intersects(dirtyRect) else { continue }
                 if let shade = model.data.shade(r, c) {
@@ -574,9 +774,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             }
         }
         let grid = NSBezierPath()
-        let width = columnLefts.last ?? 0, height = rowTops.last ?? 0
-        for y in rowTops { grid.move(to: NSPoint(x: 0, y: y)); grid.line(to: NSPoint(x: width, y: y)) }
-        for x in columnLefts { grid.move(to: NSPoint(x: x, y: 0)); grid.line(to: NSPoint(x: x, y: height)) }
+        for cell in visible { grid.appendRect(cellRect(cell)) }
         if hideBorders {
             guard !isExport, editing != nil || !selection.isEmpty else { return drawSelectionOutline(showSelection) }
             grid.lineWidth = 0.5
@@ -645,6 +843,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     // MARK: Editing
 
     func beginEditing(_ cell: CellRef, at point: NSPoint? = nil, caretAtEnd: Bool = true) {
+        let cell = model.master(cell)
         guard model.contains(cell), !isExport else { return }
         if editing != nil { stopEditing(commit: true) }
         editing = cell
@@ -867,9 +1066,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     }
 
     private func selectRange(_ a: CellRef, _ b: CellRef) {
+        let block = model.bounds(of: [a, b])
         var cells: Set<CellRef> = []
-        for r in min(a.row, b.row)...max(a.row, b.row) {
-            for c in min(a.column, b.column)...max(a.column, b.column) { cells.insert(CellRef(row: r, column: c)) }
+        for r in block.row..<(block.row + block.rows) {
+            for c in block.column..<(block.column + block.columns) { cells.insert(model.master(CellRef(row: r, column: c))) }
         }
         selection = cells
         needsDisplay = true
@@ -909,14 +1109,17 @@ final class TableGridView: NSView, NSTextViewDelegate {
             window?.makeFirstResponder(owner?.canvas)
         case 123, 124, 125, 126:
             let shift = event.modifierFlags.contains(.shift)
-            var next = shift ? (extent ?? anchor) : anchor
+            let from = shift ? (extent ?? anchor) : anchor
+            var next = from
+            let block = model.span(model.master(from))
             switch event.keyCode {
-            case 123: next.column -= 1
-            case 124: next.column += 1
-            case 125: next.row += 1
-            default: next.row -= 1
+            case 123: next.column = block.column - 1
+            case 124: next.column = block.column + block.columns
+            case 125: next.row = block.row + block.rows
+            default: next.row = block.row - 1
             }
             guard model.contains(next) else { return }
+            next = model.master(next)
             if shift {
                 extent = next
                 selectRange(anchor, next)
@@ -1035,6 +1238,20 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func sort(ascending: Bool) { let column = targetCell.column; run { model.sort(byColumn: column, ascending: ascending) } }
     func clearCells() { let cells = targetCells; run { model.clear(cells) } }
 
+    func mergeCells() {
+        let cells = targetCells
+        guard cells.count > 1 else { return NSSound.beep() }
+        run { model.merge(cells) }
+        let top = model.master(CellRef(row: model.bounds(of: cells).row, column: model.bounds(of: cells).column))
+        selection = [top]
+        anchor = top
+    }
+
+    func unmergeCell() { let cell = targetCell; run { model.unmerge(cell) } }
+    func splitIntoColumns() { let cell = targetCell; run { model.splitIntoColumns(cell) } }
+    func splitIntoRows() { let cell = targetCell; run { model.splitIntoRows(cell) } }
+    var targetIsMerged: Bool { model.data.span(targetCell.row, targetCell.column) != nil }
+
     func selectTable() {
         selectAll(nil)
         becameActive()
@@ -1075,6 +1292,18 @@ final class TableGridView: NSView, NSTextViewDelegate {
         textColor.submenu = colors
         menu.addItem(textColor)
         menu.addItem(.separator())
+        menu.autoenablesItems = false
+        let merge = ClosureMenuItem(count > 1 ? "Merge \(count) Cells" : "Merge Cells") { [weak self] in self?.mergeCells() }
+        merge.isEnabled = count > 1
+        menu.addItem(merge)
+        let split = NSMenuItem(title: "Split Cell", action: nil, keyEquivalent: "")
+        let splitMenu = NSMenu()
+        if targetIsMerged { splitMenu.addItem(ClosureMenuItem("Unmerge Cells") { [weak self] in self?.unmergeCell() }) }
+        splitMenu.addItem(ClosureMenuItem("Into 2 Columns") { [weak self] in self?.splitIntoColumns() })
+        splitMenu.addItem(ClosureMenuItem("Into 2 Rows") { [weak self] in self?.splitIntoRows() })
+        split.submenu = splitMenu
+        menu.addItem(split)
+        menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Insert Row Above") { [weak self] in self?.insertRowAbove() })
         menu.addItem(ClosureMenuItem("Insert Row Below") { [weak self] in self?.insertRowBelow() })
         menu.addItem(ClosureMenuItem("Insert Column Left") { [weak self] in self?.insertColumnLeft() })
@@ -1086,8 +1315,11 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.addItem(ClosureMenuItem(count > 1 ? "Clear Selected Cells" : "Clear Cell") { [weak self] in self?.clearCells() })
         menu.addItem(ClosureMenuItem("Delete Table") { [weak self] in self?.deleteTable() })
         menu.addItem(.separator())
-        menu.addItem(ClosureMenuItem("Sort Ascending by This Column") { [weak self] in self?.sort(ascending: true) })
-        menu.addItem(ClosureMenuItem("Sort Descending by This Column") { [weak self] in self?.sort(ascending: false) })
+        for (title, ascending) in [("Sort Ascending by This Column", true), ("Sort Descending by This Column", false)] {
+            let item = ClosureMenuItem(title) { [weak self] in self?.sort(ascending: ascending) }
+            item.isEnabled = model.canSort
+            menu.addItem(item)
+        }
         menu.addItem(ClosureMenuItem("Header Row", state: model.data.headerRow) { [weak self] in self?.toggleHeaderRow() })
         menu.addItem(ClosureMenuItem("Hide Borders", state: model.data.hideBorders ?? false) { [weak self] in self?.toggleBorders() })
         menu.addItem(ClosureMenuItem("Select Entire Table") { [weak self] in self?.selectTable() })

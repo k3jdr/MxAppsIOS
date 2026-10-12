@@ -42,6 +42,11 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   columns, clear cells, delete table, sort, header row, hide borders. Text turns white on dark shades unless you
   gave it a colour. Shading moves with its row when sorting; new columns take the shading of the column beside them.
 - **Column widths**: drag a column border to resize that column; the table grows or shrinks with it.
+- **Merge and split cells**: select neighbouring cells, then right-click ▸ **Merge Cells** (or Table tab ▸ Merge Cells);
+  their texts are joined in the merged cell. **Split Cell** ▸ Unmerge Cells, Into 2 Columns or Into 2 Rows (the
+  other rows / columns keep one cell across the new column / row). Tab, Return and the arrow keys step over merged
+  cells, and inserting or deleting rows and columns keeps merges intact. A table with cells merged across rows can't
+  be sorted. (OneNote itself has no merged cells, so merges sync to OneNote as separate cells.)
 - Tables print, export to PDF and sync with OneNote with their shading and cell formatting.
 - **Pictures**: double-click to open in a viewer; right-click to copy, save, or reset to original size.
 - **Attachments** keep a copy of the file inside the notebook; double-click to open. **Recordings** play in place.
@@ -82,6 +87,24 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 | Reload Notebooks | ⇧⌘R |
 | Save Notebook As… | ⇧⌘S |
 | Sync All OneDrive Notebooks | ⌃⌘S |
+
+## Importing from Microsoft OneNote
+
+**File ▸ Import** reads OneNote's own files:
+
+- **OneNote Package (.onepkg)…** — a notebook exported from OneNote for Windows (File ▸ Export ▸ Notebook) becomes a
+  new notebook; its section groups become section groups.
+- **OneNote Sections (.one)…** — section files are added to the current notebook.
+- **OneNote Notebook Folder…** — a folder of section files (with section-group subfolders), for example a OneNote
+  backup folder. When there are several backups of a section ("Name (On 10-3-2026).one"), the newest is used.
+
+What comes in: pages with their titles, subpage levels and dates; text containers at their positions; fonts, sizes,
+bold, italic, underline, strikethrough, superscript / subscript, colours, highlights, alignment, headings, bullets,
+numbering and indents; hyperlinks; tags (To Do with its check mark, Important, Question…); tables with column widths,
+cell shading and formatted cell text; pictures and attached files stored in the section; section colours. Not
+imported: ink (handwriting and drawings), password-protected sections, and pictures OneNote keeps outside the section
+file when the export doesn't include its `onefiles` folder (a grey note marks where each one was). Sections are in
+alphabetical order. The reader follows Microsoft's published file format ([MS-ONESTORE] and [MS-ONE]).
 
 ## OneDrive and Microsoft OneNote
 

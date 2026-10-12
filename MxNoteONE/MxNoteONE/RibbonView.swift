@@ -439,6 +439,14 @@ struct TableRibbon: View {
             RibbonButton("Insert Left", "arrow.left.square", large: true) { grid?.insertColumnLeft() }
             RibbonButton("Insert Right", "arrow.right.square", large: true) { grid?.insertColumnRight() }
         }
+        RibbonGroup("Merge") {
+            RibbonButton("Merge Cells", "rectangle.compress.vertical", large: true) { grid?.mergeCells() }
+            RibbonMenu("Split", "rectangle.split.2x1") {
+                Button("Unmerge Cells") { grid?.unmergeCell() }
+                Button("Split into 2 Columns") { grid?.splitIntoColumns() }
+                Button("Split into 2 Rows") { grid?.splitIntoRows() }
+            }
+        }
         RibbonGroup("Delete") {
             RibbonButton("Rows", "minus.rectangle", large: true) { grid?.deleteRows() }
             RibbonButton("Columns", "minus.rectangle.portrait", large: true) { grid?.deleteColumns() }

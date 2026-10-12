@@ -616,6 +616,45 @@ final class NotebookStore {
         if isOpen { reloadToken += 1 }
     }
 
+    /// Creates a section for an import, inside section groups named by `groups` (created as needed).
+    func createImportedSection(name: String, color: NoteColor?, groups: [String], in nb: Notebook) -> SectionRef {
+        var parent: UUID?
+        for groupName in groups {
+            let siblings = parent.flatMap { nb.manifest.sections.find($0)?.children } ?? nb.manifest.sections
+            if let existing = siblings.first(where: { $0.isGroup && $0.name == groupName }) {
+                parent = existing.id
+            } else {
+                let group = SectionNode(kind: .group, name: groupName, color: .gray, children: [])
+                nb.manifest.sections.append(group, toGroup: parent)
+                parent = group.id
+            }
+        }
+        let count = nb.manifest.sections.flattenedSections.count
+        let node = SectionNode(kind: .section, name: name,
+                               color: color ?? NoteColor.allCases[count % NoteColor.allCases.count])
+        nb.manifest.sections.append(node, toGroup: parent)
+        nb.sections[node.id] = SectionContent()
+        saveManifest(nb)
+        saveSection(nb, node.id)
+        expandedNotebooks.insert(nb.id)
+        return SectionRef(notebookID: nb.id, sectionID: node.id)
+    }
+
+    /// Adds imported pages to a section (the section is saved once at the end).
+    func addImportedPages(_ pages: [(PageContent, PageMeta)], to section: SectionRef) {
+        guard let nb = notebook(section.notebookID), nb.sections[section.sectionID] != nil else { return }
+        for (content, meta) in pages {
+            do {
+                try writePage(content, nb: nb, key: nb.keys[section.sectionID])
+                nb.sections[section.sectionID]!.pages.append(meta)
+            } catch {
+                report("Couldn't save an imported page.", error)
+                break
+            }
+        }
+        saveSection(nb, section.sectionID)
+    }
+
     /// Removes a page deleted in OneNote (it goes to the Recycle Bin).
     func removeSyncedPage(_ ref: PageRef) {
         deletePage(ref)
