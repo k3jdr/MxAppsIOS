@@ -164,10 +164,13 @@ class ElementView: NSView {
                 return
             }
             let p = canvas.convert(ev.locationInWindow, from: nil)
-            self.setFrameOrigin(NSPoint(x: max(0, oldFrame.minX + p.x - start.x), y: max(0, oldFrame.minY + p.y - start.y)))
+            let target = canvas.snapped(NSPoint(x: oldFrame.minX + p.x - start.x, y: oldFrame.minY + p.y - start.y))
+            self.setFrameOrigin(NSPoint(x: max(0, target.x), y: max(0, target.y)))
+            canvas.showsSnapGuides = canvas.snaps
             moved = true
             canvas.autoscroll(with: ev)
         }
+        canvas.showsSnapGuides = false
         if moved { controller?.elementFrameChanged(self, from: oldFrame) }
     }
 
@@ -184,9 +187,12 @@ class ElementView: NSView {
                 return
             }
             let p = canvas.convert(ev.locationInWindow, from: nil)
-            self.setWidth(oldFrame.width + p.x - start.x)
+            let right = canvas.snappedX(oldFrame.maxX + p.x - start.x)
+            self.setWidth(right - oldFrame.minX)
+            canvas.showsSnapGuides = canvas.snaps
             resized = true
         }
+        canvas.showsSnapGuides = false
         if resized { controller?.elementFrameChanged(self, from: oldFrame) }
     }
 
@@ -480,6 +486,10 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         let url = (link as? URL) ?? (link as? String).flatMap { URL(string: $0) }
         if let url, url.scheme == NotebookStore.linkScheme {
             NotebookStore.shared.openLink(url)
+            return true
+        }
+        if url?.scheme == OneNoteImport.missingScheme {
+            ImportActivity.shared.locateMissingPictures()
             return true
         }
         return false

@@ -231,6 +231,8 @@ struct MainCommands: Commands {
                     Button(rules.title) { canvas?.setRuleLines(rules) }
                 }
             }
+            Button(editor.snapToGrid ? "Turn Off Snap to Grid" : "Snap to Grid") { editor.snapToGrid.toggle() }
+                .keyboardShortcut("g", modifiers: [.command, .control])
             Menu("Drawing Tool") {
                 ForEach(CanvasTool.allCases) { tool in
                     Button(tool.title) { editor.tool = tool }
@@ -292,6 +294,8 @@ struct MainCommands: Commands {
             }
             Button("Lock All Protected Sections") { store.lockAll() }
                 .keyboardShortcut("l", modifiers: [.command, .control])
+            Divider()
+            Button("Find Missing OneNote Pictures…") { ImportActivity.shared.locateMissingPictures() }
             Divider()
             Button("Rename Notebook…") {
                 if let nb = store.currentNotebook { store.sheet = .renameNotebook(nb.id) }

@@ -58,6 +58,15 @@ extension TableData {
         }
     }
 
+    /// Formatted cell text from stored data (RTFD, which can hold pictures; older tables used RTF).
+    static func attributedCell(_ data: Data) -> NSAttributedString? {
+        NSAttributedString(rtfd: data, documentAttributes: nil) ?? NSAttributedString(rtf: data, documentAttributes: nil)
+    }
+
+    static func cellData(_ text: NSAttributedString) -> Data? {
+        text.rtfd(from: NSRange(location: 0, length: text.length), documentAttributes: [:])
+    }
+
     func richData(_ row: Int, _ column: Int) -> Data? {
         guard let rich, rich.indices.contains(row), rich[row].indices.contains(column) else { return nil }
         return rich[row][column]
@@ -235,7 +244,7 @@ final class TableModel {
     func storedText(_ cell: CellRef) -> NSAttributedString {
         if let cached = storedCache[cell] { return cached }
         let result: NSAttributedString
-        if let rtf = data.richData(cell.row, cell.column), let text = NSAttributedString(rtf: rtf, documentAttributes: nil) {
+        if let rtf = data.richData(cell.row, cell.column), let text = TableData.attributedCell(rtf) {
             result = text
         } else {
             result = NSAttributedString(string: text(cell), attributes: [.font: baseFont(cell.row)])
@@ -256,6 +265,21 @@ final class TableModel {
         return text
     }
 
+    /// Display text with pictures scaled down to fit the cell's width.
+    func displayText(_ cell: CellRef, fitting width: CGFloat) -> NSAttributedString {
+        let text = displayText(cell)
+        guard text.containsAttachments(in: NSRange(location: 0, length: text.length)) else { return text }
+        let fitted = NSMutableAttributedString(attributedString: text)
+        fitted.enumerateAttribute(.attachment, in: NSRange(location: 0, length: fitted.length)) { value, _, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            let size = OneNoteImport.displaySize(attachment)
+            if size.width > width + 0.5, width > 10 {
+                OneNoteImport.resize(attachment, to: NSSize(width: width, height: size.height * width / size.width))
+            }
+        }
+        return fitted
+    }
+
     /// Saves edited cell text: automatic colours are dropped; rich text is kept only when there is formatting.
     func store(_ edited: NSAttributedString, in cell: CellRef) {
         guard contains(cell) else { return }
@@ -268,7 +292,7 @@ final class TableModel {
             }
         }
         data.rows[cell.row][cell.column] = text.string
-        let rtf = Self.isPlain(text, header: isHeader(cell.row)) ? nil : text.rtf(from: all, documentAttributes: [:])
+        let rtf = Self.isPlain(text, header: isHeader(cell.row)) ? nil : TableData.cellData(text)
         if rtf != nil || data.rich != nil {
             data.rich = TableData.padded(data.rich, rows: rowCount, columns: columnCount)
             data.rich![cell.row][cell.column] = rtf
@@ -637,7 +661,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
         self.model = model
         super.init(frame: .zero)
         editor.isRichText = true
-        editor.importsGraphics = false
+        editor.importsGraphics = true
+        editor.allowsImageEditing = true
         editor.drawsBackground = false
         editor.isVerticallyResizable = true
         editor.isHorizontallyResizable = false
@@ -690,8 +715,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     private func measure(_ cell: CellRef) -> CGFloat {
         if editing != cell, let cached = heightCache[cell] { return cached }
-        let text = editing == cell ? (editor.textStorage ?? NSAttributedString()) : model.displayText(cell)
         let width = max(blockWidth(cell) - 2 * Self.padX, 10)
+        let text = editing == cell ? (editor.textStorage ?? NSAttributedString()) : model.displayText(cell, fitting: width)
         var height = text.length == 0 ? model.baseFont(cell.row).boundingRectForFont.height
             : text.boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
                                 options: [.usesLineFragmentOrigin, .usesFontLeading]).height
@@ -768,7 +793,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
                     rect.fill(using: .sourceOver)
                 }
                 if editing != cell {
-                    model.displayText(cell).draw(with: rect.insetBy(dx: Self.padX, dy: Self.padY),
+                    model.displayText(cell, fitting: rect.width - 2 * Self.padX).draw(with: rect.insetBy(dx: Self.padX, dy: Self.padY),
                                                  options: [.usesLineFragmentOrigin, .usesFontLeading])
                 }
             }
@@ -851,7 +876,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         anchor = cell
         extent = nil
         editorUndo = UndoManager()
-        editor.textStorage?.setAttributedString(model.displayText(cell))
+        editor.textStorage?.setAttributedString(model.displayText(cell, fitting: blockWidth(cell) - 2 * Self.padX))
         editor.typingAttributes = editor.textStorage?.length ?? 0 > 0
             ? editor.textStorage!.attributes(at: 0, effectiveRange: nil) : model.typingAttributes(cell)
         editor.insertionPointColor = model.autoColor(cell)
@@ -920,6 +945,20 @@ final class TableGridView: NSView, NSTextViewDelegate {
     }
 
     func undoManager(for view: NSTextView) -> UndoManager? { editorUndo }
+
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        let url = (link as? URL) ?? (link as? String).flatMap { URL(string: $0) }
+        if let url, url.scheme == NotebookStore.linkScheme {
+            NotebookStore.shared.openLink(url)
+            return true
+        }
+        if url?.scheme == OneNoteImport.missingScheme {
+            endEditing()
+            ImportActivity.shared.locateMissingPictures()
+            return true
+        }
+        return false
+    }
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         guard let cell = editing else { return false }

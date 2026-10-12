@@ -394,6 +394,8 @@ struct ViewRibbon: View {
                     Button(rules.title) { canvas?.setRuleLines(rules) }
                 }
             }
+            RibbonButton("Snap to Grid (⌃⌘G) — hold ⌥ to place freely", "square.grid.3x3", large: true,
+                         active: editor.snapToGrid) { editor.snapToGrid.toggle() }
         }
         RibbonGroup("Zoom") {
             RibbonButton("Zoom Out (⌘-)", "minus.magnifyingglass") { canvas?.zoomOut() }

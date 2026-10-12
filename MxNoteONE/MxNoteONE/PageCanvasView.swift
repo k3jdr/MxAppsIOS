@@ -38,6 +38,36 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
     }
 
     var isExport: Bool { controller?.mode == .export }
+
+    // MARK: Snap to grid
+
+    /// Grid step: the page's rule lines or grid, else 12 points.
+    var gridStep: CGFloat { style.rules.spacing ?? 12 }
+
+    /// Lined paper starts its lines under the title; grids start at the top.
+    private var gridOriginY: CGFloat { style.rules.spacing != nil && !style.rules.isGrid ? Self.contentTop : 0 }
+
+    /// Snapping is on (View ▸ Snap to Grid) and ⌥ isn't held.
+    var snaps: Bool {
+        !isExport && (controller?.editor.snapToGrid ?? false) && !NSEvent.modifierFlags.contains(.option)
+    }
+
+    /// Shows the grid while something is dragged with snapping on and the page has no rule lines.
+    var showsSnapGuides = false {
+        didSet { if oldValue != showsSnapGuides { needsDisplay = true } }
+    }
+
+    func snappedX(_ x: CGFloat) -> CGFloat {
+        snaps ? (x / gridStep).rounded() * gridStep : x
+    }
+
+    func snappedY(_ y: CGFloat) -> CGFloat {
+        snaps ? ((y - gridOriginY) / gridStep).rounded() * gridStep + gridOriginY : y
+    }
+
+    func snapped(_ point: NSPoint) -> NSPoint {
+        NSPoint(x: snappedX(point.x), y: snappedY(point.y))
+    }
     var elementViews: [ElementView] { subviews.compactMap { $0 as? ElementView } }
 
     override init(frame: NSRect) {
@@ -213,6 +243,20 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
                        options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
 
+        if showsSnapGuides, style.rules.spacing == nil {
+            let step = gridStep
+            NSColor(srgbRed: 0.45, green: 0.62, blue: 0.85, alpha: 0.45).setFill()
+            var y = floor(dirtyRect.minY / step) * step
+            while y <= dirtyRect.maxY {
+                var x = floor(dirtyRect.minX / step) * step
+                while x <= dirtyRect.maxX {
+                    NSRect(x: x - 0.75, y: y - 0.75, width: 1.5, height: 1.5).fill()
+                    x += step
+                }
+                y += step
+            }
+        }
+
         let underline = NSBezierPath()
         underline.lineWidth = 1
         underline.move(to: NSPoint(x: Self.margin, y: 69.5))
@@ -241,7 +285,7 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
             return
         }
         if let selected = selectedElement {
-            let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
+            let step: CGFloat = snaps ? gridStep : (event.modifierFlags.contains(.shift) ? 10 : 1)
             var delta = NSPoint.zero
             switch event.keyCode {
             case 51, 117:
@@ -258,7 +302,8 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
             }
             if delta != .zero {
                 let old = selected.frame
-                selected.setFrameOrigin(NSPoint(x: max(0, old.minX + delta.x), y: max(0, old.minY + delta.y)))
+                let target = snapped(NSPoint(x: old.minX + delta.x, y: old.minY + delta.y))
+                selected.setFrameOrigin(NSPoint(x: max(0, target.x), y: max(0, target.y)))
                 controller.elementFrameChanged(selected, from: old)
                 return
             }
@@ -376,8 +421,10 @@ final class InkView: NSView {
         }
         guard let kind = tool.strokeTool else { return }
         let highlighter = kind == .highlighter
+        let isShape = kind != .pen && kind != .highlighter
         current = InkStroke(tool: kind, color: highlighter ? editor.highlighterColor : editor.penColor,
-                            width: highlighter ? editor.highlighterWidth : editor.penWidth, points: [p])
+                            width: highlighter ? editor.highlighterWidth : editor.penWidth,
+                            points: [isShape ? (canvas?.snapped(p) ?? p) : p])
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -392,7 +439,7 @@ final class InkView: NSView {
             if let last = stroke.points.last, hypot(last.x - p.x, last.y - p.y) < 1 { return }
             stroke.points.append(p)
         case .line, .arrow, .rectangle, .ellipse:
-            var end = p
+            var end = canvas?.snapped(p) ?? p
             if event.modifierFlags.contains(.shift), let start = stroke.points.first {
                 end = Self.constrained(from: start, to: p, square: stroke.tool == .rectangle || stroke.tool == .ellipse)
             }

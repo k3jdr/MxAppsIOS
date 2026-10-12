@@ -50,6 +50,10 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - Tables print, export to PDF and sync with OneNote with their shading and cell formatting.
 - **Pictures**: double-click to open in a viewer; right-click to copy, save, or reset to original size.
 - **Attachments** keep a copy of the file inside the notebook; double-click to open. **Recordings** play in place.
+- **Snap to Grid** (View tab or View ▸ Snap to Grid, ⌃⌘G — as in OneNote for Windows): containers, pictures, tables
+  and shapes line up on the page grid when you place, drag, resize or nudge them (arrow keys move one grid step). The
+  grid is the page's rule lines or grid when it has them, otherwise 12 points (shown as dots while you drag). Hold ⌥
+  to place something freely.
 - **Ink**: pen and highlighter strokes, lines, arrows, rectangles and ellipses (hold Shift for 45° lines, squares, circles).
   The eraser removes whole strokes. Press Escape to go back to typing.
 - **Links**: type `[[Page Name]]` to link to a page in the notebook (it is created if it doesn't exist), or use ⌘K for
@@ -82,6 +86,7 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 | Move or Copy Page… | ⇧⌘M |
 | Zoom In / Out / Actual Size | ⌘= / ⌘- / ⌃⌘0 |
 | Full Page View / Show Ribbon | ⌥⌘F / ⌥⌘R |
+| Snap to Grid | ⌃⌘G |
 | Lock All Protected Sections | ⌃⌘L |
 | Export Page as PDF… / Print Page… | ⇧⌘E / ⌘P |
 | Reload Notebooks | ⇧⌘R |
@@ -101,10 +106,15 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 What comes in: pages with their titles, subpage levels and dates; text containers at their positions; fonts, sizes,
 bold, italic, underline, strikethrough, superscript / subscript, colours, highlights, alignment, headings, bullets,
 numbering and indents; hyperlinks; tags (To Do with its check mark, Important, Question…); tables with column widths,
-cell shading and formatted cell text; pictures and attached files stored in the section; section colours. Not
-imported: ink (handwriting and drawings), password-protected sections, and pictures OneNote keeps outside the section
-file when the export doesn't include its `onefiles` folder (a grey note marks where each one was). Sections are in
-alphabetical order. The reader follows Microsoft's published file format ([MS-ONESTORE] and [MS-ONE]).
+cell shading and formatted cell text (including pictures inside cells); pictures and attached files; section colours.
+Not imported: ink (handwriting and drawings) and password-protected sections. Sections are in alphabetical order. The
+reader follows Microsoft's published file format ([MS-ONESTORE] and [MS-ONE]).
+
+**Pictures in the `onefiles` folder**: OneNote keeps larger pictures outside the section files, in a `onefiles`
+folder (files named after an ID, like `{44382328-6B0E-…}.jpg.onebin`). The importer looks for it next to the
+sections. If it isn't there, the import offers **Locate Pictures…**, and a grey note marks where each missing picture
+goes — on the page or inside a table cell. Copy the `onefiles` folder from the Windows PC (or OneDrive) later and
+choose it with **Notebook ▸ Find Missing OneNote Pictures…**, or click any picture note: the pictures go into place.
 
 ## OneDrive and Microsoft OneNote
 

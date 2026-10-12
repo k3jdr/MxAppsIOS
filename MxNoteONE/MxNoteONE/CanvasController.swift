@@ -176,8 +176,8 @@ final class CanvasController: NSObject {
     /// Starts a new text container at the point (clicking an empty part of the page).
     @discardableResult
     func createTextElement(at point: NSPoint, text: NSAttributedString? = nil, width: CGFloat = 520) -> TextElementView? {
-        var element = PageElement(kind: .text, x: max(4, point.x - 8), y: max(4, point.y - ElementView.gripHeight - 10),
-                                  width: width)
+        var element = PageElement(kind: .text, x: max(4, canvas.snappedX(point.x - 8)),
+                                  y: max(4, canvas.snappedY(point.y - ElementView.gripHeight - 10)), width: width)
         if let text { element.rtfd = text.rtfd(from: NSRange(location: 0, length: text.length), documentAttributes: [:]) }
         guard let view = addElement(element, undoable: text != nil) as? TextElementView else { return nil }
         view.focus()
@@ -202,6 +202,10 @@ final class CanvasController: NSObject {
 
     /// Where inserted things go: under the container being edited, or near the top of the visible page.
     func nextInsertionPoint() -> NSPoint {
+        canvas.snapped(rawInsertionPoint())
+    }
+
+    private func rawInsertionPoint() -> NSPoint {
         if let tv = NoteTextView.current, let owner = tv.owner, owner.superview === canvas {
             return NSPoint(x: owner.frame.minX, y: owner.frame.maxY + 14)
         }

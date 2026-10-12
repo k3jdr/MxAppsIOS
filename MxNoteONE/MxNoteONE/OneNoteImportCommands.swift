@@ -130,15 +130,183 @@ final class ImportActivity {
         }
         if let first { store.selectSidebar(.section(first)) }
         var message = "\(pages) page\(pages == 1 ? "" : "s") in \(sections) section\(sections == 1 ? "" : "s") imported into “\(nb.name)”."
-        if missing > 0 {
-            message += "\n\n\(missing) picture\(missing == 1 ? " was" : "s were") kept outside the section files and weren't included in the export; a note marks where each one was."
-        }
         if !failed.isEmpty {
             message += "\n\nNot imported:\n" + failed.prefix(10).joined(separator: "\n")
         }
         message += "\n\nInk (handwriting and drawings) isn't imported."
         status = "Imported \(pages) pages."
-        store.showAlert("OneNote import finished", message)
+        if missing > 0 {
+            askForPictures(missing: missing, in: nb, summary: message)
+        } else {
+            store.showAlert("OneNote import finished", message)
+        }
+    }
+
+    // MARK: Pictures kept outside the section files
+
+    /// After an import with missing pictures: offer to choose the folder that holds them.
+    private func askForPictures(missing: Int, in nb: Notebook, summary: String) {
+        let alert = NSAlert()
+        alert.messageText = "OneNote import finished"
+        alert.informativeText = summary + "\n\n\(missing) picture\(missing == 1 ? " is" : "s are") kept outside the section files, in OneNote’s “onefiles” folder, which wasn’t found next to the sections. A note marks where each picture goes.\n\nIf you have that folder (OneNote for Windows keeps it in the notebook folder), choose it now — or later with Notebook ▸ Find Missing OneNote Pictures…"
+        alert.addButton(withTitle: "Locate Pictures…")
+        alert.addButton(withTitle: "Later")
+        if alert.runModal() == .alertFirstButtonReturn { locateMissingPictures(in: nb) }
+    }
+
+    /// Notebook ▸ Find Missing OneNote Pictures… (also when a picture note is clicked).
+    func locateMissingPictures(in notebook: Notebook? = nil) {
+        guard let nb = notebook ?? store.currentNotebook else { return }
+        let count = missingPictureCount(in: nb)
+        guard count > 0 else {
+            store.showAlert("No missing pictures", "Every OneNote picture in “\(nb.name)” is in place.")
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.title = "Locate OneNote Pictures"
+        panel.message = "Choose the folder with the pictures (OneNote’s “onefiles” folder, or any folder that contains it). \(count) picture\(count == 1 ? " is" : "s are") missing in “\(nb.name)”."
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        status = "Looking for pictures…"
+        let found = relinkMissingPictures(in: nb, folder: folder)
+        status = ""
+        if found == 0 {
+            store.showAlert("No pictures found", "None of the \(count) missing pictures are in \(folder.lastPathComponent). OneNote names them after an ID like {44382328-6B0E-…}.")
+        } else {
+            store.showAlert("Pictures added", "\(found) of \(count) missing picture\(count == 1 ? "" : "s") added to “\(nb.name)”.")
+        }
+    }
+
+    private struct MissingPicture {
+        var guid: String
+        var ext: String
+        var width: CGFloat
+        var height: CGFloat
+    }
+
+    private func missingPicture(in element: PageElement) -> MissingPicture? {
+        guard element.kind == .text, let data = element.rtfd,
+              let text = NSAttributedString(rtfd: data, documentAttributes: nil), text.length > 0 else { return nil }
+        var result: MissingPicture?
+        text.enumerateAttribute(.link, in: NSRange(location: 0, length: text.length)) { value, _, stop in
+            guard let url = value as? URL ?? (value as? String).flatMap({ URL(string: $0) }),
+                  url.scheme == OneNoteImport.missingScheme,
+                  let guid = OneNoteImport.FileResolver.guid(in: url.path) else { return }
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            func query(_ name: String) -> String? { items.first { $0.name == name }?.value }
+            result = MissingPicture(guid: guid, ext: query("ext") ?? "png",
+                                    width: CGFloat(Double(query("w") ?? "") ?? 0), height: CGFloat(Double(query("h") ?? "") ?? 0))
+            stop.pointee = true
+        }
+        return result
+    }
+
+    private func missingPictureCount(in nb: Notebook) -> Int {
+        var count = 0
+        forEachPage(in: nb) { _, _, content in
+            count += content.elements.filter { missingPicture(in: $0) != nil }.count
+            for element in content.elements where element.kind == .table {
+                for row in element.table?.rich ?? [] {
+                    for cell in row.compactMap({ $0 }) {
+                        if let text = TableData.attributedCell(cell) { count += missingLinks(in: text).count }
+                    }
+                }
+            }
+        }
+        return count
+    }
+
+    /// Picture notes in text: (range, picture).
+    private func missingLinks(in text: NSAttributedString) -> [(NSRange, MissingPicture)] {
+        var result: [(NSRange, MissingPicture)] = []
+        text.enumerateAttribute(.link, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let url = value as? URL ?? (value as? String).flatMap({ URL(string: $0) }),
+                  url.scheme == OneNoteImport.missingScheme,
+                  let guid = OneNoteImport.FileResolver.guid(in: url.path) else { return }
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            func query(_ name: String) -> String? { items.first { $0.name == name }?.value }
+            result.append((range, MissingPicture(guid: guid, ext: query("ext") ?? "png",
+                                                 width: CGFloat(Double(query("w") ?? "") ?? 0),
+                                                 height: CGFloat(Double(query("h") ?? "") ?? 0))))
+        }
+        return result
+    }
+
+    private func forEachPage(in nb: Notebook, _ body: (SectionRef, PageMeta, PageContent) -> Void) {
+        for node in nb.manifest.sections.flattenedSections {
+            guard let pages = nb.sections[node.id]?.pages else { continue }
+            let section = SectionRef(notebookID: nb.id, sectionID: node.id)
+            for meta in pages {
+                if let content = store.loadPage(PageRef(notebookID: nb.id, sectionID: node.id, pageID: meta.id)) {
+                    body(section, meta, content)
+                }
+            }
+        }
+    }
+
+    /// Replaces picture notes with the pictures found in the folder. Returns how many were added.
+    @discardableResult
+    func relinkMissingPictures(in nb: Notebook, folder: URL) -> Int {
+        store.canvas?.flush()
+        let index = OneNoteImport.FileResolver.buildIndex(neighbors: [], chosen: [folder])
+        guard !index.isEmpty else { return 0 }
+        var found = 0
+        var updates: [(SectionRef, PageMeta, PageContent)] = []
+        forEachPage(in: nb) { section, meta, content in
+            var content = content
+            var changed = false
+            for i in content.elements.indices {
+                guard let picture = missingPicture(in: content.elements[i]), let url = index[picture.guid],
+                      let data = try? Data(contentsOf: url), let image = NSImage(data: data), image.size.width > 0 else { continue }
+                let ref = PageRef(notebookID: nb.id, sectionID: section.sectionID, pageID: meta.id)
+                guard let asset = store.writeAsset(data, ext: picture.ext, for: ref) else { continue }
+                let old = content.elements[i]
+                let width = picture.width > 0 ? picture.width : min(image.size.width, 640)
+                var element = PageElement(kind: .image, x: old.x, y: old.y, width: width,
+                                          height: ElementView.gripHeight + width * image.size.height / image.size.width)
+                element.asset = asset
+                content.elements[i] = element
+                changed = true
+                found += 1
+            }
+            // Pictures inside table cells.
+            for i in content.elements.indices where content.elements[i].kind == .table {
+                guard var table = content.elements[i].table, let rich = table.rich else { continue }
+                for r in rich.indices {
+                    for c in rich[r].indices {
+                        guard let data = rich[r][c], let text = TableData.attributedCell(data) else { continue }
+                        let links = missingLinks(in: text)
+                        guard !links.isEmpty else { continue }
+                        let updated = NSMutableAttributedString(attributedString: text)
+                        var replaced = 0
+                        for (range, picture) in links.reversed() {
+                            guard let url = index[picture.guid], let pictureData = try? Data(contentsOf: url),
+                                  NSImage(data: pictureData) != nil else { continue }
+                            updated.replaceCharacters(in: range, with: OneNoteImport.pictureAttachment(
+                                pictureData, ext: picture.ext, width: picture.width, height: picture.height))
+                            replaced += 1
+                        }
+                        guard replaced > 0 else { continue }
+                        table.rich![r][c] = TableData.cellData(updated)
+                        table.rows[r][c] = updated.string
+                        found += replaced
+                        changed = true
+                    }
+                }
+                content.elements[i].table = table
+            }
+            if changed { updates.append((section, meta, content)) }
+        }
+        for (section, meta, content) in updates {
+            var meta = meta
+            let index = PageIndexer.index(elements: content.elements)
+            meta.plainText = index.text
+            meta.tags = index.tags
+            meta.modified = Date()
+            store.storeImportedPage(content, meta: meta, in: section)
+        }
+        return found
     }
 
     private func run(_ work: @escaping () async -> Void) {

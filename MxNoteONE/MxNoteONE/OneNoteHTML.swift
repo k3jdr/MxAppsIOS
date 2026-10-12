@@ -57,7 +57,7 @@ enum OneNoteHTML {
                         if table.textIsLight(r, c) { cellStyle += ";color:#FFFFFF" }
                         if table.hideBorders == true { cellStyle += ";border:none" }
                         body += "<td style=\"\(cellStyle)\">"
-                        if let rtf = table.richData(r, c), let rich = NSAttributedString(rtf: rtf, documentAttributes: nil) {
+                        if let rtf = table.richData(r, c), let rich = TableData.attributedCell(rtf) {
                             body += textHTML(rich, parts: &parts)
                         } else {
                             let lines = cell.components(separatedBy: "\n").map { escape($0) }
@@ -548,7 +548,7 @@ enum OneNoteHTML {
                         text.deleteCharacters(in: NSRange(location: text.length - 1, length: 1))
                     }
                     rowRich.append(TableModel.isPlain(text, header: header && r == 0)
-                        ? nil : text.rtf(from: NSRange(location: 0, length: text.length), documentAttributes: [:]))
+                        ? nil : TableData.cellData(text))
                     return text.string.trimmingCharacters(in: .whitespacesAndNewlines)
                         .replacingOccurrences(of: "\u{FFFC}", with: "")
                 })

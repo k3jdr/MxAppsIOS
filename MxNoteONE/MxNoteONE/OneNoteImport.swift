@@ -216,47 +216,109 @@ enum OneNoteImport {
     /// Finds pictures and attachments: inside the section file, or in a OneNote "onefiles" folder nearby.
     final class FileResolver {
         private var index: [String: URL]?
-        private let folders: [URL]
+        private let neighbors: [URL]
+        private let chosen: [URL]
         private(set) var missing = 0
 
+        /// `folders`: folders chosen to look in (searched with their subfolders, e.g. a onefiles folder).
         init(sectionURL: URL, folders: [URL]) {
-            var all = folders
+            var nearby: [URL] = []
             var folder = sectionURL.deletingLastPathComponent()
             for _ in 0..<4 {
-                all.append(folder)
+                nearby.append(folder)
                 folder = folder.deletingLastPathComponent()
             }
-            self.folders = all
+            neighbors = nearby
+            chosen = folders
+        }
+
+        /// The GUID a OneNote file reference or a file name contains, lowercased.
+        static func guid(in text: String) -> String? {
+            guard let range = text.range(of: "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                                         options: .regularExpression) else { return nil }
+            return text[range].lowercased()
+        }
+
+        static func guid(of object: StoreObject) -> String? {
+            object.fileReference.flatMap { guid(in: $0) }
         }
 
         func data(for object: StoreObject) -> Data? {
             if let data = object.fileData { return data }
-            guard let reference = object.fileReference,
-                  let start = reference.firstIndex(of: "{"), let end = reference.firstIndex(of: "}") else { return nil }
-            let guid = reference[reference.index(after: start)..<end].lowercased()
-            if index == nil { buildIndex() }
+            guard let guid = Self.guid(of: object) else { return nil }
+            if index == nil { index = Self.buildIndex(neighbors: neighbors, chosen: chosen) }
             if let url = index?[guid], let data = try? Data(contentsOf: url) { return data }
             missing += 1
             return nil
         }
 
-        private func buildIndex() {
+        /// Files named with a GUID (OneNote writes them as "{GUID}.ext.onebin" or similar): in "onefiles" folders next
+        /// to the sections, and anywhere inside chosen folders.
+        static func buildIndex(neighbors: [URL], chosen: [URL]) -> [String: URL] {
             var result: [String: URL] = [:]
             let fm = FileManager.default
-            for folder in folders {
-                for name in ["onefiles", "OneFiles"] {
-                    let dir = folder.appending(path: name)
-                    guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
-                    for item in items {
-                        let file = item.lastPathComponent.lowercased()
-                        if let start = file.firstIndex(of: "{"), let end = file.firstIndex(of: "}") {
-                            result[String(file[file.index(after: start)..<end])] = item
-                        }
+            func scan(_ root: URL) {
+                guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey],
+                                                     options: [.skipsHiddenFiles]) else { return }
+                var count = 0
+                for case let url as URL in enumerator {
+                    count += 1
+                    if count > 50_000 { break }
+                    if let guid = guid(in: url.lastPathComponent), result[guid] == nil,
+                       (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                        result[guid] = url
                     }
                 }
             }
-            index = result
+            for folder in neighbors {
+                let items = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+                for item in items where item.lastPathComponent.lowercased() == "onefiles" { scan(item) }
+            }
+            for folder in chosen { scan(folder) }
+            return result
         }
+    }
+
+    /// A picture placed in text (kept when the text is saved as RTFD), scaled to at most 480 points wide.
+    static func pictureAttachment(_ data: Data, ext: String, width: CGFloat, height: CGFloat) -> NSAttributedString {
+        let wrapper = FileWrapper(regularFileWithContents: data)
+        wrapper.preferredFilename = "picture." + (ext.isEmpty ? "png" : ext)
+        let attachment = NSTextAttachment(fileWrapper: wrapper)
+        var size = NSSize(width: width, height: height)
+        if size.width <= 0 || size.height <= 0, let image = NSImage(data: data) { size = image.size }
+        if size.width > 480 { size = NSSize(width: 480, height: size.height * 480 / size.width) }
+        resize(attachment, to: size)
+        return NSAttributedString(attachment: attachment)
+    }
+
+    /// Draws a picture in text at the given size (the picture's own size is used otherwise).
+    static func resize(_ attachment: NSTextAttachment, to size: NSSize) {
+        if let data = attachment.fileWrapper?.regularFileContents, let image = NSImage(data: data) {
+            image.size = size
+            attachment.attachmentCell = NSTextAttachmentCell(imageCell: image)
+        }
+        attachment.bounds = CGRect(origin: .zero, size: size)
+    }
+
+    /// The size a picture in text is drawn at.
+    static func displaySize(_ attachment: NSTextAttachment) -> NSSize {
+        if let cell = attachment.attachmentCell as? NSTextAttachmentCell, let image = cell.image { return image.size }
+        if attachment.bounds.width > 0 { return attachment.bounds.size }
+        return attachment.fileWrapper?.regularFileContents.flatMap(NSImage.init(data:))?.size ?? .zero
+    }
+
+    /// Link on the note left where a picture couldn't be found; it records the picture to look for later.
+    static let missingScheme = "mxnoteone-missing"
+
+    static func missingPictureLink(guid: String, ext: String, width: CGFloat, height: CGFloat) -> URL? {
+        var components = URLComponents()
+        components.scheme = missingScheme
+        components.host = "picture"
+        components.path = "/" + guid
+        components.queryItems = [URLQueryItem(name: "ext", value: ext),
+                                 URLQueryItem(name: "w", value: String(Int(width))),
+                                 URLQueryItem(name: "h", value: String(Int(height)))]
+        return components.url
     }
 
     // MARK: - Pages
@@ -365,7 +427,7 @@ enum OneNoteImport {
                 var rowTexts: [String] = [], rowRich: [Data?] = [], rowShading: [RGBA?] = []
                 for cell in objects(space, row, contentChildNodes) where cell.jcid == tableCellNode {
                     var builder = TextBuilder(space: space)
-                    builder.onBlock = { _ in }
+                    builder.files = files
                     for oe in objects(space, cell, contentChildNodes) { builder.outlineElement(oe, depth: 0) }
                     let text = builder.text
                     while let last = text.string.last, last == "\n" || last == " " {
@@ -373,7 +435,7 @@ enum OneNoteImport {
                     }
                     rowTexts.append(text.string)
                     rowRich.append(TableModel.isPlain(text, header: false)
-                        ? nil : text.rtf(from: NSRange(location: 0, length: text.length), documentAttributes: [:]))
+                        ? nil : TableData.cellData(text))
                     rowShading.append(u32(cell, cellShading).flatMap { colorRef($0) }.map { RGBA($0) })
                 }
                 texts.append(rowTexts)
@@ -406,10 +468,14 @@ enum OneNoteImport {
             let width = (float(node, pictureWidth) ?? 8) * halfInch
             let height = (float(node, pictureHeight) ?? 6) * halfInch
             guard let container, let data = files.data(for: container), NSImage(data: data) != nil else {
-                // Keep a note where a picture couldn't be found.
-                let note = NSAttributedString(string: "[Picture not included in the OneNote export]",
-                                              attributes: [.font: Prefs.defaultFont, .foregroundColor: NSColor.gray])
-                elements.append(OneNoteHTML.textElement(note, x: x, y: y, width: max(width, 240)))
+                // Keep a note where a picture couldn't be found; its link remembers which picture to look for.
+                var attrs: [NSAttributedString.Key: Any] = [.font: Prefs.defaultFont, .foregroundColor: NSColor.gray]
+                if let container, let guid = FileResolver.guid(of: container),
+                   let link = missingPictureLink(guid: guid, ext: container.fileExtension ?? "png", width: width, height: height) {
+                    attrs[.link] = link
+                }
+                let note = NSAttributedString(string: "🖼 Picture not found — click to locate the OneNote “onefiles” folder", attributes: attrs)
+                elements.append(OneNoteHTML.textElement(note, x: x, y: y, width: max(min(width, 520), 300)))
                 return 30
             }
             var element = PageElement(kind: .image, x: x, y: y, width: max(width, 24),
@@ -440,6 +506,8 @@ enum OneNoteImport {
         var text = NSMutableAttributedString()
         /// Tables, pictures and files met in the text (handled by the caller).
         var onBlock: ((StoreObject) -> Void)?
+        /// Inside a table cell: pictures go into the text (found through this resolver).
+        var files: FileResolver?
         private var counters: [Int: Int] = [:]
 
         init(space: ObjectSpace) {
@@ -482,6 +550,16 @@ enum OneNoteImport {
                 case tableNode, imageNode, embeddedFileNode:
                     if let onBlock {
                         onBlock(content)
+                    } else if content.jcid == imageNode {
+                        if !text.string.isEmpty, !text.string.hasSuffix("\n") {
+                            text.append(NSAttributedString(string: "\n", attributes: TextFormatter.defaultAttributes))
+                        }
+                        if !prefix.isEmpty, first {
+                            text.append(NSAttributedString(string: prefix, attributes: TextFormatter.defaultAttributes))
+                        }
+                        text.append(inlinePicture(content))
+                        text.append(NSAttributedString(string: "\n", attributes: TextFormatter.defaultAttributes))
+                        first = false
                     } else if content.jcid == tableNode {
                         // Inside a table cell: keep the nested table's text.
                         for row in objects(space, content, contentChildNodes) {
@@ -497,6 +575,22 @@ enum OneNoteImport {
             for child in objects(space, oe, contentChildNodes) where child.jcid == outlineElementNode {
                 outlineElement(child, depth: depth + 1)
             }
+        }
+
+        /// A picture in a table cell: the picture itself, or a note whose link remembers the missing picture.
+        private func inlinePicture(_ node: StoreObject) -> NSAttributedString {
+            let container = objects(space, node, pictureContainer).first
+            let width = (float(node, pictureWidth) ?? 4) * halfInch
+            let height = (float(node, pictureHeight) ?? 3) * halfInch
+            if let container, let data = files?.data(for: container), NSImage(data: data) != nil {
+                return OneNoteImport.pictureAttachment(data, ext: container.fileExtension ?? "png", width: width, height: height)
+            }
+            var attrs: [NSAttributedString.Key: Any] = [.font: Prefs.defaultFont, .foregroundColor: NSColor.gray]
+            if let container, let guid = FileResolver.guid(of: container),
+               let link = missingPictureLink(guid: guid, ext: container.fileExtension ?? "png", width: width, height: height) {
+                attrs[.link] = link
+            }
+            return NSAttributedString(string: "🖼 Picture not found — click to locate", attributes: attrs)
         }
 
         /// A note tag on a paragraph: its label (To Do, Important…) and whether it is checked.

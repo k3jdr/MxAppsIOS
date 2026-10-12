@@ -62,6 +62,8 @@ enum Prefs {
         return items.filter { $0.lastPathComponent.hasPrefix("OneDrive") }.sorted { $0.path < $1.path }
     }
 
+    static let snapToGridKey = "snapToGrid"
+
     static let oneDriveAutoSyncKey = "oneDriveAutoSyncMinutes"
 
     /// Sync OneDrive notebooks automatically every so many minutes (0 = only when asked).
@@ -150,6 +152,14 @@ final class EditorState {
     var recordingSeconds = 0
 
     var zoom: Double = 1
+
+    /// View ▸ Snap to Grid: containers, pictures and shapes line up on the page grid (hold ⌥ to place freely).
+    var snapToGrid = UserDefaults.standard.bool(forKey: Prefs.snapToGridKey) {
+        didSet {
+            UserDefaults.standard.set(snapToGrid, forKey: Prefs.snapToGridKey)
+            NotebookStore.shared.canvas?.canvas.needsDisplay = true
+        }
+    }
 }
 
 /// Palette used by the ribbon colour menus.
