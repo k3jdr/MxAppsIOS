@@ -244,6 +244,16 @@ final class GripView: NSView {
         addCursorRect(bounds, cursor: .openHand)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.openHand.set()
+    }
+
     override func mouseDown(with event: NSEvent) {
         owner?.beginMove(with: event)
     }
@@ -269,6 +279,16 @@ final class ResizeHandleView: NSView {
         addCursorRect(bounds, cursor: .resizeLeftRight)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.resizeLeftRight.set()
+    }
+
     override func mouseDown(with event: NSEvent) {
         owner?.beginResize(with: event)
     }
@@ -280,6 +300,47 @@ final class NoteTextView: NSTextView {
     weak var owner: TextElementView?
     /// The text container edited last (formatting from the ribbon goes here).
     static weak var current: NoteTextView?
+    private var linkTracking: NSTrackingArea?
+
+    // MARK: Pointing hand over links
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let linkTracking { removeTrackingArea(linkTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        linkTracking = area
+    }
+
+    /// The link under a point (in this view's coordinates).
+    func link(at point: NSPoint) -> URL? {
+        guard let lm = layoutManager, let tc = textContainer, let storage = textStorage, storage.length > 0 else { return nil }
+        let p = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        let glyph = lm.glyphIndex(for: p, in: tc, fractionOfDistanceThroughGlyph: nil)
+        guard lm.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: tc).contains(p) else { return nil }
+        let index = lm.characterIndexForGlyph(at: glyph)
+        guard index < storage.length else { return nil }
+        let value = storage.attribute(.link, at: index, effectiveRange: nil)
+        return value as? URL ?? (value as? String).flatMap { URL(string: $0) }
+    }
+
+    @discardableResult
+    private func showLinkCursor(_ event: NSEvent) -> Bool {
+        guard NotebookStore.shared.editor.tool == .type,
+              link(at: convert(event.locationInWindow, from: nil)) != nil else { return false }
+        NSCursor.pointingHand.set()
+        return true
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        showLinkCursor(event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if !showLinkCursor(event) { super.cursorUpdate(with: event) }
+    }
 
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()

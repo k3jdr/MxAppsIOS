@@ -765,11 +765,74 @@ final class TableGridView: NSView, NSTextViewDelegate {
         needsDisplay = true
     }
 
-    override func resetCursorRects() {
-        guard !isExport, columnLefts.count > 1 else { return }
-        let height = rowTops.last ?? bounds.height
-        for c in 1..<columnLefts.count {
-            addCursorRect(NSRect(x: columnLefts[c] - 3, y: 0, width: 6, height: height), cursor: .resizeLeftRight)
+    // MARK: Cursors
+
+    private var cursorTracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let cursorTracking { removeTrackingArea(cursorTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        cursorTracking = area
+    }
+
+    /// True on the table's top, left or bottom edge (drag there to move the table).
+    private func onOuterEdge(_ p: NSPoint) -> Bool {
+        let width = columnLefts.last ?? 0, height = rowTops.last ?? 0
+        guard p.x >= -3, p.x <= width + 3, p.y >= -3, p.y <= height + 3 else { return false }
+        return abs(p.y) <= 3 || abs(p.x) <= 3 || abs(p.y - height) <= 3
+    }
+
+    /// The link under a point in a cell that isn't being typed in.
+    func link(at p: NSPoint) -> URL? {
+        guard let cell = cell(at: p), cell != editing else { return nil }
+        let rect = cellRect(cell).insetBy(dx: Self.padX, dy: Self.padY)
+        guard rect.contains(p) else { return nil }
+        let text = model.displayText(cell, fitting: rect.width)
+        guard text.length > 0 else { return nil }
+        let storage = NSTextStorage(attributedString: text)
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: rect.width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        let local = NSPoint(x: p.x - rect.minX, y: p.y - rect.minY)
+        let glyph = layout.glyphIndex(for: local, in: container, fractionOfDistanceThroughGlyph: nil)
+        guard layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).contains(local) else { return nil }
+        let index = layout.characterIndexForGlyph(at: glyph)
+        guard index < storage.length else { return nil }
+        let value = storage.attribute(.link, at: index, effectiveRange: nil)
+        return value as? URL ?? (value as? String).flatMap { URL(string: $0) }
+    }
+
+    /// Resize on column borders, move on the outer edges, pointing hand on links, text cursor in cells.
+    func cursor(at p: NSPoint) -> NSCursor {
+        if columnBorder(at: p) != nil { return .resizeLeftRight }
+        if onOuterEdge(p) { return .openHand }
+        if link(at: p) != nil { return .pointingHand }
+        return .iBeam
+    }
+
+    private func updateCursor(_ event: NSEvent) {
+        guard !isExport, NotebookStore.shared.editor.tool == .type else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        // While typing in a cell, the editor shows its own cursor (and links) inside the cell.
+        if let editing, cellRect(editing).insetBy(dx: Self.padX, dy: Self.padY).contains(p) { return }
+        cursor(at: p).set()
+    }
+
+    override func mouseMoved(with event: NSEvent) { updateCursor(event) }
+    override func cursorUpdate(with event: NSEvent) { updateCursor(event) }
+
+    private func open(_ url: URL) {
+        if url.scheme == NotebookStore.linkScheme {
+            NotebookStore.shared.openLink(url)
+        } else if url.scheme == OneNoteImport.missingScheme {
+            ImportActivity.shared.locateMissingPictures()
+        } else {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -1031,6 +1094,17 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let p = convert(event.locationInWindow, from: nil)
         if let column = columnBorder(at: p) {
             resizeColumn(column, from: event)
+            return
+        }
+        if onOuterEdge(p) {
+            endEditing()
+            owner.beginMove(with: event)
+            return
+        }
+        // A click on a link follows it (⌥-click to type in the cell instead).
+        if !event.modifierFlags.contains(.option), !event.modifierFlags.contains(.shift),
+           !event.modifierFlags.contains(.command), let url = link(at: p) {
+            open(url)
             return
         }
         guard let start = cell(at: p) else { return }

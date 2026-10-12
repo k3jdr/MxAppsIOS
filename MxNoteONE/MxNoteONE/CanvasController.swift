@@ -19,6 +19,14 @@ struct ClipboardElement: Codable {
     var assetData: Data?
 }
 
+/// A lasso selection on the pasteboard: containers (with their pictures and files) and ink.
+struct ClipboardSelection: Codable {
+    static let type = NSPasteboard.PasteboardType("com.k3jdr.mxnoteone.selection")
+    var page: UUID?
+    var elements: [ClipboardElement]
+    var strokes: [InkStroke]
+}
+
 final class CanvasController: NSObject {
     enum Mode { case live, export }
 
@@ -402,6 +410,121 @@ final class CanvasController: NSObject {
         undoManager?.setActionName("Delete")
     }
 
+    // MARK: Lasso clipboard
+
+    /// ⌘C with a lasso selection: the selection for MxNoteONE, plus its text and a picture of it for other apps.
+    func copyLassoSelection() {
+        guard let ref else { return }
+        let ink = canvas.inkView
+        let views = ink.lassoElements
+        let strokes = ink.strokes.filter { ink.lassoStrokes.contains($0.id) }
+        let clip = ClipboardSelection(page: ref.pageID, elements: views.map { view in
+            let element = view.makeElement()
+            return ClipboardElement(element: element, assetData: element.asset.flatMap { store.assetData($0, for: ref) })
+        }, strokes: strokes)
+        let item = NSPasteboardItem()
+        if let data = try? JSONEncoder().encode(clip) { item.setData(data, forType: ClipboardSelection.type) }
+        let text = views.sorted { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+            .compactMap { $0.indexText() }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+        if !text.isEmpty { item.setString(text, forType: .string) }
+        if let png = selectionImage(views: views, strokes: strokes) { item.setData(png, forType: .png) }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.writeObjects([item])
+        pasteCount = (pb.changeCount, 0)
+    }
+
+    /// A picture of the selected containers and ink (for pasting into other apps).
+    private func selectionImage(views: [ElementView], strokes: [InkStroke]) -> Data? {
+        let bounds = canvas.inkView.lassoBounds.insetBy(dx: -4, dy: -4).integral
+        guard !bounds.isNull, bounds.width > 0, bounds.height > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(bounds.width * 2), pixelsHigh: Int(bounds.height * 2),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        rep.size = bounds.size
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        for view in views { view.isSelected = false }
+        defer { for view in views { view.isSelected = true } }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        let cg = context.cgContext
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: bounds.size).fill()
+        // Flip to page coordinates (y down) with the selection's corner at the origin.
+        cg.translateBy(x: 0, y: bounds.height)
+        cg.scaleBy(x: 1, y: -1)
+        cg.translateBy(x: -bounds.minX, y: -bounds.minY)
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: cg, flipped: true)
+        for view in views {
+            guard let snapshot = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+            view.cacheDisplay(in: view.bounds, to: snapshot)
+            snapshot.draw(in: view.frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
+        for stroke in strokes { InkView.draw(stroke, in: cg) }
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    /// Repeated pastes of the same copy move down and right, so copies don't land on top of each other.
+    private var pasteCount = (changeCount: -1, count: 0)
+
+    /// ⌘V of a lasso selection: same layout, then selected (Lasso Select) so it can be moved right away.
+    func pasteSelection(_ clip: ClipboardSelection) {
+        guard let ref, !(clip.elements.isEmpty && clip.strokes.isEmpty) else { return }
+        var bounds = InkView.bounds(of: clip.strokes)
+        for item in clip.elements { bounds = bounds.union(item.element.frame) }
+        let pb = NSPasteboard.general
+        var dx: CGFloat = 0, dy: CGFloat = 0
+        if clip.page == ref.pageID {
+            pasteCount = (pb.changeCount, pasteCount.changeCount == pb.changeCount ? pasteCount.count + 1 : 1)
+            dx = 20 * CGFloat(pasteCount.count)
+            dy = 20 * CGFloat(pasteCount.count)
+        } else {
+            let visible = scrollView.documentVisibleRect
+            if !visible.isEmpty, !visible.intersects(bounds) {
+                dx = visible.minX + 40 - bounds.minX
+                dy = max(PageCanvasView.contentTop, visible.minY + 40) - bounds.minY
+            }
+        }
+        if canvas.snaps {
+            let origin = canvas.snapped(CGPoint(x: bounds.minX + dx, y: bounds.minY + dy))
+            dx = origin.x - bounds.minX
+            dy = origin.y - bounds.minY
+        }
+        let ink = canvas.inkView
+        editor.tool = .lasso
+        undoManager?.beginUndoGrouping()
+        var views: [ElementView] = []
+        for item in clip.elements {
+            var element = item.element
+            element.id = UUID()
+            element.x += dx
+            element.y += dy
+            if let data = item.assetData {
+                element.asset = store.writeAsset(data, ext: ((item.element.asset ?? "") as NSString).pathExtension, for: ref)
+            }
+            if let view = addElement(element) { views.append(view) }
+        }
+        var strokeIDs: Set<UUID> = []
+        if !clip.strokes.isEmpty {
+            let old = ink.strokes
+            let pasted = clip.strokes.map { stroke -> InkStroke in
+                var copy = stroke
+                copy.id = UUID()
+                copy.points = stroke.points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+                return copy
+            }
+            strokeIDs = Set(pasted.map(\.id))
+            ink.strokes += pasted
+            strokesChanged(from: old)
+        }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName("Paste")
+        canvas.window?.makeFirstResponder(canvas)
+        ink.select(strokes: strokeIDs, elements: views)
+        canvas.updateSize()
+    }
+
     func clearInk() {
         let old = canvas.inkView.strokes
         guard !old.isEmpty else { return }
@@ -547,6 +670,10 @@ final class CanvasController: NSObject {
     func paste(at point: NSPoint? = nil) {
         guard let ref else { return }
         let pb = NSPasteboard.general
+        if let data = pb.data(forType: ClipboardSelection.type),
+           let clip = try? JSONDecoder().decode(ClipboardSelection.self, from: data) {
+            return pasteSelection(clip)
+        }
         let p = point ?? nextInsertionPoint()
         if let data = pb.data(forType: PageCanvasView.elementType),
            var clip = try? JSONDecoder().decode(ClipboardElement.self, from: data) {

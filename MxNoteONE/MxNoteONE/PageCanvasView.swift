@@ -420,11 +420,18 @@ final class PageCanvasView: NSView {
     }
 
     @objc func copy(_ sender: Any?) {
+        if inkView.hasLassoSelection { return controller?.copyLassoSelection() ?? () }
         guard let selected = selectedElement else { return NSSound.beep() }
         controller?.copyElement(selected)
     }
 
     @objc func cut(_ sender: Any?) {
+        if inkView.hasLassoSelection {
+            controller?.copyLassoSelection()
+            controller?.deleteLassoSelection()
+            controller?.undoManager?.setActionName("Cut")
+            return
+        }
         guard let selected = selectedElement else { return NSSound.beep() }
         controller?.copyElement(selected)
         controller?.removeElement(selected)
@@ -436,6 +443,7 @@ final class PageCanvasView: NSView {
     }
 
     @objc func delete(_ sender: Any?) {
+        if inkView.hasLassoSelection { return controller?.deleteLassoSelection() ?? () }
         controller?.deleteSelectedElement()
     }
 
@@ -489,6 +497,15 @@ final class InkView: NSView {
         }
         for view in lassoElements where view.superview != nil { rect = rect.union(view.frame) }
         return rect
+    }
+
+    /// Selects the given strokes and containers (after a paste).
+    func select(strokes ids: Set<UUID>, elements: [ElementView]) {
+        clearLasso()
+        lassoStrokes = ids
+        lassoElements = elements
+        for view in elements { view.isSelected = true }
+        needsDisplay = true
     }
 
     func clearLasso() {

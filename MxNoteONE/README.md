@@ -8,12 +8,13 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 
 ## Window
 
-| Part | What it does |
-|------|--------------|
-| **Sidebar** | Open notebooks, each with its **sections** (coloured tabs) and **section groups** (folders, can nest). Right-click a notebook, section or group to rename, recolour, move up/down or into a group, password protect, export or delete it. **+** adds a section, section group or notebook; the tag and trash buttons open the Tag Summary and Recycle Bin. The search field searches every open notebook. |
-| **Page list** | Pages of the selected section with date and first line. Subpages are indented (two levels) and can be collapsed; drag to reorder (subpages move with their page). Right-click for New Page / Subpage, Make Subpage, Promote, Move or Copy…, Duplicate, Copy Link to Page, Export as PDF / Markdown, Print, Delete. While the search field has text, this column shows the search results instead. |
-| **Ribbon** | **Home**: font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: type, pen, highlighter, eraser, line, arrow, rectangle, ellipse, pen colours and thickness. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
-| **Page** | A title and creation date, then a free-form canvas: click anywhere to start a text container there. Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper. |
+
+| Part          | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sidebar**   | Open notebooks, each with its**sections** (coloured tabs) and **section groups** (folders, can nest). Right-click a notebook, section or group to rename, recolour, move up/down or into a group, password protect, export or delete it. **+** adds a section, section group or notebook; the tag and trash buttons open the Tag Summary and Recycle Bin. The search field searches every open notebook.                                                                                                                                                             |
+| **Page list** | Pages of the selected section with date and first line. Subpages are indented (two levels) and can be collapsed; drag to reorder (subpages move with their page). Right-click for New Page / Subpage, Make Subpage, Promote, Move or Copy…, Duplicate, Copy Link to Page, Export as PDF / Markdown, Print, Delete. While the search field has text, this column shows the search results instead.                                                                                                                                                                   |
+| **Ribbon**    | **Home**: font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: type, pen, highlighter, eraser, line, arrow, rectangle, ellipse, pen colours and thickness. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
+| **Page**      | A title and creation date, then a free-form canvas: click anywhere to start a text container there. Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper.                                                                                 |
 
 ## Pages
 
@@ -42,6 +43,11 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   columns, clear cells, delete table, sort, header row, hide borders. Text turns white on dark shades unless you
   gave it a colour. Shading moves with its row when sorting; new columns take the shading of the column beside them.
 - **Column widths**: drag a column border to resize that column; the table grows or shrinks with it.
+- **Pointer**: ↔ on column borders (resize), open hand on the table's top, left and bottom edges (drag to move the
+  table), pointing hand on links (click to follow; ⌥-click to type in the cell instead), text cursor in cells. Links in
+  text boxes show the pointing hand as well.
+- **Formatting selected cells**: with cells selected (not typing), the Home ribbon's font, size, bold, colours and
+  alignment apply to the text in every selected cell.
 - **Merge and split cells**: select neighbouring cells, then right-click ▸ **Merge Cells** (or Table tab ▸ Merge Cells);
   their texts are joined in the merged cell. **Split Cell** ▸ Unmerge Cells, Into 2 Columns or Into 2 Rows (the
   other rows / columns keep one cell across the new column / row). Tab, Return and the arrow keys step over merged
@@ -58,6 +64,10 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Lasso Select** (Draw tab): draw a loop around ink and containers to select them — selected ink is highlighted and
   a dashed frame surrounds the selection. Drag inside it to move everything together (it snaps when Snap to Grid is
   on), use the arrow keys to nudge, Delete to remove, Escape to deselect. Moving and deleting undo in one step.
+  **⌘C / ⌘X / ⌘V** copy, cut and paste the whole selection — ink and containers with their pictures and files — keeping
+  its layout: repeated pastes on the same page step 20 points down and right, on another page they land in the same
+  place (or in view). Pasted items arrive selected, ready to drag; one undo removes a paste. The copy also carries the
+  text and a picture of the selection, for pasting into other apps.
   The eraser removes whole strokes. Press Escape to go back to typing.
 - **Links**: type `[[Page Name]]` to link to a page in the notebook (it is created if it doesn't exist), or use ⌘K for
   web links and links to any page. Right-click a page ▸ Copy Link to Page and paste it anywhere in your notes.
@@ -66,35 +76,36 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 
 ## Keyboard
 
-| Command | Keys |
-|---------|------|
-| New Page / New Subpage / New Quick Note | ⌘N / ⌥⌘N / ⌃⌘N |
-| New Section | ⌘T |
-| Open Notebook… | ⌘O |
-| Search All Notebooks / Find on Page | ⌘E / ⌘F (⌘G, ⇧⌘G for next / previous) |
-| Bold / Italic / Underline / Strikethrough | ⌘B / ⌘I / ⌘U / ⌃⌘- |
-| Superscript / Subscript / Highlight | ⌃⌘= / ⌃⇧⌘= / ⌃⌘H |
-| Bigger / Smaller | ⇧⌘> / ⇧⌘< |
-| Heading 1 – 4 / Normal | ⌥⌘1 – ⌥⌘4 / ⌥⌘0 |
-| Bullets / Numbering | ⌘. / ⌘/ |
-| Clear Formatting | ⇧⌘N |
-| Tags / Remove Tag / Tag Summary | ⌘1 – ⌘9 / ⌘0 / ⇧⌘T |
-| Link… | ⌘K |
-| Date / Time / Date & Time | ⌥⇧D / ⌥⇧T / ⌥⇧F |
-| Insert Table / Picture / Screen Clipping / Record Audio | ⌃⌘T / ⌃⌘P / ⌃⇧⌘S / ⌃⌘R |
-| Back / Forward | ⌘[ / ⌘] |
-| Previous / Next Page | ⌥⌘↑ / ⌥⌘↓ |
-| Previous / Next Section | ⌥⌘← / ⌥⌘→ |
-| Make Subpage / Promote Subpage | ⌥⌘] / ⌥⌘[ |
-| Move or Copy Page… | ⇧⌘M |
-| Zoom In / Out / Actual Size | ⌘= / ⌘- / ⌃⌘0 |
-| Full Page View / Show Ribbon | ⌥⌘F / ⌥⌘R |
-| Snap to Grid | ⌃⌘G |
-| Lock All Protected Sections | ⌃⌘L |
-| Export Page as PDF… / Print Page… | ⇧⌘E / ⌘P |
-| Reload Notebooks | ⇧⌘R |
-| Save Notebook As… | ⇧⌘S |
-| Sync All OneDrive Notebooks | ⌃⌘S |
+
+| Command                                                 | Keys                                       |
+| --------------------------------------------------------- | -------------------------------------------- |
+| New Page / New Subpage / New Quick Note                 | ⌘N / ⌥⌘N / ⌃⌘N                        |
+| New Section                                             | ⌘T                                        |
+| Open Notebook…                                         | ⌘O                                        |
+| Search All Notebooks / Find on Page                     | ⌘E / ⌘F (⌘G, ⇧⌘G for next / previous) |
+| Bold / Italic / Underline / Strikethrough               | ⌘B / ⌘I / ⌘U / ⌃⌘-                    |
+| Superscript / Subscript / Highlight                     | ⌃⌘= / ⌃⇧⌘= / ⌃⌘H                    |
+| Bigger / Smaller                                        | ⇧⌘> / ⇧⌘<                              |
+| Heading 1 – 4 / Normal                                 | ⌥⌘1 – ⌥⌘4 / ⌥⌘0                     |
+| Bullets / Numbering                                     | ⌘. / ⌘/                                  |
+| Clear Formatting                                        | ⇧⌘N                                      |
+| Tags / Remove Tag / Tag Summary                         | ⌘1 – ⌘9 / ⌘0 / ⇧⌘T                   |
+| Link…                                                  | ⌘K                                        |
+| Date / Time / Date & Time                               | ⌥⇧D / ⌥⇧T / ⌥⇧F                      |
+| Insert Table / Picture / Screen Clipping / Record Audio | ⌃⌘T / ⌃⌘P / ⌃⇧⌘S / ⌃⌘R            |
+| Back / Forward                                          | ⌘[ / ⌘]                                  |
+| Previous / Next Page                                    | ⌥⌘↑ / ⌥⌘↓                            |
+| Previous / Next Section                                 | ⌥⌘← / ⌥⌘→                            |
+| Make Subpage / Promote Subpage                          | ⌥⌘] / ⌥⌘[                              |
+| Move or Copy Page…                                     | ⇧⌘M                                      |
+| Zoom In / Out / Actual Size                             | ⌘= / ⌘- / ⌃⌘0                          |
+| Full Page View / Show Ribbon                            | ⌥⌘F / ⌥⌘R                              |
+| Snap to Grid                                            | ⌃⌘G                                      |
+| Lock All Protected Sections                             | ⌃⌘L                                      |
+| Export Page as PDF… / Print Page…                     | ⇧⌘E / ⌘P                                |
+| Reload Notebooks                                        | ⇧⌘R                                      |
+| Save Notebook As…                                      | ⇧⌘S                                      |
+| Sync All OneDrive Notebooks                             | ⌃⌘S                                      |
 
 ## Importing from Microsoft OneNote
 

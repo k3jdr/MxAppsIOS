@@ -89,8 +89,12 @@ enum TextFormatter {
 
     /// The text container being edited (or the last one edited, if focus moved to the ribbon).
     static var target: NoteTextView? {
-        if let tv = NSApp.keyWindow?.firstResponder as? NoteTextView { return tv }
-        if let tv = NoteTextView.current, let window = tv.window, !(window.firstResponder is PageCanvasView) { return tv }
+        let responder = NSApp.keyWindow?.firstResponder
+        if let tv = responder as? NoteTextView { return tv }
+        // Table cells selected (not typing): format the cells' text instead (see perform).
+        if let grid = TableGridView.active, grid.editing == nil, !grid.targetCells.isEmpty { return nil }
+        if let tv = NoteTextView.current, let window = tv.window,
+           !(window.firstResponder is PageCanvasView), !(window.firstResponder is TableGridView) { return tv }
         return nil
     }
 
