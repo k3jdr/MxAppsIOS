@@ -309,6 +309,12 @@ final class ImportActivity {
         return found
     }
 
+    /// Runs a notebook-wide job (one at a time) with its progress in the sidebar.
+    func runTask(_ title: String, _ work: @escaping (ImportActivity) async -> Void) {
+        status = title
+        run { await work(self) }
+    }
+
     private func run(_ work: @escaping () async -> Void) {
         guard !busy else {
             store.showAlert("An import is running", "Wait for the current import to finish.")

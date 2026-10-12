@@ -92,7 +92,7 @@ enum TextFormatter {
         let responder = NSApp.keyWindow?.firstResponder
         if let tv = responder as? NoteTextView { return tv }
         // Table cells selected (not typing): format the cells' text instead (see perform).
-        if let grid = TableGridView.active, grid.editing == nil, !grid.targetCells.isEmpty { return nil }
+        if let grid = TableGridView.active, grid.window != nil, grid.editing == nil, !grid.targetCells.isEmpty { return nil }
         if let tv = NoteTextView.current, let window = tv.window,
            !(window.firstResponder is PageCanvasView), !(window.firstResponder is TableGridView) { return tv }
         return nil
@@ -107,6 +107,56 @@ enum TextFormatter {
         }
         if tv.window?.firstResponder !== tv { tv.window?.makeFirstResponder(tv) }
         body(tv)
+        reportFormatting(tv)
+    }
+
+    // MARK: Current formatting (Home ribbon)
+
+    /// Shows the formatting of a text view's selection (or of what you'll type next) in the ribbon.
+    static func reportFormatting(_ tv: NSTextView) {
+        guard let storage = tv.textStorage else { return }
+        let selection = tv.selectedRange()
+        if selection.length == 0 || NSMaxRange(selection) > storage.length {
+            report([tv.typingAttributes])
+            return
+        }
+        var runs: [[NSAttributedString.Key: Any]] = []
+        storage.enumerateAttributes(in: selection) { attrs, range, _ in
+            let text = (storage.string as NSString).substring(with: range)
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || runs.isEmpty { runs.append(attrs) }
+        }
+        report(runs)
+    }
+
+    /// Shows the formatting of whole texts (selected table cells) in the ribbon.
+    static func reportFormatting(of texts: [NSAttributedString]) {
+        var runs: [[NSAttributedString.Key: Any]] = []
+        for text in texts {
+            if text.length == 0 { continue }
+            text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attrs, _, _ in runs.append(attrs) }
+        }
+        if runs.isEmpty { runs = [defaultAttributes] }
+        report(runs)
+    }
+
+    private static func report(_ runs: [[NSAttributedString.Key: Any]]) {
+        let fm = NSFontManager.shared
+        let fonts = runs.map { $0[.font] as? NSFont ?? Prefs.defaultFont }
+        let families = Set(fonts.map { $0.familyName ?? $0.fontName })
+        let sizes = Set(fonts.map { ($0.pointSize * 2).rounded() / 2 })
+        let editor = NotebookStore.shared.editor
+        let family = families.count == 1 ? families.first : nil
+        let size = sizes.count == 1 ? sizes.first : nil
+        let bold = fonts.allSatisfy { fm.traits(of: $0).contains(.boldFontMask) }
+        let italic = fonts.allSatisfy { fm.traits(of: $0).contains(.italicFontMask) }
+        let underline = runs.allSatisfy { ($0[.underlineStyle] as? Int ?? 0) != 0 }
+        let strike = runs.allSatisfy { ($0[.strikethroughStyle] as? Int ?? 0) != 0 }
+        if editor.fontFamily != family { editor.fontFamily = family }
+        if editor.fontSize != size { editor.fontSize = size }
+        if editor.isBold != bold { editor.isBold = bold }
+        if editor.isItalic != italic { editor.isItalic = italic }
+        if editor.isUnderline != underline { editor.isUnderline = underline }
+        if editor.isStrikethrough != strike { editor.isStrikethrough = strike }
     }
 
     // MARK: Paragraph parsing

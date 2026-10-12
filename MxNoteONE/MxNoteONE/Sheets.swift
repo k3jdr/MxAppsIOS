@@ -20,6 +20,7 @@ struct SheetView: View {
         case .insertTable: InsertTableSheet()
         case .insertLink: LinkSheet()
         case .oneDriveOpen: OneDriveOpenSheet()
+        case .notebookFonts(let id): NotebookFontsSheet(notebookID: id)
         }
     }
 }

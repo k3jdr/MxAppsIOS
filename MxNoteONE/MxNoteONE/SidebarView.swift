@@ -113,6 +113,7 @@ struct NotebookHeader: View {
             }
             Button("Show in Finder") { store.showInFinder(notebook.id) }
             Button("Save Notebook As…") { store.saveNotebookAs(notebook.id) }
+            Button("Notebook Fonts…") { store.sheet = .notebookFonts(notebook.id) }
             Divider()
             OneDriveNotebookMenu(notebook: notebook)
             Divider()

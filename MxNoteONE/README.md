@@ -13,7 +13,7 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Sidebar**   | Open notebooks, each with its**sections** (coloured tabs) and **section groups** (folders, can nest). Right-click a notebook, section or group to rename, recolour, move up/down or into a group, password protect, export or delete it. **+** adds a section, section group or notebook; the tag and trash buttons open the Tag Summary and Recycle Bin. The search field searches every open notebook.                                                                                                                                                             |
 | **Page list** | Pages of the selected section with date and first line. Subpages are indented (two levels) and can be collapsed; drag to reorder (subpages move with their page). Right-click for New Page / Subpage, Make Subpage, Promote, Move or Copy…, Duplicate, Copy Link to Page, Export as PDF / Markdown, Print, Delete. While the search field has text, this column shows the search results instead.                                                                                                                                                                   |
-| **Ribbon**    | **Home**: font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: type, pen, highlighter, eraser, line, arrow, rectangle, ellipse, pen colours and thickness. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
+| **Ribbon**    | **Home**: font and size boxes showing the selected text's font and size ("Mixed" / "–" when the selection mixes several; with table cells selected, the cells' font), bold / italic / underline / strikethrough buttons lit when the selection has them, then font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: type, pen, highlighter, eraser, line, arrow, rectangle, ellipse, pen colours and thickness. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
 | **Page**      | A title and creation date, then a free-form canvas: click anywhere to start a text container there. Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper.                                                                                 |
 
 ## Pages
@@ -73,6 +73,15 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   web links and links to any page. Right-click a page ▸ Copy Link to Page and paste it anywhere in your notes.
 - **Templates**: To Do List, Meeting Notes, Project Overview, Lecture Notes (Cornell), Daily Journal, Weekly Planner, Decision Log.
 - Everything saves automatically. Undo / Redo covers typing, formatting, moving, resizing, inserting, deleting and ink.
+
+## Notebook fonts
+
+**Notebook ▸ Notebook Fonts…** (also in the Format menu and a notebook's right-click menu) sets one font family and
+size for every page of a notebook — text boxes and table cells. Sizes can be scaled (text at the current default size
+gets the new size and headings stay proportionally larger), set to one size, or kept. Options: only change text in the
+current default font (keep text you set to other fonts), leave code (monospaced) text alone, and also use the font
+for new text. Bold, italic, colours and links are kept; page titles keep their style; locked sections are skipped.
+It can't be undone.
 
 ## Keyboard
 

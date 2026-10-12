@@ -168,6 +168,39 @@ struct RibbonMenu<Content: View>: View {
     }
 }
 
+/// A dropdown box showing a value (the current font or size); its menu changes it.
+struct RibbonField<Content: View>: View {
+    let text: String
+    let width: CGFloat
+    let help: String
+    @ViewBuilder let content: Content
+
+    init(_ text: String, width: CGFloat, help: String, @ViewBuilder content: () -> Content) {
+        self.text = text
+        self.width = width
+        self.help = help
+        self.content = content()
+    }
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            Text(text)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: width, alignment: .leading)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+        .focusable(false)
+        .help(help)
+    }
+}
+
 private func swatch(_ color: NSColor) -> Image {
     Image(nsImage: Palette.swatch(color))
 }
@@ -184,34 +217,54 @@ struct HomeRibbon: View {
         return Self.common.filter(available.contains)
     }
 
+    @Bindable private var editor = NotebookStore.shared.editor
+
+    private var sizeText: String {
+        guard let size = editor.fontSize else { return "–" }
+        return size == size.rounded() ? String(Int(size)) : String(format: "%.1f", size)
+    }
+
+    @ViewBuilder
+    private func fontItem(_ family: String) -> some View {
+        Button {
+            TextFormatter.setFontFamily(family)
+        } label: {
+            if family == editor.fontFamily { Label(family, systemImage: "checkmark") } else { Text(family) }
+        }
+    }
+
     var body: some View {
         RibbonGroup("Font") {
-            RibbonMenu("Font", "textformat") {
-                ForEach(families, id: \.self) { family in
-                    Button(family) { TextFormatter.setFontFamily(family) }
+            RibbonField(editor.fontFamily ?? "Mixed", width: 132, help: "Font of the selected text") {
+                ForEach(families, id: \.self) { fontItem($0) }
+                if let family = editor.fontFamily, !families.contains(family) {
+                    Divider()
+                    fontItem(family)
                 }
                 Divider()
                 Menu("All Fonts") {
-                    ForEach(NSFontManager.shared.availableFontFamilies, id: \.self) { family in
-                        Button(family) { TextFormatter.setFontFamily(family) }
-                    }
+                    ForEach(NSFontManager.shared.availableFontFamilies, id: \.self) { fontItem($0) }
                 }
                 Divider()
                 Button("Show Fonts…") { NSFontManager.shared.orderFrontFontPanel(nil) }
             }
-            RibbonMenu("Size", "textformat.size") {
+            RibbonField(sizeText, width: 34, help: "Size of the selected text") {
                 ForEach(Self.sizes, id: \.self) { size in
-                    Button("\(Int(size))") { TextFormatter.setFontSize(size) }
+                    Button {
+                        TextFormatter.setFontSize(size)
+                    } label: {
+                        if size == editor.fontSize { Label("\(Int(size))", systemImage: "checkmark") } else { Text("\(Int(size))") }
+                    }
                 }
             }
             RibbonButton("Increase Font Size", "textformat.size.larger") { TextFormatter.stepFontSize(2) }
             RibbonButton("Decrease Font Size", "textformat.size.smaller") { TextFormatter.stepFontSize(-2) }
         }
         RibbonGroup("Format") {
-            RibbonButton("Bold (⌘B)", "bold") { TextFormatter.toggleBold() }
-            RibbonButton("Italic (⌘I)", "italic") { TextFormatter.toggleItalic() }
-            RibbonButton("Underline (⌘U)", "underline") { TextFormatter.toggleUnderline() }
-            RibbonButton("Strikethrough", "strikethrough") { TextFormatter.toggleStrikethrough() }
+            RibbonButton("Bold (⌘B)", "bold", active: editor.isBold) { TextFormatter.toggleBold() }
+            RibbonButton("Italic (⌘I)", "italic", active: editor.isItalic) { TextFormatter.toggleItalic() }
+            RibbonButton("Underline (⌘U)", "underline", active: editor.isUnderline) { TextFormatter.toggleUnderline() }
+            RibbonButton("Strikethrough", "strikethrough", active: editor.isStrikethrough) { TextFormatter.toggleStrikethrough() }
             RibbonButton("Superscript", "textformat.superscript") { TextFormatter.toggleScript(1) }
             RibbonButton("Subscript", "textformat.subscript") { TextFormatter.toggleScript(-1) }
             RibbonMenu("Highlight", "highlighter", showTitle: false) {

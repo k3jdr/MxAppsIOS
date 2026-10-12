@@ -643,7 +643,18 @@ final class TableGridView: NSView, NSTextViewDelegate {
     weak var owner: TableElementView?
     let model: TableModel
     var isExport = false
-    private(set) var selection: Set<CellRef> = []
+    private(set) var selection: Set<CellRef> = [] {
+        didSet {
+            guard selection != oldValue, editing == nil, !selection.isEmpty, !isExport else { return }
+            reportCellFormatting()
+        }
+    }
+
+    /// Shows the selected cells' font in the ribbon.
+    func reportCellFormatting() {
+        TextFormatter.reportFormatting(of: selection.sorted { ($0.row, $0.column) < ($1.row, $1.column) }
+            .map { model.displayText($0) })
+    }
     private var anchor: CellRef?
     /// The moving corner of a ⇧-extended selection.
     private var extent: CellRef?
@@ -888,32 +899,49 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     // MARK: Active table
 
+    private var responderObservation: NSKeyValueObservation?
+
+    /// This table receives the ribbon's formatting and table commands. It stays that way while focus is in the
+    /// ribbon, menus or other controls outside the page, and lets go when something else on the page gets focus.
     private func becameActive() {
         TableGridView.active = self
+        guard responderObservation == nil, let window else { return }
+        responderObservation = window.observe(\.firstResponder, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.firstResponderChanged() }
+        }
     }
 
-    private func resignActiveIfNeeded() {
-        guard TableGridView.active === self else { return }
-        let responder = window?.firstResponder
-        if editing == nil, responder !== self, responder !== editor {
-            TableGridView.active = nil
+    private func deactivate() {
+        responderObservation = nil
+        if TableGridView.active === self { TableGridView.active = nil }
+    }
+
+    private func firstResponderChanged() {
+        guard let window, let canvas = owner?.canvas else { return deactivate() }
+        let responder = window.firstResponder
+        if responder === self || responder === editor { return }
+        // Focus went to the ribbon or another control off the page: keep the selection and any cell being typed in.
+        guard let view = responder as? NSView, view.isDescendant(of: canvas) else { return }
+        if editing != nil {
+            stopEditing(commit: true)
+            relayout()
+        }
+        selection = []
+        needsDisplay = true
+        deactivate()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            if editing != nil { stopEditing(commit: true) }
+            selection = []
+            deactivate()
         }
     }
 
     override func becomeFirstResponder() -> Bool {
         becameActive()
-        return true
-    }
-
-    override func resignFirstResponder() -> Bool {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            if self.editing == nil, self.window?.firstResponder !== self {
-                self.selection = []
-                self.needsDisplay = true
-            }
-            self.resignActiveIfNeeded()
-        }
         return true
     }
 
@@ -998,13 +1026,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
     }
 
     func textDidEndEditing(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.editing != nil, self.window?.firstResponder !== self.editor else { return }
-            if self.window?.firstResponder !== self { self.selection = [] }
-            self.stopEditing(commit: true)
-            self.relayout()
-            self.resignActiveIfNeeded()
-        }
+        // Typing in the cell ends when something else on the page gets focus (see firstResponderChanged).
+        if let cell = editing, let storage = editor.textStorage { model.store(storage, in: cell) }
     }
 
     func undoManager(for view: NSTextView) -> UndoManager? { editorUndo }
@@ -1071,7 +1094,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     /// Runs a text-formatting command (from the ribbon or menus) on every selected cell's text.
     func applyToSelection(_ body: (NoteTextView) -> Void) -> Bool {
         let cells = targetCells
-        guard !cells.isEmpty, editing == nil else { return false }
+        guard !cells.isEmpty, editing == nil, window != nil else { return false }
         let scratch = NoteTextView(usingTextLayoutManager: false)
         scratch.isRichText = true
         for cell in cells.sorted(by: { ($0.row, $0.column) < ($1.row, $1.column) }) {
@@ -1084,6 +1107,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         owner?.controller?.markDirty()
         relayout()
+        reportCellFormatting()
         return true
     }
 

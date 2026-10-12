@@ -55,6 +55,7 @@ enum ActiveSheet: Identifiable {
     case insertTable
     case insertLink
     case oneDriveOpen
+    case notebookFonts(UUID)
 
     var id: String {
         switch self {
@@ -66,6 +67,7 @@ enum ActiveSheet: Identifiable {
         case .insertTable: "insertTable"
         case .insertLink: "insertLink"
         case .oneDriveOpen: "oneDriveOpen"
+        case .notebookFonts(let id): "notebookFonts-\(id)"
         }
     }
 }

@@ -155,6 +155,14 @@ final class EditorState {
 
     var zoom: Double = 1
 
+    // Formatting of the selected text, shown in the Home ribbon (nil = the selection mixes several).
+    var fontFamily: String? = Prefs.fontName
+    var fontSize: CGFloat? = Prefs.fontSize
+    var isBold = false
+    var isItalic = false
+    var isUnderline = false
+    var isStrikethrough = false
+
     /// View ▸ Snap to Grid: containers, pictures and shapes line up on the page grid (hold ⌥ to place freely).
     var snapToGrid = UserDefaults.standard.bool(forKey: Prefs.snapToGridKey) {
         didSet {

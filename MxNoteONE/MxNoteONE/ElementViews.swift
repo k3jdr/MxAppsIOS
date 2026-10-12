@@ -348,8 +348,19 @@ final class NoteTextView: NSTextView {
             NoteTextView.current = self
             owner?.isEditing = true
             owner?.canvas?.selectedElement = nil
+            TextFormatter.reportFormatting(self)
         }
         return accepted
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        if !stillSelecting, window?.firstResponder === self { TextFormatter.reportFormatting(self) }
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        if window?.firstResponder === self { TextFormatter.reportFormatting(self) }
     }
 
     override func resignFirstResponder() -> Bool {

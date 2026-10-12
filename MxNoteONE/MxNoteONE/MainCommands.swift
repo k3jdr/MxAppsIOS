@@ -133,6 +133,9 @@ struct MainCommands: Commands {
             Button("Smaller") { TextFormatter.stepFontSize(-2) }
                 .keyboardShortcut("<", modifiers: [.command, .shift])
             Button("Show Fonts") { NSFontManager.shared.orderFrontFontPanel(nil) }
+            Button("Notebook Fonts…") {
+                if let nb = store.currentNotebook { store.sheet = .notebookFonts(nb.id) }
+            }
             Divider()
             Menu("Styles") {
                 Button(TextStyleKind.heading1.title) { TextFormatter.applyStyle(.heading1) }
@@ -295,6 +298,9 @@ struct MainCommands: Commands {
             Button("Lock All Protected Sections") { store.lockAll() }
                 .keyboardShortcut("l", modifiers: [.command, .control])
             Divider()
+            Button("Notebook Fonts…") {
+                if let nb = store.currentNotebook { store.sheet = .notebookFonts(nb.id) }
+            }
             Button("Find Missing OneNote Pictures…") { ImportActivity.shared.locateMissingPictures() }
             Divider()
             Button("Rename Notebook…") {
