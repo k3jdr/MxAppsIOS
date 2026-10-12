@@ -321,7 +321,7 @@ struct DrawRibbon: View {
 
     var body: some View {
         RibbonGroup("Tools") {
-            ForEach([CanvasTool.type, .pen, .highlighter, .eraser]) { tool in
+            ForEach([CanvasTool.lasso, .type, .pen, .highlighter, .eraser]) { tool in
                 RibbonButton(tool.title, tool.symbol, large: true, active: editor.tool == tool) { editor.tool = tool }
             }
         }

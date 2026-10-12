@@ -84,7 +84,7 @@ enum RibbonTab: String, CaseIterable, Identifiable {
 
 /// What a mouse drag on the page does.
 enum CanvasTool: String, CaseIterable, Identifiable {
-    case type, pen, highlighter, eraser, line, arrow, rectangle, ellipse
+    case type, lasso, pen, highlighter, eraser, line, arrow, rectangle, ellipse
 
     var id: String { rawValue }
 
@@ -94,6 +94,7 @@ enum CanvasTool: String, CaseIterable, Identifiable {
         case .pen: "Pen"
         case .highlighter: "Highlighter"
         case .eraser: "Eraser"
+        case .lasso: "Lasso Select"
         case .line: "Line"
         case .arrow: "Arrow"
         case .rectangle: "Rectangle"
@@ -107,6 +108,7 @@ enum CanvasTool: String, CaseIterable, Identifiable {
         case .pen: "pencil.tip"
         case .highlighter: "highlighter"
         case .eraser: "eraser"
+        case .lasso: "lasso"
         case .line: "line.diagonal"
         case .arrow: "arrow.up.right"
         case .rectangle: "rectangle"
@@ -124,7 +126,7 @@ enum CanvasTool: String, CaseIterable, Identifiable {
         case .arrow: .arrow
         case .rectangle: .rectangle
         case .ellipse: .ellipse
-        case .type, .eraser: nil
+        case .type, .eraser, .lasso: nil
         }
     }
 }

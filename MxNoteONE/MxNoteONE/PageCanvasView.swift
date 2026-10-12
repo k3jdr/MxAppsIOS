@@ -10,7 +10,100 @@
 
 import AppKit
 
-final class PageCanvasView: NSView, NSTextFieldDelegate {
+/// The page title: a one-line text view in a scroll view without scroll bars. Shown and edited with the same text
+/// engine, so the title never clips tall letters or jumps when you click into it; long titles scroll sideways.
+final class TitleView: NSScrollView, NSTextViewDelegate {
+    final class Editor: NSTextView {
+        var placeholder = "Page Title"
+
+        override func draw(_ dirtyRect: NSRect) {
+            super.draw(dirtyRect)
+            guard string.isEmpty, let font else { return }
+            NSAttributedString(string: placeholder, attributes: [.font: font, .foregroundColor: NSColor(white: 0.7, alpha: 1)])
+                .draw(at: NSPoint(x: textContainerOrigin.x + (textContainer?.lineFragmentPadding ?? 0), y: textContainerOrigin.y))
+        }
+    }
+
+    let editor = Editor(usingTextLayoutManager: false)
+    /// Typing changed the title.
+    var onChange: (() -> Void)?
+    /// Return or Tab in the title (go to the page content).
+    var onCommit: (() -> Void)?
+
+    init(frame: NSRect, font: NSFont) {
+        super.init(frame: frame)
+        drawsBackground = false
+        hasVerticalScroller = false
+        hasHorizontalScroller = false
+        verticalScrollElasticity = .none
+        horizontalScrollElasticity = .none
+        borderType = .noBorder
+        editor.font = font
+        editor.textColor = .black
+        editor.insertionPointColor = .black
+        editor.isRichText = false
+        editor.importsGraphics = false
+        editor.allowsUndo = true
+        editor.drawsBackground = false
+        editor.isHorizontallyResizable = true
+        editor.isVerticallyResizable = false
+        editor.textContainer?.widthTracksTextView = false
+        editor.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: frame.height)
+        editor.textContainer?.lineFragmentPadding = 2
+        editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: frame.height)
+        let lineHeight = ceil(NSLayoutManager().defaultLineHeight(for: font))
+        editor.textContainerInset = NSSize(width: 0, height: max(0, floor((frame.height - lineHeight) / 2)))
+        editor.frame = NSRect(x: 0, y: 0, width: frame.width, height: frame.height)
+        editor.minSize = NSSize(width: frame.width, height: frame.height)
+        editor.delegate = self
+        documentView = editor
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    var stringValue: String {
+        get { editor.string }
+        set {
+            editor.string = newValue.replacingOccurrences(of: "\n", with: " ")
+            editor.undoManager?.removeAllActions(withTarget: editor)
+            editor.scroll(.zero)
+            editor.needsDisplay = true
+        }
+    }
+
+    var font: NSFont? { editor.font }
+
+    var placeholderString: String {
+        get { editor.placeholder }
+        set { editor.placeholder = newValue }
+    }
+
+    func focus() {
+        window?.makeFirstResponder(editor)
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+    }
+
+    func textDidChange(_ notification: Notification) {
+        if editor.string.contains("\n") {
+            editor.string = editor.string.replacingOccurrences(of: "\n", with: " ")
+        }
+        editor.needsDisplay = true
+        onChange?()
+    }
+
+    func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)),
+             #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), #selector(NSResponder.insertLineBreak(_:)):
+            onCommit?()
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+final class PageCanvasView: NSView {
     static let margin: CGFloat = 48
     static let contentTop: CGFloat = 110
     static let titleWidth: CGFloat = 640
@@ -27,7 +120,8 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
             needsDisplay = true
         }
     }
-    let titleField = NSTextField()
+    let titleField = TitleView(frame: NSRect(x: PageCanvasView.margin - 2, y: 20, width: PageCanvasView.titleWidth, height: 48),
+                               font: NSFont(name: "HelveticaNeue-Light", size: 26) ?? .systemFont(ofSize: 26, weight: .light))
     let dateLabel = NSTextField(labelWithString: "")
     let inkView = InkView()
     var selectedElement: ElementView? {
@@ -74,17 +168,9 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
         super.init(frame: frame)
         appearance = NSAppearance(named: .aqua)
 
-        titleField.isBordered = false
-        titleField.drawsBackground = false
-        titleField.focusRingType = .none
-        titleField.font = NSFont(name: "HelveticaNeue-Light", size: 26) ?? .systemFont(ofSize: 26, weight: .light)
-        titleField.textColor = .black
         titleField.placeholderString = "Page Title"
-        titleField.lineBreakMode = .byTruncatingTail
-        titleField.usesSingleLineMode = true
-        titleField.cell?.isScrollable = true
-        titleField.delegate = self
-        titleField.frame = NSRect(x: Self.margin, y: 30, width: Self.titleWidth, height: 36)
+        titleField.onChange = { [weak self] in self?.controller?.titleChanged() }
+        titleField.onCommit = { [weak self] in self?.controller?.focusFirstText() }
 
         dateLabel.font = .systemFont(ofSize: 12)
         dateLabel.textColor = NSColor(white: 0.45, alpha: 1)
@@ -147,6 +233,7 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
     func clear() {
         for view in elementViews { view.removeFromSuperview() }
         inkView.strokes = []
+        inkView.clearLasso()
         selectedElement = nil
         titleField.stringValue = ""
     }
@@ -239,7 +326,7 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
             let title = NSAttributedString(string: titleField.stringValue, attributes: [
                 .font: titleField.font ?? NSFont.systemFont(ofSize: 26), .foregroundColor: NSColor.black,
             ])
-            title.draw(with: NSRect(x: Self.margin + 2, y: 32, width: Self.titleWidth, height: 36),
+            title.draw(with: NSRect(x: Self.margin, y: 26, width: Self.titleWidth, height: 40),
                        options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
 
@@ -279,6 +366,22 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
 
     override func keyDown(with event: NSEvent) {
         guard let controller else { return super.keyDown(with: event) }
+        if inkView.hasLassoSelection {
+            let step: CGFloat = snaps ? gridStep : (event.modifierFlags.contains(.shift) ? 10 : 1)
+            switch event.keyCode {
+            case 51, 117:
+                controller.deleteLassoSelection()
+                return
+            case 53:
+                inkView.clearLasso()
+                return
+            case 123: return inkView.nudgeLasso(dx: -step, dy: 0)
+            case 124: return inkView.nudgeLasso(dx: step, dy: 0)
+            case 125: return inkView.nudgeLasso(dx: 0, dy: step)
+            case 126: return inkView.nudgeLasso(dx: 0, dy: -step)
+            default: break
+            }
+        }
         if event.keyCode == 53 {
             controller.editor.tool = .type
             selectedElement = nil
@@ -357,19 +460,6 @@ final class PageCanvasView: NSView, NSTextFieldDelegate {
         return false
     }
 
-    // MARK: Title
-
-    func controlTextDidChange(_ obj: Notification) {
-        controller?.titleChanged()
-    }
-
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) || commandSelector == #selector(NSResponder.insertTab(_:)) {
-            controller?.focusFirstText()
-            return true
-        }
-        return false
-    }
 }
 
 // MARK: - Ink layer
@@ -382,6 +472,83 @@ final class InkView: NSView {
     }
     private var current: InkStroke?
     private var strokesBeforeErasing: [InkStroke]?
+
+    // Lasso selection.
+    private(set) var lassoStrokes: Set<UUID> = []
+    private(set) var lassoElements: [ElementView] = []
+    private var lassoPath: [CGPoint] = []
+    private var lassoMove: (start: CGPoint, bounds: CGRect, strokes: [InkStroke], frames: [(ElementView, NSRect)])?
+
+    var hasLassoSelection: Bool { !lassoStrokes.isEmpty || !lassoElements.isEmpty }
+
+    /// Everything the lasso selected.
+    var lassoBounds: CGRect {
+        var rect = CGRect.null
+        for stroke in strokes where lassoStrokes.contains(stroke.id) {
+            rect = rect.union(Self.path(for: stroke).boundingBoxOfPath.insetBy(dx: -stroke.width / 2, dy: -stroke.width / 2))
+        }
+        for view in lassoElements where view.superview != nil { rect = rect.union(view.frame) }
+        return rect
+    }
+
+    func clearLasso() {
+        for view in lassoElements { view.isSelected = canvas?.selectedElement === view }
+        lassoElements = []
+        lassoStrokes = []
+        lassoPath = []
+        lassoMove = nil
+        needsDisplay = true
+    }
+
+    /// Selects strokes mostly inside the loop and containers whose middle (and half their corners) are inside it.
+    private func finishLasso() {
+        defer {
+            lassoPath = []
+            needsDisplay = true
+        }
+        guard lassoPath.count > 2 else { return clearLasso() }
+        let loop = CGMutablePath()
+        loop.addLines(between: lassoPath)
+        loop.closeSubpath()
+        lassoStrokes = Set(strokes.filter { stroke in
+            let inside = stroke.points.filter { loop.contains($0) }.count
+            return Double(inside) >= Double(stroke.points.count) * 0.8
+        }.map(\.id))
+        lassoElements = (canvas?.elementViews ?? []).filter { view in
+            let f = view.frame
+            let corners = [CGPoint(x: f.minX, y: f.minY), CGPoint(x: f.maxX, y: f.minY),
+                           CGPoint(x: f.minX, y: f.maxY), CGPoint(x: f.maxX, y: f.maxY)]
+            return loop.contains(CGPoint(x: f.midX, y: f.midY)) && corners.filter { loop.contains($0) }.count >= 2
+        }
+        for view in lassoElements { view.isSelected = true }
+    }
+
+    /// Moves the lasso selection (from where it was when the move started).
+    private func moveLasso(from move: (start: CGPoint, bounds: CGRect, strokes: [InkStroke], frames: [(ElementView, NSRect)]),
+                           dx rawX: CGFloat, dy rawY: CGFloat) {
+        var dx = rawX, dy = rawY
+        if let canvas, canvas.snaps {
+            let origin = canvas.snapped(CGPoint(x: move.bounds.minX + dx, y: move.bounds.minY + dy))
+            dx = origin.x - move.bounds.minX
+            dy = origin.y - move.bounds.minY
+        }
+        dx = max(dx, -move.bounds.minX)
+        dy = max(dy, -move.bounds.minY)
+        strokes = move.strokes.map { stroke in
+            guard lassoStrokes.contains(stroke.id) else { return stroke }
+            var moved = stroke
+            moved.points = stroke.points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+            return moved
+        }
+        for (view, frame) in move.frames { view.setFrameOrigin(NSPoint(x: frame.minX + dx, y: frame.minY + dy)) }
+    }
+
+    /// Arrow keys: nudge the lasso selection.
+    func nudgeLasso(dx: CGFloat, dy: CGFloat) {
+        let move = (start: CGPoint.zero, bounds: lassoBounds, strokes: strokes, frames: lassoElements.map { ($0, $0.frame) })
+        moveLasso(from: move, dx: dx, dy: dy)
+        canvas?.controller?.lassoMoved(frames: move.frames, oldStrokes: move.strokes)
+    }
 
     private var tool: CanvasTool { NotebookStore.shared.editor.tool }
 
@@ -419,6 +586,15 @@ final class InkView: NSView {
             erase(at: p)
             return
         }
+        if tool == .lasso {
+            if hasLassoSelection, lassoBounds.insetBy(dx: -6, dy: -6).contains(p) {
+                lassoMove = (p, lassoBounds, strokes, lassoElements.map { ($0, $0.frame) })
+            } else {
+                clearLasso()
+                lassoPath = [p]
+            }
+            return
+        }
         guard let kind = tool.strokeTool else { return }
         let highlighter = kind == .highlighter
         let isShape = kind != .pen && kind != .highlighter
@@ -431,6 +607,17 @@ final class InkView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         if tool == .eraser {
             erase(at: p)
+            return
+        }
+        if tool == .lasso {
+            if let move = lassoMove {
+                moveLasso(from: move, dx: p.x - move.start.x, dy: p.y - move.start.y)
+                canvas?.showsSnapGuides = canvas?.snaps ?? false
+            } else if let last = lassoPath.last, hypot(last.x - p.x, last.y - p.y) >= 2 {
+                lassoPath.append(p)
+            }
+            needsDisplay = true
+            autoscroll(with: event)
             return
         }
         guard var stroke = current else { return }
@@ -451,6 +638,16 @@ final class InkView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if tool == .lasso {
+            if let move = lassoMove {
+                lassoMove = nil
+                canvas?.showsSnapGuides = false
+                canvas?.controller?.lassoMoved(frames: move.frames, oldStrokes: move.strokes)
+            } else {
+                finishLasso()
+            }
+            return
+        }
         if tool == .eraser, let before = strokesBeforeErasing {
             strokesBeforeErasing = nil
             if before.count != strokes.count { canvas?.controller?.strokesChanged(from: before) }
@@ -489,8 +686,36 @@ final class InkView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        for stroke in strokes { Self.draw(stroke, in: ctx) }
+        for stroke in strokes {
+            if lassoStrokes.contains(stroke.id) {
+                ctx.saveGState()
+                ctx.setLineCap(.round)
+                ctx.setLineJoin(.round)
+                ctx.setLineWidth(stroke.width + 8)
+                ctx.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.3).cgColor)
+                ctx.addPath(Self.path(for: stroke))
+                ctx.strokePath()
+                ctx.restoreGState()
+            }
+            Self.draw(stroke, in: ctx)
+        }
         if let current { Self.draw(current, in: ctx) }
+        if lassoPath.count > 1 {
+            let loop = NSBezierPath()
+            loop.move(to: lassoPath[0])
+            for p in lassoPath.dropFirst() { loop.line(to: p) }
+            loop.lineWidth = 1.2
+            loop.setLineDash([5, 3], count: 2, phase: 0)
+            NSColor.controlAccentColor.setStroke()
+            loop.stroke()
+        }
+        if hasLassoSelection {
+            let frame = NSBezierPath(rect: lassoBounds.insetBy(dx: -5, dy: -5))
+            frame.lineWidth = 1
+            frame.setLineDash([4, 3], count: 2, phase: 0)
+            NSColor.controlAccentColor.setStroke()
+            frame.stroke()
+        }
     }
 
     static func draw(_ stroke: InkStroke, in ctx: CGContext) {

@@ -55,6 +55,9 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   grid is the page's rule lines or grid when it has them, otherwise 12 points (shown as dots while you drag). Hold ⌥
   to place something freely.
 - **Ink**: pen and highlighter strokes, lines, arrows, rectangles and ellipses (hold Shift for 45° lines, squares, circles).
+- **Lasso Select** (Draw tab): draw a loop around ink and containers to select them — selected ink is highlighted and
+  a dashed frame surrounds the selection. Drag inside it to move everything together (it snaps when Snap to Grid is
+  on), use the arrow keys to nudge, Delete to remove, Escape to deselect. Moving and deleting undo in one step.
   The eraser removes whole strokes. Press Escape to go back to typing.
 - **Links**: type `[[Page Name]]` to link to a page in the notebook (it is created if it doesn't exist), or use ⌘K for
   web links and links to any page. Right-click a page ▸ Copy Link to Page and paste it anywhere in your notes.

@@ -103,7 +103,7 @@ final class CanvasController: NSObject {
             store.focusTitleOnLoad = false
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.canvas.window?.makeFirstResponder(self.canvas.titleField)
+                self.canvas.titleField.focus()
             }
         }
         applyPendingFind()
@@ -372,6 +372,36 @@ final class CanvasController: NSObject {
         markDirty()
     }
 
+    /// Records a lasso move (containers and strokes) as one undo step.
+    func lassoMoved(frames: [(ElementView, NSRect)], oldStrokes: [InkStroke]) {
+        let movedFrames = frames.filter { $0.0.frame != $0.1 }
+        let strokesMoved = oldStrokes != canvas.inkView.strokes
+        guard !movedFrames.isEmpty || strokesMoved else { return }
+        undoManager?.beginUndoGrouping()
+        for (view, old) in movedFrames { elementFrameChanged(view, from: old) }
+        if strokesMoved { strokesChanged(from: oldStrokes) }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName("Move")
+        canvas.updateSize()
+    }
+
+    /// Delete: removes what the lasso selected (one undo step).
+    func deleteLassoSelection() {
+        let ink = canvas.inkView
+        let views = ink.lassoElements
+        let ids = ink.lassoStrokes
+        let old = ink.strokes
+        ink.clearLasso()
+        undoManager?.beginUndoGrouping()
+        for view in views { removeElement(view) }
+        if !ids.isEmpty {
+            ink.strokes.removeAll { ids.contains($0.id) }
+            strokesChanged(from: old)
+        }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName("Delete")
+    }
+
     func clearInk() {
         let old = canvas.inkView.strokes
         guard !old.isEmpty else { return }
@@ -380,6 +410,7 @@ final class CanvasController: NSObject {
     }
 
     func toolChanged() {
+        if editor.tool != .lasso { canvas.inkView.clearLasso() }
         canvas.window?.invalidateCursorRects(for: canvas.inkView)
         if editor.tool.isInk, let window = canvas.window, window.firstResponder is NSTextView {
             window.makeFirstResponder(canvas)
