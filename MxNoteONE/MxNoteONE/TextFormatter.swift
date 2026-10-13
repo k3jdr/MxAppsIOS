@@ -110,6 +110,90 @@ enum TextFormatter {
         reportFormatting(tv)
     }
 
+    // MARK: Code
+
+    /// Format ▸ Format as Code: the selected paragraphs become a VS Code-style code block.
+    static func formatAsCode(_ language: CodeLanguage = .auto) {
+        perform { tv in CodeHighlighter.format(tv, language: language) }
+    }
+
+    /// Code theme for new code blocks; a code block at the cursor is re-coloured at once.
+    static func setCodeTheme(_ theme: CodeTheme) {
+        UserDefaults.standard.set(theme.name, forKey: CodeTheme.themeKey)
+        guard let tv = target, let storage = tv.textStorage,
+              let range = CodeHighlighter.blockRange(in: storage, at: tv.selectedRange().location) else { return }
+        let language = (storage.attribute(.mxCodeLanguage, at: range.location, effectiveRange: nil) as? String)
+            .flatMap(CodeLanguage.init(rawValue:)) ?? .auto
+        tv.setSelectedRange(range)
+        CodeHighlighter.format(tv, language: language, theme: theme)
+    }
+
+    private static func inCode(_ tv: NSTextView, at location: Int) -> Bool {
+        guard let storage = tv.textStorage, storage.length > 0 else { return false }
+        let index = min(location, storage.length - 1)
+        if CodeHighlighter.isCode(storage.attributes(at: index, effectiveRange: nil)) { return true }
+        return location > 0 && location == storage.length && CodeHighlighter.isCode(tv.typingAttributes)
+    }
+
+    /// Enter in code keeps the indent (one more level after { [ ( :); Enter on an empty last line leaves the block.
+    private static func codeNewline(_ tv: NSTextView, paragraph text: String, range: NSRange, indent: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if let storage = tv.textStorage, trimmed.isEmpty, !text.isEmpty || range.location > 0,
+           NSMaxRange(range) >= storage.length || !CodeHighlighter.isCode(storage.attributes(at: NSMaxRange(range), effectiveRange: nil)) {
+            if range.length > 0, tv.shouldChangeText(in: range, replacementString: nil) {
+                storage.beginEditing()
+                for key: NSAttributedString.Key in [.paragraphStyle, .mxCodeLanguage] { storage.removeAttribute(key, range: range) }
+                storage.addAttributes(defaultAttributes, range: range)
+                storage.endEditing()
+                tv.didChangeText()
+                tv.undoManager?.setActionName("End Code Block")
+            }
+            tv.typingAttributes = defaultAttributes
+            return true
+        }
+        var next = indent
+        if let last = trimmed.last, "{[(:".contains(last) { next += "    " }
+        tv.insertText("\n" + next, replacementRange: tv.selectedRange())
+        return true
+    }
+
+    /// Tab in code types four spaces (Shift-Tab removes up to four from the line's start).
+    private static func codeTab(_ tv: NSTextView, outdent: Bool) -> Bool {
+        guard let storage = tv.textStorage else { return false }
+        if !outdent, tv.selectedRange().length == 0 {
+            tv.insertText("    ", replacementRange: tv.selectedRange())
+            return true
+        }
+        var edits: [(NSRange, String)] = []
+        for range in paragraphRanges(tv) {
+            if outdent {
+                let text = paragraphText(storage, range)
+                let spaces = text.prefix(4).prefix { $0 == " " }.count
+                let remove = spaces > 0 ? spaces : (text.hasPrefix("\t") ? 1 : 0)
+                if remove > 0 { edits.append((NSRange(location: range.location, length: remove), "")) }
+            } else {
+                edits.append((NSRange(location: range.location, length: 0), "    "))
+            }
+        }
+        replace(tv, edits: edits, actionName: outdent ? "Outdent" : "Indent")
+        return true
+    }
+
+    /// Places items after the spelling suggestions of a text view's right-click menu (or at the top).
+    static func insertAfterSpelling(_ items: [NSMenuItem], into menu: NSMenu) {
+        let spelling = menu.items.lastIndex { item in
+            guard let action = item.action else { return false }
+            let name = NSStringFromSelector(action).lowercased()
+            return name.contains("ignorespelling") || name.contains("learnspelling") || name.contains("guess")
+        }
+        var index = 0
+        if let spelling {
+            index = spelling + 1
+            if index < menu.items.count, menu.items[index].isSeparatorItem { index += 1 }
+        }
+        for item in items.reversed() { menu.insertItem(item, at: index) }
+    }
+
     // MARK: Current formatting (Home ribbon)
 
     /// Shows the formatting of a text view's selection (or of what you'll type next) in the ribbon.
@@ -543,6 +627,9 @@ enum TextFormatter {
         let info = parseParagraph(text)
         let isTodo = info.tag == .todo
         let length = (text as NSString).length
+        if inCode(tv, at: sel.location) {
+            return codeNewline(tv, paragraph: text, range: range, indent: (text as NSString).substring(to: info.indent))
+        }
         if info.list != nil || isTodo {
             let prefixEnd = info.indent + info.listLength + (isTodo ? info.tagLength : 0)
             guard sel.location >= range.location + prefixEnd else { return false }
@@ -623,6 +710,13 @@ enum TextFormatter {
         let info = parseParagraph(paragraphText(storage, range))
         let offset = sel.location - range.location
         guard offset > 0 else { return false }
+        if inCode(tv, at: sel.location) {
+            let leading = (paragraphText(storage, range) as NSString).substring(to: info.indent)
+            guard offset == info.indent, !leading.contains("\t"), info.indent > 0 else { return false }
+            let remove = info.indent % 4 == 0 ? 4 : info.indent % 4
+            replace(tv, edits: [(NSRange(location: sel.location - remove, length: remove), "")], actionName: "Outdent")
+            return true
+        }
         if info.tagLength > 0, offset == info.indent + info.listLength + info.tagLength {
             replace(tv, edits: [(NSRange(location: range.location + info.indent + info.listLength, length: info.tagLength), "")],
                     actionName: "Remove Tag")
@@ -717,6 +811,7 @@ enum TextFormatter {
     /// Tab / Shift-Tab in a list item indents or outdents the item.
     static func handleTab(_ tv: NSTextView, outdent: Bool) -> Bool {
         guard let storage = tv.textStorage else { return false }
+        if inCode(tv, at: tv.selectedRange().location) { return codeTab(tv, outdent: outdent) }
         let paragraphs = paragraphRanges(tv)
         let infos = paragraphs.map { parseParagraph(paragraphText(storage, $0)) }
         // OneNote: text followed by Tab starts a table (⌥Tab types a tab character).

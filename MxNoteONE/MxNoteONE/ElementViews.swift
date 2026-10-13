@@ -531,6 +531,7 @@ final class TextElementView: ElementView, NSTextViewDelegate {
     // MARK: NSTextViewDelegate
 
     func textDidChange(_ notification: Notification) {
+        CodeHighlighter.recolor(textView)
         controller?.textChanged()
         TextFormatter.convertWikiLink(in: textView)
     }
@@ -586,11 +587,14 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         let paragraph = ns.substring(to: range.location).components(separatedBy: "\n").count - 1
         let text = ns.substring(with: range)
         let elementID = element.id
-        menu.insertItem(ClosureMenuItem("Copy Link to this Paragraph") {
-            NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: paragraph, cell: nil, text: text)
-        }, at: 0)
-        menu.insertItem(ClosureMenuItem("Copy Link to this Page") { NotebookStore.shared.copyLink(ref) }, at: 1)
-        menu.insertItem(.separator(), at: 2)
+        TextFormatter.insertAfterSpelling([
+            ClosureMenuItem("Copy Link to this Paragraph") {
+                NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: paragraph, cell: nil, text: text)
+            },
+            ClosureMenuItem("Copy Link to this Page") { NotebookStore.shared.copyLink(ref) },
+            ClosureMenuItem("Format as Code") { TextFormatter.formatAsCode() },
+            .separator(),
+        ], into: menu)
         return menu
     }
 

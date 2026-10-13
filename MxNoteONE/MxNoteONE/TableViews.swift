@@ -872,26 +872,120 @@ final class TableGridView: NSView, NSTextViewDelegate {
         return abs(p.y) <= 3 || abs(p.x) <= 3 || abs(p.y - height) <= 3
     }
 
-    /// The link under a point in a cell that isn't being typed in.
-    func link(at p: NSPoint) -> URL? {
-        guard let cell = cell(at: p), cell != editing else { return nil }
-        let rect = cellRect(cell).insetBy(dx: Self.padX, dy: Self.padY)
-        guard rect.contains(p) else { return nil }
-        let text = model.displayText(cell, fitting: rect.width)
-        guard text.length > 0 else { return nil }
+    /// Lays out a drawn cell's text the way draw(_:) shows it.
+    private func layout(_ text: NSAttributedString, width: CGFloat) -> (NSTextStorage, NSLayoutManager, NSTextContainer) {
         let storage = NSTextStorage(attributedString: text)
         let layout = NSLayoutManager()
-        let container = NSTextContainer(size: NSSize(width: rect.width, height: .greatestFiniteMagnitude))
+        let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         layout.addTextContainer(container)
         storage.addLayoutManager(layout)
-        let local = NSPoint(x: p.x - rect.minX, y: p.y - rect.minY)
+        return (storage, layout, container)
+    }
+
+    /// The character under a point in a cell that isn't being typed in: (cell, text, character index).
+    private func character(at p: NSPoint) -> (CellRef, NSAttributedString, Int)? {
+        guard let cell = cell(at: p), cell != editing else { return nil }
+        let rect = cellRect(cell).insetBy(dx: Self.padX, dy: Self.padY)
+        guard rect.contains(unpinned(p)) || rect.contains(p) else { return nil }
+        let text = model.displayText(cell, fitting: rect.width)
+        guard text.length > 0 else { return nil }
+        let (storage, layout, container) = self.layout(text, width: rect.width)
+        let point = rect.contains(p) ? p : unpinned(p)
+        let local = NSPoint(x: point.x - rect.minX, y: point.y - rect.minY)
         let glyph = layout.glyphIndex(for: local, in: container, fractionOfDistanceThroughGlyph: nil)
         guard layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).contains(local) else { return nil }
         let index = layout.characterIndexForGlyph(at: glyph)
         guard index < storage.length else { return nil }
-        let value = storage.attribute(.link, at: index, effectiveRange: nil)
+        return (cell, text, index)
+    }
+
+    /// The link under a point in a cell that isn't being typed in.
+    func link(at p: NSPoint) -> URL? {
+        guard let (_, text, index) = character(at: p) else { return nil }
+        let value = text.attribute(.link, at: index, effectiveRange: nil)
         return value as? URL ?? (value as? String).flatMap { URL(string: $0) }
+    }
+
+    // MARK: Spelling in cells
+
+    private let spellTag = NSSpellChecker.uniqueSpellDocumentTag()
+    private var spellCache: [String: [NSRange]] = [:]
+
+    /// Misspelled words of a cell's text (code is not checked).
+    func misspellings(_ text: NSAttributedString) -> [NSRange] {
+        let string = text.string
+        guard !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !CodeHighlighter.isCode(text.attributes(at: 0, effectiveRange: nil)) else { return [] }
+        if let cached = spellCache[string] { return cached }
+        let results = NSSpellChecker.shared.check(string, range: NSRange(location: 0, length: (string as NSString).length),
+                                                  types: NSTextCheckingResult.CheckingType.spelling.rawValue, options: nil,
+                                                  inSpellDocumentWithTag: spellTag, orthography: nil, wordCount: nil)
+        let ranges = results.map(\.range)
+        spellCache[string] = ranges
+        return ranges
+    }
+
+    /// Red dotted underlines under misspelled words of a drawn cell.
+    private func drawMisspellings(_ text: NSAttributedString, in rect: NSRect) {
+        let ranges = misspellings(text)
+        guard !ranges.isEmpty else { return }
+        let (_, layout, container) = layout(text, width: rect.width)
+        NSColor.systemRed.setFill()
+        for range in ranges {
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            layout.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                                           in: container) { line, _ in
+                var x = rect.minX + line.minX + 1
+                let y = rect.minY + line.maxY - 1.5
+                while x < rect.minX + line.maxX - 1 {
+                    NSBezierPath(ovalIn: NSRect(x: x, y: y, width: 2, height: 2)).fill()
+                    x += 4
+                }
+            }
+        }
+    }
+
+    /// Spelling suggestions for the word under a point (right-click), as menu items.
+    private func spellingItems(at p: NSPoint) -> [NSMenuItem] {
+        guard let (cell, text, index) = character(at: p),
+              let range = misspellings(text).first(where: { NSLocationInRange(index, $0) }) else { return [] }
+        let word = (text.string as NSString).substring(with: range)
+        let guesses = NSSpellChecker.shared.guesses(forWordRange: range, in: text.string, language: nil,
+                                                    inSpellDocumentWithTag: spellTag) ?? []
+        var items: [NSMenuItem] = guesses.prefix(6).map { guess in
+            let item = ClosureMenuItem(guess) { [weak self] in
+                guard let self else { return }
+                let updated = NSMutableAttributedString(attributedString: self.model.storedText(cell))
+                guard NSMaxRange(range) <= updated.length else { return }
+                updated.replaceCharacters(in: range, with: guess)
+                self.model.store(updated, in: cell)
+                self.invalidateLayout()
+                self.relayout()
+                self.owner?.controller?.markDirty()
+            }
+            item.attributedTitle = NSAttributedString(string: guess, attributes: [.font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)])
+            return item
+        }
+        if items.isEmpty {
+            let none = NSMenuItem(title: "No Guesses Found", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            items.append(none)
+        }
+        items.append(.separator())
+        items.append(ClosureMenuItem("Ignore Spelling") { [weak self] in
+            guard let self else { return }
+            NSSpellChecker.shared.ignoreWord(word, inSpellDocumentWithTag: self.spellTag)
+            self.spellCache.removeAll()
+            self.needsDisplay = true
+        })
+        items.append(ClosureMenuItem("Learn Spelling") { [weak self] in
+            NSSpellChecker.shared.learnWord(word)
+            self?.spellCache.removeAll()
+            self?.needsDisplay = true
+        })
+        items.append(.separator())
+        return items
     }
 
     /// Resize on column borders, move on the outer edges, pointing hand on links, text cursor in cells.
@@ -943,8 +1037,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
                     rect.fill(using: .sourceOver)
                 }
                 if editing != cell {
-                    model.displayText(cell, fitting: rect.width - 2 * Self.padX).draw(with: rect.insetBy(dx: Self.padX, dy: Self.padY),
-                                                 options: [.usesLineFragmentOrigin, .usesFontLeading])
+                    let text = model.displayText(cell, fitting: rect.width - 2 * Self.padX)
+                    text.draw(with: rect.insetBy(dx: Self.padX, dy: Self.padY), options: [.usesLineFragmentOrigin, .usesFontLeading])
+                    if !isExport { drawMisspellings(text, in: rect.insetBy(dx: Self.padX, dy: Self.padY)) }
                 }
             }
         }
@@ -1098,6 +1193,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     }
 
     func textDidChange(_ notification: Notification) {
+        CodeHighlighter.recolor(editor)
         guard let cell = editing, let storage = editor.textStorage else { return }
         model.store(storage, in: cell)
         owner?.controller?.markDirty()
@@ -1205,8 +1301,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             }, at: 0)
             items.insert(.separator(), at: 1)
         }
-        for (i, item) in items.enumerated() { menu.insertItem(item, at: i) }
-        menu.insertItem(.separator(), at: items.count)
+        TextFormatter.insertAfterSpelling(items + [.separator()], into: menu)
         return menu
     }
 
@@ -1342,7 +1437,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
             needsDisplay = true
         }
         becameActive()
-        return tableMenu(for: cell)
+        let menu = tableMenu(for: cell)
+        for (i, item) in spellingItems(at: convert(event.locationInWindow, from: nil)).enumerated() { menu.insertItem(item, at: i) }
+        return menu
     }
 
     // MARK: Keys (cells selected, not typing)

@@ -44,6 +44,7 @@ final class TitleView: NSScrollView, NSTextViewDelegate {
         editor.isRichText = false
         editor.importsGraphics = false
         editor.allowsUndo = true
+        editor.isContinuousSpellCheckingEnabled = true
         editor.drawsBackground = false
         editor.isHorizontallyResizable = true
         editor.isVerticallyResizable = false

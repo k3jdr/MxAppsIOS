@@ -305,6 +305,16 @@ struct HomeRibbon: View {
                     Button(style.title) { TextFormatter.applyStyle(style) }
                 }
             }
+            RibbonMenu("Code", "chevron.left.forwardslash.chevron.right") {
+                Button("Format as Code (⌥⌘C)") { TextFormatter.formatAsCode() }
+                Divider()
+                ForEach(CodeLanguage.allCases.filter { $0 != .auto }) { language in
+                    Button(language.title) { TextFormatter.formatAsCode(language) }
+                }
+                Divider()
+                Button("Theme: VS Code Dark+") { TextFormatter.setCodeTheme(.darkPlus) }
+                Button("Theme: VS Code Light+") { TextFormatter.setCodeTheme(.lightPlus) }
+            }
         }
         RibbonGroup("Tags") {
             RibbonButton("To Do (⌘1)", "checkmark.square") { TextFormatter.toggleTag(.todo) }

@@ -167,6 +167,18 @@ struct MainCommands: Commands {
                 Button("Justify") { TextFormatter.setAlignment(.justified) }
             }
             Divider()
+            Button("Format as Code") { TextFormatter.formatAsCode() }
+                .keyboardShortcut("c", modifiers: [.command, .option])
+            Menu("Format as Code in") {
+                ForEach(CodeLanguage.allCases.filter { $0 != .auto }) { language in
+                    Button(language.title) { TextFormatter.formatAsCode(language) }
+                }
+            }
+            Menu("Code Theme") {
+                Button("VS Code Dark+") { TextFormatter.setCodeTheme(.darkPlus) }
+                Button("VS Code Light+") { TextFormatter.setCodeTheme(.lightPlus) }
+            }
+            Divider()
             Button("Clear Formatting") { TextFormatter.clearFormatting() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }

@@ -111,6 +111,25 @@ It can't be undone.
   ↑ / ↓ at the first / last line of a cell go to the cell above / below (and out of the table at the top or bottom);
   ← / → at the start / end of a cell go to the previous / next cell.
 
+## Code blocks
+
+Select lines of code and choose **Format ▸ Format as Code** (⌥⌘C), or **Home ▸ Code** on the ribbon. The lines become a
+shaded block in Menlo, coloured like VS Code: keywords, control flow, types, functions, strings, numbers, comments,
+constants, properties, tags and attributes. The language is detected (Swift, Python, JavaScript, TypeScript, Java,
+C#, C / C++, Go, Rust, SQL, JSON, HTML / XML, CSS, Shell, YAML), or pick one from **Format as Code in**. **Code Theme**
+switches between Dark+ and Light+ (the block at the caret changes; new blocks use the theme).
+
+- The block re-colours as you type.
+- Enter keeps the indent and adds a level after `{ [ ( :`; Enter on an empty last line leaves the block.
+- Tab types four spaces and ⇧Tab removes them. Backspace in leading spaces steps back to the previous four-space stop.
+- Clear Formatting (⇧⌘N) turns a block back into normal text.
+
+## Spelling
+
+Misspelled words are underlined in text boxes, page titles and table cells. Right-click one for suggestions,
+Ignore Spelling and Learn Spelling; in text boxes the app's own items (links, Format as Code) come after them.
+Table cells formatted as code aren't checked.
+
 ## Keyboard
 
 
@@ -126,6 +145,7 @@ It can't be undone.
 | Heading 1 – 4 / Normal                                 | ⌥⌘1 – ⌥⌘4 / ⌥⌘0                     |
 | Bullets / Numbering                                     | ⌘. / ⌘/                                  |
 | Clear Formatting                                        | ⇧⌘N                                      |
+| Format as Code                                          | ⌥⌘C                                      |
 | Tags / Remove Tag / Tag Summary                         | ⌘1 – ⌘9 / ⌘0 / ⇧⌘T                   |
 | Link…                                                  | ⌘K                                        |
 | Date / Time / Date & Time                               | ⌥⇧D / ⌥⇧T / ⌥⇧F                      |
