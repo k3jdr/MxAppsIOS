@@ -496,6 +496,17 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         textView.setSelectedRange(NSRange(location: atEnd ? length : 0, length: 0))
     }
 
+    /// Puts the caret on the first or last line, at a page x position (arrow keys coming from another container).
+    func focus(lastLine: Bool, pageX: CGFloat) {
+        window?.makeFirstResponder(textView)
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        let x = pageX - frame.minX
+        let y = lastLine ? textView.bounds.maxY - textView.textContainerInset.height - 2 : textView.textContainerOrigin.y + 2
+        let index = textView.characterIndexForInsertion(at: NSPoint(x: x, y: y))
+        textView.setSelectedRange(NSRange(location: min(index, (textView.string as NSString).length), length: 0))
+        textView.scrollRangeToVisible(textView.selectedRange())
+    }
+
     override func makeElement() -> PageElement {
         var e = super.makeElement()
         if let storage = textView.textStorage {
@@ -541,6 +552,18 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         switch commandSelector {
         case #selector(NSResponder.insertNewline(_:)):
             return TextFormatter.handleNewline(textView)
+        case #selector(NSResponder.deleteBackward(_:)):
+            return TextFormatter.handleBackspace(textView)
+        case #selector(NSResponder.moveUp(_:)):
+            guard TextFormatter.caretLine(textView).first else { return false }
+            return controller?.moveFocus(from: self, up: true, x: frame.minX + TextFormatter.caretX(textView)) ?? false
+        case #selector(NSResponder.moveDown(_:)):
+            guard TextFormatter.caretLine(textView).last else { return false }
+            return controller?.moveFocus(from: self, up: false, x: frame.minX + TextFormatter.caretX(textView)) ?? false
+        case #selector(NSResponder.moveParagraphBackwardAndModifySelection(_:)):
+            return TextFormatter.moveParagraphs(textView, up: true)
+        case #selector(NSResponder.moveParagraphForwardAndModifySelection(_:)):
+            return TextFormatter.moveParagraphs(textView, up: false)
         case #selector(NSResponder.insertTab(_:)):
             return TextFormatter.handleTab(textView, outdent: false)
         case #selector(NSResponder.insertBacktab(_:)):

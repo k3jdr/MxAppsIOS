@@ -98,6 +98,19 @@ current default font (keep text you set to other fonts), leave code (monospaced)
 for new text. Bold, italic, colours and links are kept; page titles keep their style; locked sections are skipped.
 It can't be undone.
 
+## Keys in notes (OneNote style)
+
+- **Enter**: lists and To Dos continue; Enter on an empty item steps out one level, then ends the list. A new line keeps
+  the paragraph's indent; Enter on an empty indented line steps out. After a heading the next line is Normal text.
+  **⇧Enter** starts a new line in the same paragraph.
+- **Backspace** at the start of a tagged, bulleted or numbered paragraph removes the tag or marker (the text stays); at
+  the start of an indented paragraph it steps out one level.
+- **↑ / ↓** on the first / last line of a text box continue into the text box or table directly above / below, as if
+  the page were one outline. **⌥⇧↑ / ⌥⇧↓** move the selected paragraphs up or down.
+- **In tables**: Enter makes a new line in the cell (in the last row it adds a row; ⌘Enter inserts a row below);
+  ↑ / ↓ at the first / last line of a cell go to the cell above / below (and out of the table at the top or bottom);
+  ← / → at the start / end of a cell go to the previous / next cell.
+
 ## Keyboard
 
 

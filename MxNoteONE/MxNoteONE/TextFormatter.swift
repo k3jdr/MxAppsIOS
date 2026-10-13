@@ -531,6 +531,8 @@ enum TextFormatter {
     // MARK: Keys in lists
 
     /// Return in a list item continues the list; Return on an empty item ends it.
+    /// Enter, OneNote style: lists and To Dos continue (an empty item steps out a level, then ends the list);
+    /// a new line keeps the paragraph's indent (an empty indented line steps out); after a heading comes Normal text.
     static func handleNewline(_ tv: NSTextView) -> Bool {
         guard let storage = tv.textStorage else { return false }
         let sel = tv.selectedRange()
@@ -540,26 +542,176 @@ enum TextFormatter {
         let text = paragraphText(storage, range)
         let info = parseParagraph(text)
         let isTodo = info.tag == .todo
-        guard info.list != nil || isTodo else { return false }
-        let prefixEnd = info.indent + info.listLength + (isTodo ? info.tagLength : 0)
-        guard sel.location >= range.location + prefixEnd else { return false }
-        if (text as NSString).length <= prefixEnd {
-            replace(tv, edits: [(NSRange(location: range.location + info.indent, length: prefixEnd - info.indent), "")],
-                    actionName: "End List")
+        let length = (text as NSString).length
+        if info.list != nil || isTodo {
+            let prefixEnd = info.indent + info.listLength + (isTodo ? info.tagLength : 0)
+            guard sel.location >= range.location + prefixEnd else { return false }
+            if length <= prefixEnd {
+                if info.indent > 0 {
+                    // Empty nested item: one level out.
+                    replace(tv, edits: [(NSRange(location: range.location, length: 1), "")], actionName: "Outdent")
+                } else {
+                    replace(tv, edits: [(NSRange(location: range.location + info.indent, length: prefixEnd - info.indent), "")],
+                            actionName: "End List")
+                }
+                return true
+            }
+            var next = (text as NSString).substring(to: info.indent)
+            switch info.list {
+            case .bullet?: next += bullet
+            case .number(let n)?: next += "\(n + 1). "
+            case nil: break
+            }
+            if isTodo { next += TagKind.todo.symbol + " " }
+            var attrs = tv.typingAttributes
+            attrs[.link] = nil
+            tv.typingAttributes = attrs
+            tv.insertText("\n" + next, replacementRange: sel)
             return true
         }
-        var next = (text as NSString).substring(to: info.indent)
-        switch info.list {
-        case .bullet?: next += bullet
-        case .number(let n)?: next += "\(n + 1). "
-        case nil: break
+        let indent = (text as NSString).substring(to: info.indent)
+        let atEnd = sel.location >= range.location + length
+        let heading = length > 0 && atEnd ? headingStyle(storage.attributes(at: range.location, effectiveRange: nil)) : nil
+        if !indent.isEmpty, length == info.indent, sel.location >= range.location + info.indent {
+            // Empty indented line: one level out.
+            replace(tv, edits: [(NSRange(location: range.location, length: 1), "")], actionName: "Outdent")
+            return true
         }
-        if isTodo { next += TagKind.todo.symbol + " " }
-        var attrs = tv.typingAttributes
-        attrs[.link] = nil
-        tv.typingAttributes = attrs
-        tv.insertText("\n" + next, replacementRange: sel)
+        guard !indent.isEmpty || heading != nil else { return false }
+        var nextAttrs = tv.typingAttributes
+        nextAttrs[.link] = nil
+        if heading != nil {
+            nextAttrs = TextStyleKind.normal.attributes
+            if let style = tv.typingAttributes[.paragraphStyle] { nextAttrs[.paragraphStyle] = style }
+        }
+        let insertion = NSMutableAttributedString(string: "\n", attributes: tv.typingAttributes)
+        insertion.append(NSAttributedString(string: indent, attributes: nextAttrs))
+        guard tv.shouldChangeText(in: sel, replacementString: insertion.string) else { return true }
+        storage.replaceCharacters(in: sel, with: insertion)
+        tv.didChangeText()
+        tv.setSelectedRange(NSRange(location: sel.location + insertion.length, length: 0))
+        tv.typingAttributes = nextAttrs
         return true
+    }
+
+    /// The heading style (Title, Heading 1–4) text is in, if any.
+    static func headingStyle(_ attrs: [NSAttributedString.Key: Any]) -> TextStyleKind? {
+        guard let font = attrs[.font] as? NSFont else { return nil }
+        let fm = NSFontManager.shared
+        for kind in [TextStyleKind.title, .heading1, .heading2, .heading3, .heading4] {
+            let style = kind.attributes
+            guard let styleFont = style[.font] as? NSFont, abs(styleFont.pointSize - font.pointSize) < 0.5,
+                  fm.traits(of: styleFont).contains(.boldFontMask) == fm.traits(of: font).contains(.boldFontMask) else { continue }
+            let color = (attrs[.foregroundColor] as? NSColor)?.usingColorSpace(.sRGB)
+            let styleColor = (style[.foregroundColor] as? NSColor)?.usingColorSpace(.sRGB)
+            if let color, let styleColor, abs(color.redComponent - styleColor.redComponent) < 0.02,
+               abs(color.greenComponent - styleColor.greenComponent) < 0.02, abs(color.blueComponent - styleColor.blueComponent) < 0.02 {
+                return kind
+            }
+        }
+        return nil
+    }
+
+    /// Backspace, OneNote style: at the start of a tagged, bulleted or numbered paragraph the tag or marker goes
+    /// (the text stays); at the start of an indented paragraph it steps out one level.
+    static func handleBackspace(_ tv: NSTextView) -> Bool {
+        guard let storage = tv.textStorage else { return false }
+        let sel = tv.selectedRange()
+        guard sel.length == 0, sel.location > 0 else { return false }
+        let ns = storage.string as NSString
+        let range = ns.paragraphRange(for: NSRange(location: sel.location, length: 0))
+        let info = parseParagraph(paragraphText(storage, range))
+        let offset = sel.location - range.location
+        guard offset > 0 else { return false }
+        if info.tagLength > 0, offset == info.indent + info.listLength + info.tagLength {
+            replace(tv, edits: [(NSRange(location: range.location + info.indent + info.listLength, length: info.tagLength), "")],
+                    actionName: "Remove Tag")
+            return true
+        }
+        if info.listLength > 0, offset == info.indent + info.listLength {
+            replace(tv, edits: [(NSRange(location: range.location + info.indent, length: info.listLength), "")],
+                    actionName: "Remove Bullet")
+            return true
+        }
+        if info.indent > 0, offset == info.indent {
+            replace(tv, edits: [(NSRange(location: range.location, length: 1), "")], actionName: "Outdent")
+            return true
+        }
+        return false
+    }
+
+    /// ⌥⇧↑ / ⌥⇧↓ (OneNote): moves the selected paragraphs up or down past the neighbouring paragraph.
+    static func moveParagraphs(_ tv: NSTextView, up: Bool) -> Bool {
+        guard let storage = tv.textStorage, storage.length > 0 else { return true }
+        let ns = storage.string as NSString
+        let paragraphs = paragraphRanges(tv)
+        guard let firstRange = paragraphs.first, let lastRange = paragraphs.last else { return true }
+        let block = NSRange(location: firstRange.location, length: NSMaxRange(lastRange) - firstRange.location)
+        let neighbor: NSRange
+        if up {
+            guard block.location > 0 else { NSSound.beep(); return true }
+            neighbor = ns.paragraphRange(for: NSRange(location: block.location - 1, length: 0))
+        } else {
+            guard NSMaxRange(block) < ns.length else { NSSound.beep(); return true }
+            neighbor = ns.paragraphRange(for: NSRange(location: NSMaxRange(block), length: 0))
+        }
+        let combined = up ? NSRange(location: neighbor.location, length: NSMaxRange(block) - neighbor.location)
+                          : NSRange(location: block.location, length: NSMaxRange(neighbor) - block.location)
+        let first = NSMutableAttributedString(attributedString: storage.attributedSubstring(from: up ? block : neighbor))
+        let second = NSMutableAttributedString(attributedString: storage.attributedSubstring(from: up ? neighbor : block))
+        // The piece that ends the text has no line break: give the front piece one and take it from the back.
+        if !first.string.hasSuffix("\n") {
+            let attrs = first.length > 0 ? first.attributes(at: first.length - 1, effectiveRange: nil) : tv.typingAttributes
+            first.append(NSAttributedString(string: "\n", attributes: attrs))
+            if second.string.hasSuffix("\n") { second.deleteCharacters(in: NSRange(location: second.length - 1, length: 1)) }
+        }
+        let result = NSMutableAttributedString(attributedString: first)
+        result.append(second)
+        guard tv.shouldChangeText(in: combined, replacementString: result.string) else { return true }
+        storage.replaceCharacters(in: combined, with: result)
+        tv.didChangeText()
+        tv.undoManager?.setActionName(up ? "Move Paragraph Up" : "Move Paragraph Down")
+        let movedLength = up ? first.length : second.length
+        let movedStart = up ? combined.location : combined.location + first.length
+        var selection = NSRange(location: movedStart, length: movedLength)
+        if selection.length > 0, (storage.string as NSString).character(at: NSMaxRange(selection) - 1) == 0x0A { selection.length -= 1 }
+        tv.setSelectedRange(selection)
+        tv.scrollRangeToVisible(selection)
+        return true
+    }
+
+    /// Whether the caret is on the first / last visual line of a text view.
+    static func caretLine(_ tv: NSTextView) -> (first: Bool, last: Bool) {
+        guard let lm = tv.layoutManager, let tc = tv.textContainer, let storage = tv.textStorage, storage.length > 0 else {
+            return (true, true)
+        }
+        lm.ensureLayout(for: tc)
+        let location = tv.selectedRange().location
+        let caretLine: NSRect
+        if location >= storage.length, !lm.extraLineFragmentRect.isEmpty {
+            caretLine = lm.extraLineFragmentRect
+        } else {
+            let glyph = lm.glyphIndexForCharacter(at: min(location, storage.length - 1))
+            caretLine = lm.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        }
+        let firstLine = lm.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+        let lastLine = lm.extraLineFragmentRect.isEmpty
+            ? lm.lineFragmentRect(forGlyphAt: max(0, lm.numberOfGlyphs - 1), effectiveRange: nil) : lm.extraLineFragmentRect
+        return (caretLine.minY <= firstLine.minY + 0.5, caretLine.minY >= lastLine.minY - 0.5)
+    }
+
+    /// The caret's horizontal position in the text view.
+    static func caretX(_ tv: NSTextView) -> CGFloat {
+        guard let lm = tv.layoutManager, let tc = tv.textContainer, let storage = tv.textStorage, storage.length > 0 else {
+            return tv.textContainerOrigin.x
+        }
+        let location = min(tv.selectedRange().location, storage.length)
+        if location >= storage.length {
+            let glyph = lm.glyphIndexForCharacter(at: storage.length - 1)
+            return tv.textContainerOrigin.x + lm.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: tc).maxX
+        }
+        let glyph = lm.glyphIndexForCharacter(at: location)
+        return tv.textContainerOrigin.x + lm.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: tc).minX
     }
 
     /// Tab / Shift-Tab in a list item indents or outdents the item.

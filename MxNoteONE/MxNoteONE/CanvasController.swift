@@ -786,6 +786,29 @@ final class CanvasController: NSObject {
         findIndex = -1
     }
 
+    // MARK: - Arrow keys between containers
+
+    /// ↑ on the first line / ↓ on the last line: continue into the text box or table directly above / below
+    /// (as if the page's containers were one outline). Returns false when there's none.
+    @discardableResult
+    func moveFocus(from view: ElementView, up: Bool, x: CGFloat) -> Bool {
+        let source = view.frame
+        let candidates = canvas.elementViews.filter { other in
+            guard other !== view, other is TextElementView || other is TableElementView else { return false }
+            let f = other.frame
+            guard f.maxX > source.minX - 40, f.minX < source.maxX + 40 else { return false }
+            return up ? f.maxY <= source.minY + 4 : f.minY >= source.maxY - 4
+        }
+        let target = up ? candidates.max { $0.frame.maxY < $1.frame.maxY } : candidates.min { $0.frame.minY < $1.frame.minY }
+        guard let target else { return false }
+        if let text = target as? TextElementView {
+            text.focus(lastLine: up, pageX: x)
+        } else if let table = target as? TableElementView {
+            table.grid.enter(fromAbove: !up, pageX: x)
+        }
+        return true
+    }
+
     // MARK: - Frozen header rows
 
     /// Tables whose header row has scrolled above the visible area keep it pinned at the top of the view.

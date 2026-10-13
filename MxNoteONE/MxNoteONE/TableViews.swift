@@ -754,6 +754,23 @@ final class TableGridView: NSView, NSTextViewDelegate {
         if !(model.data.hideBorders ?? false) { grid.stroke() }
     }
 
+    /// Starts typing in a row at an x position (in this view), on the cell's first or last line.
+    private func enterRow(_ row: Int, atX x: CGFloat, lastLine: Bool) {
+        let column = max(0, min(model.columnCount - 1, (columnLefts.lastIndex { $0 <= x } ?? 0)))
+        let cell = model.master(CellRef(row: row, column: column))
+        beginEditing(cell)
+        let rect = cellRect(cell).insetBy(dx: Self.padX, dy: Self.padY)
+        let y = lastLine ? rect.maxY - 2 : rect.minY + 2
+        let index = editor.characterIndexForInsertion(at: editor.convert(NSPoint(x: x, y: y), from: self))
+        editor.setSelectedRange(NSRange(location: min(index, (editor.string as NSString).length), length: 0))
+    }
+
+    /// Arrow keys coming from another container: the first row (from above) or last row (from below), at a page x.
+    func enter(fromAbove: Bool, pageX: CGFloat) {
+        guard model.rowCount > 0, let owner else { return }
+        enterRow(fromAbove ? 0 : model.rowCount - 1, atX: pageX - owner.frame.minX, lastLine: !fromAbove)
+    }
+
     /// Selects a cell and scrolls it into view (paragraph links).
     func reveal(_ cell: CellRef) {
         let cell = model.master(cell)
@@ -1117,9 +1134,39 @@ final class TableGridView: NSView, NSTextViewDelegate {
             if model.focusRequest == nil { beginEditing(cell) } else { continueAtFocusRequest() }
             return true
         case #selector(NSResponder.insertNewline(_:)):
+            // OneNote: Enter is a new line in the cell; in the last row it adds a row; ⌘Enter inserts a row below.
+            let insertBelow = NSApp.currentEvent?.modifierFlags.contains(.command) == true
+            let block = model.span(cell)
+            guard insertBelow || block.row + block.rows >= model.rowCount else { return false }
             stopEditing(commit: true)
-            model.newline(from: cell, insertBelow: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
+            model.newline(from: cell, insertBelow: insertBelow)
             continueAtFocusRequest()
+            return true
+        case #selector(NSResponder.moveUp(_:)), #selector(NSResponder.moveDown(_:)):
+            let up = commandSelector == #selector(NSResponder.moveUp(_:))
+            let line = TextFormatter.caretLine(textView)
+            guard up ? line.first : line.last else { return false }
+            let block = model.span(cell)
+            let x = cellRect(cell).minX + TableGridView.padX + TextFormatter.caretX(textView)
+            let row = up ? block.row - 1 : block.row + block.rows
+            if row >= 0, row < model.rowCount {
+                enterRow(row, atX: x, lastLine: up)
+            } else if let owner {
+                endEditing()
+                let pageX = owner.frame.minX + x
+                if owner.controller?.moveFocus(from: owner, up: up, x: pageX) != true { beginEditing(cell) }
+            }
+            return true
+        case #selector(NSResponder.moveLeft(_:)), #selector(NSResponder.moveRight(_:)):
+            let left = commandSelector == #selector(NSResponder.moveLeft(_:))
+            let selection = textView.selectedRange()
+            let length = (textView.string as NSString).length
+            guard selection.length == 0, left ? selection.location == 0 : selection.location >= length else { return false }
+            let order = model.visibleCells
+            guard let index = order.firstIndex(of: cell) else { return false }
+            let next = left ? index - 1 : index + 1
+            guard order.indices.contains(next) else { return true }
+            beginEditing(order[next], caretAtEnd: left)
             return true
         case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), #selector(NSResponder.insertLineBreak(_:)):
             textView.insertText("\n", replacementRange: textView.selectedRange())
