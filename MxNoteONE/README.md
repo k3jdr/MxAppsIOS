@@ -80,6 +80,15 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Templates**: To Do List, Meeting Notes, Project Overview, Lecture Notes (Cornell), Daily Journal, Weekly Planner, Decision Log.
 - Everything saves automatically. Undo / Redo covers typing, formatting, moving, resizing, inserting, deleting and ink.
 
+## Microsoft Office fonts
+
+Office for Mac keeps its fonts (Calibri, Consolas, Cambria, Aptos, Segoe UI…) inside the Office apps, so other apps
+can't use them. When Word, Excel, PowerPoint, OneNote or Outlook is installed, MxNoteONE loads those fonts for itself
+at launch — nothing is copied or installed and other apps aren't affected. They appear in the ribbon's font box
+(Calibri, Aptos, Segoe UI, Cambria and Consolas in the short list), Settings and Notebook Fonts, and imported OneNote
+pages keep their Calibri / Consolas text. Turn it off in **Settings ▸ General ▸ Fonts ▸ Use fonts from Microsoft
+Office** (takes effect the next time MxNoteONE opens). The fonts are Microsoft's, licensed with Office.
+
 ## Notebook fonts
 
 **Notebook ▸ Notebook Fonts…** (also in the Format menu and a notebook's right-click menu) sets one font family and

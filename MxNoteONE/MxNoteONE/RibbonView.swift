@@ -209,11 +209,12 @@ private func swatch(_ color: NSColor) -> Image {
 
 struct HomeRibbon: View {
     private static let sizes: [CGFloat] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72]
-    private static let common = ["Helvetica Neue", "Avenir Next", "Calibri", "Arial", "Georgia", "Times New Roman",
-                                 "Palatino", "Optima", "Gill Sans", "Futura", "Verdana", "Menlo", "Courier New"]
+    private static let common = ["Helvetica Neue", "Avenir Next", "Aptos", "Calibri", "Segoe UI", "Arial", "Verdana",
+                                 "Georgia", "Cambria", "Times New Roman", "Palatino", "Optima", "Gill Sans", "Futura",
+                                 "Menlo", "Consolas", "Courier New"]
 
     private var families: [String] {
-        let available = Set(NSFontManager.shared.availableFontFamilies)
+        let available = Set(FontLibrary.shared.families)
         return Self.common.filter(available.contains)
     }
 
@@ -243,7 +244,7 @@ struct HomeRibbon: View {
                 }
                 Divider()
                 Menu("All Fonts") {
-                    ForEach(NSFontManager.shared.availableFontFamilies, id: \.self) { fontItem($0) }
+                    ForEach(FontLibrary.shared.families, id: \.self) { fontItem($0) }
                 }
                 Divider()
                 Button("Show Fonts…") { NSFontManager.shared.orderFrontFontPanel(nil) }

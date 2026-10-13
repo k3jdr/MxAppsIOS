@@ -14,6 +14,21 @@ struct SettingsView: View {
     @AppStorage(Prefs.ruleLinesKey) private var ruleLines = RuleLines.none.rawValue
     @AppStorage(Prefs.notebooksFolderKey) private var notebooksFolder = ""
     @AppStorage(Prefs.autoLockKey) private var autoLockMinutes = 10
+    @State private var useOfficeFonts = OfficeFonts.enabled
+
+    private var officeFontsStatus: String {
+        let available = OfficeFonts.fontFiles()
+        if available.files.isEmpty {
+            return "Microsoft Office isn't installed. Its fonts (Calibri, Consolas, Cambria…) come with Word, Excel, PowerPoint, OneNote or Outlook."
+        }
+        if !OfficeFonts.loaded.isEmpty && !useOfficeFonts {
+            return "Office fonts will be removed the next time you open MxNoteONE. Text in those fonts then shows in a similar Mac font."
+        }
+        if !OfficeFonts.loaded.isEmpty {
+            return "\(OfficeFonts.loaded.count) Office font files (Calibri, Consolas, Cambria, Aptos…) from \(OfficeFonts.sources.joined(separator: ", ")) are available in MxNoteONE. They're used from the Office apps — nothing is copied or installed, and other apps aren't affected."
+        }
+        return "Calibri, Consolas, Cambria and the other fonts that come with \(available.apps.joined(separator: ", ")) can be used in MxNoteONE."
+    }
 
     var body: some View {
         TabView {
@@ -29,12 +44,25 @@ struct SettingsView: View {
         Form {
             Section("New Text") {
                 Picker("Default font:", selection: $fontName) {
-                    ForEach(NSFontManager.shared.availableFontFamilies, id: \.self) { Text($0).tag($0) }
+                    ForEach(FontLibrary.shared.families, id: \.self) { Text($0).tag($0) }
                 }
                 Stepper("Default size: \(Int(fontSize)) pt", value: $fontSize, in: 8...48)
                 Text("The quick brown fox jumps over the lazy dog.")
                     .font(Font(Prefs.defaultFont as CTFont))
                     .foregroundStyle(.secondary)
+            }
+            Section("Fonts") {
+                Toggle("Use fonts from Microsoft Office", isOn: Binding(
+                    get: { useOfficeFonts },
+                    set: { on in
+                        OfficeFonts.setEnabled(on)
+                        useOfficeFonts = on
+                    }))
+                .disabled(OfficeFonts.fontFiles().files.isEmpty)
+                Text(officeFontsStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("New Pages") {
                 Picker("Page color:", selection: $pageColor) {

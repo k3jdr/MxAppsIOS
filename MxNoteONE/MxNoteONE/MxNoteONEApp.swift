@@ -44,6 +44,11 @@ struct MxNoteONEApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Calibri, Consolas and the other Microsoft Office fonts, for MxNoteONE only.
+        OfficeFonts.load()
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         NotebookStore.shared.canvas?.flush()
     }

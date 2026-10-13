@@ -179,7 +179,7 @@ struct NotebookFontsSheet: View {
                 Section {
                     Toggle("Change the font to:", isOn: $changeFamily)
                     Picker("Font:", selection: $family) {
-                        ForEach(NSFontManager.shared.availableFontFamilies, id: \.self) { Text($0).tag($0) }
+                        ForEach(FontLibrary.shared.families, id: \.self) { Text($0).tag($0) }
                     }
                     .disabled(!changeFamily)
                     Picker("Sizes:", selection: $sizeMode) {
