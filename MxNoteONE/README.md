@@ -42,6 +42,23 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   Row, Column, Banded Rows and Table Shading (colour palette or No Color), Text Color, insert / delete rows and
   columns, clear cells, delete table, sort, header row, hide borders. Text turns white on dark shades unless you
   gave it a colour. Shading moves with its row when sorting; new columns take the shading of the column beside them.
+- **Columns, Excel style**: while you work in a table a bar of column letters (A, B, C…) sits on its top edge. Click
+  a letter to select the column, ⇧-click or drag across letters for several. Right-click a letter for Sort A to Z /
+  Z to A, Filter…, Hide / Unhide Columns, insert, delete, clear and Column Shading.
+- **Hide and show columns**: Hide Column (column bar, right-click a cell, or the Table ribbon). Hidden columns keep
+  their text; the table gets narrower, and a double line in the column bar marks where they are — click it to show
+  them again, or use Unhide Columns.
+- **Filter** (Table ribbon, right-click, or Filter… on a column letter): filter buttons appear in the first row.
+  A button opens Sort A to Z / Z to A, Clear Filter, a search box and a checklist of the column's values (with
+  Select All and Blanks); OK hides the other rows. Filtered columns show a filter icon and "▾" by their letter.
+  Like Excel, filters apply when you choose them — rows you edit afterwards stay visible until you filter again.
+  Turning Filter off shows every row.
+- **Sorting** sorts numbers in order (2 before 10), ignores case and puts blank cells last. It leaves the first row
+  in place as a header. For a table without Header Row, right-click ▸
+  **Sort Includes First Row** sorts every row.
+- **Moving rows**: right-click ▸ Move Row Up / Down, the Table ribbon's Row Up / Row Down, or ⌥⇧↑ / ⌥⇧↓ (also while
+  typing in a cell). Or select whole rows (right-click ▸ Select Row, or drag across them) and drag them up or down; a
+  line shows where they'll go. The header row stays first.
 - **Column widths**: drag a column border to resize that column; the table grows or shrinks with it.
 - **Pointer**: ↔ on column borders (resize), open hand on the table's top, left and bottom edges (drag to move the
   table), pointing hand on links (click to follow; ⌥-click to type in the cell instead), text cursor in cells. Links in
@@ -78,7 +95,9 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Links**: type `[[Page Name]]` to link to a page in the notebook (it is created if it doesn't exist), or use ⌘K for
   web links and links to any page. Right-click a page ▸ Copy Link to Page and paste it anywhere in your notes.
 - **Templates**: To Do List, Meeting Notes, Project Overview, Lecture Notes (Cornell), Daily Journal, Weekly Planner, Decision Log.
-- Everything saves automatically. Undo / Redo covers typing, formatting, moving, resizing, inserting, deleting and ink.
+- Everything saves automatically. Undo / Redo covers typing, formatting, moving, resizing, inserting, deleting and ink,
+  and table changes (sorting, moving rows, inserting / deleting rows and columns, shading, merging, column widths,
+  typing in cells). ⌘Z / ⇧⌘Z, or ⌃Z / ⌃Y as in OneNote for Windows.
 
 ## Microsoft Office fonts
 
@@ -109,7 +128,7 @@ It can't be undone.
   the page were one outline. **⌥⇧↑ / ⌥⇧↓** move the selected paragraphs up or down.
 - **In tables**: Enter makes a new line in the cell (in the last row it adds a row; ⌘Enter inserts a row below);
   ↑ / ↓ at the first / last line of a cell go to the cell above / below (and out of the table at the top or bottom);
-  ← / → at the start / end of a cell go to the previous / next cell.
+  ← / → at the start / end of a cell go to the previous / next cell. ⌥⇧↑ / ⌥⇧↓ move the row up or down.
 
 ## Code blocks
 

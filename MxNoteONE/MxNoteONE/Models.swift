@@ -297,6 +297,15 @@ struct TableData: Codable, Hashable {
     var hideBorders: Bool?
     /// Merged cells: each span is drawn as one cell, its text kept in the top-left cell.
     var merges: [CellSpan]?
+    /// Hidden columns (Excel: Hide / Unhide); they keep their text and width.
+    var hiddenColumns: [Int]?
+    /// Filter buttons on the first row (Excel: Filter).
+    var autoFilter: Bool?
+    /// Column filters. The rows they hide are worked out when a filter changes (as in Excel), so a row
+    /// being typed in doesn't vanish.
+    var filters: [ColumnFilter]?
+    /// Rows hidden by the filters.
+    var filteredRows: [Int]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {
@@ -324,6 +333,13 @@ struct TableData: Codable, Hashable {
         }
         shading = grid
     }
+}
+
+/// A table column filter: values not shown, and optionally text the cell must contain.
+struct ColumnFilter: Codable, Hashable {
+    var column: Int
+    var excluded: [String] = []
+    var contains: String?
 }
 
 /// A block of merged table cells, starting at its top-left cell.

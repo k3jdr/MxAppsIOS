@@ -18,6 +18,7 @@
 //
 
 import AppKit
+import SwiftUI
 
 extension NSAttributedString.Key {
     /// Marks text whose colour was chosen automatically for the cell's shading (never saved).
@@ -77,6 +78,7 @@ extension TableData {
         let i = min(max(index, 0), rows.count)
         let columns = columnCount
         rows.insert(Array(repeating: "", count: columns), at: i)
+        shiftRows(at: i, by: 1)
         shading?.insert(Array(repeating: nil, count: columns), at: i)
         rich?.insert(Array(repeating: nil, count: columns), at: i)
         merges = merges?.map { span in
@@ -92,6 +94,7 @@ extension TableData {
         let i = min(max(index, 0), columnCount)
         let neighbor = i > 0 ? i - 1 : i
         for r in rows.indices { rows[r].insert("", at: i) }
+        shiftColumns(at: i, by: 1)
         if shading != nil {
             for r in shading!.indices {
                 let color = shading![r].indices.contains(neighbor) ? shading![r][neighbor] : nil
@@ -118,6 +121,7 @@ extension TableData {
             if shading != nil { shading![index + 1][span.column] = shading![index][span.column] }
         }
         rows.remove(at: index)
+        shiftRows(at: index, by: -1)
         _ = shading?.remove(at: index)
         _ = rich?.remove(at: index)
         merges = merges?.compactMap { span in
@@ -137,6 +141,7 @@ extension TableData {
             if shading != nil { shading![span.row][index + 1] = shading![span.row][index] }
         }
         for r in rows.indices { rows[r].remove(at: index) }
+        shiftColumns(at: index, by: -1)
         merges = merges?.compactMap { span in
             var s = span
             if s.column > index { s.column -= 1 } else if index < s.column + s.columns { s.columns -= 1 }
@@ -171,6 +176,12 @@ extension TableData {
         rows = order.map { rows[$0] }
         if let shading { self.shading = order.map { shading[$0] } }
         if let rich { self.rich = order.map { rich[$0] } }
+        var newIndex = Array(repeating: 0, count: order.count)
+        for (new, old) in order.enumerated() { newIndex[old] = new }
+        remapRows(newIndex)
+        if let merges {
+            self.merges = merges.map { var m = $0; if m.rows == 1, m.row < newIndex.count { m.row = newIndex[m.row] }; return m }
+        }
     }
 }
 
@@ -186,17 +197,53 @@ final class TableModel {
     var onChange: (() -> Void)?
     private var storedCache: [CellRef: NSAttributedString] = [:]
 
+    /// The table as one undo step sees it.
+    struct Snapshot {
+        var data: TableData
+        var width: CGFloat
+    }
+
+    /// The table after the last undo step; changes since then become the next step.
+    private var undoBase: TableData
+    /// Called with the table before a change that should be undoable, and the change's name.
+    var onUndoable: ((Snapshot, String) -> Void)?
+
     init(data: TableData, width: CGFloat) {
+        var data = data
+        data.normalize()
         self.data = data
-        self.data.normalize()
+        self.undoBase = data
         self.width = width
+    }
+
+    var snapshot: Snapshot { Snapshot(data: data, width: width) }
+
+    /// Records the changes since the last step as one undo step (nothing when the table is unchanged).
+    func checkpoint(_ name: String, widthBefore: CGFloat? = nil) {
+        guard data != undoBase else { return }
+        let before = Snapshot(data: undoBase, width: widthBefore ?? width)
+        undoBase = data
+        onUndoable?(before, name)
+    }
+
+    /// Puts the table back as it was (undo / redo).
+    func restore(_ snapshot: Snapshot) {
+        data = snapshot.data
+        undoBase = snapshot.data
+        changed()
     }
 
     var rowCount: Int { data.rows.count }
     var columnCount: Int { data.columnCount }
 
+    /// A column's width on the page (0 when hidden); the shown columns share the table's width.
     func columnWidth(_ column: Int) -> CGFloat {
-        let total = data.columnWidths.reduce(0, +)
+        isColumnHidden(column) ? 0 : fullColumnWidth(column)
+    }
+
+    /// A column's width, also for a hidden column (the width it gets back when shown).
+    func fullColumnWidth(_ column: Int) -> CGFloat {
+        let total = data.columnWidths.indices.reduce(0) { isColumnHidden($1) ? $0 : $0 + data.columnWidths[$1] }
         guard column < data.columnWidths.count, total > 0 else { return 80 }
         return max(30, width * data.columnWidths[column] / total)
     }
@@ -217,7 +264,9 @@ final class TableModel {
 
     /// Visible cells in reading order.
     var visibleCells: [CellRef] {
-        (0..<rowCount).flatMap { r in (0..<columnCount).compactMap { c in data.isCovered(r, c) ? nil : CellRef(row: r, column: c) } }
+        (0..<rowCount).flatMap { r in
+            (0..<columnCount).compactMap { c in data.isCovered(r, c) || !isShown(CellRef(row: r, column: c)) ? nil : CellRef(row: r, column: c) }
+        }
     }
 
     func text(_ cell: CellRef) -> String {
@@ -335,7 +384,7 @@ final class TableModel {
         return plain
     }
 
-    private func changed() {
+    func changed() {
         storedCache.removeAll()
         onChange?()
     }
@@ -379,7 +428,7 @@ final class TableModel {
 
     /// Column widths as points (so one column can change without the others).
     func freezeColumnWidths() {
-        data.columnWidths = (0..<columnCount).map { Double(columnWidth($0)) }
+        data.columnWidths = (0..<columnCount).map { Double(fullColumnWidth($0)) }
     }
 
     // MARK: OneNote-style keys
@@ -412,7 +461,8 @@ final class TableModel {
     /// Return: in the last row adds a row; elsewhere moves down. ⌘Return inserts a row below.
     func newline(from cell: CellRef, insertBelow: Bool) {
         let block = span(master(cell))
-        let below = block.row + block.rows
+        let next = shownRow(from: block.row + block.rows, step: 1) ?? rowCount
+        let below = insertBelow ? block.row + block.rows : next
         if insertBelow || below >= rowCount {
             insertRow(at: below)
             focusRequest = CellRef(row: below, column: insertBelow ? cell.column : 0)
@@ -451,15 +501,45 @@ final class TableModel {
     /// Tables with cells merged across rows can't be sorted.
     var canSort: Bool { !(data.merges ?? []).contains { $0.rows > 1 } }
 
+    /// Sorting leaves the first row in place (as a header) unless this is on; tables with Header Row on always keep it.
+    static let sortIncludesFirstRowKey = "tableSortIncludesFirstRow"
+    static var sortIncludesFirstRow: Bool { UserDefaults.standard.bool(forKey: sortIncludesFirstRowKey) }
+
+    /// The first row is kept out of sorting.
+    var firstRowIsHeader: Bool { data.headerRow || filterOn || !Self.sortIncludesFirstRow }
+
     func sort(byColumn column: Int, ascending: Bool) {
         guard canSort else { return NSSound.beep() }
-        let skip = data.headerRow && rowCount > 0 ? 1 : 0
+        let skip = firstRowIsHeader && rowCount > 1 ? 1 : 0
         var body = Array(skip..<rowCount)
+        // Numbers in order (2 before 10), case ignored, blank cells last either way — as in Excel.
+        let key = { (r: Int) in Self.filterValue(self.data.rows[r][column]) }
         body.sort {
-            let order = data.rows[$0][column].localizedStandardCompare(data.rows[$1][column])
+            let a = key($0), b = key($1)
+            if a.isEmpty != b.isEmpty { return b.isEmpty }
+            let order = a.localizedStandardCompare(b)
             return ascending ? order == .orderedAscending : order == .orderedDescending
         }
         data.reorderRows(Array(0..<skip) + body)
+        applyFilters()
+        changed()
+    }
+
+    /// Whether rows can move: the header row stays first, and rows inside a block merged across rows don't move.
+    func canMoveRows(_ rows: ClosedRange<Int>, by offset: Int) -> Bool {
+        let top = data.headerRow ? 1 : 0
+        guard rows.lowerBound + offset >= top, rows.upperBound + offset < rowCount, rows.lowerBound >= top else { return false }
+        return !(data.merges ?? []).contains { $0.rows > 1 }
+    }
+
+    /// Moves a run of rows up (negative) or down (positive) by a number of rows.
+    func moveRows(_ rows: ClosedRange<Int>, by offset: Int) {
+        guard offset != 0, canMoveRows(rows, by: offset) else { return }
+        var order = Array(0..<rowCount)
+        let moving = Array(rows)
+        order.removeSubrange(rows)
+        order.insert(contentsOf: moving, at: rows.lowerBound + offset)
+        data.reorderRows(order)
         changed()
     }
 
@@ -638,7 +718,11 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// The table being edited or with selected cells (the Table ribbon and cell formatting act on it).
     static weak var active: TableGridView? {
-        didSet { NotebookStore.shared.editor.tableActive = active != nil }
+        didSet {
+            NotebookStore.shared.editor.tableActive = active != nil
+            if oldValue !== active { oldValue?.updateColumnBar() }
+            active?.updateColumnBar()
+        }
     }
 
     weak var owner: TableElementView?
@@ -646,7 +730,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     var isExport = false
     private(set) var selection: Set<CellRef> = [] {
         didSet {
-            guard selection != oldValue, editing == nil, !selection.isEmpty, !isExport else { return }
+            guard selection != oldValue else { return }
+            columnBar?.needsDisplay = true
+            if (selection.isEmpty) != (oldValue.isEmpty) { updateColumnBar() }
+            guard editing == nil, !selection.isEmpty, !isExport else { return }
             reportCellFormatting()
         }
     }
@@ -657,9 +744,13 @@ final class TableGridView: NSView, NSTextViewDelegate {
             .map { model.displayText($0) })
     }
     private var anchor: CellRef?
+    /// Row boundary where dragged rows would be dropped.
+    private var dropLine: Int?
     /// The moving corner of a ⇧-extended selection.
     private var extent: CellRef?
-    private(set) var editing: CellRef?
+    private(set) var editing: CellRef? {
+        didSet { if (editing == nil) != (oldValue == nil) { updateColumnBar() } }
+    }
     private let editor = NoteTextView(usingTextLayoutManager: false)
     private var editorUndo = UndoManager()
     private var rowHeights: [CGFloat] = []
@@ -756,7 +847,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// Starts typing in a row at an x position (in this view), on the cell's first or last line.
     private func enterRow(_ row: Int, atX x: CGFloat, lastLine: Bool) {
-        let column = max(0, min(model.columnCount - 1, (columnLefts.lastIndex { $0 <= x } ?? 0)))
+        let row = model.shownRow(from: row, step: lastLine ? -1 : 1) ?? row
+        var column = max(0, min(model.columnCount - 1, (columnLefts.lastIndex { $0 <= x } ?? 0)))
+        column = model.shownColumn(from: column, step: -1) ?? model.shownColumn(from: column, step: 1) ?? column
         let cell = model.master(CellRef(row: row, column: column))
         beginEditing(cell)
         let rect = cellRect(cell).insetBy(dx: Self.padX, dy: Self.padY)
@@ -787,15 +880,18 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private func cell(at point: NSPoint) -> CellRef? {
         let point = unpinned(point)
         guard model.rowCount > 0, model.columnCount > 0 else { return nil }
-        let row = max(0, min(model.rowCount - 1, (rowTops.lastIndex { $0 <= point.y } ?? 0)))
-        let column = max(0, min(model.columnCount - 1, (columnLefts.lastIndex { $0 <= point.x } ?? 0)))
+        var row = max(0, min(model.rowCount - 1, (rowTops.lastIndex { $0 <= point.y } ?? 0)))
+        var column = max(0, min(model.columnCount - 1, (columnLefts.lastIndex { $0 <= point.x } ?? 0)))
+        // Hidden rows and columns have no size; land on the shown one before them.
+        row = model.shownRow(from: row, step: -1) ?? model.shownRow(from: row, step: 1) ?? row
+        column = model.shownColumn(from: column, step: -1) ?? model.shownColumn(from: column, step: 1) ?? column
         return model.master(CellRef(row: row, column: column))
     }
 
     /// Index of the column whose right border is under the point (for resizing).
     private func columnBorder(at point: NSPoint) -> Int? {
         guard !isExport else { return nil }
-        for c in 0..<model.columnCount where abs(columnLefts[c + 1] - point.x) <= 3 { return c }
+        for c in 0..<model.columnCount where !model.isColumnHidden(c) && abs(columnLefts[c + 1] - point.x) <= 3 { return c }
         return nil
     }
 
@@ -831,15 +927,17 @@ final class TableGridView: NSView, NSTextViewDelegate {
         columnLefts = [0]
         for c in 0..<model.columnCount { columnLefts.append(columnLefts[c] + model.columnWidth(c)) }
         rowHeights = (0..<model.rowCount).map { r in
+            if model.isRowHidden(r) { return 0 }
             let tallest = (0..<model.columnCount).compactMap { c -> CGFloat? in
                 let cell = CellRef(row: r, column: c)
-                guard !model.data.isCovered(r, c), model.span(cell).rows == 1 else { return nil }
+                guard !model.data.isCovered(r, c), !model.isColumnHidden(c), model.span(cell).rows == 1 else { return nil }
                 return measure(cell)
             }.max() ?? 0
             return max(Self.minRowHeight, tallest + 2 * Self.padY)
         }
         // A merged cell taller than its rows makes its last row taller.
-        for block in model.data.merges ?? [] where block.rows > 1 && block.row + block.rows <= rowHeights.count {
+        for block in model.data.merges ?? [] where block.rows > 1 && block.row + block.rows <= rowHeights.count
+            && !model.isRowHidden(block.row + block.rows - 1) {
             let needed = measure(CellRef(row: block.row, column: block.column)) + 2 * Self.padY
             let have = rowHeights[block.row..<(block.row + block.rows)].reduce(0, +)
             if needed > have { rowHeights[block.row + block.rows - 1] += needed - have }
@@ -851,6 +949,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         positionEditor()
         window?.invalidateCursorRects(for: self)
         needsDisplay = true
+        updateColumnBar()
     }
 
     // MARK: Cursors
@@ -1022,8 +1121,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// Resize on column borders, move on the outer edges, pointing hand on links, text cursor in cells.
     func cursor(at p: NSPoint) -> NSCursor {
+        if filterButton(at: p) != nil { return .arrow }
         if columnBorder(at: p) != nil { return .resizeLeftRight }
         if onOuterEdge(p) { return .openHand }
+        if selectedWholeRows != nil, let cell = cell(at: p), selection.contains(cell) { return .openHand }
         if link(at: p) != nil { return .pointingHand }
         return .iBeam
     }
@@ -1068,11 +1169,14 @@ final class TableGridView: NSView, NSTextViewDelegate {
                     NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
                     rect.fill(using: .sourceOver)
                 }
+                var textRect = rect.insetBy(dx: Self.padX, dy: Self.padY)
+                if hasFilterButton(cell) { textRect.size.width -= Self.filterButtonSize }
                 if editing != cell {
-                    let text = model.displayText(cell, fitting: rect.width - 2 * Self.padX)
-                    drawText(text, in: rect.insetBy(dx: Self.padX, dy: Self.padY))
-                    if !isExport { drawMisspellings(text, in: rect.insetBy(dx: Self.padX, dy: Self.padY)) }
+                    let text = model.displayText(cell, fitting: textRect.width)
+                    drawText(text, in: textRect)
+                    if !isExport { drawMisspellings(text, in: textRect) }
                 }
+                if hasFilterButton(cell) { drawFilterButton(cell) }
             }
         }
         let grid = NSBezierPath()
@@ -1089,6 +1193,213 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         grid.stroke()
         drawSelectionOutline(showSelection)
+        if let dropLine, rowTops.indices.contains(dropLine) {
+            NSColor.controlAccentColor.setFill()
+            NSRect(x: 0, y: rowTops[dropLine] - 1.5, width: columnLefts.last ?? bounds.width, height: 3).fill()
+        }
+    }
+
+    // MARK: Filter buttons
+
+    static let filterButtonSize: CGFloat = 16
+
+    /// Header-row cells show a filter button while filters are on.
+    private func hasFilterButton(_ cell: CellRef) -> Bool {
+        !isExport && model.filterOn && cell.row == 0 && model.rowCount > 1
+    }
+
+    private func filterButtonRect(_ cell: CellRef) -> NSRect {
+        let rect = cellRect(cell)
+        let size = Self.filterButtonSize
+        return NSRect(x: rect.maxX - size - 3, y: rect.minY + min(4, max(0, (rect.height - size) / 2)), width: size, height: size)
+    }
+
+    private func drawFilterButton(_ cell: CellRef) {
+        let rect = filterButtonRect(cell)
+        let filtered = model.isFiltered(cell.column)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
+        (filtered ? NSColor.controlAccentColor.withAlphaComponent(0.18) : NSColor.white).setFill()
+        path.fill()
+        NSColor(white: 0.6, alpha: 1).setStroke()
+        path.lineWidth = 0.75
+        path.stroke()
+        let symbol = filtered ? "line.3.horizontal.decrease" : "chevron.down"
+        let config = NSImage.SymbolConfiguration(pointSize: filtered ? 9 : 8, weight: .semibold)
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Filter")?.withSymbolConfiguration(config) {
+            let tinted = NSImage(size: image.size, flipped: false) { r in
+                image.draw(in: r)
+                (filtered ? NSColor.controlAccentColor : NSColor(white: 0.3, alpha: 1)).set()
+                r.fill(using: .sourceAtop)
+                return true
+            }
+            let s = tinted.size
+            tinted.draw(in: NSRect(x: rect.midX - s.width / 2, y: rect.midY - s.height / 2, width: s.width, height: s.height),
+                        from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
+    }
+
+    private func filterButton(at p: NSPoint) -> CellRef? {
+        guard model.filterOn, model.rowCount > 1 else { return nil }
+        for c in model.shownColumns {
+            let cell = model.master(CellRef(row: 0, column: c))
+            if cell.row == 0, filterButtonRect(cell).insetBy(dx: -2, dy: -2).contains(p) { return cell }
+        }
+        return nil
+    }
+
+    private var filterPopover: NSPopover?
+
+    func closeFilter() {
+        filterPopover?.close()
+        filterPopover = nil
+    }
+
+    /// The filter button's popover: sort, search and pick the values to show.
+    func showFilter(_ column: Int) {
+        let cell = model.master(CellRef(row: 0, column: column))
+        endEditing()
+        let header = model.text(cell).trimmingCharacters(in: .whitespacesAndNewlines)
+        closeFilter()
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let view = TableFilterView(
+            title: header.isEmpty ? "Column \(TableData.columnName(column))" : header,
+            values: model.values(in: column),
+            filter: model.filter(for: column) ?? ColumnFilter(column: column),
+            sort: { [weak self] ascending in self?.sortColumn(column, ascending: ascending) },
+            apply: { [weak self] filter in self?.applyFilter(filter) },
+            close: { [weak popover] in popover?.performClose(nil) })
+        popover.contentViewController = NSHostingController(rootView: view)
+        filterPopover = popover
+        popover.show(relativeTo: filterButtonRect(cell), of: self, preferredEdge: .maxY)
+    }
+
+    func applyFilter(_ filter: ColumnFilter) {
+        guard model.canSort else { return NSSound.beep() }
+        run(filter.excluded.isEmpty && (filter.contains ?? "").isEmpty ? "Clear Filter" : "Filter") { model.setFilter(filter) }
+    }
+
+    func toggleFilter() {
+        guard model.filterOn || model.canSort else { return NSSound.beep() }
+        run("Filter") { model.toggleAutoFilter() }
+    }
+
+    func clearAllFilters() { run("Clear Filter") { model.clearAllFilters() } }
+
+    func sortColumn(_ column: Int, ascending: Bool) { run("Sort") { model.sort(byColumn: column, ascending: ascending) } }
+
+    // MARK: Columns (Excel style)
+
+    /// Left edges of the columns, and the table's right edge.
+    var columnEdges: [CGFloat] { columnLefts }
+
+    /// Columns whose every shown cell is selected.
+    var selectedWholeColumns: Set<Int> {
+        guard editing == nil, !selection.isEmpty else { return [] }
+        let columns = Set(selection.map(\.column))
+        return columns.filter { c in
+            (0..<model.rowCount).allSatisfy { r in
+                let cell = CellRef(row: r, column: c)
+                return !model.isShown(cell) || model.data.isCovered(r, c) || selection.contains(cell)
+                    || selection.contains(model.master(cell))
+            }
+        }
+    }
+
+    /// Selects whole columns (from the column bar or ⌃Space).
+    func selectColumns(_ a: Int, _ b: Int) {
+        endEditing()
+        becameActive()
+        let top = model.shownRow(from: 0, step: 1) ?? 0
+        let bottom = model.shownRow(from: model.rowCount - 1, step: -1) ?? model.rowCount - 1
+        selectRange(CellRef(row: top, column: min(a, b)), CellRef(row: bottom, column: max(a, b)))
+        anchor = CellRef(row: top, column: a)
+        extent = CellRef(row: bottom, column: b)
+        window?.makeFirstResponder(self)
+        columnBar?.needsDisplay = true
+    }
+
+    private var targetColumns: [Int] {
+        let whole = selectedWholeColumns
+        if !whole.isEmpty { return whole.sorted() }
+        return selectedColumns.isEmpty ? [targetCell.column] : selectedColumns
+    }
+
+    func hideColumns() {
+        let columns = targetColumns
+        guard model.canHide(columns) else { return NSSound.beep() }
+        run(columns.count > 1 ? "Hide Columns" : "Hide Column") { model.hideColumns(columns) }
+        selection = []
+    }
+
+    func unhideColumns(_ columns: [Int]? = nil) {
+        guard model.hasHiddenColumns else { return }
+        run("Unhide Columns") { model.unhideColumns(columns) }
+    }
+
+    /// The column bar's right-click menu.
+    func columnMenu(for column: Int) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let columns = targetColumns
+        let n = columns.count
+        let sortable = model.canSort
+        for (title, ascending) in [("Sort A to Z", true), ("Sort Z to A", false)] {
+            let item = ClosureMenuItem(title) { [weak self] in self?.sortColumn(column, ascending: ascending) }
+            item.isEnabled = sortable
+            menu.addItem(item)
+        }
+        let filter = ClosureMenuItem("Filter…") { [weak self] in
+            guard let self else { return }
+            if !self.model.filterOn { self.toggleFilter() }
+            self.showFilter(column)
+        }
+        filter.isEnabled = sortable && model.rowCount > 1
+        menu.addItem(filter)
+        if model.isFiltered(column) {
+            menu.addItem(ClosureMenuItem("Clear Filter") { [weak self] in self?.applyFilter(ColumnFilter(column: column)) })
+        }
+        menu.addItem(.separator())
+        let hide = ClosureMenuItem(n > 1 ? "Hide \(n) Columns" : "Hide Column") { [weak self] in self?.hideColumns() }
+        hide.isEnabled = model.canHide(columns)
+        menu.addItem(hide)
+        let unhide = ClosureMenuItem("Unhide Columns") { [weak self] in self?.unhideColumns() }
+        unhide.isEnabled = model.hasHiddenColumns
+        menu.addItem(unhide)
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Insert Column Left") { [weak self] in self?.insertColumnLeft() })
+        menu.addItem(ClosureMenuItem("Insert Column Right") { [weak self] in self?.insertColumnRight() })
+        menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Columns" : "Delete Column") { [weak self] in self?.deleteColumns() })
+        menu.addItem(ClosureMenuItem(n > 1 ? "Clear \(n) Columns" : "Clear Column") { [weak self] in self?.clearCells() })
+        menu.addItem(.separator())
+        menu.addItem(paletteItem("Column Shading") { [weak self] in self?.shadeColumns($0) })
+        return menu
+    }
+
+    // MARK: Column bar
+
+    private(set) var columnBar: TableColumnBar?
+
+    /// Shows the A, B, C… bar above the table while it's being worked in (cells selected or typing).
+    func updateColumnBar() {
+        let show = !isExport && TableGridView.active === self && (editing != nil || !selection.isEmpty) && window != nil
+        guard show, let owner, let canvas = owner.canvas else {
+            columnBar?.removeFromSuperview()
+            return
+        }
+        let bar = columnBar ?? TableColumnBar()
+        bar.grid = self
+        columnBar = bar
+        let origin = canvas.convert(NSPoint(x: 0, y: 0), from: self)
+        // Right on the table's top (over the container's grip while it shows).
+        bar.frame = NSRect(x: origin.x, y: origin.y - TableColumnBar.height,
+                           width: columnLefts.last ?? bounds.width, height: TableColumnBar.height)
+        if bar.superview !== canvas || canvas.subviews.last !== bar {
+            bar.removeFromSuperview()
+            canvas.addSubview(bar)
+        }
+        bar.needsDisplay = true
+        window?.invalidateCursorRects(for: bar)
     }
 
     private func drawSelectionOutline(_ show: Bool) {
@@ -1138,6 +1449,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
+            columnBar?.removeFromSuperview()
+            closeFilter()
             if editing != nil { stopEditing(commit: true) }
             selection = []
             deactivate()
@@ -1211,6 +1524,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         if commit, let storage = editor.textStorage {
             model.store(storage, in: cell)
             owner?.controller?.markDirty()
+            model.checkpoint("Typing")
         }
         heightCache[cell] = nil
         editing = nil
@@ -1256,6 +1570,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         guard let cell = editing else { return false }
         switch commandSelector {
+        case #selector(NSResponder.moveParagraphBackwardAndModifySelection(_:)),
+             #selector(NSResponder.moveParagraphForwardAndModifySelection(_:)):
+            moveRows(up: commandSelector == #selector(NSResponder.moveParagraphBackwardAndModifySelection(_:)))
+            return true
         case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
             stopEditing(commit: true)
             model.tab(from: cell, backward: commandSelector == #selector(NSResponder.insertBacktab(_:)))
@@ -1276,7 +1594,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             guard up ? line.first : line.last else { return false }
             let block = model.span(cell)
             let x = cellRect(cell).minX + TableGridView.padX + TextFormatter.caretX(textView)
-            let row = up ? block.row - 1 : block.row + block.rows
+            let row = model.shownRow(from: up ? block.row - 1 : block.row + block.rows, step: up ? -1 : 1) ?? -1
             if row >= 0, row < model.rowCount {
                 enterRow(row, atX: x, lastLine: up)
             } else if let owner {
@@ -1353,6 +1671,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             if let storage = scratch.textStorage { model.store(storage, in: cell) }
             heightCache[cell] = nil
         }
+        model.checkpoint("Format")
         owner?.controller?.markDirty()
         relayout()
         reportCellFormatting()
@@ -1364,6 +1683,11 @@ final class TableGridView: NSView, NSTextViewDelegate {
     override func mouseDown(with event: NSEvent) {
         guard !isExport, let owner, let window else { return }
         let p = convert(event.locationInWindow, from: nil)
+        if let cell = filterButton(at: p) {
+            becameActive()
+            showFilter(cell.column)
+            return
+        }
         if let column = columnBorder(at: p) {
             resizeColumn(column, from: event)
             return
@@ -1380,6 +1704,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
             return
         }
         guard let start = cell(at: p) else { return }
+        if event.modifierFlags.intersection([.shift, .command, .option]).isEmpty, let rows = selectedWholeRows,
+           selection.contains(start), dragRows(rows, from: event) {
+            return
+        }
         owner.canvas?.selectedElement = nil
         becameActive()
         if event.modifierFlags.contains(.shift), let anchor {
@@ -1429,6 +1757,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private func resizeColumn(_ column: Int, from event: NSEvent) {
         guard let window else { return }
         endEditing()
+        let widthBefore = model.width
         model.freezeColumnWidths()
         let startX = convert(event.locationInWindow, from: nil).x
         let startWidth = model.data.columnWidths[column]
@@ -1447,6 +1776,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             self.heightCache.removeAll()
             self.relayout()
         }
+        model.checkpoint("Resize Column", widthBefore: widthBefore)
         owner?.controller?.markDirty()
     }
 
@@ -1454,7 +1784,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let block = model.bounds(of: [a, b])
         var cells: Set<CellRef> = []
         for r in block.row..<(block.row + block.rows) {
-            for c in block.column..<(block.column + block.columns) { cells.insert(model.master(CellRef(row: r, column: c))) }
+            for c in block.column..<(block.column + block.columns) where model.isShown(CellRef(row: r, column: c)) {
+                cells.insert(model.master(CellRef(row: r, column: c)))
+            }
         }
         selection = cells
         needsDisplay = true
@@ -1483,6 +1815,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             beginEditing(anchor)
         case 51, 117:
             model.clear(selection)
+            model.checkpoint("Clear")
             heightCache.removeAll()
             relayout()
             owner?.controller?.markDirty()
@@ -1494,6 +1827,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
             needsDisplay = true
             owner?.canvas?.selectedElement = owner
             window?.makeFirstResponder(owner?.canvas)
+        case 125, 126 where event.modifierFlags.contains([.option, .shift]):
+            moveRows(up: event.keyCode == 126)
         case 123, 124, 125, 126:
             let shift = event.modifierFlags.contains(.shift)
             let from = shift ? (extent ?? anchor) : anchor
@@ -1505,6 +1840,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
             case 125: next.row = block.row + block.rows
             default: next.row = block.row - 1
             }
+            if next.row != from.row { next.row = model.shownRow(from: next.row, step: next.row < from.row ? -1 : 1) ?? -1 }
+            if next.column != from.column { next.column = model.shownColumn(from: next.column, step: next.column < from.column ? -1 : 1) ?? -1 }
             guard model.contains(next) else { return }
             next = model.master(next)
             if shift {
@@ -1544,6 +1881,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     @objc func cut(_ sender: Any?) {
         copy(sender)
         model.clear(selection)
+        model.checkpoint("Cut")
     }
 
     @objc func paste(_ sender: Any?) {
@@ -1555,6 +1893,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 if model.contains(cell) { model.store(NSAttributedString(string: value, attributes: model.typingAttributes(cell)), in: cell) }
             }
         }
+        model.checkpoint("Paste")
         heightCache.removeAll()
         model.onChange?()
     }
@@ -1567,30 +1906,143 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     // MARK: Commands (right-click menu and the Table ribbon tab)
 
-    private func run(_ body: () -> Void) {
+    private func run(_ name: String = "Table Change", _ body: () -> Void) {
         endEditing()
+        let widthBefore = model.width
         body()
+        model.checkpoint(name, widthBefore: widthBefore)
         heightCache.removeAll()
         relayout()
+    }
+
+    // MARK: Undo
+
+    /// Table changes are undo steps of the page (Edit ▸ Undo, ⌘Z), next to moving and deleting containers.
+    func registerUndo(restoring snapshot: TableModel.Snapshot, _ name: String) {
+        guard let undo = owner?.controller?.undoManager else { return }
+        undo.registerUndo(withTarget: self) { grid in grid.restore(snapshot, name) }
+        undo.setActionName(name)
+    }
+
+    private func restore(_ snapshot: TableModel.Snapshot, _ name: String) {
+        if editing != nil { stopEditing(commit: true) }
+        let current = model.snapshot
+        let delta = snapshot.width - model.width
+        model.restore(snapshot)
+        if abs(delta) > 0.5 { model.onWidthChange?(delta) }
+        registerUndo(restoring: current, name)
+        selection = selection.filter(model.contains)
+        heightCache.removeAll()
+        relayout()
+    }
+
+    // MARK: Moving rows
+
+    /// The selected rows (or the row being typed in) as one run.
+    private var targetRows: ClosedRange<Int> {
+        let rows = selectedRows.isEmpty ? [targetCell.row] : selectedRows
+        return rows.min()!...rows.max()!
+    }
+
+    func canMoveRows(up: Bool) -> Bool { model.canMoveRows(targetRows, by: up ? -1 : 1) }
+
+    /// Move Row Up / Down (⌥⇧↑ / ⌥⇧↓): the selected rows, or the row being typed in, keeping the caret.
+    func moveRows(up: Bool) {
+        moveRows(targetRows, by: up ? -1 : 1)
+    }
+
+    private func moveRows(_ rows: ClosedRange<Int>, by offset: Int) {
+        guard model.canMoveRows(rows, by: offset) else { return NSSound.beep() }
+        let typing = editing.map { ($0, editor.selectedRange()) }
+        let selected = selection
+        run(rows.count > 1 ? "Move Rows" : "Move Row") { model.moveRows(rows, by: offset) }
+        if let (cell, caret) = typing {
+            beginEditing(CellRef(row: cell.row + offset, column: cell.column))
+            if caret.location <= editor.string.utf16.count { editor.setSelectedRange(caret) }
+        } else {
+            selection = Set(selected.map { CellRef(row: $0.row + offset, column: $0.column) }.filter(model.contains))
+            anchor = anchor.map { CellRef(row: $0.row + offset, column: $0.column) }
+            extent = extent.map { CellRef(row: $0.row + offset, column: $0.column) }
+            needsDisplay = true
+        }
+    }
+
+    /// Whole rows are selected (every cell of each selected row).
+    private var selectedWholeRows: ClosedRange<Int>? {
+        guard editing == nil, !selection.isEmpty else { return nil }
+        let rows = selectedRows
+        guard rows.last! - rows.first! + 1 == rows.count else { return nil }
+        for r in rows {
+            for c in 0..<model.columnCount where !model.data.isCovered(r, c) && !model.isColumnHidden(c) {
+                if !selection.contains(CellRef(row: r, column: c)) { return nil }
+            }
+        }
+        return rows.first!...rows.last!
+    }
+
+    func selectRows() {
+        let rows = targetRows
+        endEditing()
+        selectRange(CellRef(row: rows.lowerBound, column: 0), CellRef(row: rows.upperBound, column: model.columnCount - 1))
+        anchor = CellRef(row: rows.lowerBound, column: 0)
+        window?.makeFirstResponder(self)
+    }
+
+    /// Where dragged rows would go: the row boundary nearest the pointer.
+    private func dropBoundary(at y: CGFloat) -> Int {
+        var best = 0
+        for (i, top) in rowTops.enumerated() where abs(top - y) < abs(rowTops[best] - y) { best = i }
+        return best
+    }
+
+    /// Dragging selected whole rows moves them; a line shows where they'll go.
+    private func dragRows(_ rows: ClosedRange<Int>, from event: NSEvent) -> Bool {
+        guard let window else { return false }
+        let startY = convert(event.locationInWindow, from: nil).y
+        var moved = false
+        var boundary: Int?
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
+                           mode: .eventTracking) { ev, stop in
+            guard let ev, ev.type == .leftMouseDragged else {
+                stop.pointee = true
+                return
+            }
+            let y = self.convert(ev.locationInWindow, from: nil).y
+            if !moved, abs(y - startY) < 4 { return }
+            moved = true
+            NSCursor.closedHand.set()
+            let b = self.dropBoundary(at: y)
+            let offset = b <= rows.lowerBound ? b - rows.lowerBound : b - rows.upperBound - 1
+            boundary = offset != 0 && self.model.canMoveRows(rows, by: offset) ? b : nil
+            self.dropLine = boundary
+            self.needsDisplay = true
+        }
+        dropLine = nil
+        needsDisplay = true
+        guard moved else { return false }
+        if let b = boundary {
+            moveRows(rows, by: b <= rows.lowerBound ? b - rows.lowerBound : b - rows.upperBound - 1)
+        }
+        return true
     }
 
     private var selectedRows: [Int] { Set(targetCells.map(\.row)).sorted() }
     private var selectedColumns: [Int] { Set(targetCells.map(\.column)).sorted() }
 
-    func insertRowAbove() { run { model.insertRow(at: selectedRows.first ?? targetCell.row) } }
-    func insertRowBelow() { run { model.insertRow(at: (selectedRows.last ?? targetCell.row) + 1) } }
-    func insertColumnLeft() { run { model.addColumn(at: selectedColumns.first ?? targetCell.column) } }
-    func insertColumnRight() { run { model.addColumn(at: (selectedColumns.last ?? targetCell.column) + 1) } }
+    func insertRowAbove() { run("Insert Row") { model.insertRow(at: selectedRows.first ?? targetCell.row) } }
+    func insertRowBelow() { run("Insert Row") { model.insertRow(at: (selectedRows.last ?? targetCell.row) + 1) } }
+    func insertColumnLeft() { run("Insert Column") { model.addColumn(at: selectedColumns.first ?? targetCell.column) } }
+    func insertColumnRight() { run("Insert Column") { model.addColumn(at: (selectedColumns.last ?? targetCell.column) + 1) } }
 
     func deleteRows() {
         let rows = selectedRows.isEmpty ? [targetCell.row] : selectedRows
-        run { for r in rows.reversed() where model.rowCount > 1 { model.deleteRow(r) } }
+        run(rows.count > 1 ? "Delete Rows" : "Delete Row") { for r in rows.reversed() where model.rowCount > 1 { model.deleteRow(r) } }
         selection = []
     }
 
     func deleteColumns() {
         let columns = selectedColumns.isEmpty ? [targetCell.column] : selectedColumns
-        run { for c in columns.reversed() where model.columnCount > 1 { model.removeColumn(c) } }
+        run(columns.count > 1 ? "Delete Columns" : "Delete Column") { for c in columns.reversed() where model.columnCount > 1 { model.removeColumn(c) } }
         selection = []
     }
 
@@ -1602,41 +2054,41 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     func shadeCells(_ color: NSColor?) {
         let cells = targetCells.isEmpty ? [targetCell] : targetCells
-        run { model.setShading(color, cells: cells) }
+        run("Shading") { model.setShading(color, cells: cells) }
     }
 
     func shadeRows(_ color: NSColor?) {
         let rows = selectedRows.isEmpty ? [targetCell.row] : selectedRows
         let cells = Set(rows.flatMap { r in (0..<model.columnCount).map { CellRef(row: r, column: $0) } })
-        run { model.setShading(color, cells: cells) }
+        run("Shading") { model.setShading(color, cells: cells) }
     }
 
     func shadeColumns(_ color: NSColor?) {
         let columns = selectedColumns.isEmpty ? [targetCell.column] : selectedColumns
         let cells = Set(columns.flatMap { c in (0..<model.rowCount).map { CellRef(row: $0, column: c) } })
-        run { model.setShading(color, cells: cells) }
+        run("Shading") { model.setShading(color, cells: cells) }
     }
 
-    func shadeHeaderRow(_ color: NSColor?) { run { model.setShading(color, scope: .headerRow, at: targetCell) } }
-    func shadeTable(_ color: NSColor?) { run { model.setShading(color, scope: .table, at: targetCell) } }
-    func bandRows(_ color: NSColor?) { run { model.bandRows(color) } }
-    func toggleHeaderRow() { run { model.toggleHeaderRow() } }
-    func toggleBorders() { run { model.toggleBorders() } }
-    func sort(ascending: Bool) { let column = targetCell.column; run { model.sort(byColumn: column, ascending: ascending) } }
-    func clearCells() { let cells = targetCells; run { model.clear(cells) } }
+    func shadeHeaderRow(_ color: NSColor?) { run("Shading") { model.setShading(color, scope: .headerRow, at: targetCell) } }
+    func shadeTable(_ color: NSColor?) { run("Shading") { model.setShading(color, scope: .table, at: targetCell) } }
+    func bandRows(_ color: NSColor?) { run("Shading") { model.bandRows(color) } }
+    func toggleHeaderRow() { run("Header Row") { model.toggleHeaderRow() } }
+    func toggleBorders() { run("Borders") { model.toggleBorders() } }
+    func sort(ascending: Bool) { let column = targetCell.column; run("Sort") { model.sort(byColumn: column, ascending: ascending) } }
+    func clearCells() { let cells = targetCells; run("Clear") { model.clear(cells) } }
 
     func mergeCells() {
         let cells = targetCells
         guard cells.count > 1 else { return NSSound.beep() }
-        run { model.merge(cells) }
+        run("Merge Cells") { model.merge(cells) }
         let top = model.master(CellRef(row: model.bounds(of: cells).row, column: model.bounds(of: cells).column))
         selection = [top]
         anchor = top
     }
 
-    func unmergeCell() { let cell = targetCell; run { model.unmerge(cell) } }
-    func splitIntoColumns() { let cell = targetCell; run { model.splitIntoColumns(cell) } }
-    func splitIntoRows() { let cell = targetCell; run { model.splitIntoRows(cell) } }
+    func unmergeCell() { let cell = targetCell; run("Unmerge Cells") { model.unmerge(cell) } }
+    func splitIntoColumns() { let cell = targetCell; run("Split Cell") { model.splitIntoColumns(cell) } }
+    func splitIntoRows() { let cell = targetCell; run("Split Cell") { model.splitIntoRows(cell) } }
     var targetIsMerged: Bool { model.data.span(targetCell.row, targetCell.column) != nil }
 
     func selectTable() {
@@ -1709,13 +2161,38 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let rows = selectedRows.count, columns = selectedColumns.count
         menu.addItem(ClosureMenuItem(rows > 1 ? "Delete \(rows) Rows" : "Delete Row") { [weak self] in self?.deleteRows() })
         menu.addItem(ClosureMenuItem(columns > 1 ? "Delete \(columns) Columns" : "Delete Column") { [weak self] in self?.deleteColumns() })
+        let hide = ClosureMenuItem(columns > 1 ? "Hide \(columns) Columns" : "Hide Column") { [weak self] in self?.hideColumns() }
+        hide.isEnabled = model.canHide(targetColumns)
+        menu.addItem(hide)
+        if model.hasHiddenColumns {
+            menu.addItem(ClosureMenuItem("Unhide Columns") { [weak self] in self?.unhideColumns() })
+        }
         menu.addItem(ClosureMenuItem(count > 1 ? "Clear Selected Cells" : "Clear Cell") { [weak self] in self?.clearCells() })
         menu.addItem(ClosureMenuItem("Delete Table") { [weak self] in self?.deleteTable() })
+        menu.addItem(.separator())
+        let up = ClosureMenuItem(rows > 1 ? "Move Rows Up" : "Move Row Up") { [weak self] in self?.moveRows(up: true) }
+        up.isEnabled = canMoveRows(up: true)
+        menu.addItem(up)
+        let down = ClosureMenuItem(rows > 1 ? "Move Rows Down" : "Move Row Down") { [weak self] in self?.moveRows(up: false) }
+        down.isEnabled = canMoveRows(up: false)
+        menu.addItem(down)
+        menu.addItem(ClosureMenuItem(rows > 1 ? "Select Rows" : "Select Row") { [weak self] in self?.selectRows() })
         menu.addItem(.separator())
         for (title, ascending) in [("Sort Ascending by This Column", true), ("Sort Descending by This Column", false)] {
             let item = ClosureMenuItem(title) { [weak self] in self?.sort(ascending: ascending) }
             item.isEnabled = model.canSort
             menu.addItem(item)
+        }
+        if !model.data.headerRow && !model.filterOn {
+            menu.addItem(ClosureMenuItem("Sort Includes First Row", state: TableModel.sortIncludesFirstRow) {
+                UserDefaults.standard.set(!TableModel.sortIncludesFirstRow, forKey: TableModel.sortIncludesFirstRowKey)
+            })
+        }
+        let filterItem = ClosureMenuItem("Filter", state: model.filterOn) { [weak self] in self?.toggleFilter() }
+        filterItem.isEnabled = model.filterOn || model.canSort
+        menu.addItem(filterItem)
+        if model.data.filteredRows != nil || model.data.filters != nil {
+            menu.addItem(ClosureMenuItem("Clear All Filters") { [weak self] in self?.clearAllFilters() })
         }
         menu.addItem(ClosureMenuItem("Header Row", state: model.data.headerRow) { [weak self] in self?.toggleHeaderRow() })
         menu.addItem(ClosureMenuItem("Hide Borders", state: model.data.hideBorders ?? false) { [weak self] in self?.toggleBorders() })
@@ -1740,6 +2217,7 @@ final class TableElementView: ElementView {
             self?.grid.invalidateLayout()
             self?.grid.relayout()
         }
+        model.onUndoable = { [weak self] before, name in self?.grid.registerUndo(restoring: before, name) }
         model.onWidthChange = { [weak self] delta in
             guard let self else { return }
             self.setWidth(self.frame.width + delta)
@@ -1753,6 +2231,21 @@ final class TableElementView: ElementView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override var minWidth: CGFloat { 60 }
+
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        super.setFrameOrigin(newOrigin)
+        if grid.columnBar?.superview != nil { grid.updateColumnBar() }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if grid.columnBar?.superview != nil { grid.updateColumnBar() }
+    }
+
+    override func removeFromSuperview() {
+        grid.columnBar?.removeFromSuperview()
+        super.removeFromSuperview()
+    }
 
     override func prepareForExport() {
         super.prepareForExport()
@@ -1795,7 +2288,7 @@ final class TableElementView: ElementView {
     override func makeElement() -> PageElement {
         var e = super.makeElement()
         var table = model.data
-        table.columnWidths = (0..<table.columnCount).map { Double(model.columnWidth($0)) }
+        table.columnWidths = (0..<table.columnCount).map { Double(model.fullColumnWidth($0)) }
         e.table = table
         return e
     }

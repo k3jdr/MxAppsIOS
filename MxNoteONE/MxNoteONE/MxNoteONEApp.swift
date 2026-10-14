@@ -47,6 +47,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Calibri, Consolas and the other Microsoft Office fonts, for MxNoteONE only.
         OfficeFonts.load()
+        // ⌃Z / ⌃Y (as in OneNote for Windows) also undo and redo; ⌘Z / ⇧⌘Z are the Mac keys.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard mods == .control || mods == [.control, .shift] else { return event }
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "z": NSApp.sendAction(mods.contains(.shift) ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: nil)
+            case "y" where mods == .control: NSApp.sendAction(Selector(("redo:")), to: nil, from: nil)
+            default: return event
+            }
+            return nil
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

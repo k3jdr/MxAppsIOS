@@ -542,6 +542,11 @@ struct TableRibbon: View {
             RibbonButton("Hide Borders", "square.dashed", large: true) { grid?.toggleBorders() }
             RibbonButton("Sort A→Z", "arrow.up", large: true) { grid?.sort(ascending: true) }
             RibbonButton("Sort Z→A", "arrow.down", large: true) { grid?.sort(ascending: false) }
+            RibbonButton("Filter", "line.3.horizontal.decrease.circle", large: true) { grid?.toggleFilter() }
+            RibbonButton("Hide Columns", "eye.slash", large: true) { grid?.hideColumns() }
+            RibbonButton("Unhide Columns", "eye", large: true) { grid?.unhideColumns() }
+            RibbonButton("Row Up", "arrow.up.to.line", large: true) { grid?.moveRows(up: true) }
+            RibbonButton("Row Down", "arrow.down.to.line", large: true) { grid?.moveRows(up: false) }
             RibbonButton("Select Table", "tablecells", large: true) { grid?.selectTable() }
         }
     }
