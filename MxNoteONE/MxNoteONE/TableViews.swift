@@ -257,8 +257,9 @@ final class TableModel {
     func displayText(_ cell: CellRef) -> NSAttributedString {
         let text = NSMutableAttributedString(attributedString: storedText(cell))
         let auto = autoColor(cell)
-        text.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: text.length)) { value, range, _ in
-            if value == nil || Self.isBlack(value as? NSColor) {
+        text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attrs, range, _ in
+            let value = attrs[.foregroundColor]
+            if value == nil || Self.isBlack(value as? NSColor) && !CodeHighlighter.isCode(attrs) {
                 text.addAttributes([.foregroundColor: auto, .mxAutoColor: true], range: range)
             }
         }
@@ -745,8 +746,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 shade.nsColor.setFill()
                 rect.fill()
             }
-            model.displayText(cell, fitting: rect.width - 2 * Self.padX)
-                .draw(with: rect.insetBy(dx: Self.padX, dy: Self.padY), options: [.usesLineFragmentOrigin, .usesFontLeading])
+            drawText(model.displayText(cell, fitting: rect.width - 2 * Self.padX), in: rect.insetBy(dx: Self.padX, dy: Self.padY))
             grid.appendRect(rect)
         }
         grid.lineWidth = 0.75
@@ -804,9 +804,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let width = max(blockWidth(cell) - 2 * Self.padX, 10)
         let text = editing == cell ? (editor.textStorage ?? NSAttributedString()) : model.displayText(cell, fitting: width)
         var height = text.length == 0 ? model.baseFont(cell.row).boundingRectForFont.height
+            : Self.hasBlocks(text) ? blockTextHeight(text, width: width)
             : text.boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
                                 options: [.usesLineFragmentOrigin, .usesFontLeading]).height
-        if text.string.hasSuffix("\n") { height += model.baseFont(cell.row).pointSize * 1.25 }
+        if text.string.hasSuffix("\n"), !Self.hasBlocks(text) { height += model.baseFont(cell.row).pointSize * 1.25 }
         height = ceil(height)
         heightCache[cell] = height
         return height
@@ -872,6 +873,37 @@ final class TableGridView: NSView, NSTextViewDelegate {
         return abs(p.y) <= 3 || abs(p.x) <= 3 || abs(p.y - height) <= 3
     }
 
+    /// Whether the text has a code block (or other text block), which boundingRect and draw(with:) don't handle.
+    static func hasBlocks(_ text: NSAttributedString) -> Bool {
+        var blocks = false
+        text.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: text.length)) { value, _, stop in
+            if let style = value as? NSParagraphStyle, !style.textBlocks.isEmpty { blocks = true; stop.pointee = true }
+        }
+        return blocks
+    }
+
+    private func blockTextHeight(_ text: NSAttributedString, width: CGFloat) -> CGFloat {
+        let (storage, layout, container) = layout(text, width: width)
+        layout.ensureLayout(for: container)
+        return withExtendedLifetime(storage) { layout.usedRect(for: container).height }
+    }
+
+    /// Draws a cell's text; code blocks go through a layout manager, which also paints their shading.
+    private func drawText(_ text: NSAttributedString, in rect: NSRect) {
+        guard Self.hasBlocks(text) else {
+            text.draw(with: rect, options: [.usesLineFragmentOrigin, .usesFontLeading])
+            return
+        }
+        let (storage, layout, container) = layout(text, width: rect.width)
+        let glyphs = layout.glyphRange(for: container)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: rect.insetBy(dx: -Self.padX + 1, dy: -Self.padY + 1)).addClip()
+        layout.drawBackground(forGlyphRange: glyphs, at: rect.origin)
+        layout.drawGlyphs(forGlyphRange: glyphs, at: rect.origin)
+        NSGraphicsContext.restoreGraphicsState()
+        withExtendedLifetime(storage) {}
+    }
+
     /// Lays out a drawn cell's text the way draw(_:) shows it.
     private func layout(_ text: NSAttributedString, width: CGFloat) -> (NSTextStorage, NSLayoutManager, NSTextContainer) {
         let storage = NSTextStorage(attributedString: text)
@@ -930,7 +962,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private func drawMisspellings(_ text: NSAttributedString, in rect: NSRect) {
         let ranges = misspellings(text)
         guard !ranges.isEmpty else { return }
-        let (_, layout, container) = layout(text, width: rect.width)
+        let (storage, layout, container) = layout(text, width: rect.width)
         NSColor.systemRed.setFill()
         for range in ranges {
             let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
@@ -1038,7 +1070,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 }
                 if editing != cell {
                     let text = model.displayText(cell, fitting: rect.width - 2 * Self.padX)
-                    text.draw(with: rect.insetBy(dx: Self.padX, dy: Self.padY), options: [.usesLineFragmentOrigin, .usesFontLeading])
+                    drawText(text, in: rect.insetBy(dx: Self.padX, dy: Self.padY))
                     if !isExport { drawMisspellings(text, in: rect.insetBy(dx: Self.padX, dy: Self.padY)) }
                 }
             }

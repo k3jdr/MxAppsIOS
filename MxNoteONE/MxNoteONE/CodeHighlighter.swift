@@ -500,7 +500,8 @@ enum CodeHighlighter {
         let paragraph = NSMutableParagraphStyle()
         paragraph.textBlocks = [block]
         paragraph.lineHeightMultiple = 1.15
-        let keys: [NSAttributedString.Key] = [.backgroundColor, .underlineStyle, .strikethroughStyle, .superscript, .link, .obliqueness]
+        // .mxAutoColor too: table cells drop the colour of "automatic" text when they're saved.
+        let keys: [NSAttributedString.Key] = [.backgroundColor, .underlineStyle, .strikethroughStyle, .superscript, .link, .obliqueness, .mxAutoColor]
         for key in keys { storage.removeAttribute(key, range: range) }
         storage.addAttributes([.font: codeFont, .foregroundColor: theme.text, .paragraphStyle: paragraph,
                                .mxCodeLanguage: resolved.rawValue], range: range)
@@ -541,6 +542,7 @@ enum CodeHighlighter {
         let code = (storage.string as NSString).substring(with: range)
         let resolved = language == .auto ? detect(code) : language
         storage.beginEditing()
+        storage.removeAttribute(.mxAutoColor, range: range)
         storage.addAttribute(.foregroundColor, value: theme.text, range: range)
         storage.addAttribute(.mxCodeLanguage, value: resolved.rawValue, range: range)
         for (token, kind) in tokens(code, language: resolved) {
