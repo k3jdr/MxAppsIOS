@@ -16,6 +16,8 @@ struct ApiTestResult {
     var body: String
     var checks: [(label: String, passed: Bool)]
     var error: String?
+    /// The parsed response, when it was JSON.
+    var json: Any?
 
     var passed: Bool { error == nil && checks.allSatisfy(\.passed) }
 }
@@ -100,7 +102,7 @@ enum ApiTester {
                 checks.append((label: "Field “\(field)” present", passed: json.map { lookup(field, in: $0) != nil } ?? false))
             }
             return ApiTestResult(url: shownURL, status: status, elapsed: elapsed,
-                                 body: pretty(data, json: json), checks: checks, error: nil)
+                                 body: pretty(data, json: json), checks: checks, error: nil, json: json)
         } catch {
             return ApiTestResult(url: shownURL, status: nil, elapsed: Date().timeIntervalSince(started),
                                  body: "", checks: [], error: error.localizedDescription)

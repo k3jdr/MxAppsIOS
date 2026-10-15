@@ -65,9 +65,16 @@ final class EditorState {
     var subscriptionToEdit: UUID?
     /// Bumped when API keys may have changed, so checks that read the Keychain run again.
     var keyRevision = 0
+    var showConsole = false
+    var consoleHeight: CGFloat = 230
+
+    /// Runs and debugs this window's jobspace.
+    let run = RunEngine()
 
     /// The window's document; set by ContentView so menu commands can edit it.
-    @ObservationIgnored var document: Binding<JobspaceDocument>?
+    @ObservationIgnored var document: Binding<JobspaceDocument>? {
+        didSet { run.currentSpace = { [weak self] in self?.document?.wrappedValue.space } }
+    }
 
     var hasSelection: Bool { !selectedNodes.isEmpty || selectedLink != nil }
 
@@ -133,6 +140,31 @@ final class EditorState {
         document.wrappedValue.space.nodes.append(node)
         selectedLink = nil
         selectedNodes = [node.id]
+    }
+
+    // MARK: Run
+
+    func startRun() {
+        guard let space = document?.wrappedValue.space else { return }
+        showConsole = true
+        run.run(space)
+    }
+
+    func stepRun() {
+        guard let space = document?.wrappedValue.space else { return }
+        showConsole = true
+        run.step(space)
+    }
+
+    /// Toggles the breakpoint on the selected steps.
+    func toggleBreakpoint() {
+        guard let document, !selectedNodes.isEmpty else { return }
+        let space = document.wrappedValue.space
+        let turnOn = !space.nodes.filter { selectedNodes.contains($0.id) }.allSatisfy(\.breakpoint)
+        for i in space.nodes.indices where selectedNodes.contains(space.nodes[i].id) {
+            document.wrappedValue.space.nodes[i].breakpoint = turnOn
+        }
+        if turnOn { document.wrappedValue.space.run.breakpointsEnabled = true }
     }
 
     func zoomIn() { zoom = min(2, (zoom + 0.1).rounded(toPlaces: 1)) }

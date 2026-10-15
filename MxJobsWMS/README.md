@@ -38,6 +38,35 @@ time, the checks of the expected outcome, and the response (the key is masked in
   draw.io XML, so draw.io / diagrams.net opens it for editing: each layer becomes a swimlane holding its nodes,
   and links become connectors (results going up a layer are dashed).
 
+## Run and debug
+
+The **run bar** above the canvas runs the jobspace across its three layers:
+
+| Control | What it does |
+| ------- | ------------ |
+| ▶ **Run** (⌘R) / **Continue** (⌃⌘Y) | Starts a run, or continues a paused one. |
+| ⏸ **Pause** | Pauses before the next step. |
+| ↳ **Step** (F6) | Runs to the next step and pauses before it (starts a run when idle). |
+| ■ **Stop** (⌘.) | Stops the run. |
+| **L1 / L2 / L3** menus | What the run does with each layer, saved in the jobspace: **Layer 1** Interactive (asks for approvals and send confirmations) / Auto-approve (rehearsal) / Skip; **Layer 2** Run (agents simulated, passing on their inputs) / Skip; **Layer 3** Live API calls / Mock data (no network) / Skip. A skipped step passes its inputs straight through. |
+| ▸ **Breakpoints** (⌘Y) | Turns breakpoints on or off. Toggle one on the selected step with ⌘\, the step's right-click menu or the inspector; it shows as a blue tag. |
+| ⚙ **Options** | Stop the run when a step fails, the delay between steps (to follow the flow on the canvas), Clear Run Results. |
+| Status, console toggle (⇧⌘Y) | What the run is doing now; shows or hides the run console. |
+
+**Order.** A step waits for the steps feeding it along its own layer or from below, performs its action, then runs
+the steps it calls down the layers. Layer 2 agents act after their calls return, so they see what the Layer 3 reads
+brought back. Steps show their state on the canvas (running, paused, waiting, succeeded, warning, failed, skipped).
+
+**Exception handling** of each step applies: retries with delay and optional exponential backoff, skip, fallback value,
+ask the user (Retry / Skip / Abort), or abort the run. A step after a failed, rejected or cancelled step is skipped.
+
+**User Approval** pauses the run on a prompt (Approve / Reject) showing the instructions; **Execution Request** asks
+to confirm when set to, and does **not send anything yet** — it reports what it would send (target, mode, request).
+The **Outcome Report** sums up the run.
+
+The **run console** shows the log (filter by level, click a line to select its step) and the output of the selected
+step as JSON; the inspector's **Last Run** section shows a step's result.
+
 ## Files and keys
 
 - A jobspace is pretty-printed JSON (`format: "mxjobspace"`, `formatVersion: 1`) with `subscriptions`,

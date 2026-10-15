@@ -19,8 +19,29 @@ struct ContentView: View {
             PaletteView(editor: editor)
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
         } detail: {
-            DiagramCanvas(space: $document.space, editor: editor, issues: issues)
-                .inspector(isPresented: $editor.showInspector) {
+            VStack(spacing: 0) {
+                RunBar(settings: $document.space.run, editor: editor)
+                Divider()
+                // A plain stack with our own divider: AppKit split views re-entered layout
+                // while a run changed the console and crashed (constraint update loop).
+                VStack(spacing: 0) {
+                    DiagramCanvas(space: $document.space, editor: editor, issues: issues)
+                        .frame(maxHeight: .infinity)
+                        .overlay(alignment: .top) {
+                            // Keep a pending approval in view even with the console closed.
+                            if !editor.showConsole, let prompt = editor.run.prompt {
+                                RunPromptBanner(prompt: prompt, engine: editor.run)
+                                    .background(.regularMaterial)
+                            }
+                        }
+                    if editor.showConsole {
+                        ConsoleDivider(height: $editor.consoleHeight)
+                        RunConsole(editor: editor, space: document.space)
+                            .frame(height: editor.consoleHeight)
+                    }
+                }
+            }
+            .inspector(isPresented: $editor.showInspector) {
                     InspectorView(space: $document.space, editor: editor, issues: issues)
                         .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
                 }

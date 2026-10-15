@@ -178,12 +178,24 @@ private struct NodeInspector: View {
                 }
                 TextField("Title", text: $node.title)
                 Toggle("Enabled", isOn: $node.enabled)
+                Toggle("Breakpoint — pause runs before this step", isOn: $node.breakpoint)
                 TextField("Notes", text: $node.notes, axis: .vertical)
                     .lineLimit(2...6)
             }
 
             if !issues.isEmpty {
                 Section("Checks") { IssueList(issues: issues, editor: editor) }
+            }
+
+            if let state = editor.run.states[node.id], state != .pending {
+                Section("Last Run") {
+                    Label(state.title, systemImage: state.symbol).foregroundStyle(state.color)
+                    if let message = editor.run.log.last(where: { $0.nodeID == node.id && $0.level >= .success })?.message
+                        ?? editor.run.log.last(where: { $0.nodeID == node.id })?.message {
+                        Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                    Button("Show Output in Console") { editor.showConsole = true }
+                }
             }
 
             kindSection

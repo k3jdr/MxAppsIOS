@@ -409,6 +409,8 @@ nonisolated struct JobNode: Codable, Identifiable, Equatable, Sendable {
     var x: Double = 0
     var y: Double = 0
     var enabled = true
+    /// Debug runs pause before this node (when breakpoints are on).
+    var breakpoint = false
 
     var arguments: [Argument] = []
     var outcome = ExpectedOutcome()
@@ -453,6 +455,7 @@ nonisolated struct JobNode: Codable, Identifiable, Equatable, Sendable {
         x = c.value(.x, 0)
         y = c.value(.y, 0)
         enabled = c.value(.enabled, true)
+        breakpoint = c.value(.breakpoint, false)
         arguments = c.value(.arguments, [])
         outcome = c.value(.outcome, ExpectedOutcome())
         exceptions = c.value(.exceptions, ExceptionPolicy())
@@ -539,6 +542,85 @@ nonisolated struct ApiSubscription: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+// MARK: - Run settings
+
+/// What a run does with the Layer 1 business operations.
+nonisolated enum OperationsAction: String, Codable, CaseIterable, Identifiable, Sendable {
+    case interactive, autoApprove, skip
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .interactive: "Interactive — ask for approvals"
+        case .autoApprove: "Auto-approve (rehearsal)"
+        case .skip: "Skip Layer 1"
+        }
+    }
+    var short: String {
+        switch self {
+        case .interactive: "Interactive"
+        case .autoApprove: "Auto-approve"
+        case .skip: "Skip"
+        }
+    }
+}
+
+/// What a run does with the Layer 2 agents.
+nonisolated enum AgentsAction: String, Codable, CaseIterable, Identifiable, Sendable {
+    case run, skip
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .run: "Run agents (simulated)"
+        case .skip: "Skip Layer 2"
+        }
+    }
+    var short: String { self == .run ? "Run" : "Skip" }
+}
+
+/// What a run does with the Layer 3 data reads.
+nonisolated enum DataAction: String, Codable, CaseIterable, Identifiable, Sendable {
+    case live, mock, skip
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .live: "Live API calls"
+        case .mock: "Mock data (no network)"
+        case .skip: "Skip Layer 3"
+        }
+    }
+    var short: String {
+        switch self {
+        case .live: "Live"
+        case .mock: "Mock"
+        case .skip: "Skip"
+        }
+    }
+}
+
+nonisolated struct RunSettings: Codable, Equatable, Sendable {
+    var operations = OperationsAction.interactive
+    var agents = AgentsAction.run
+    var data = DataAction.mock
+    var breakpointsEnabled = true
+    /// Stop the whole run at the first step that fails after its exception handling.
+    var stopOnError = true
+    /// Pause between steps so the flow can be followed on the canvas (seconds).
+    var stepDelay = 0.4
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = RunSettings()
+        operations = c.value(.operations, d.operations)
+        agents = c.value(.agents, d.agents)
+        data = c.value(.data, d.data)
+        breakpointsEnabled = c.value(.breakpointsEnabled, d.breakpointsEnabled)
+        stopOnError = c.value(.stopOnError, d.stopOnError)
+        stepDelay = c.value(.stepDelay, d.stepDelay)
+    }
+}
+
 // MARK: - Jobspace
 
 nonisolated struct Jobspace: Codable, Equatable, Sendable {
@@ -549,6 +631,7 @@ nonisolated struct Jobspace: Codable, Equatable, Sendable {
     var subscriptions: [ApiSubscription] = []
     var nodes: [JobNode] = []
     var links: [JobLink] = []
+    var run = RunSettings()
 
     init() {}
 
@@ -561,6 +644,7 @@ nonisolated struct Jobspace: Codable, Equatable, Sendable {
         subscriptions = c.value(.subscriptions, [])
         nodes = c.value(.nodes, [])
         links = try c.decodeIfPresent([JobLink].self, forKey: .links) ?? []
+        run = c.value(.run, RunSettings())
         let ids = Set(nodes.map(\.id))
         links.removeAll { !ids.contains($0.from) || !ids.contains($0.to) }
     }

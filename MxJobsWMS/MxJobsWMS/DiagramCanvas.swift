@@ -88,9 +88,12 @@ struct DiagramCanvas: View {
         let size = Metrics.canvasSize(for: space)
         ScrollView([.horizontal, .vertical]) {
             DiagramContent(space: space, selectedNodes: editor.selectedNodes, selectedLink: editor.selectedLink,
-                           issues: issues, size: size, position: position,
+                           issues: issues, runStates: editor.run.states, currentNode: editor.run.currentNode,
+                           breakpointsEnabled: space.run.breakpointsEnabled,
+                           size: size, position: position,
                            dropTargetLayer: dropTargetLayer, pendingLink: pendingLink, rubberBand: rubberBand,
-                           nodeGesture: nodeGesture, handleGesture: handleGesture, onNodeTap: tapNode)
+                           nodeGesture: nodeGesture, handleGesture: handleGesture, onNodeTap: tapNode,
+                           nodeMenu: nodeMenu)
                 .background {
                     // Background interactions: click to select links / clear, drag to rubber-band.
                     Color.clear
@@ -100,6 +103,13 @@ struct DiagramCanvas: View {
                 }
                 .coordinateSpace(.named(canvasSpace))
                 .contextMenu {
+                    Button(editor.run.canContinue ? "Continue" : "Run") { editor.startRun() }
+                        .disabled(editor.run.isActive && !editor.run.canContinue)
+                    Button("Step") { editor.stepRun() }
+                        .disabled(editor.run.phase == .running || editor.run.phase == .waiting)
+                    Button("Stop") { editor.run.stop() }
+                        .disabled(!editor.run.isActive)
+                    Divider()
                     Button("Save as PNG…") { DiagramExport.savePNG(space: space) }
                     Button("Save as draw.io SVG…") { DiagramExport.saveDrawioSVG(space: space) }
                 }
@@ -139,6 +149,27 @@ struct DiagramCanvas: View {
             editor.zoom = min(2, max(0.4, (editor.zoom * value.magnification).rounded(toPlaces: 1)))
         })
         .onAppear { focused = true }
+    }
+
+    private func nodeMenu(_ node: JobNode) -> AnyView {
+        AnyView(Group {
+            Button(node.breakpoint ? "Remove Breakpoint" : "Add Breakpoint") {
+                if !editor.selectedNodes.contains(node.id) { editor.select(node: node.id) }
+                editor.toggleBreakpoint()
+            }
+            Button(node.enabled ? "Disable Step" : "Enable Step") {
+                if let i = space.index(of: node.id) { space.nodes[i].enabled.toggle() }
+            }
+            Divider()
+            Button("Duplicate") {
+                if !editor.selectedNodes.contains(node.id) { editor.select(node: node.id) }
+                editor.duplicateSelection()
+            }
+            Button("Delete") {
+                if !editor.selectedNodes.contains(node.id) { editor.select(node: node.id) }
+                editor.deleteSelection()
+            }
+        })
     }
 
     // MARK: Geometry
@@ -245,6 +276,9 @@ struct DiagramContent<NG: Gesture, HG: Gesture>: View {
     var selectedNodes: Set<UUID>
     var selectedLink: UUID?
     var issues: [ValidationIssue]
+    var runStates: [UUID: NodeRunState] = [:]
+    var currentNode: UUID?
+    var breakpointsEnabled = true
     var size: CGSize
     var position: (JobNode) -> CGPoint
     var dropTargetLayer: Layer?
@@ -254,6 +288,8 @@ struct DiagramContent<NG: Gesture, HG: Gesture>: View {
     var handleGesture: (JobNode) -> HG
     var onNodeTap: (JobNode) -> Void
     var interactive = true
+    /// Right-click menu of a node (canvas only).
+    var nodeMenu: ((JobNode) -> AnyView)?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -267,11 +303,15 @@ struct DiagramContent<NG: Gesture, HG: Gesture>: View {
                 NodeView(node: node, space: space,
                          selected: selectedNodes.contains(node.id),
                          issue: issues.filter { $0.nodeID == node.id }.map(\.severity).max(),
+                         runState: runStates[node.id],
+                         isCurrent: currentNode == node.id,
+                         breakpointsEnabled: breakpointsEnabled,
                          interactive: interactive,
                          handleGesture: handleGesture(node))
                     .position(position(node))
                     .onTapGesture { onNodeTap(node) }
                     .gesture(nodeGesture(node))
+                    .contextMenu { if let nodeMenu { nodeMenu(node) } }
             }
 
             if let pendingLink, let from = space.node(pendingLink.from) {

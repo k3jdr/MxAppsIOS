@@ -55,6 +55,38 @@ struct JobspaceCommands: Commands {
                 .keyboardShortcut("a", modifiers: [.command, .option])
                 .disabled(editor == nil)
         }
+        CommandMenu("Run") {
+            let run = editor?.run
+            Button(run?.canContinue == true ? "Continue" : "Run") { editor?.startRun() }
+                .keyboardShortcut("r")
+                .disabled(editor == nil || (run?.isActive == true && run?.canContinue == false))
+            Button("Continue") { run?.continueRun() }
+                .keyboardShortcut("y", modifiers: [.command, .control])
+                .disabled(run?.canContinue != true)
+            Button("Step") { editor?.stepRun() }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF6FunctionKey)!)), modifiers: [])
+                .disabled(editor == nil || run?.phase == .running || run?.phase == .waiting)
+            Button("Pause") { run?.pause() }
+                .disabled(run?.phase != .running)
+            Button("Stop") { run?.stop() }
+                .keyboardShortcut(".")
+                .disabled(run?.isActive != true)
+            Divider()
+            Button("Toggle Breakpoint") { editor?.toggleBreakpoint() }
+                .keyboardShortcut("\\")
+                .disabled(editor?.selectedNodes.isEmpty ?? true)
+            Button(editor?.document?.wrappedValue.space.run.breakpointsEnabled == false ? "Activate Breakpoints" : "Deactivate Breakpoints") {
+                editor?.document?.wrappedValue.space.run.breakpointsEnabled.toggle()
+            }
+            .keyboardShortcut("y")
+            .disabled(editor == nil)
+            Divider()
+            Button(editor?.showConsole == true ? "Hide Run Console" : "Show Run Console") { editor?.showConsole.toggle() }
+                .keyboardShortcut("y", modifiers: [.command, .shift])
+                .disabled(editor == nil)
+            Button("Clear Run Results") { run?.reset() }
+                .disabled(run == nil || run?.isActive == true)
+        }
         CommandMenu("Diagram") {
             Menu("Add Node") {
                 ForEach(Layer.allCases) { layer in
