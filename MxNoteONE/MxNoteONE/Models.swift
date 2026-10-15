@@ -316,6 +316,8 @@ struct TableData: Codable, Hashable {
     var showHeadings: Bool?
     /// Rows given a height by dragging their border (row index → points); other rows fit their content.
     var rowHeightOverrides: [Int: Double]?
+    /// Number formats of cells ("row,column" → format); other cells show numbers as typed (General).
+    var numberFormats: [String: NumberFormat]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {
@@ -342,6 +344,42 @@ struct TableData: Codable, Hashable {
             while grid[r].count < columns { grid[r].append(nil) }
         }
         shading = grid
+    }
+}
+
+/// How a table cell shows numbers (Excel: Number, Currency, Percent).
+struct NumberFormat: Codable, Hashable {
+    enum Kind: String, Codable { case number, currency, percent }
+    var kind: Kind
+    var decimals: Int
+    var thousands = true
+    /// Currency symbol ($, €, £, ¥).
+    var symbol: String?
+
+    static let currencySymbols = ["$", "€", "£", "¥"]
+
+    /// A number as this format shows it (1,234.50 · $1,234.50 · -$5.00 · 12.5%).
+    func string(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = thousands
+        formatter.groupingSeparator = ","
+        formatter.groupingSize = 3
+        formatter.decimalSeparator = "."
+        formatter.minimumFractionDigits = decimals
+        formatter.maximumFractionDigits = decimals
+        formatter.roundingMode = .halfUp
+        switch kind {
+        case .number:
+            return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        case .currency:
+            let digits = formatter.string(from: NSNumber(value: abs(value))) ?? "\(abs(value))"
+            let shown = (symbol ?? "$") + digits
+            return value < 0 && digits.contains(where: { $0 != "0" && $0 != "." && $0 != "," }) ? "-" + shown : shown
+        case .percent:
+            return (formatter.string(from: NSNumber(value: value * 100)) ?? "\(value * 100)") + "%"
+        }
     }
 }
 

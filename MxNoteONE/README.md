@@ -87,6 +87,12 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   - References follow inserted and deleted rows and columns (a deleted cell becomes #REF!, a range just shrinks).
     Sorting and moving rows take a formula's relative row references with it; rows of totals (formulas over a range)
     stay in place when sorting. Sorting, filters, auto-fit and copying use the results.
+- **Number formats** (Table ribbon's Number menu, Currency / Percent / Increase / Decrease Decimal buttons, or
+  right-click ▸ Number Format on a cell or column letter): General, Number (1,234.50), Currency ($ € £ ¥ — $1,234.50,
+  -$5.00), Percent (12.5%), with decimal places and a thousands separator. They apply to numbers and formula results
+  in the selected cells (whole columns too); text is left alone. Typing in a cell shows the number as typed, and
+  formulas use the value. Formats move with their cells when rows and columns are inserted, deleted, sorted or moved,
+  and copying to Excel gives the formatted numbers.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
   tab-separated text — so they paste into Excel, Numbers or Word as cells (hidden rows and columns are left out).

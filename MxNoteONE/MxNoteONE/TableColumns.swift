@@ -19,6 +19,7 @@ extension TableData {
     /// Keeps hidden columns and filters on their columns when a column is inserted (+1) or removed (-1).
     mutating func shiftColumns(at index: Int, by delta: Int) {
         shiftFormulas(rows: false, at: index, by: delta)
+        moveNumberFormats(rows: false, at: index, by: delta)
         if var hidden = hiddenColumns {
             if delta < 0 { hidden.removeAll { $0 == index } }
             hidden = hidden.map { $0 >= index + (delta < 0 ? 1 : 0) ? $0 + delta : $0 }
@@ -59,6 +60,29 @@ extension TableData {
         }
     }
 
+    static func key(_ cell: CellRef) -> String { "\(cell.row),\(cell.column)" }
+
+    static func cell(_ key: String) -> CellRef? {
+        let parts = key.split(separator: ",").compactMap { Int($0) }
+        return parts.count == 2 ? CellRef(row: parts[0], column: parts[1]) : nil
+    }
+
+    /// Keeps number formats on their cells when a row or column is inserted (+1) or removed (-1).
+    mutating func moveNumberFormats(rows: Bool, at index: Int, by delta: Int) {
+        guard let formats = numberFormats else { return }
+        var moved: [String: NumberFormat] = [:]
+        for (key, format) in formats {
+            guard var cell = Self.cell(key) else { continue }
+            let value = rows ? cell.row : cell.column
+            if delta < 0 && value == index { continue }
+            if value >= index + (delta < 0 ? 1 : 0) {
+                if rows { cell.row += delta } else { cell.column += delta }
+            }
+            moved[Self.key(cell)] = format
+        }
+        numberFormats = moved.isEmpty ? nil : moved
+    }
+
     /// Keeps filtered and hidden rows hidden when a row is inserted (+1) or removed (-1).
     mutating func shiftRows(at index: Int, by delta: Int) {
         shiftFormulas(rows: true, at: index, by: delta)
@@ -70,6 +94,7 @@ extension TableData {
         }
         filteredRows = shifted(filteredRows)
         hiddenRows = shifted(hiddenRows)
+        moveNumberFormats(rows: true, at: index, by: delta)
         if let heights = rowHeightOverrides {
             var moved: [Int: Double] = [:]
             for (r, h) in heights where !(delta < 0 && r == index) {
@@ -86,6 +111,14 @@ extension TableData {
         }
         filteredRows = mapped(filteredRows)
         hiddenRows = mapped(hiddenRows)
+        if let formats = numberFormats {
+            var moved: [String: NumberFormat] = [:]
+            for (key, format) in formats {
+                guard let cell = Self.cell(key), newIndex.indices.contains(cell.row) else { continue }
+                moved[Self.key(CellRef(row: newIndex[cell.row], column: cell.column))] = format
+            }
+            numberFormats = moved.isEmpty ? nil : moved
+        }
         if let heights = rowHeightOverrides {
             var moved: [Int: Double] = [:]
             for (r, h) in heights where newIndex.indices.contains(r) { moved[newIndex[r]] = h }
@@ -109,6 +142,22 @@ extension TableData {
 // MARK: - Model
 
 extension TableModel {
+    // MARK: Number formats
+
+    func numberFormat(_ cell: CellRef) -> NumberFormat? { data.numberFormats?[TableData.key(master(cell))] }
+
+    func setNumberFormat(_ format: NumberFormat?, cells: Set<CellRef>) {
+        var formats = data.numberFormats ?? [:]
+        for cell in cells { formats[TableData.key(master(cell))] = format }
+        data.numberFormats = formats.isEmpty ? nil : formats
+        changed()
+    }
+
+    /// A number as the cell's format shows it (nil for General).
+    func formatted(_ number: Double, in cell: CellRef) -> String? {
+        numberFormat(cell)?.string(number)
+    }
+
     var hasFormulas: Bool { data.rows.contains { $0.contains(where: Formula.isFormula) } }
 
     func isColumnHidden(_ column: Int) -> Bool { data.hiddenColumns?.contains(column) ?? false }

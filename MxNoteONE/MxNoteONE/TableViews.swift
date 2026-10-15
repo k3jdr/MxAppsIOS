@@ -319,7 +319,12 @@ final class TableModel {
         let raw = stored.string
         if Formula.isFormula(raw) {
             let attrs = stored.length > 0 ? stored.attributes(at: 0, effectiveRange: nil) : [.font: baseFont(cell.row)]
-            return NSAttributedString(string: value(cell).display, attributes: attrs)
+            return NSAttributedString(string: shownString(cell), attributes: attrs)
+        }
+        // A number in a formatted cell shows in its format (typing in it shows the number as typed).
+        if numberFormat(cell) != nil, let number = Formula.number(from: raw), let shown = formatted(number, in: cell) {
+            let attrs = stored.length > 0 ? stored.attributes(at: 0, effectiveRange: nil) : [.font: baseFont(cell.row)]
+            return NSAttributedString(string: shown, attributes: attrs)
         }
         // A leading apostrophe keeps text that starts with "=" as text ('=A1 shows =A1).
         if raw.hasPrefix("'="), stored.length > 1 { return stored.attributedSubstring(from: NSRange(location: 1, length: stored.length - 1)) }
@@ -329,7 +334,12 @@ final class TableModel {
     /// What the cell shows, as plain text (a formula's result).
     func shownString(_ cell: CellRef) -> String {
         let raw = text(cell)
-        if Formula.isFormula(raw) { return value(cell).display }
+        if Formula.isFormula(raw) {
+            let v = value(cell)
+            if case .number(let d) = v, let shown = formatted(d, in: cell) { return shown }
+            return v.display
+        }
+        if numberFormat(cell) != nil, let number = Formula.number(from: raw), let shown = formatted(number, in: cell) { return shown }
         return raw.hasPrefix("'=") ? String(raw.dropFirst()) : raw
     }
 
@@ -1532,6 +1542,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         unhide.isEnabled = model.hasHiddenColumns
         menu.addItem(unhide)
         menu.addItem(.separator())
+        let numbers = NSMenuItem(title: "Number Format", action: nil, keyEquivalent: "")
+        numbers.submenu = numberFormatMenu()
+        menu.addItem(numbers)
         menu.addItem(ClosureMenuItem(n > 1 ? "Auto-Fit \(n) Columns" : "Auto-Fit Column Width") { [weak self] in
             self?.autoFitColumns(columns)
         })
@@ -2351,6 +2364,84 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
     }
 
+    // MARK: Number formats
+
+    /// The cells number formats apply to: the selection (whole columns included), or the cell being typed in.
+    private var formatTargets: Set<CellRef> {
+        let cells = targetCells.isEmpty ? [targetCell] : targetCells
+        return Set(cells.map { model.master($0) })
+    }
+
+    /// The number shown in a cell now, and its decimals (for a General cell switching to a format).
+    private func currentDecimals(_ cell: CellRef) -> Int {
+        if let format = model.numberFormat(cell) { return format.decimals }
+        let shown = model.shownString(cell)
+        guard Formula.number(from: shown) != nil, let dot = shown.firstIndex(of: ".") else { return 0 }
+        return shown[shown.index(after: dot)...].prefix { $0.isNumber }.count
+    }
+
+    func setNumberFormat(_ kind: NumberFormat.Kind?, symbol: String? = nil) {
+        let cells = formatTargets
+        run("Number Format") {
+            guard let kind else { return model.setNumberFormat(nil, cells: cells) }
+            for cell in cells {
+                let old = model.numberFormat(cell)
+                let decimals = kind == .percent ? (old?.kind == .percent ? old!.decimals : 0) : (old?.kind == kind ? old!.decimals : 2)
+                model.setNumberFormat(NumberFormat(kind: kind, decimals: decimals, thousands: old?.thousands ?? true,
+                                                   symbol: kind == .currency ? (symbol ?? old?.symbol ?? "$") : nil), cells: [cell])
+            }
+        }
+    }
+
+    /// Increase / Decrease Decimal (a General cell becomes Number with one more or fewer decimal than it shows).
+    func changeDecimals(by delta: Int) {
+        let cells = formatTargets
+        run(delta > 0 ? "Increase Decimal" : "Decrease Decimal") {
+            for cell in cells {
+                var format = model.numberFormat(cell) ?? NumberFormat(kind: .number, decimals: currentDecimals(cell), thousands: false)
+                format.decimals = min(10, max(0, currentDecimals(cell) + delta))
+                model.setNumberFormat(format, cells: [cell])
+            }
+        }
+    }
+
+    /// Thousands separator on or off (a General cell becomes Number with it).
+    func toggleThousands() {
+        let cells = formatTargets
+        let on = !(cells.allSatisfy { model.numberFormat($0)?.thousands == true && model.numberFormat($0) != nil })
+        run("Thousands Separator") {
+            for cell in cells {
+                var format = model.numberFormat(cell) ?? NumberFormat(kind: .number, decimals: currentDecimals(cell))
+                format.thousands = on
+                model.setNumberFormat(format, cells: [cell])
+            }
+        }
+    }
+
+    /// The Number Format menu.
+    func numberFormatMenu() -> NSMenu {
+        let menu = NSMenu()
+        let current = formatTargets.first.flatMap { model.numberFormat($0) }
+        menu.addItem(ClosureMenuItem("General", state: current == nil) { [weak self] in self?.setNumberFormat(nil) })
+        menu.addItem(ClosureMenuItem("Number  1,234.50", state: current?.kind == .number) { [weak self] in self?.setNumberFormat(.number) })
+        let currency = NSMenuItem(title: "Currency", action: nil, keyEquivalent: "")
+        currency.state = current?.kind == .currency ? .on : .off
+        let symbols = NSMenu()
+        for symbol in NumberFormat.currencySymbols {
+            symbols.addItem(ClosureMenuItem("\(symbol)1,234.50", state: current?.kind == .currency && current?.symbol == symbol) { [weak self] in
+                self?.setNumberFormat(.currency, symbol: symbol)
+            })
+        }
+        currency.submenu = symbols
+        menu.addItem(currency)
+        menu.addItem(ClosureMenuItem("Percent  12%", state: current?.kind == .percent) { [weak self] in self?.setNumberFormat(.percent) })
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Increase Decimal") { [weak self] in self?.changeDecimals(by: 1) })
+        menu.addItem(ClosureMenuItem("Decrease Decimal") { [weak self] in self?.changeDecimals(by: -1) })
+        menu.addItem(ClosureMenuItem("Thousands Separator", state: current?.thousands == true) { [weak self] in self?.toggleThousands() })
+        return menu
+    }
+
     // MARK: Formulas
 
     /// Enter in a formula: keeps it and selects the cell below (the next shown row).
@@ -2769,6 +2860,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let formulas = NSMenuItem(title: "Formulas", action: nil, keyEquivalent: "")
         formulas.submenu = formulasMenu()
         menu.addItem(formulas)
+        let numbers = NSMenuItem(title: "Number Format", action: nil, keyEquivalent: "")
+        numbers.submenu = numberFormatMenu()
+        menu.addItem(numbers)
         menu.addItem(.separator())
         let count = targetCells.count
         menu.addItem(paletteItem(count > 1 ? "Shade Selected Cells (\(count))" : "Cell Shading") { [weak self] in self?.shadeCells($0) })

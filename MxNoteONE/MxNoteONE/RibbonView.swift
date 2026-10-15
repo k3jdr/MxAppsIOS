@@ -545,6 +545,20 @@ struct TableRibbon: View {
             RibbonButton("Filter", "line.3.horizontal.decrease.circle", large: true) { grid?.toggleFilter() }
             RibbonButton("Hide Columns", "eye.slash", large: true) { grid?.hideColumns() }
             RibbonButton("Unhide Columns", "eye", large: true) { grid?.unhideColumns() }
+            RibbonMenu("Number", "number") {
+                Button("General") { grid?.setNumberFormat(nil) }
+                Button("Number  1,234.50") { grid?.setNumberFormat(.number) }
+                ForEach(NumberFormat.currencySymbols, id: \.self) { symbol in
+                    Button("Currency  \(symbol)1,234.50") { grid?.setNumberFormat(.currency, symbol: symbol) }
+                }
+                Button("Percent  12%") { grid?.setNumberFormat(.percent) }
+                Divider()
+                Button("Thousands Separator") { grid?.toggleThousands() }
+            }
+            RibbonButton("Currency", "dollarsign", large: true) { grid?.setNumberFormat(.currency) }
+            RibbonButton("Percent", "percent", large: true) { grid?.setNumberFormat(.percent) }
+            RibbonButton("Increase Decimal", "increase.decimalplaces", large: true) { grid?.changeDecimals(by: 1) }
+            RibbonButton("Decrease Decimal", "decrease.decimalplaces", large: true) { grid?.changeDecimals(by: -1) }
             RibbonButton("AutoSum", "sum", large: true) { grid?.autoSum() }
             RibbonMenu("Formulas", "function") {
                 ForEach(Formula.menuFunctions, id: \.0) { name, about in
