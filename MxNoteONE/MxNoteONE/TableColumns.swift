@@ -40,6 +40,13 @@ extension TableData {
         }
         filteredRows = shifted(filteredRows)
         hiddenRows = shifted(hiddenRows)
+        if let heights = rowHeightOverrides {
+            var moved: [Int: Double] = [:]
+            for (r, h) in heights where !(delta < 0 && r == index) {
+                moved[r >= index + (delta < 0 ? 1 : 0) ? r + delta : r] = h
+            }
+            rowHeightOverrides = moved.isEmpty ? nil : moved
+        }
     }
 
     /// Keeps filtered and hidden rows hidden when rows are put in a new order (new index of each old row).
@@ -49,6 +56,11 @@ extension TableData {
         }
         filteredRows = mapped(filteredRows)
         hiddenRows = mapped(hiddenRows)
+        if let heights = rowHeightOverrides {
+            var moved: [Int: Double] = [:]
+            for (r, h) in heights where newIndex.indices.contains(r) { moved[newIndex[r]] = h }
+            rowHeightOverrides = moved.isEmpty ? nil : moved
+        }
     }
 
     /// Spreadsheet-style column name: A…Z, AA, AB…
@@ -74,6 +86,15 @@ extension TableModel {
     }
 
     var hasHiddenRows: Bool { !(data.hiddenRows ?? []).isEmpty }
+
+    /// A row's height set by dragging its border (nil = fits its content).
+    func manualHeight(_ row: Int) -> CGFloat? { data.rowHeightOverrides?[row].map { CGFloat($0) } }
+
+    func setManualHeight(_ height: CGFloat?, row: Int) {
+        var heights = data.rowHeightOverrides ?? [:]
+        heights[row] = height.map(Double.init)
+        data.rowHeightOverrides = heights.isEmpty ? nil : heights
+    }
 
     /// Rows inside a block merged across rows can't be hidden, and one row must stay.
     func canHideRows(_ rows: [Int]) -> Bool {
@@ -490,6 +511,15 @@ final class TableRowBar: NSView {
         return result
     }
 
+    /// The row whose bottom border is at y (bar coordinates; shown rows only).
+    func border(at y: CGFloat) -> Int? {
+        guard let grid else { return nil }
+        let tops = grid.rowEdges
+        return (0..<grid.model.rowCount).first { r in
+            !grid.model.isRowHidden(r) && r + 1 < tops.count && abs(cornerHeight + tops[r + 1] - y) <= 3
+        }
+    }
+
     /// The hidden rows whose mark is at y (bar coordinates).
     func hiddenRows(atY y: CGFloat) -> [Int]? {
         hiddenEdges().first { abs($0.y - y) <= 4 }?.rows
@@ -514,6 +544,11 @@ final class TableRowBar: NSView {
         }
         if let rows = hiddenRows(atY: p.y) {
             grid.unhideRows(rows)
+            return
+        }
+        // Row borders: drag to set the height, double-click to fit the contents.
+        if let border = border(at: p.y) {
+            if event.clickCount == 2 { grid.autoFitRows(near: border) } else { grid.beginRowResize(border, from: event) }
             return
         }
         var pinnedHeader: Int?
@@ -542,8 +577,10 @@ final class TableRowBar: NSView {
     }
 
     override func resetCursorRects() {
-        for edge in hiddenEdges() {
-            addCursorRect(NSRect(x: 0, y: edge.y - 4, width: bounds.width, height: 8), cursor: .resizeUpDown)
+        guard let grid else { return }
+        let tops = grid.rowEdges
+        for r in 0..<grid.model.rowCount where !grid.model.isRowHidden(r) && r + 1 < tops.count {
+            addCursorRect(NSRect(x: 0, y: cornerHeight + tops[r + 1] - 3, width: bounds.width, height: 6), cursor: .resizeUpDown)
         }
     }
 }

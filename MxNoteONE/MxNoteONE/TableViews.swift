@@ -732,6 +732,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     static let padX: CGFloat = 6
     static let padY: CGFloat = 4
     static let minRowHeight: CGFloat = 24
+    static let minManualHeight: CGFloat = 10
     private static let borderColor = NSColor(srgbRed: 0.64, green: 0.64, blue: 0.64, alpha: 1)
 
     /// The table being edited or with selected cells (the Table ribbon and cell formatting act on it).
@@ -1021,12 +1022,15 @@ final class TableGridView: NSView, NSTextViewDelegate {
         for c in 0..<model.columnCount { columnLefts.append(columnLefts[c] + model.columnWidth(c)) }
         rowHeights = (0..<model.rowCount).map { r in
             if model.isRowHidden(r) { return 0 }
+            // A height set by dragging stays (text that doesn't fit is cut off), except while typing in the row.
+            if let manual = model.manualHeight(r), editing?.row != r { return max(Self.minManualHeight, manual) }
             let tallest = (0..<model.columnCount).compactMap { c -> CGFloat? in
                 let cell = CellRef(row: r, column: c)
                 guard !model.data.isCovered(r, c), !model.isColumnHidden(c), model.span(cell).rows == 1 else { return nil }
                 return measure(cell)
             }.max() ?? 0
-            return max(Self.minRowHeight, tallest + 2 * Self.padY)
+            let fit = max(Self.minRowHeight, tallest + 2 * Self.padY)
+            return max(fit, model.manualHeight(r) ?? 0)
         }
         // A merged cell taller than its rows makes its last row taller.
         for block in model.data.merges ?? [] where block.rows > 1 && block.row + block.rows <= rowHeights.count
@@ -1216,6 +1220,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func cursor(at p: NSPoint) -> NSCursor {
         if filterButton(at: p) != nil { return .arrow }
         if columnBorder(at: p) != nil { return .resizeLeftRight }
+        if rowBorder(at: p) != nil { return .resizeUpDown }
         if onOuterEdge(p) { return .openHand }
         if selectedWholeRows != nil, let cell = cell(at: p), selection.contains(cell) { return .openHand }
         if link(at: p) != nil { return .pointingHand }
@@ -1527,6 +1532,16 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Rows" : "Delete Row") { [weak self] in self?.deleteRows() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Clear \(n) Rows" : "Clear Row") { [weak self] in self?.clearCells() })
         menu.addItem(.separator())
+        let fit = ClosureMenuItem(n > 1 ? "Auto-Fit \(n) Rows" : "Auto-Fit Row Height") { [weak self] in self?.autoFitRows(rows) }
+        fit.isEnabled = rows.contains { model.manualHeight($0) != nil }
+        menu.addItem(fit)
+        let fitAll = ClosureMenuItem("Auto-Fit All Rows") { [weak self] in
+            guard let self else { return }
+            self.autoFitRows(Array(0..<self.model.rowCount))
+        }
+        fitAll.isEnabled = model.data.rowHeightOverrides != nil
+        menu.addItem(fitAll)
+        menu.addItem(.separator())
         let hide = ClosureMenuItem(n > 1 ? "Hide \(n) Rows" : "Hide Row") { [weak self] in self?.hideRows() }
         hide.isEnabled = model.canHideRows(rows)
         menu.addItem(hide)
@@ -1626,6 +1641,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
     /// A cell's shading, selection tint, text and filter button.
     private func drawCell(_ cell: CellRef, showSelection: Bool) {
         let rect = cellRect(cell)
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        rect.clip()
         if let shade = model.data.shade(cell.row, cell.column) {
             shade.nsColor.setFill()
             rect.fill()
@@ -1939,6 +1957,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
             if event.clickCount == 2 { autoFitColumns(near: column) } else { resizeColumn(column, from: event) }
             return
         }
+        if let row = rowBorder(at: p) {
+            if event.clickCount == 2 { autoFitRows(near: row) } else { resizeRow(row, from: event) }
+            return
+        }
         if onOuterEdge(p) {
             endEditing()
             owner.beginMove(with: event)
@@ -2056,6 +2078,57 @@ final class TableGridView: NSView, NSTextViewDelegate {
             if abs(delta) >= 0.5 { model.onWidthChange?(delta) }
             model.changed()
         }
+    }
+
+    // MARK: Row heights
+
+    /// The row whose bottom border is under the point (not the table's bottom edge, which moves the table).
+    private func rowBorder(at point: NSPoint) -> Int? {
+        guard !isExport, point.x >= 0, point.x <= (columnLefts.last ?? 0) else { return nil }
+        for r in 0..<max(0, model.rowCount - 1) where !model.isRowHidden(r) && abs(rowTops[r + 1] - point.y) <= 2 { return r }
+        return nil
+    }
+
+    /// Double-click a row border: the row fits its content again (the selected whole rows when it's one of them).
+    func autoFitRows(near row: Int) {
+        let whole = selectedWholeRowSet
+        autoFitRows(whole.contains(row) ? whole.sorted() : [row])
+    }
+
+    func autoFitRows(_ rows: [Int]) {
+        guard rows.contains(where: { model.manualHeight($0) != nil }) else { return }
+        run(rows.count > 1 ? "Auto-Fit Rows" : "Auto-Fit Row") {
+            for r in rows { model.setManualHeight(nil, row: r) }
+            model.changed()
+        }
+    }
+
+    /// Dragging a row border (in the table or the row number bar) sets the row's height.
+    func beginRowResize(_ row: Int, from event: NSEvent) { resizeRow(row, from: event) }
+
+    private func resizeRow(_ row: Int, from event: NSEvent) {
+        guard let window else { return }
+        endEditing()
+        let startY = convert(event.locationInWindow, from: nil).y
+        let startHeight = rowTops[row + 1] - rowTops[row]
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
+                           mode: .eventTracking) { ev, stop in
+            guard let ev, ev.type == .leftMouseDragged else {
+                stop.pointee = true
+                return
+            }
+            let y = self.convert(ev.locationInWindow, from: nil).y
+            self.setRowHeight(max(Self.minManualHeight, startHeight + y - startY), row: row)
+        }
+        model.checkpoint("Row Height")
+        owner?.controller?.markDirty()
+    }
+
+    /// Gives a row a fixed height (as dragging its border does).
+    func setRowHeight(_ height: CGFloat, row: Int) {
+        guard abs((model.manualHeight(row) ?? -1) - height) >= 0.5 else { return }
+        model.setManualHeight(height.rounded(), row: row)
+        relayout()
     }
 
     /// Dragging a column border (also from the column letter bar).
@@ -2514,6 +2587,12 @@ final class TableGridView: NSView, NSTextViewDelegate {
         down.isEnabled = canMoveRows(up: false)
         menu.addItem(down)
         menu.addItem(ClosureMenuItem(rows > 1 ? "Select Rows" : "Select Row") { [weak self] in self?.selectRows() })
+        if model.data.rowHeightOverrides != nil {
+            menu.addItem(ClosureMenuItem("Auto-Fit Row Height") { [weak self] in
+                guard let self else { return }
+                self.autoFitRows(self.targetRowList)
+            })
+        }
         let hideRow = ClosureMenuItem(rows > 1 ? "Hide \(rows) Rows" : "Hide Row") { [weak self] in self?.hideRows() }
         hideRow.isEnabled = model.canHideRows(targetRowList)
         menu.addItem(hideRow)

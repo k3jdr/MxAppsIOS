@@ -314,6 +314,8 @@ struct TableData: Codable, Hashable {
     var freezeHeaderRow: Bool?
     /// Row numbers and column letters always show (Excel: Headings), not only while the table is in use.
     var showHeadings: Bool?
+    /// Rows given a height by dragging their border (row index → points); other rows fit their content.
+    var rowHeightOverrides: [Int: Double]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {
