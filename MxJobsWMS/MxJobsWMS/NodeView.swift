@@ -81,7 +81,12 @@ struct NodeView<HG: Gesture>: View {
         .help(node.kind.summary)
     }
 
-    private var summary: String {
+    private var summary: String { NodeSummary.text(for: node, in: space) }
+}
+
+enum NodeSummary {
+    /// One line describing a node's configuration (canvas and exports).
+    static func text(for node: JobNode, in space: Jobspace) -> String {
         switch node.kind {
         case .trigger:
             return node.schedule?.summary ?? ""

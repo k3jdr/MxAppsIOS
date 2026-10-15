@@ -9,7 +9,6 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 
 @main
 struct MxJobsWMSApp: App {
@@ -37,7 +36,11 @@ struct JobspaceCommands: Commands {
         }
         CommandGroup(after: .importExport) {
             Button("Export Diagram as PNG…") {
-                if let editor { DiagramExport.exportPNG(editor: editor) }
+                if let space = editor?.document?.wrappedValue.space { DiagramExport.savePNG(space: space) }
+            }
+            .disabled(editor == nil)
+            Button("Export Diagram as draw.io SVG…") {
+                if let space = editor?.document?.wrappedValue.space { DiagramExport.saveDrawioSVG(space: space) }
             }
             .disabled(editor == nil)
         }
@@ -86,30 +89,5 @@ struct JobspaceCommands: Commands {
             .keyboardShortcut("i", modifiers: [.command, .option])
             .disabled(editor == nil)
         }
-    }
-}
-
-enum DiagramExport {
-    /// Renders the whole diagram (no selection) to a PNG chosen with a save panel.
-    static func exportPNG(editor: EditorState) {
-        guard let space = editor.document?.wrappedValue.space else { return }
-        let size = Metrics.canvasSize(for: space)
-        let content = DiagramContent(
-            space: space, selectedNodes: [], selectedLink: nil, issues: [], size: size,
-            position: { CGPoint(x: $0.x, y: $0.y) }, dropTargetLayer: nil, rubberBand: nil,
-            nodeGesture: { _ in TapGesture() }, handleGesture: { _ in TapGesture() }, onNodeTap: { _ in },
-            interactive: false)
-            .background(Color.white)
-            .environment(\.colorScheme, .light)
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = 2
-        guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
-              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
-
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = "\(space.name).png"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? png.write(to: url)
     }
 }

@@ -31,7 +31,12 @@ results back.
 **Test Call** (inspector of an API Data Read) sends the request once with the stored key and shows the status,
 time, the checks of the expected outcome, and the response (the key is masked in the URL shown).
 
-**File ▸ Export Diagram as PNG…** saves the whole diagram as an image.
+**Save the diagram** — right-click anywhere in the swim-lane editor, or use **File ▸ Export Diagram as…**:
+
+- **Save as PNG…** — the whole diagram as a 2× image.
+- **Save as draw.io SVG…** (`*.drawio.svg`) — an SVG that any browser or viewer displays, carrying the diagram as
+  draw.io XML, so draw.io / diagrams.net opens it for editing: each layer becomes a swimlane holding its nodes,
+  and links become connectors (results going up a layer are dashed).
 
 ## Files and keys
 

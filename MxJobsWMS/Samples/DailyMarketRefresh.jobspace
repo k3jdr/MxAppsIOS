@@ -4,88 +4,88 @@
   "formatVersion" : 1,
   "links" : [
     {
-      "from" : "3701953E-8901-4CC1-9CCF-771D1D6FDE5D",
-      "id" : "61316483-1B97-4CE1-8AE1-518D7C7AEA2A",
+      "from" : "54093868-359E-4084-8AE8-B8B715227F2E",
+      "id" : "33A8A789-B953-4DBC-8CA4-3F9EEB90C45C",
       "label" : "",
-      "to" : "8AAE9B02-2380-4481-9B4B-CC5AFB07DD51"
+      "to" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10"
     },
     {
-      "from" : "3701953E-8901-4CC1-9CCF-771D1D6FDE5D",
-      "id" : "EDA034E7-8646-44BD-946D-4A5DCBAD7437",
+      "from" : "54093868-359E-4084-8AE8-B8B715227F2E",
+      "id" : "9D09094C-2DFF-43AA-AD9F-5FE3D6873A72",
       "label" : "",
-      "to" : "1C102E1C-799F-477F-9780-FD49EB3B1852"
+      "to" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD"
     },
     {
-      "from" : "8AAE9B02-2380-4481-9B4B-CC5AFB07DD51",
-      "id" : "0402FC22-C6C4-41AC-8AB7-278556CF2132",
+      "from" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
+      "id" : "48E6A73C-8CB3-427A-BAFD-E95DD95AC3F7",
       "label" : "",
-      "to" : "FBCA001B-58E0-4425-9A0A-9A9E67172883"
+      "to" : "946E4C3F-C61A-4FBE-9BCB-247361F45E6B"
     },
     {
-      "from" : "8AAE9B02-2380-4481-9B4B-CC5AFB07DD51",
-      "id" : "6C2DE33D-1B57-4EE5-B78B-F667AB815907",
+      "from" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
+      "id" : "EDDC5474-A7EA-44B6-AA02-1FBD3B671189",
       "label" : "",
-      "to" : "6FEF7400-3B44-40EC-9337-AFAA4E0FE591"
+      "to" : "870C116B-E895-488C-84F4-175BE2122DC7"
     },
     {
-      "from" : "1C102E1C-799F-477F-9780-FD49EB3B1852",
-      "id" : "6CDD56B1-A092-4F8D-B154-1163539DA221",
+      "from" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
+      "id" : "AF3376A5-58A2-4258-9493-9B4621F4BEF4",
       "label" : "",
-      "to" : "1F864F8F-012C-4C6A-A1D6-331B04BE9DD6"
+      "to" : "B32D3A81-851D-4DC2-9E59-FE0E3FAADE35"
     },
     {
-      "from" : "1C102E1C-799F-477F-9780-FD49EB3B1852",
-      "id" : "218AA3E1-07AF-48B2-A27E-5C4E3AA73F1A",
+      "from" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
+      "id" : "A903EB08-E2B9-41D7-9850-EE24FAF4F1FF",
       "label" : "",
-      "to" : "0D34E2E8-442A-4452-A6D8-E52B79FB0418"
+      "to" : "9F6F3E2D-DC8B-4F16-BDCE-6C8ADABF2D24"
     },
     {
-      "from" : "FBCA001B-58E0-4425-9A0A-9A9E67172883",
-      "id" : "106E7878-3931-4691-B753-937CF7145FA2",
+      "from" : "946E4C3F-C61A-4FBE-9BCB-247361F45E6B",
+      "id" : "CB801E41-6C83-42C7-8CCC-BCA5E91F4FD3",
       "label" : "",
-      "to" : "E0E6E1A7-A236-4EC3-B754-0F2FC3CC6EEE"
+      "to" : "0148D65B-2CB5-4C2C-A70C-41786A987801"
     },
     {
-      "from" : "E0E6E1A7-A236-4EC3-B754-0F2FC3CC6EEE",
-      "id" : "424D63A8-BF00-44CC-9E3C-6201ADA9C781",
+      "from" : "0148D65B-2CB5-4C2C-A70C-41786A987801",
+      "id" : "551E294B-7664-4FC9-BC43-E165A326475A",
       "label" : "quotes",
-      "to" : "8AAE9B02-2380-4481-9B4B-CC5AFB07DD51"
+      "to" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10"
     },
     {
-      "from" : "8AAE9B02-2380-4481-9B4B-CC5AFB07DD51",
-      "id" : "D37B3BB9-7DBB-4A05-96BD-A7529B4690B4",
+      "from" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
+      "id" : "275E1E4E-90EA-46C7-805F-0F884663453F",
       "label" : "",
-      "to" : "FC37F237-E827-4191-9C6B-A0DFF45EBEC8"
+      "to" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14"
     },
     {
-      "from" : "1C102E1C-799F-477F-9780-FD49EB3B1852",
-      "id" : "604C3218-ED0A-4E12-B9DD-14697B4CBE95",
+      "from" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
+      "id" : "D6A42289-FF9C-430C-AAF0-628E8356CA37",
       "label" : "",
-      "to" : "FC37F237-E827-4191-9C6B-A0DFF45EBEC8"
+      "to" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14"
     },
     {
-      "from" : "FC37F237-E827-4191-9C6B-A0DFF45EBEC8",
-      "id" : "8463D3A5-F376-4B87-9338-7DA16224C69C",
+      "from" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14",
+      "id" : "3ED8437E-F817-44C4-8849-38350EA9091B",
       "label" : "",
-      "to" : "FB5D35CB-EB01-440F-A6B9-03547B8B8AEB"
+      "to" : "57575965-96FD-44AD-9EA5-3E78CEFB658D"
     },
     {
-      "from" : "FB5D35CB-EB01-440F-A6B9-03547B8B8AEB",
-      "id" : "A04EA357-AFEB-49C3-AB41-892BE14A08B7",
+      "from" : "57575965-96FD-44AD-9EA5-3E78CEFB658D",
+      "id" : "E1133136-AB51-4816-BC38-BA7B5028AB7A",
       "label" : "",
-      "to" : "3076CA31-DD40-45A1-85C3-A905AE75DEF2"
+      "to" : "AC10A678-00EE-4508-9C88-367579CDF6AB"
     },
     {
-      "from" : "3076CA31-DD40-45A1-85C3-A905AE75DEF2",
-      "id" : "482F30E7-B3C4-4455-9837-2CA25053E413",
+      "from" : "AC10A678-00EE-4508-9C88-367579CDF6AB",
+      "id" : "22F478F0-9993-48C9-8528-A21B7C4DCB83",
       "label" : "approved",
-      "to" : "A141B798-1278-4CC9-9E0D-50F241154955"
+      "to" : "15A2DB57-D50B-481B-9961-B886E023AB8B"
     },
     {
-      "from" : "A141B798-1278-4CC9-9E0D-50F241154955",
-      "id" : "AA4B943D-A82F-46C9-8B55-0CD5EF5B4E05",
+      "from" : "15A2DB57-D50B-481B-9961-B886E023AB8B",
+      "id" : "3A2A0505-9F51-45F4-927C-514D793907BC",
       "label" : "",
-      "to" : "1C50B5F3-E5E0-4EF6-8C74-865B0C7F21B3"
+      "to" : "EEE13CA8-A69C-40B1-9CA7-79BA9AEFC192"
     }
   ],
   "name" : "Daily Market Data Refresh",
@@ -93,7 +93,7 @@
     {
       "arguments" : [
         {
-          "id" : "3773AFBD-3BDF-41B8-918E-04D3DEFC4572",
+          "id" : "EEE9A725-0EFF-4C6F-99E9-BDF2BBBF8AE1",
           "name" : "watchlist",
           "required" : true,
           "type" : "symbols",
@@ -110,7 +110,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "3701953E-8901-4CC1-9CCF-771D1D6FDE5D",
+      "id" : "54093868-359E-4084-8AE8-B8B715227F2E",
       "kind" : "trigger",
       "notes" : "",
       "outcome" : {
@@ -153,7 +153,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "FB5D35CB-EB01-440F-A6B9-03547B8B8AEB",
+      "id" : "57575965-96FD-44AD-9EA5-3E78CEFB658D",
       "kind" : "instructionSet",
       "notes" : "",
       "outcome" : {
@@ -189,7 +189,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "3076CA31-DD40-45A1-85C3-A905AE75DEF2",
+      "id" : "AC10A678-00EE-4508-9C88-367579CDF6AB",
       "kind" : "approvalGate",
       "notes" : "",
       "outcome" : {
@@ -201,7 +201,7 @@
         "successStatus" : "200-299"
       },
       "title" : "Approve instructions",
-      "x" : 1840,
+      "x" : 1580,
       "y" : 120
     },
     {
@@ -223,7 +223,7 @@
         "mode" : "paper",
         "target" : "Broker API (paper)"
       },
-      "id" : "A141B798-1278-4CC9-9E0D-50F241154955",
+      "id" : "15A2DB57-D50B-481B-9961-B886E023AB8B",
       "kind" : "executeRequest",
       "notes" : "",
       "outcome" : {
@@ -252,7 +252,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "1C50B5F3-E5E0-4EF6-8C74-865B0C7F21B3",
+      "id" : "EEE13CA8-A69C-40B1-9CA7-79BA9AEFC192",
       "kind" : "outcomeReport",
       "notes" : "",
       "outcome" : {
@@ -294,7 +294,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "8AAE9B02-2380-4481-9B4B-CC5AFB07DD51",
+      "id" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -331,7 +331,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "1C102E1C-799F-477F-9780-FD49EB3B1852",
+      "id" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -369,7 +369,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "FC37F237-E827-4191-9C6B-A0DFF45EBEC8",
+      "id" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14",
       "kind" : "aggregate",
       "notes" : "",
       "outcome" : {
@@ -394,21 +394,21 @@
         "path" : "/query",
         "query" : [
           {
-            "id" : "9167E9D2-1402-4634-A299-37EA98DB2F37",
+            "id" : "1D0916F8-0DF2-42B7-A498-81D1C405E058",
             "key" : "function",
             "value" : "GLOBAL_QUOTE"
           },
           {
-            "id" : "A30177DE-A351-4C06-9675-ECCEEE90FBE9",
+            "id" : "FC92FC00-3403-4930-AEC8-8ECC8D344744",
             "key" : "symbol",
             "value" : "{{symbol}}"
           }
         ],
-        "subscriptionID" : "78A83FE8-6413-4520-A81D-1620B3422C42"
+        "subscriptionID" : "AC2261BD-4BE2-48B9-BA83-EFF3DEB8F4D0"
       },
       "arguments" : [
         {
-          "id" : "79602474-5AF0-4532-83A4-3FC781CE7223",
+          "id" : "E187CA64-D936-4C7E-BC00-746D80AA5BE7",
           "name" : "symbol",
           "required" : true,
           "type" : "symbols",
@@ -425,7 +425,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "FBCA001B-58E0-4425-9A0A-9A9E67172883",
+      "id" : "946E4C3F-C61A-4FBE-9BCB-247361F45E6B",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -450,17 +450,17 @@
         "path" : "/latest",
         "query" : [
           {
-            "id" : "AE7106AA-89BB-4A1C-807C-73CA56DBDB78",
+            "id" : "AE0C3C2A-BFA1-430C-B2B7-D63ECF973B2D",
             "key" : "base",
             "value" : "USD"
           },
           {
-            "id" : "137F50F8-3A2F-4DD8-96D1-9C1456C09BF2",
+            "id" : "AD393DFD-1DFE-4D47-9D2F-6E7A7385A4B1",
             "key" : "symbols",
             "value" : "EUR,GBP,JPY"
           }
         ],
-        "subscriptionID" : "D8716319-FB98-4252-987C-5C34C14E6076"
+        "subscriptionID" : "325D839D-6B5E-4493-A584-09A4A8E9D254"
       },
       "arguments" : [
 
@@ -475,7 +475,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "6FEF7400-3B44-40EC-9337-AFAA4E0FE591",
+      "id" : "870C116B-E895-488C-84F4-175BE2122DC7",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -500,26 +500,26 @@
         "path" : "/company-news",
         "query" : [
           {
-            "id" : "AD2B24F3-4590-49A8-93CA-3C43F4F43276",
+            "id" : "C8AD4383-F377-4963-ACF9-E4F0A7C782A4",
             "key" : "symbol",
             "value" : "{{symbol}}"
           },
           {
-            "id" : "07205387-A95F-4499-A31B-8625DD5A0C42",
+            "id" : "57AF531B-BBAD-4485-A11A-3ABA22B36348",
             "key" : "from",
             "value" : "{{yesterday}}"
           },
           {
-            "id" : "63C2B633-B996-48D6-9D09-4940CB7F8DFC",
+            "id" : "A6797550-A136-464D-802E-4792ABB81822",
             "key" : "to",
             "value" : "{{today}}"
           }
         ],
-        "subscriptionID" : "98CD1E69-09FA-4C6F-8E06-FCAF71A8880A"
+        "subscriptionID" : "D6D11B05-7F7B-4845-AA84-E0EE3993090B"
       },
       "arguments" : [
         {
-          "id" : "B975AAED-3079-4C04-9BC1-B8865A983CA8",
+          "id" : "AF4292BD-E01C-48C0-B14F-6EE50EE2C47A",
           "name" : "symbol",
           "required" : true,
           "type" : "symbols",
@@ -536,7 +536,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "1F864F8F-012C-4C6A-A1D6-331B04BE9DD6",
+      "id" : "B32D3A81-851D-4DC2-9E59-FE0E3FAADE35",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -562,11 +562,11 @@
         "query" : [
 
         ],
-        "subscriptionID" : "91EFF9A4-CB9A-4F7F-A948-D4EA92AC85DE"
+        "subscriptionID" : "E9CB5D41-82B9-47C6-B3C8-28A9A2B38D71"
       },
       "arguments" : [
         {
-          "id" : "B8F31B7A-47C4-447F-9B1C-0149270447C4",
+          "id" : "3FA81D08-5BA6-4991-AC42-375637E5978D",
           "name" : "cik",
           "required" : true,
           "type" : "text",
@@ -583,7 +583,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "0D34E2E8-442A-4452-A6D8-E52B79FB0418",
+      "id" : "9F6F3E2D-DC8B-4F16-BDCE-6C8ADABF2D24",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -612,7 +612,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "E0E6E1A7-A236-4EC3-B754-0F2FC3CC6EEE",
+      "id" : "0148D65B-2CB5-4C2C-A70C-41786A987801",
       "kind" : "dataNormalize",
       "notes" : "",
       "outcome" : {
@@ -627,12 +627,12 @@
       "transform" : {
         "mappings" : [
           {
-            "id" : "5A87D985-422F-4152-905A-FF17A20603DE",
+            "id" : "CFAFD340-8B4F-48C6-B80B-C8F9D77D1862",
             "key" : "price",
             "value" : "Global Quote.05. price"
           },
           {
-            "id" : "4A25D3C0-CC1E-4E04-B191-E96DFCCF163F",
+            "id" : "C6AB1DB7-69D9-437C-83ED-3253B6C43C21",
             "key" : "change",
             "value" : "Global Quote.10. change percent"
           }
@@ -650,7 +650,7 @@
 
       ],
       "docsURL" : "https://www.alphavantage.co/documentation/",
-      "id" : "78A83FE8-6413-4520-A81D-1620B3422C42",
+      "id" : "AC2261BD-4BE2-48B9-BA83-EFF3DEB8F4D0",
       "keyName" : "apikey",
       "name" : "Alpha Vantage",
       "notes" : "",
@@ -665,7 +665,7 @@
 
       ],
       "docsURL" : "https://finnhub.io/docs/api",
-      "id" : "98CD1E69-09FA-4C6F-8E06-FCAF71A8880A",
+      "id" : "D6D11B05-7F7B-4845-AA84-E0EE3993090B",
       "keyName" : "X-Finnhub-Token",
       "name" : "Finnhub",
       "notes" : "",
@@ -680,7 +680,7 @@
 
       ],
       "docsURL" : "https://frankfurter.dev",
-      "id" : "D8716319-FB98-4252-987C-5C34C14E6076",
+      "id" : "325D839D-6B5E-4493-A584-09A4A8E9D254",
       "keyName" : "",
       "name" : "Frankfurter FX",
       "notes" : "",
@@ -693,13 +693,13 @@
       "baseURL" : "https://data.sec.gov",
       "defaultHeaders" : [
         {
-          "id" : "921EBE35-5523-48DE-AFAC-3E2E0DF77E64",
+          "id" : "6E316747-6F30-4A15-B661-511711605478",
           "key" : "User-Agent",
           "value" : "MxJobsWMS your-name@example.com"
         }
       ],
       "docsURL" : "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
-      "id" : "91EFF9A4-CB9A-4F7F-A948-D4EA92AC85DE",
+      "id" : "E9CB5D41-82B9-47C6-B3C8-28A9A2B38D71",
       "keyName" : "",
       "name" : "SEC EDGAR",
       "notes" : "SEC asks every client to send a User-Agent naming the requester.",

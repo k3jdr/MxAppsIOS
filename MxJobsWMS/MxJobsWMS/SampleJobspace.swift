@@ -74,7 +74,7 @@ nonisolated extension Jobspace {
         assemble.outcome.outputName = "instructions"
         assemble.outcome.description = "At least one instruction, or an explicit 'no action' note"
 
-        var approve = JobNode(kind: .approvalGate, title: "Approve instructions", x: 1840, y: y1)
+        var approve = JobNode(kind: .approvalGate, title: "Approve instructions", x: 1580, y: y1)
         approve.approval?.approver = "Portfolio owner"
         approve.approval?.summaryTemplate = "{{instructions.count}} instructions ready for {{today}}"
         approve.outcome.outputName = "approved"

@@ -19,6 +19,8 @@ struct LinkGeometry {
     var path: Path
     var start: CGPoint
     var end: CGPoint
+    var control1: CGPoint
+    var control2: CGPoint
     var mid: CGPoint
     var arrowAngle: CGFloat
 
@@ -46,6 +48,8 @@ struct LinkGeometry {
         p.move(to: start)
         p.addCurve(to: end, control1: c1, control2: c2)
         path = p
+        control1 = c1
+        control2 = c2
         // Point at t = 0.5 on the cubic.
         mid = CGPoint(x: (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8,
                       y: (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8)
@@ -95,6 +99,10 @@ struct DiagramCanvas: View {
                         .gesture(rubberBandGesture)
                 }
                 .coordinateSpace(.named(canvasSpace))
+                .contextMenu {
+                    Button("Save as PNG…") { DiagramExport.savePNG(space: space) }
+                    Button("Save as draw.io SVG…") { DiagramExport.saveDrawioSVG(space: space) }
+                }
                 .dropDestination(for: String.self) { items, location in
                     dropTargetLayer = nil
                     guard let raw = items.first, let kind = NodeKind(rawValue: raw) else { return false }
