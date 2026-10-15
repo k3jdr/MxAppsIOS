@@ -80,6 +80,9 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   with their formatting, fill and merges; the table grows to fit. One copied cell fills every selected cell. While
   typing in a cell, pasting several cells fills the table from that cell; one cell's text goes in at the caret.
   Fonts the import can't see (such as Calibri) come in as the notebook's default font.
+  Pasting Excel cells onto the page (outside a table) makes a **new table** with their formatting, fill and merges,
+  columns fitted to the contents — as do cells copied from another table, and tab-separated text whose lines have the
+  same number of cells. (A web page that just contains a table inside its text still pastes as text.)
 - **Row heights**: rows fit their content. Drag a row's bottom border (in the table or the row numbers) to give it a
   height of its own — text that doesn't fit is cut off, and the row opens up while you type in it. **Double-click the
   border to auto-fit** the row to its content again (with whole rows selected, all of them). Also Auto-Fit Row Height /

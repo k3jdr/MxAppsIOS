@@ -168,6 +168,48 @@ enum TableClipboard {
         return parseTabSeparated(text)
     }
 
+    /// Cells to paste onto the page as a new table: an HTML table that is most of what was copied (as Excel,
+    /// Numbers and MxNoteONE tables put on the clipboard — a web page with a table inside its text stays text), or
+    /// tab-separated text whose lines all have the same number of cells.
+    static func readForPage() -> PastedTable? {
+        let pasteboard = NSPasteboard.general
+        if let html = pasteboard.string(forType: .html), html.range(of: "<table", options: .caseInsensitive) != nil,
+           let table = parseHTML(html), table.rowCount * table.columnCount > 1 {
+            let tableText = table.cells.values.reduce(0) { $0 + $1.text.string.filter { !$0.isWhitespace }.count }
+            let allText = (pasteboard.string(forType: .string) ?? "").filter { !$0.isWhitespace }.count
+            if allText == 0 || Double(tableText) >= 0.9 * Double(allText) { return table }
+            return nil
+        }
+        guard let text = pasteboard.string(forType: .string), text.contains("\t") else { return nil }
+        let table = parseTabSeparated(text)
+        let counts = Set((0..<table.rowCount).map { r in (0..<table.columnCount).filter { table.cells[CellRef(row: r, column: $0)] != nil }.count })
+        return counts.count == 1 && table.columnCount > 1 ? table : nil
+    }
+
+    /// A new table's data from pasted cells (formatting, fill and merges kept).
+    static func tableData(_ pasted: PastedTable) -> TableData {
+        var data = TableData(rows: max(pasted.rowCount, 1), columns: max(pasted.columnCount, 1), width: Double(pasted.columnCount) * 120)
+        data.headerRow = false
+        let model = TableModel(data: data, width: CGFloat(pasted.columnCount) * 120)
+        for (cell, item) in pasted.cells where model.contains(cell) {
+            var text = item.text
+            if text.length > 0, text.attribute(.font, at: 0, effectiveRange: nil) == nil {
+                text = NSAttributedString(string: text.string, attributes: model.typingAttributes(cell))
+            }
+            model.store(text, in: cell)
+            if let shade = item.shading {
+                model.data.padShading()
+                model.data.shading![cell.row][cell.column] = shade
+            }
+            if item.rows > 1 || item.columns > 1 {
+                let span = CellSpan(row: cell.row, column: cell.column, rows: min(item.rows, model.rowCount - cell.row),
+                                    columns: min(item.columns, model.columnCount - cell.column))
+                model.data.merges = (model.data.merges ?? []) + [span]
+            }
+        }
+        return model.data
+    }
+
     static func parseTabSeparated(_ text: String) -> PastedTable {
         var table = PastedTable()
         var rows: [[String]] = [[]]

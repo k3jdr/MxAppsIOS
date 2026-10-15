@@ -2132,6 +2132,20 @@ final class TableGridView: NSView, NSTextViewDelegate {
         relayout()
     }
 
+    /// Fits every column without its own undo step (a table just pasted onto the page).
+    func fitAllColumns() {
+        model.freezeColumnWidths()
+        var delta: CGFloat = 0
+        for c in 0..<model.columnCount where !model.isColumnHidden(c) {
+            let width = fittingWidth(c)
+            delta += width - CGFloat(model.data.columnWidths[c])
+            model.data.columnWidths[c] = Double(width)
+        }
+        if abs(delta) >= 0.5 { model.onWidthChange?(delta) }
+        model.changed()
+        model.checkpoint("Paste")
+    }
+
     /// Dragging a column border (also from the column letter bar).
     func beginColumnResize(_ column: Int, from event: NSEvent) { resizeColumn(column, from: event) }
 

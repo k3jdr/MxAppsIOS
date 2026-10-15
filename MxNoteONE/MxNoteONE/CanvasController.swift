@@ -696,6 +696,11 @@ final class CanvasController: NSObject {
             insertFiles(urls, at: p)
             return
         }
+        // Cells from Excel, Numbers or a table (Excel also puts a picture of them on the clipboard) → a new table.
+        if let cells = TableClipboard.readForPage() {
+            pasteTable(cells, at: p)
+            return
+        }
         if pb.availableType(from: [.png, .tiff]) != nil, let image = NSImage(pasteboard: pb) {
             insertImage(image, at: p)
             return
@@ -703,6 +708,16 @@ final class CanvasController: NSObject {
         if let text = (pb.readObjects(forClasses: [NSAttributedString.self]) as? [NSAttributedString])?.first, text.length > 0 {
             createTextElement(at: p, text: text)
         }
+    }
+
+    /// A new table from pasted cells, its columns fitted to their contents.
+    func pasteTable(_ cells: PastedTable, at point: NSPoint) {
+        var element = PageElement(kind: .table, x: point.x, y: point.y, width: CGFloat(cells.columnCount) * 120)
+        element.table = TableClipboard.tableData(cells)
+        guard let view = addElement(element) as? TableElementView else { return }
+        view.grid.fitAllColumns()
+        undoManager?.setActionName("Paste")
+        canvas.selectedElement = view
     }
 
     // MARK: - Page style and zoom
