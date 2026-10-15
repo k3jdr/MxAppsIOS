@@ -306,6 +306,8 @@ struct TableData: Codable, Hashable {
     var filters: [ColumnFilter]?
     /// Rows hidden by the filters.
     var filteredRows: [Int]?
+    /// Rows hidden with Hide Row (row number bar); they keep their text.
+    var hiddenRows: [Int]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {

@@ -732,6 +732,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         didSet {
             guard selection != oldValue else { return }
             columnBar?.needsDisplay = true
+            rowBar?.needsDisplay = true
             if (selection.isEmpty) != (oldValue.isEmpty) { updateColumnBar() }
             guard editing == nil, !selection.isEmpty, !isExport else { return }
             reportCellFormatting()
@@ -1376,15 +1377,94 @@ final class TableGridView: NSView, NSTextViewDelegate {
         return menu
     }
 
+    // MARK: Rows (row number bar)
+
+    /// Top edges of the rows, and the table's bottom edge.
+    var rowEdges: [CGFloat] { rowTops }
+
+    /// Rows whose every shown cell is selected (for the row number bar).
+    var selectedWholeRowSet: Set<Int> {
+        guard editing == nil, !selection.isEmpty else { return [] }
+        let rows = Set(selection.map(\.row))
+        return rows.filter { r in
+            (0..<model.columnCount).allSatisfy { c in
+                let cell = CellRef(row: r, column: c)
+                return !model.isShown(cell) || model.data.isCovered(r, c) || selection.contains(cell)
+                    || selection.contains(model.master(cell))
+            }
+        }
+    }
+
+    /// Selects whole rows (from the row number bar).
+    func selectRowRange(_ a: Int, _ b: Int) {
+        endEditing()
+        becameActive()
+        let left = model.shownColumns.first ?? 0, right = model.shownColumns.last ?? model.columnCount - 1
+        selectRange(CellRef(row: min(a, b), column: left), CellRef(row: max(a, b), column: right))
+        anchor = CellRef(row: a, column: left)
+        extent = CellRef(row: b, column: right)
+        window?.makeFirstResponder(self)
+        rowBar?.needsDisplay = true
+    }
+
+    private var targetRowList: [Int] {
+        let whole = selectedWholeRowSet
+        if !whole.isEmpty { return whole.sorted() }
+        return selectedRows.isEmpty ? [targetCell.row] : selectedRows
+    }
+
+    func hideRows() {
+        let rows = targetRowList
+        guard model.canHideRows(rows) else { return NSSound.beep() }
+        run(rows.count > 1 ? "Hide Rows" : "Hide Row") { model.hideRows(rows) }
+        selection = []
+    }
+
+    func unhideRows(_ rows: [Int]? = nil) {
+        guard model.hasHiddenRows else { return }
+        run("Unhide Rows") { model.unhideRows(rows) }
+    }
+
+    /// The row number bar's right-click menu.
+    func rowMenu(for row: Int) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let rows = targetRowList
+        let n = rows.count
+        menu.addItem(ClosureMenuItem("Insert Row Above") { [weak self] in self?.insertRowAbove() })
+        menu.addItem(ClosureMenuItem("Insert Row Below") { [weak self] in self?.insertRowBelow() })
+        menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Rows" : "Delete Row") { [weak self] in self?.deleteRows() })
+        menu.addItem(ClosureMenuItem(n > 1 ? "Clear \(n) Rows" : "Clear Row") { [weak self] in self?.clearCells() })
+        menu.addItem(.separator())
+        let hide = ClosureMenuItem(n > 1 ? "Hide \(n) Rows" : "Hide Row") { [weak self] in self?.hideRows() }
+        hide.isEnabled = model.canHideRows(rows)
+        menu.addItem(hide)
+        let unhide = ClosureMenuItem("Unhide Rows") { [weak self] in self?.unhideRows() }
+        unhide.isEnabled = model.hasHiddenRows
+        menu.addItem(unhide)
+        menu.addItem(.separator())
+        let up = ClosureMenuItem(n > 1 ? "Move Rows Up" : "Move Row Up") { [weak self] in self?.moveRows(up: true) }
+        up.isEnabled = canMoveRows(up: true)
+        menu.addItem(up)
+        let down = ClosureMenuItem(n > 1 ? "Move Rows Down" : "Move Row Down") { [weak self] in self?.moveRows(up: false) }
+        down.isEnabled = canMoveRows(up: false)
+        menu.addItem(down)
+        menu.addItem(.separator())
+        menu.addItem(paletteItem("Row Shading") { [weak self] in self?.shadeRows($0) })
+        return menu
+    }
+
     // MARK: Column bar
 
     private(set) var columnBar: TableColumnBar?
+    private(set) var rowBar: TableRowBar?
 
     /// Shows the A, B, C… bar above the table while it's being worked in (cells selected or typing).
     func updateColumnBar() {
         let show = !isExport && TableGridView.active === self && (editing != nil || !selection.isEmpty) && window != nil
         guard show, let owner, let canvas = owner.canvas else {
             columnBar?.removeFromSuperview()
+            rowBar?.removeFromSuperview()
             return
         }
         let bar = columnBar ?? TableColumnBar()
@@ -1400,6 +1480,19 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         bar.needsDisplay = true
         window?.invalidateCursorRects(for: bar)
+        // Row numbers down the left side, with the select-all corner beside the column letters.
+        let rows = rowBar ?? TableRowBar()
+        rows.grid = self
+        rowBar = rows
+        let width = TableRowBar.width(rows: model.rowCount)
+        rows.frame = NSRect(x: origin.x - width, y: origin.y - TableColumnBar.height,
+                            width: width, height: TableColumnBar.height + (rowTops.last ?? bounds.height))
+        if rows.superview !== canvas || canvas.subviews.last !== rows {
+            rows.removeFromSuperview()
+            canvas.addSubview(rows)
+        }
+        rows.needsDisplay = true
+        window?.invalidateCursorRects(for: rows)
     }
 
     private func drawSelectionOutline(_ show: Bool) {
@@ -1450,6 +1543,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         super.viewDidMoveToWindow()
         if window == nil {
             columnBar?.removeFromSuperview()
+            rowBar?.removeFromSuperview()
             closeFilter()
             if editing != nil { stopEditing(commit: true) }
             selection = []
@@ -1944,11 +2038,19 @@ final class TableGridView: NSView, NSTextViewDelegate {
         return rows.min()!...rows.max()!
     }
 
-    func canMoveRows(up: Bool) -> Bool { model.canMoveRows(targetRows, by: up ? -1 : 1) }
+    /// How far the rows move to pass the next shown row (hidden rows are stepped over).
+    private func moveOffset(up: Bool) -> Int? {
+        let rows = targetRows
+        if up { return model.shownRow(from: rows.lowerBound - 1, step: -1).map { $0 - rows.lowerBound } }
+        return model.shownRow(from: rows.upperBound + 1, step: 1).map { $0 - rows.upperBound }
+    }
+
+    func canMoveRows(up: Bool) -> Bool { moveOffset(up: up).map { model.canMoveRows(targetRows, by: $0) } ?? false }
 
     /// Move Row Up / Down (⌥⇧↑ / ⌥⇧↓): the selected rows, or the row being typed in, keeping the caret.
     func moveRows(up: Bool) {
-        moveRows(targetRows, by: up ? -1 : 1)
+        guard let offset = moveOffset(up: up) else { return NSSound.beep() }
+        moveRows(targetRows, by: offset)
     }
 
     private func moveRows(_ rows: ClosedRange<Int>, by offset: Int) {
@@ -1971,7 +2073,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private var selectedWholeRows: ClosedRange<Int>? {
         guard editing == nil, !selection.isEmpty else { return nil }
         let rows = selectedRows
-        guard rows.last! - rows.first! + 1 == rows.count else { return nil }
+        let span = (rows.first!...rows.last!).filter { !model.isRowHidden($0) }
+        guard span.count == rows.count else { return nil }
         for r in rows {
             for c in 0..<model.columnCount where !model.data.isCovered(r, c) && !model.isColumnHidden(c) {
                 if !selection.contains(CellRef(row: r, column: c)) { return nil }
@@ -2177,6 +2280,12 @@ final class TableGridView: NSView, NSTextViewDelegate {
         down.isEnabled = canMoveRows(up: false)
         menu.addItem(down)
         menu.addItem(ClosureMenuItem(rows > 1 ? "Select Rows" : "Select Row") { [weak self] in self?.selectRows() })
+        let hideRow = ClosureMenuItem(rows > 1 ? "Hide \(rows) Rows" : "Hide Row") { [weak self] in self?.hideRows() }
+        hideRow.isEnabled = model.canHideRows(targetRowList)
+        menu.addItem(hideRow)
+        if model.hasHiddenRows {
+            menu.addItem(ClosureMenuItem("Unhide Rows") { [weak self] in self?.unhideRows() })
+        }
         menu.addItem(.separator())
         for (title, ascending) in [("Sort Ascending by This Column", true), ("Sort Descending by This Column", false)] {
             let item = ClosureMenuItem(title) { [weak self] in self?.sort(ascending: ascending) }
@@ -2244,6 +2353,7 @@ final class TableElementView: ElementView {
 
     override func removeFromSuperview() {
         grid.columnBar?.removeFromSuperview()
+        grid.rowBar?.removeFromSuperview()
         super.removeFromSuperview()
     }
 

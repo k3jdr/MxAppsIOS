@@ -6,7 +6,8 @@
 //  table while you work in it — click a letter to select the column, ⇧-click
 //  or drag to select several, right-click for column commands — hiding and
 //  showing columns, and filters: buttons on the first row with sorting, a
-//  search box and a checklist of the column's values.
+//  search box and a checklist of the column's values. A row number bar on the
+//  left does the same for rows: select, hide and show them.
 //
 
 import AppKit
@@ -29,18 +30,25 @@ extension TableData {
         }
     }
 
-    /// Keeps filtered rows hidden when a row is inserted (+1) or removed (-1).
+    /// Keeps filtered and hidden rows hidden when a row is inserted (+1) or removed (-1).
     mutating func shiftRows(at index: Int, by delta: Int) {
-        guard var rows = filteredRows else { return }
-        if delta < 0 { rows.removeAll { $0 == index } }
-        rows = rows.map { $0 >= index + (delta < 0 ? 1 : 0) ? $0 + delta : $0 }
-        filteredRows = rows.isEmpty ? nil : rows
+        func shifted(_ list: [Int]?) -> [Int]? {
+            guard var rows = list else { return nil }
+            if delta < 0 { rows.removeAll { $0 == index } }
+            rows = rows.map { $0 >= index + (delta < 0 ? 1 : 0) ? $0 + delta : $0 }
+            return rows.isEmpty ? nil : rows
+        }
+        filteredRows = shifted(filteredRows)
+        hiddenRows = shifted(hiddenRows)
     }
 
-    /// Keeps filtered rows hidden when rows are put in a new order (new index of each old row).
+    /// Keeps filtered and hidden rows hidden when rows are put in a new order (new index of each old row).
     mutating func remapRows(_ newIndex: [Int]) {
-        guard let rows = filteredRows else { return }
-        filteredRows = rows.compactMap { newIndex.indices.contains($0) ? newIndex[$0] : nil }.sorted()
+        func mapped(_ list: [Int]?) -> [Int]? {
+            list.map { $0.compactMap { newIndex.indices.contains($0) ? newIndex[$0] : nil }.sorted() }
+        }
+        filteredRows = mapped(filteredRows)
+        hiddenRows = mapped(hiddenRows)
     }
 
     /// Spreadsheet-style column name: A…Z, AA, AB…
@@ -60,7 +68,33 @@ extension TableData {
 
 extension TableModel {
     func isColumnHidden(_ column: Int) -> Bool { data.hiddenColumns?.contains(column) ?? false }
-    func isRowHidden(_ row: Int) -> Bool { data.filteredRows?.contains(row) ?? false }
+    /// Hidden by a filter or with Hide Row.
+    func isRowHidden(_ row: Int) -> Bool {
+        (data.filteredRows?.contains(row) ?? false) || (data.hiddenRows?.contains(row) ?? false)
+    }
+
+    var hasHiddenRows: Bool { !(data.hiddenRows ?? []).isEmpty }
+
+    /// Rows inside a block merged across rows can't be hidden, and one row must stay.
+    func canHideRows(_ rows: [Int]) -> Bool {
+        let shown = (0..<rowCount).filter { !isRowHidden($0) }
+        guard !rows.isEmpty, shown.count > Set(rows).intersection(shown).count else { return false }
+        return !(data.merges ?? []).contains { span in span.rows > 1 && rows.contains { span.row <= $0 && $0 < span.row + span.rows } }
+    }
+
+    func hideRows(_ rows: [Int]) {
+        guard canHideRows(rows) else { return NSSound.beep() }
+        data.hiddenRows = Array(Set(data.hiddenRows ?? []).union(rows)).sorted()
+        changed()
+    }
+
+    /// Shows rows hidden with Hide Row again (all of them when nil).
+    func unhideRows(_ rows: [Int]? = nil) {
+        guard let hidden = data.hiddenRows else { return }
+        let rest = rows.map { r in hidden.filter { !r.contains($0) } } ?? []
+        data.hiddenRows = rest.isEmpty ? nil : rest
+        changed()
+    }
 
     /// Whether a cell shows (its row and column aren't hidden).
     func isShown(_ cell: CellRef) -> Bool { !isRowHidden(cell.row) && !isColumnHidden(cell.column) }
@@ -302,6 +336,142 @@ final class TableColumnBar: NSView {
     override func resetCursorRects() {
         for edge in hiddenEdges() {
             addCursorRect(NSRect(x: edge.x - 4, y: 0, width: 8, height: bounds.height), cursor: .resizeLeftRight)
+        }
+    }
+}
+
+// MARK: - Row number bar
+
+/// The 1, 2, 3… bar on a table's left while you work in it; its top corner selects the whole table.
+final class TableRowBar: NSView {
+    weak var grid: TableGridView?
+    private var anchorRow: Int?
+
+    override var isFlipped: Bool { true }
+
+    static func width(rows: Int) -> CGFloat { 14 + CGFloat(String(rows).count) * 7 }
+
+    /// The corner square above the numbers (as tall as the column bar).
+    private var cornerHeight: CGFloat { TableColumnBar.height }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let grid else { return }
+        let tops = grid.rowEdges
+        NSColor(srgbRed: 0.95, green: 0.95, blue: 0.95, alpha: 1).setFill()
+        bounds.fill()
+        // Corner: a small triangle, as in Excel.
+        let corner = NSBezierPath()
+        corner.move(to: NSPoint(x: bounds.width - 3, y: cornerHeight - 3))
+        corner.line(to: NSPoint(x: bounds.width - 3, y: 4))
+        corner.line(to: NSPoint(x: bounds.width - cornerHeight + 4, y: cornerHeight - 3))
+        corner.close()
+        NSColor(white: 0.7, alpha: 1).setFill()
+        corner.fill()
+        NSColor(white: 0.75, alpha: 1).setFill()
+        NSRect(x: 0, y: cornerHeight - 0.5, width: bounds.width, height: 0.5).fill()
+        let selected = grid.selectedWholeRowSet
+        let filtered = grid.model.data.filters != nil
+        for r in 0..<grid.model.rowCount where !grid.model.isRowHidden(r) && r + 1 < tops.count {
+            let rect = NSRect(x: 0, y: cornerHeight + tops[r], width: bounds.width, height: tops[r + 1] - tops[r])
+            let isSelected = selected.contains(r)
+            if isSelected {
+                NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
+                rect.fill()
+            }
+            NSColor(white: 0.75, alpha: 1).setFill()
+            NSRect(x: 0, y: rect.maxY - 0.5, width: rect.width, height: 0.5).fill()
+            let name = "\(r + 1)"
+            // Row numbers turn blue while a filter hides rows (as in Excel).
+            let color = isSelected ? NSColor.controlAccentColor : filtered && r > 0 ? NSColor.systemBlue : NSColor(white: 0.35, alpha: 1)
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: isSelected ? .bold : .medium), .foregroundColor: color,
+            ]
+            let size = (name as NSString).size(withAttributes: attrs)
+            if size.height < rect.height {
+                (name as NSString).draw(at: NSPoint(x: (rect.width - size.width) / 2, y: rect.minY + min(4, (rect.height - size.height) / 2)),
+                                        withAttributes: attrs)
+            }
+        }
+        for edge in hiddenEdges() {
+            NSColor(white: 0.45, alpha: 1).setFill()
+            NSRect(x: 2, y: edge.y - 2, width: bounds.width - 4, height: 1).fill()
+            NSRect(x: 2, y: edge.y + 1, width: bounds.width - 4, height: 1).fill()
+        }
+        NSColor(white: 0.75, alpha: 1).setStroke()
+        NSBezierPath(rect: bounds.insetBy(dx: 0.25, dy: 0.25)).stroke()
+    }
+
+    /// Where runs of rows hidden with Hide Row are (in bar coordinates), and which rows they are.
+    private func hiddenEdges() -> [(y: CGFloat, rows: [Int])] {
+        guard let grid else { return [] }
+        let tops = grid.rowEdges
+        let hidden = Set(grid.model.data.hiddenRows ?? [])
+        var result: [(CGFloat, [Int])] = []
+        var run: [Int] = []
+        for r in 0..<grid.model.rowCount {
+            if hidden.contains(r) {
+                run.append(r)
+            } else if !grid.model.isRowHidden(r), !run.isEmpty {
+                result.append((cornerHeight + tops[r], run))
+                run = []
+            }
+        }
+        if !run.isEmpty { result.append((cornerHeight + (tops.last ?? 0), run)) }
+        return result
+    }
+
+    /// The hidden rows whose mark is at y (bar coordinates).
+    func hiddenRows(atY y: CGFloat) -> [Int]? {
+        hiddenEdges().first { abs($0.y - y) <= 4 }?.rows
+    }
+
+    private func row(at y: CGFloat) -> Int? {
+        guard let grid else { return nil }
+        let tops = grid.rowEdges
+        let y = y - cornerHeight
+        for r in 0..<grid.model.rowCount where !grid.model.isRowHidden(r) && r + 1 < tops.count {
+            if y >= tops[r] && y < tops[r + 1] { return r }
+        }
+        return y < 0 ? nil : (0..<grid.model.rowCount).last { !grid.model.isRowHidden($0) }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let grid, let window else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        if p.y < cornerHeight {
+            grid.selectTable()
+            return
+        }
+        if let rows = hiddenRows(atY: p.y) {
+            grid.unhideRows(rows)
+            return
+        }
+        guard let start = row(at: p.y) else { return }
+        let from = event.modifierFlags.contains(.shift) ? (anchorRow ?? start) : start
+        if !event.modifierFlags.contains(.shift) { anchorRow = start }
+        grid.selectRowRange(from, start)
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
+                           mode: .eventTracking) { ev, stop in
+            guard let ev, ev.type == .leftMouseDragged else {
+                stop.pointee = true
+                return
+            }
+            if let r = self.row(at: self.convert(ev.locationInWindow, from: nil).y) { grid.selectRowRange(from, r) }
+        }
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let grid, let r = row(at: convert(event.locationInWindow, from: nil).y) else { return nil }
+        if !grid.selectedWholeRowSet.contains(r) {
+            anchorRow = r
+            grid.selectRowRange(r, r)
+        }
+        return grid.rowMenu(for: r)
+    }
+
+    override func resetCursorRects() {
+        for edge in hiddenEdges() {
+            addCursorRect(NSRect(x: 0, y: edge.y - 4, width: bounds.width, height: 8), cursor: .resizeUpDown)
         }
     }
 }

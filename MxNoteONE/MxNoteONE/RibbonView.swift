@@ -545,6 +545,8 @@ struct TableRibbon: View {
             RibbonButton("Filter", "line.3.horizontal.decrease.circle", large: true) { grid?.toggleFilter() }
             RibbonButton("Hide Columns", "eye.slash", large: true) { grid?.hideColumns() }
             RibbonButton("Unhide Columns", "eye", large: true) { grid?.unhideColumns() }
+            RibbonButton("Hide Rows", "eye.slash", large: true) { grid?.hideRows() }
+            RibbonButton("Unhide Rows", "eye", large: true) { grid?.unhideRows() }
             RibbonButton("Row Up", "arrow.up.to.line", large: true) { grid?.moveRows(up: true) }
             RibbonButton("Row Down", "arrow.down.to.line", large: true) { grid?.moveRows(up: false) }
             RibbonButton("Select Table", "tablecells", large: true) { grid?.selectTable() }

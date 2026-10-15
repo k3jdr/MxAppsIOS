@@ -48,6 +48,13 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Hide and show columns**: Hide Column (column bar, right-click a cell, or the Table ribbon). Hidden columns keep
   their text; the table gets narrower, and a double line in the column bar marks where they are — click it to show
   them again, or use Unhide Columns.
+- **Rows, Excel style**: row numbers (1, 2, 3…) run down the table's left side next to the column letters; the
+  corner where they meet selects the whole table. Click a number to select the row, ⇧-click or drag for several.
+  Right-click a number for insert / delete / clear, Hide / Unhide Rows, Move Up / Down and Row Shading.
+- **Hide and show rows**: Hide Row (row numbers, right-click a cell, or the Table ribbon). Hidden rows keep their
+  text and are skipped by the arrow keys and by Move Row Up / Down; the numbers jump past them and a double line
+  marks where they are — click it to show them again, or use Unhide Rows. Rows hidden this way stay hidden when
+  Filter is turned off. While a filter hides rows the row numbers turn blue.
 - **Filter** (Table ribbon, right-click, or Filter… on a column letter): filter buttons appear in the first row.
   A button opens Sort A to Z / Z to A, Clear Filter, a search box and a checklist of the column's values (with
   Select All and Blanks); OK hides the other rows. Filtered columns show a filter icon and "▾" by their letter.
