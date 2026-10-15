@@ -310,6 +310,8 @@ struct TableData: Codable, Hashable {
     var hiddenRows: [Int]?
     /// The first column stays in view while the page scrolls sideways (Excel: Freeze First Column).
     var freezeFirstColumn: Bool?
+    /// The header row stays in view while the page scrolls (nil = on, as before this option existed).
+    var freezeHeaderRow: Bool?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {

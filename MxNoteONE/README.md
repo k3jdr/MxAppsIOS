@@ -72,6 +72,8 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   text boxes show the pointing hand as well.
 - **Frozen header row**: in a table with a header row, the header stays pinned at the top of the view while you scroll
   through the table, and scrolls away with its last row. Clicking a pinned header cell scrolls back to type in it.
+  Turn it off per table with **Freeze Header Row** (right-click a cell or a column letter, or the Table ribbon's
+  Freeze Header).
 - **Freeze First Column** (right-click a cell or a column letter, or the Table ribbon's Freeze Column): when a wide
   table's left side scrolls out of view, its first column stays pinned at the left edge of the page (with its column
   letter), so each row's label stays visible. You can click and type in the pinned column. With a header row too,

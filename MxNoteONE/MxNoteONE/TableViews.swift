@@ -493,6 +493,14 @@ final class TableModel {
         changed()
     }
 
+    /// The header row is pinned while scrolling (Header Row and Freeze Header Row both on).
+    var headerRowFrozen: Bool { data.headerRow && data.freezeHeaderRow != false }
+
+    func toggleFreezeHeaderRow() {
+        data.freezeHeaderRow = data.freezeHeaderRow == false ? nil : false
+        changed()
+    }
+
     func toggleFreezeFirstColumn() {
         data.freezeFirstColumn = (data.freezeFirstColumn ?? false) ? nil : true
         changed()
@@ -817,7 +825,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     var headerHeight: CGFloat { rowHeights.first ?? 0 }
     var tableHeight: CGFloat { rowTops.last ?? 0 }
-    private var stickyActive: Bool { stickyOffset > 0 && model.data.headerRow && model.rowCount > 1 }
+    private var stickyActive: Bool { stickyOffset > 0 && model.headerRowFrozen && model.rowCount > 1 }
 
     /// A point on the pinned header counts as a point in the real header row.
     private func unpinned(_ point: NSPoint) -> NSPoint {
@@ -1431,6 +1439,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Columns" : "Delete Column") { [weak self] in self?.deleteColumns() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Clear \(n) Columns" : "Clear Column") { [weak self] in self?.clearCells() })
         menu.addItem(.separator())
+        let freezeHeader = ClosureMenuItem("Freeze Header Row", state: model.headerRowFrozen) { [weak self] in self?.toggleFreezeHeaderRow() }
+        freezeHeader.isEnabled = model.data.headerRow
+        menu.addItem(freezeHeader)
         menu.addItem(ClosureMenuItem("Freeze First Column", state: model.data.freezeFirstColumn ?? false) { [weak self] in
             self?.toggleFreezeFirstColumn()
         })
@@ -2260,6 +2271,12 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func bandRows(_ color: NSColor?) { run("Shading") { model.bandRows(color) } }
     func toggleHeaderRow() { run("Header Row") { model.toggleHeaderRow() } }
     func toggleBorders() { run("Borders") { model.toggleBorders() } }
+    func toggleFreezeHeaderRow() {
+        guard model.data.headerRow else { return NSSound.beep() }
+        run("Freeze Header Row") { model.toggleFreezeHeaderRow() }
+        owner?.controller?.updateStickyHeaders()
+    }
+
     func toggleFreezeFirstColumn() {
         run("Freeze First Column") { model.toggleFreezeFirstColumn() }
         owner?.controller?.updateStickyHeaders()
@@ -2391,6 +2408,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
             menu.addItem(ClosureMenuItem("Clear All Filters") { [weak self] in self?.clearAllFilters() })
         }
         menu.addItem(ClosureMenuItem("Header Row", state: model.data.headerRow) { [weak self] in self?.toggleHeaderRow() })
+        let freezeHeader = ClosureMenuItem("Freeze Header Row", state: model.headerRowFrozen) { [weak self] in self?.toggleFreezeHeaderRow() }
+        freezeHeader.isEnabled = model.data.headerRow
+        menu.addItem(freezeHeader)
         menu.addItem(ClosureMenuItem("Freeze First Column", state: model.data.freezeFirstColumn ?? false) { [weak self] in
             self?.toggleFreezeFirstColumn()
         })
@@ -2472,7 +2492,7 @@ final class TableElementView: ElementView {
         } else {
             grid.stickyLeft = 0
         }
-        guard model.data.headerRow, model.rowCount > 1 else {
+        guard model.headerRowFrozen, model.rowCount > 1 else {
             grid.stickyOffset = 0
             return
         }

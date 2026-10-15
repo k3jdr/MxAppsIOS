@@ -30,10 +30,12 @@ struct MainView: View {
             searchFocused = true
         }
         .onChange(of: store.showFullPage) { _, full in
-            withAnimation { visibility = full ? .detailOnly : .all }
+            visibility = full ? .detailOnly : .all
+            FullPageView.collapseColumns(full)
         }
         .onChange(of: visibility) { _, newValue in
-            if newValue != .detailOnly, store.showFullPage { store.showFullPage = false }
+            // Showing the sidebar again (its toolbar button, or dragging a column out) ends Full Page View.
+            if newValue == .all, store.showFullPage, !FullPageView.changing { store.showFullPage = false }
         }
         .navigationTitle(store.windowTitle)
         .navigationSubtitle(store.windowSubtitle)
@@ -186,5 +188,40 @@ struct FindBar: View {
         canvas?.clearFind()
         editor.findStatus = ""
         editor.showFindBar = false
+    }
+}
+
+// MARK: - Full Page View
+
+/// Full Page View hides the notebooks and page list. A three-column NavigationSplitView doesn't collapse its
+/// columns for .detailOnly on macOS, so the window's split view items are collapsed directly.
+enum FullPageView {
+    /// True while the columns are being collapsed or shown (their visibility changes aren't the user's).
+    private(set) static var changing = false
+
+    static func collapseColumns(_ collapse: Bool) {
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow, let content = window.contentView,
+              let split = splitViewController(in: content) else { return }
+        let items = split.splitViewItems.dropLast()
+        guard items.contains(where: { $0.isCollapsed != collapse }) else { return }
+        changing = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            for item in items { item.animator().isCollapsed = collapse }
+        } completionHandler: {
+            DispatchQueue.main.async { changing = false }
+        }
+    }
+
+    /// The split view controller of the window's split view (SwiftUI doesn't add it as a child controller).
+    private static func splitViewController(in view: NSView) -> NSSplitViewController? {
+        if let split = view as? NSSplitView, let controller = split.delegate as? NSSplitViewController,
+           controller.splitViewItems.count == 3 {
+            return controller
+        }
+        for subview in view.subviews {
+            if let found = splitViewController(in: subview) { return found }
+        }
+        return nil
     }
 }
