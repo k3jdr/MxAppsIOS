@@ -428,6 +428,7 @@ final class TableModel {
         }
         storedCache[cell] = text
         valueCache.removeAll()
+        NotificationCenter.default.post(name: .mxTableChanged, object: self)
         conditionalNumbers.removeAll()
         conditionalCounts.removeAll()
     }
@@ -466,6 +467,7 @@ final class TableModel {
     }
 
     func changed() {
+        defer { NotificationCenter.default.post(name: .mxTableChanged, object: self) }
         storedCache.removeAll()
         valueCache.removeAll()
         conditionalNumbers.removeAll()
@@ -2473,6 +2475,66 @@ final class TableGridView: NSView, NSTextViewDelegate {
         popover.show(relativeTo: cellRect(cell), of: self, preferredEdge: .maxY)
     }
 
+    /// Where a new container goes: below this table, and below anything already under it.
+    private func placeBelow(width: CGFloat) -> NSPoint? {
+        guard let owner, let controller = owner.controller else { return nil }
+        let strip = NSRect(x: owner.frame.minX, y: owner.frame.minY, width: max(width, owner.frame.width), height: .greatestFiniteMagnitude)
+        let below = controller.canvas.elementViews.filter { $0 !== owner && $0.frame.minY >= owner.frame.minY && $0.frame.intersects(strip) }
+        let top = below.map(\.frame.maxY).max().map { max($0, owner.frame.maxY) } ?? owner.frame.maxY
+        return NSPoint(x: owner.frame.minX, y: top + 24)
+    }
+
+    // MARK: Charts
+
+    /// Insert Chart: the selected columns (the first gives the categories, columns of numbers the series), or the
+    /// whole table; the chart goes below the table.
+    func insertChart(_ kind: ChartSpec.Kind) {
+        guard let owner, let controller = owner.controller, model.rowCount > 1 else { return NSSound.beep() }
+        let names = PivotBuilder.fields(model)
+        func numeric(_ c: Int) -> Bool {
+            (1..<model.rowCount).contains { r in
+                switch model.value(CellRef(row: r, column: c)) {
+                case .number, .date: return true
+                default: return false
+                }
+            }
+        }
+        var columns = selectedColumns.filter { !model.isColumnHidden($0) }
+        if columns.count < 2 {
+            // One column (or a cell): the table's first column against the chosen column, or every column of numbers.
+            let chosen = columns.first.flatMap { $0 > 0 && numeric($0) ? $0 : nil }
+            columns = [0] + (chosen.map { [$0] } ?? (1..<model.columnCount).filter { !model.isColumnHidden($0) && numeric($0) })
+        }
+        let category = columns[0]
+        let series = columns.dropFirst().filter(numeric)
+        guard !series.isEmpty else {
+            NotebookStore.shared.showAlert("No numbers to chart", "Select a column of labels and one or more columns of numbers.")
+            return
+        }
+        var spec = ChartSpec(source: owner.element.id, categoryField: names[category], categoryColumn: category,
+                             seriesFields: series.map { names[$0] }, seriesColumns: Array(series), kind: kind,
+                             title: series.count == 1 ? names[series[0]] : "")
+        ChartBuilder.refresh(&spec, from: model)
+        endEditing()
+        let width: CGFloat = kind == .pie || kind == .donut ? 360 : 460
+        guard let origin = placeBelow(width: width) else { return }
+        var element = PageElement(kind: .chart, x: origin.x, y: origin.y, width: width)
+        element.chart = spec
+        guard let view = controller.addElement(element) else { return }
+        controller.undoManager?.setActionName("Insert Chart")
+        controller.canvas.selectedElement = view
+    }
+
+    func chartMenu() -> NSMenu {
+        let menu = NSMenu()
+        for kind in ChartSpec.Kind.allCases {
+            let item = ClosureMenuItem(kind.title) { [weak self] in self?.insertChart(kind) }
+            item.image = NSImage(systemSymbolName: kind.symbol, accessibilityDescription: nil)
+            menu.addItem(item)
+        }
+        return menu
+    }
+
     func createPivot(row: Int, column: Int?, value: Int?, summary: PivotSpec.Summary, totals: Bool) {
         guard let owner, let controller = owner.controller else { return }
         let names = PivotBuilder.fields(model)
@@ -3289,6 +3351,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let validation = NSMenuItem(title: "Data Validation", action: nil, keyEquivalent: "")
         validation.submenu = validationMenu()
         menu.addItem(validation)
+        let charts = NSMenuItem(title: "Insert Chart", action: nil, keyEquivalent: "")
+        charts.submenu = chartMenu()
+        menu.addItem(charts)
         menu.addItem(ClosureMenuItem("Create Pivot Table…") { [weak self] in self?.showPivot() })
         if model.data.pivot != nil {
             menu.addItem(ClosureMenuItem("Refresh Pivot Table") { [weak self] in self?.refreshPivot() })

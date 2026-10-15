@@ -141,6 +141,17 @@ enum PageExporter {
                 try? data.write(to: assetsFolder.appending(path: fileName))
                 let link = (assetsName + "/" + fileName).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? fileName
                 lines.append(element.kind == .image ? "![](\(link))" : "[\(fileName)](\(link))")
+            case .chart:
+                // A chart's data as a table, under its title.
+                guard let chart = element.chart, !chart.series.isEmpty else { continue }
+                lines.append("*\(chart.title.isEmpty ? "\(chart.kind.title) chart" : chart.title)*")
+                lines.append("")
+                lines.append("| \(chart.categoryField) | " + chart.series.map(\.name).joined(separator: " | ") + " |")
+                lines.append("|" + Array(repeating: " --- |", count: chart.series.count + 1).joined())
+                for (i, category) in chart.categories.enumerated() {
+                    let values = chart.series.map { s in i < s.values.count ? s.values[i].map(Formula.format) ?? "" : "" }
+                    lines.append("| \(category) | " + values.joined(separator: " | ") + " |")
+                }
             }
             lines.append("")
         }

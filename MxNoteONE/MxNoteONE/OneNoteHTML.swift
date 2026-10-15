@@ -69,6 +69,17 @@ enum OneNoteHTML {
                     body += "</tr>"
                 }
                 body += "</table></div>\n"
+            case .chart:
+                // OneNote has no charts: the chart's data as a table, under its title.
+                guard let chart = element.chart, !chart.series.isEmpty else { continue }
+                let title = chart.title.isEmpty ? "\(chart.kind.title) chart" : chart.title
+                body += "<div style=\"position:absolute;left:\(x)px;top:\(y)px;width:\(w)px\"><p><b>\(escape(title))</b></p><table border=\"1\">"
+                body += "<tr><td><b>\(escape(chart.categoryField))</b></td>" + chart.series.map { "<td><b>\(escape($0.name))</b></td>" }.joined() + "</tr>"
+                for (i, category) in chart.categories.enumerated() {
+                    let values = chart.series.map { s in "<td>\(i < s.values.count ? s.values[i].map(Formula.format) ?? "" : "")</td>" }
+                    body += "<tr><td>\(escape(category))</td>" + values.joined() + "</tr>"
+                }
+                body += "</table></div>\n"
             case .image:
                 guard let asset = element.asset, let data = assetData(asset),
                       let (imageData, type) = webImage(data, ext: (asset as NSString).pathExtension) else { continue }

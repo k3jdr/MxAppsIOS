@@ -1480,6 +1480,8 @@ enum PageIndexer {
                 texts.append(element.table?.rows.map { $0.joined(separator: " ") }.joined(separator: "\n") ?? "")
             case .file, .audio, .image:
                 if let name = element.fileName { texts.append(name) }
+            case .chart:
+                if let title = element.chart?.title, !title.isEmpty { texts.append(title) }
             }
         }
         return index(texts: texts)

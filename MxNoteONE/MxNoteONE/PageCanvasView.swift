@@ -219,6 +219,8 @@ final class PageCanvasView: NSView {
             view = FileElementView(element: element)
         case .table:
             view = TableElementView(element: element)
+        case .chart:
+            view = ChartElementView(element: element)
         }
         view.canvas = self
         if isExport { view.prepareForExport() }

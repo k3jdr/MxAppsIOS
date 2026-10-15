@@ -667,6 +667,8 @@ final class CanvasController: NSObject {
             item.setString(element.table?.rows.map { $0.joined(separator: "\t") }.joined(separator: "\n") ?? "", forType: .string)
         case .file, .audio:
             item.setString(element.fileName ?? "", forType: .string)
+        case .chart:
+            if let tiff = (view as? ChartElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
         }
         let pb = NSPasteboard.general
         pb.clearContents()

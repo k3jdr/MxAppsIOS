@@ -563,6 +563,11 @@ struct TableRibbon: View {
             RibbonButton("Percent", "percent", large: true) { grid?.setNumberFormat(.percent) }
             RibbonButton("Increase Decimal", "increase.decimalplaces", large: true) { grid?.changeDecimals(by: 1) }
             RibbonButton("Decrease Decimal", "decrease.decimalplaces", large: true) { grid?.changeDecimals(by: -1) }
+            RibbonMenu("Chart", "chart.bar.xaxis") {
+                ForEach(ChartSpec.Kind.allCases) { kind in
+                    Button { grid?.insertChart(kind) } label: { Label(kind.title, systemImage: kind.symbol) }
+                }
+            }
             RibbonMenu("Pivot", "tablecells.badge.ellipsis") {
                 Button("Create Pivot Table…") { grid?.showPivot() }
                 Button("Refresh Pivot Table") { grid?.refreshPivot() }
