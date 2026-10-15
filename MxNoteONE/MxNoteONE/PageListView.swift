@@ -67,18 +67,12 @@ struct PagesList: View {
                 let hasSubpages = store.hasSubpages(meta.id, in: section)
                 PageRow(meta: meta, ref: ref, hasSubpages: hasSubpages)
                     .tag(meta.id)
+                    .contextMenu { PageMenu(ref: ref, meta: meta, hasSubpages: hasSubpages) }
             }
             .onMove { store.movePages(in: section, from: $0, to: $1) }
         }
-        // Right-click a page for its menu; right-click the empty space below for Add New.
-        .contextMenu(forSelectionType: UUID.self) { ids in
-            if let id = ids.first, let meta = pages.first(where: { $0.id == id }) {
-                let ref = PageRef(notebookID: section.notebookID, sectionID: section.sectionID, pageID: meta.id)
-                PageMenu(ref: ref, meta: meta, hasSubpages: store.hasSubpages(meta.id, in: section))
-            } else {
-                AddNewMenu(section: section)
-            }
-        }
+        // Right-click the empty space (below the pages, or an empty section) for Add New.
+        .background(AddNewArea(section: section))
         .onDeleteCommand {
             if let ref = store.currentPageRef { store.deletePage(ref) }
         }
@@ -111,27 +105,90 @@ struct PagesList: View {
     }
 }
 
-/// Right-click in the empty part of the pages list: add a page (blank or from a template), a subpage or a section.
-struct AddNewMenu: View {
+/// Right-click in the empty part of the pages list: Add New (a page, blank or from a template, a subpage, a
+/// section or a section group). SwiftUI's list menus don't reach the space below the rows, so this watches
+/// right-clicks in the pages column and shows the menu when one isn't on a page.
+struct AddNewArea: NSViewRepresentable {
     let section: SectionRef
-    @Bindable private var store = NotebookStore.shared
 
-    var body: some View {
-        Button("New Page") { store.addPageToCurrentSection() }
-        Button("New Subpage") { store.addPageToCurrentSection(subpage: true) }
-            .disabled(store.pages(in: section)?.isEmpty ?? true)
-        Menu("New Page from Template") {
-            ForEach(PageTemplate.choices.filter { $0 != .blank }) { template in
-                Button {
-                    store.addPageToCurrentSection(template: template)
-                } label: {
-                    Label(template.title, systemImage: template.symbol)
-                }
-            }
+    func makeNSView(context: Context) -> AddNewAreaView {
+        let view = AddNewAreaView()
+        view.section = section
+        return view
+    }
+
+    func updateNSView(_ view: AddNewAreaView, context: Context) {
+        view.section = section
+    }
+}
+
+final class AddNewAreaView: NSView {
+    var section: SectionRef?
+    private var monitor: Any?
+
+    #if DEBUG
+    /// Self-tests: receives the menu instead of it popping up.
+    nonisolated(unsafe) static var testMenuHandler: ((NSMenu) -> Void)?
+    #endif
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        guard window != nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak self] event in
+            guard let self else { return event }
+            if event.type == .leftMouseDown, !event.modifierFlags.contains(.control) { return event }
+            return self.handle(event) ? nil : event
         }
-        Divider()
-        Button("New Section") { _ = store.addSection(to: section.notebookID) }
-        Button("New Section Group") { store.addSectionGroup(to: section.notebookID) }
+    }
+
+    override func removeFromSuperview() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        super.removeFromSuperview()
+    }
+
+    /// Shows Add New for a right-click in the pages column that isn't on a page.
+    func handle(_ event: NSEvent) -> Bool {
+        guard let window, event.window === window, let section else { return false }
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point) else { return false }
+        // On a page row: the row's own menu.
+        if let content = window.contentView, let hit = content.hitTest(content.convert(event.locationInWindow, from: nil)) {
+            var view: NSView? = hit
+            while let v = view, !(v is NSTableView) { view = v.superview }
+            if let table = view as? NSTableView, table.row(at: table.convert(event.locationInWindow, from: nil)) >= 0 { return false }
+        }
+        let menu = Self.menu(for: section)
+        #if DEBUG
+        if let handler = Self.testMenuHandler { handler(menu); return true }
+        #endif
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+        return true
+    }
+
+    static func menu(for section: SectionRef) -> NSMenu {
+        let store = NotebookStore.shared
+        let menu = NSMenu(title: "Add New")
+        menu.autoenablesItems = false
+        menu.addItem(ClosureMenuItem("New Page") { store.addPageToCurrentSection() })
+        let subpage = ClosureMenuItem("New Subpage") { store.addPageToCurrentSection(subpage: true) }
+        subpage.isEnabled = !(store.pages(in: section)?.isEmpty ?? true)
+        menu.addItem(subpage)
+        let templates = NSMenuItem(title: "New Page from Template", action: nil, keyEquivalent: "")
+        let list = NSMenu()
+        for template in PageTemplate.choices where template != .blank {
+            let item = ClosureMenuItem(template.title) { store.addPageToCurrentSection(template: template) }
+            item.image = NSImage(systemSymbolName: template.symbol, accessibilityDescription: nil)
+            list.addItem(item)
+        }
+        templates.submenu = list
+        menu.addItem(templates)
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("New Section") { _ = store.addSection(to: section.notebookID) })
+        menu.addItem(ClosureMenuItem("New Section Group") { store.addSectionGroup(to: section.notebookID) })
+        return menu
     }
 }
 
