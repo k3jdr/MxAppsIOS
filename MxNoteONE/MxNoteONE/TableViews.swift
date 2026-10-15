@@ -1442,6 +1442,14 @@ final class TableGridView: NSView, NSTextViewDelegate {
         unhide.isEnabled = model.hasHiddenColumns
         menu.addItem(unhide)
         menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem(n > 1 ? "Auto-Fit \(n) Columns" : "Auto-Fit Column Width") { [weak self] in
+            self?.autoFitColumns(columns)
+        })
+        menu.addItem(ClosureMenuItem("Auto-Fit All Columns") { [weak self] in
+            guard let self else { return }
+            self.autoFitColumns(Array(0..<self.model.columnCount))
+        })
+        menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Insert Column Left") { [weak self] in self?.insertColumnLeft() })
         menu.addItem(ClosureMenuItem("Insert Column Right") { [weak self] in self?.insertColumnRight() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Columns" : "Delete Column") { [weak self] in self?.deleteColumns() })
@@ -1928,7 +1936,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             return
         }
         if let column = columnBorder(at: p) {
-            resizeColumn(column, from: event)
+            if event.clickCount == 2 { autoFitColumns(near: column) } else { resizeColumn(column, from: event) }
             return
         }
         if onOuterEdge(p) {
@@ -1993,6 +2001,66 @@ final class TableGridView: NSView, NSTextViewDelegate {
     }
 
     /// Drag a column border: that column gets wider or narrower and the table follows.
+    // MARK: Auto-fit
+
+    /// The width a cell's text needs on one line (its widest paragraph; pictures at their size).
+    private func naturalWidth(_ cell: CellRef) -> CGFloat {
+        let text = NSMutableAttributedString(attributedString: model.displayText(cell))
+        guard text.length > 0, !text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || text.containsAttachments(in: NSRange(location: 0, length: text.length)) else { return 0 }
+        // Measured left-aligned and outside any code block (whose shading stretches to fill the cell).
+        var extra: CGFloat = 0
+        text.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let style = value as? NSParagraphStyle else { return }
+            let plain = style.mutableCopy() as! NSMutableParagraphStyle
+            if !plain.textBlocks.isEmpty { extra = 24 }
+            plain.textBlocks = []
+            plain.alignment = .left
+            text.addAttribute(.paragraphStyle, value: plain, range: range)
+        }
+        let rect = text.boundingRect(with: NSSize(width: 10_000, height: CGFloat.greatestFiniteMagnitude),
+                                     options: [.usesLineFragmentOrigin, .usesFontLeading])
+        return ceil(rect.width) + extra
+    }
+
+    /// The width that fits a column's widest shown cell on one line.
+    func fittingWidth(_ column: Int) -> CGFloat {
+        var widest: CGFloat = 0
+        for r in 0..<model.rowCount where !model.isRowHidden(r) && !model.data.isCovered(r, column) {
+            let cell = CellRef(row: r, column: column)
+            guard model.span(cell).columns == 1 else { continue }
+            var width = naturalWidth(cell) + 2 * Self.padX + 2
+            if hasFilterButton(cell) { width += Self.filterButtonSize }
+            widest = max(widest, width)
+        }
+        return min(max(widest, 40), 900)
+    }
+
+    /// Auto-fit: double-click a column border. Fits the selected whole columns when the column is one of them.
+    func autoFitColumns(near column: Int) {
+        let whole = selectedWholeColumns
+        autoFitColumns(whole.contains(column) ? whole.sorted() : [column])
+    }
+
+    func autoFitColumns(_ columns: [Int]) {
+        let columns = columns.filter { !model.isColumnHidden($0) }
+        guard !columns.isEmpty else { return }
+        run(columns.count > 1 ? "Auto-Fit Columns" : "Auto-Fit Column") {
+            model.freezeColumnWidths()
+            var delta: CGFloat = 0
+            for c in columns {
+                let width = fittingWidth(c)
+                delta += width - CGFloat(model.data.columnWidths[c])
+                model.data.columnWidths[c] = Double(width)
+            }
+            if abs(delta) >= 0.5 { model.onWidthChange?(delta) }
+            model.changed()
+        }
+    }
+
+    /// Dragging a column border (also from the column letter bar).
+    func beginColumnResize(_ column: Int, from event: NSEvent) { resizeColumn(column, from: event) }
+
     private func resizeColumn(_ column: Int, from event: NSEvent) {
         guard let window else { return }
         endEditing()
@@ -2426,6 +2494,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let rows = selectedRows.count, columns = selectedColumns.count
         menu.addItem(ClosureMenuItem(rows > 1 ? "Delete \(rows) Rows" : "Delete Row") { [weak self] in self?.deleteRows() })
         menu.addItem(ClosureMenuItem(columns > 1 ? "Delete \(columns) Columns" : "Delete Column") { [weak self] in self?.deleteColumns() })
+        menu.addItem(ClosureMenuItem("Auto-Fit Column Width") { [weak self] in
+            guard let self else { return }
+            self.autoFitColumns(self.targetColumns)
+        })
         let hide = ClosureMenuItem(columns > 1 ? "Hide \(columns) Columns" : "Hide Column") { [weak self] in self?.hideColumns() }
         hide.isEnabled = model.canHide(targetColumns)
         menu.addItem(hide)

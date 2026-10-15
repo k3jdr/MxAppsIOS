@@ -70,7 +70,9 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Moving rows**: right-click ▸ Move Row Up / Down, the Table ribbon's Row Up / Row Down, or ⌥⇧↑ / ⌥⇧↓ (also while
   typing in a cell). Or select whole rows (right-click ▸ Select Row, or drag across them) and drag them up or down; a
   line shows where they'll go. The header row stays first.
-- **Column widths**: drag a column border to resize that column; the table grows or shrinks with it.
+- **Column widths**: drag a column border to resize that column (in the table or in the column letter bar); the table
+  grows or shrinks with it. **Double-click a border to auto-fit** the column to its widest shown cell on one line
+  (with whole columns selected, all of them fit). Also Auto-Fit Column Width / Auto-Fit All Columns by right-click.
 - **Pointer**: ↔ on column borders (resize), open hand on the table's top, left and bottom edges (drag to move the
   table), pointing hand on links (click to follow; ⌥-click to type in the cell instead), text cursor in cells. Links in
   text boxes show the pointing hand as well.

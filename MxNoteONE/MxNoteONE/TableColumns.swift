@@ -309,6 +309,15 @@ final class TableColumnBar: NSView {
         return result
     }
 
+    /// The column whose right border is at x (shown columns only).
+    func border(at x: CGFloat) -> Int? {
+        guard let grid else { return nil }
+        let lefts = grid.columnEdges
+        return (0..<grid.model.columnCount).first { c in
+            !grid.model.isColumnHidden(c) && c + 1 < lefts.count && abs(lefts[c + 1] - x) <= 3
+        }
+    }
+
     /// The hidden columns whose mark is at x.
     func hiddenColumns(atX x: CGFloat) -> [Int]? {
         hiddenEdges().first { abs($0.x - x) <= 4 }?.columns
@@ -329,6 +338,11 @@ final class TableColumnBar: NSView {
         let p = convert(event.locationInWindow, from: nil)
         if let columns = hiddenColumns(atX: p.x) {
             grid.unhideColumns(columns)
+            return
+        }
+        // Column borders: drag to resize, double-click to fit the contents.
+        if let border = border(at: p.x) {
+            if event.clickCount == 2 { grid.autoFitColumns(near: border) } else { grid.beginColumnResize(border, from: event) }
             return
         }
         guard let start = column(at: p.x) else { return }
@@ -355,8 +369,10 @@ final class TableColumnBar: NSView {
     }
 
     override func resetCursorRects() {
-        for edge in hiddenEdges() {
-            addCursorRect(NSRect(x: edge.x - 4, y: 0, width: 8, height: bounds.height), cursor: .resizeLeftRight)
+        guard let grid else { return }
+        let lefts = grid.columnEdges
+        for c in 0..<grid.model.columnCount where !grid.model.isColumnHidden(c) && c + 1 < lefts.count {
+            addCursorRect(NSRect(x: lefts[c + 1] - 3, y: 0, width: 6, height: bounds.height), cursor: .resizeLeftRight)
         }
     }
 }
