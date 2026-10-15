@@ -16,13 +16,13 @@ struct RibbonView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 2) {
-                ForEach(RibbonTab.allCases.filter { $0 != .table || editor.tableActive }) { tab in
+                ForEach(RibbonTab.allCases.filter { ($0 != .table || editor.tableActive) && ($0 != .score || editor.scoreActive) }) { tab in
                     Button {
                         editor.ribbonTab = tab
                     } label: {
                         Text(tab.rawValue)
                             .font(.system(size: 12, weight: editor.ribbonTab == tab ? .semibold : .regular))
-                            .foregroundStyle(tab == .table ? Color.accentColor : Color.primary)
+                            .foregroundStyle(tab == .table || tab == .score ? Color.accentColor : Color.primary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
                             .background(editor.ribbonTab == tab ? Color.accentColor.opacity(0.16) : .clear,
@@ -58,6 +58,8 @@ struct RibbonView: View {
                     case .view: ViewRibbon()
                     case .table:
                         if editor.tableActive { TableRibbon() } else { HomeRibbon() }
+                    case .score:
+                        if editor.scoreActive { ScoreRibbon() } else { HomeRibbon() }
                     }
                 }
                 .padding(.horizontal, 10)
@@ -346,6 +348,9 @@ struct InsertRibbon: View {
                 Button("Insert Table…") { store.sheet = .insertTable }
             }
         }
+        RibbonGroup("Music") {
+            RibbonButton("Score", "music.note.list", large: true) { canvas?.insertScore() }
+        }
         RibbonGroup("Files") {
             RibbonButton("Picture", "photo", large: true) { canvas?.choosePictures() }
             RibbonButton("File", "paperclip", large: true) { canvas?.chooseAttachments() }
@@ -479,6 +484,78 @@ struct ViewRibbon: View {
                 store.recycleBinNotebookID = store.currentNotebook?.id
                 openWindow(id: "trash")
             }
+        }
+    }
+}
+
+// MARK: - Score (shown while a music score is being edited)
+
+struct ScoreRibbon: View {
+    @Bindable private var editor = NotebookStore.shared.editor
+    private var staff: ScoreView? { ScoreView.active }
+
+    /// Runs a command on the score and keeps typing going to it.
+    private func act(_ body: (ScoreView) -> Void) {
+        guard let staff else { return }
+        body(staff)
+        staff.window?.makeFirstResponder(staff)
+    }
+
+    var body: some View {
+        let _ = editor.scoreInputChanged
+        RibbonGroup("Notes") {
+            ForEach(ScoreNote.Duration.allCases) { d in
+                RibbonButton("\(d.title) (\(d.key))", d == .whole ? "circle" : d == .half ? "music.note" : "music.note",
+                             active: ScoreView.inputDuration == d) { act { $0.setDuration(d) } }
+                    .overlay(alignment: .bottom) { Text(d.glyph).font(.system(size: 9)).offset(y: 8) }
+            }
+            RibbonButton("Dot (.)", "circle.fill", active: ScoreView.inputDotted) { act { $0.toggleDot() } }
+        }
+        RibbonGroup("Add") {
+            ForEach(Array(["C", "D", "E", "F", "G", "A", "B"].enumerated()), id: \.offset) { step, name in
+                Button(name) { act { $0.insert(step: step) } }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Add \(name) (\(name.lowercased()))")
+            }
+            RibbonButton("Rest (0)", "pause", large: true) { act { $0.insert(step: nil) } }
+        }
+        RibbonGroup("Selected Note") {
+            RibbonButton("Up (↑)", "arrow.up") { act { $0.moveSelected(steps: 1) } }
+            RibbonButton("Down (↓)", "arrow.down") { act { $0.moveSelected(steps: -1) } }
+            RibbonButton("Octave Up (⌘↑)", "arrow.up.to.line") { act { $0.moveSelected(steps: 7) } }
+            RibbonButton("Octave Down (⌘↓)", "arrow.down.to.line") { act { $0.moveSelected(steps: -7) } }
+            Button("♯") { act { $0.setAccidental(1) } }.help("Sharp (+)")
+            Button("♭") { act { $0.setAccidental(-1) } }.help("Flat (-)")
+            Button("♮") { act { $0.setAccidental(0) } }.help("Natural (=)")
+            RibbonButton("Tie (T)", "link") { act { $0.toggleTie() } }
+            RibbonButton("Note / Rest (R)", "arrow.left.arrow.right") { act { $0.toggleRest() } }
+            RibbonButton("Delete", "delete.left") { act { $0.deleteSelected() } }
+        }
+        RibbonGroup("Score") {
+            RibbonButton(editor.scorePlaying ? "Stop" : "Play (Space)", editor.scorePlaying ? "stop.fill" : "play.fill", large: true,
+                         active: editor.scorePlaying) { act { $0.togglePlay() } }
+            RibbonMenu("Clef", "music.note") {
+                ForEach(ScoreData.Clef.allCases) { c in
+                    Button(c.title) { act { s in s.owner?.update({ $0.clef = c }, actionName: "Clef") } }
+                }
+            }
+            RibbonMenu("Key", "number") {
+                ForEach(ScoreData.keyNames, id: \.0) { fifths, name in
+                    Button(name) { act { s in s.owner?.update({ $0.keyFifths = fifths }, actionName: "Key Signature") } }
+                }
+            }
+            RibbonMenu("Time", "metronome") {
+                ForEach(ScoreData.times, id: \.0.self) { b, u in
+                    Button("\(b)/\(u)") { act { s in s.owner?.update({ $0.beats = b; $0.beatUnit = u }, actionName: "Time Signature") } }
+                }
+            }
+            RibbonMenu("Tempo", "speedometer") {
+                ForEach([60, 72, 80, 90, 100, 112, 120, 132, 144, 160], id: \.self) { t in
+                    Button("♩ = \(t)") { act { s in s.owner?.update({ $0.tempo = t }, actionName: "Tempo") } }
+                }
+            }
+            RibbonButton("Title", "textformat", large: true) { act { $0.owner?.editTitle() } }
         }
     }
 }

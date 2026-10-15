@@ -202,6 +202,32 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   and table changes (sorting, moving rows, inserting / deleting rows and columns, shading, merging, column widths,
   typing in cells). ⌘Z / ⇧⌘Z, or ⌃Z / ⌃Y as in OneNote for Windows.
 
+## Music scores
+
+**Insert ▸ Music Score** (or the Insert ribbon's Score button) puts a staff on the page, like a table: a treble or bass
+clef, key signature, time signature and tempo, with a melody of notes and rests laid out in bars that wrap to the
+container's width (drag its edge). While a score is being edited the **Score** ribbon tab appears.
+
+| To | Type (as in MuseScore) | or |
+| --- | --- | --- |
+| Add a note after the cursor | **A–G** (in the octave nearest the note before) | double-click the staff at a pitch |
+| Add a rest | **0** | Score tab ▸ Rest |
+| Length of the next note — 16th, 8th, quarter, half, whole | **3, 4, 5, 6, 7** (on a selected note: changes it) | Score tab ▸ Notes |
+| Dot | **.** | Score tab ▸ Dot |
+| Move the note just typed (or selected) a step / an octave | **↑ ↓** / **⌘↑ ⌘↓** | drag the note up or down |
+| Sharp, flat, natural (again takes it off) | **+  -  =** | Score tab ▸ ♯ ♭ ♮ |
+| Tie to the next note / note ↔ rest | **T** / **R** | |
+| Select notes, move the cursor | **← →**, or click a note | |
+| Delete | **Delete** | |
+| Play from the selected note (again: stop) | **Space** | Score tab ▸ Play, right-click ▸ Play |
+
+Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
+and the bar don't already give them, and last to the end of the bar; ledger lines, ties and a final bar line are
+drawn. Clef, key (C to F♯ and G♭ major), time (4/4, 3/4, 2/4, 2/2, 6/8, 3/8, 9/8, 12/8, 5/4), tempo and title are on
+the Score tab and the right-click menu, as is Copy Score as Picture. Playback uses the Mac's General MIDI piano, and the
+note sounding is shown in orange. Every change can be undone. PDF and print show the score; Markdown export and OneNote
+sync write its title, signatures and the notes by name.
+
 ## Microsoft Office fonts
 
 Office for Mac keeps its fonts (Calibri, Consolas, Cambria, Aptos, Segoe UI…) inside the Office apps, so other apps

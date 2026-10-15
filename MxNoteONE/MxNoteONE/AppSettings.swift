@@ -78,7 +78,7 @@ enum Prefs {
 }
 
 enum RibbonTab: String, CaseIterable, Identifiable {
-    case home = "Home", insert = "Insert", draw = "Draw", view = "View", table = "Table"
+    case home = "Home", insert = "Insert", draw = "Draw", view = "View", table = "Table", score = "Score"
     var id: String { rawValue }
 }
 
@@ -136,6 +136,11 @@ final class EditorState {
     var ribbonTab: RibbonTab = .home
     /// A table is being edited or has selected cells (shows the Table ribbon tab).
     var tableActive = false
+    /// A music score is being edited (the Score ribbon tab shows), or playing.
+    var scoreActive = false
+    var scorePlaying = false
+    /// Bumped when the length or dot for new notes changes (the Score tab shows it).
+    var scoreInputChanged = 0
     var showRibbon = true
     var tool: CanvasTool = .type {
         didSet { NotebookStore.shared.canvas?.toolChanged() }

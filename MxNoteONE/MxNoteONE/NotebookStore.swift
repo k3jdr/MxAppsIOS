@@ -1482,6 +1482,8 @@ enum PageIndexer {
                 if let name = element.fileName { texts.append(name) }
             case .chart:
                 if let title = element.chart?.title, !title.isEmpty { texts.append(title) }
+            case .score:
+                if let title = element.score?.title, !title.isEmpty { texts.append(title) }
             }
         }
         return index(texts: texts)

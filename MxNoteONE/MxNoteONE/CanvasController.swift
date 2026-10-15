@@ -548,6 +548,16 @@ final class CanvasController: NSObject {
 
     // MARK: - Inserting
 
+    /// Insert ▸ Music Score: an empty treble staff in 4/4, ready for notes.
+    func insertScore() {
+        guard ref != nil else { return }
+        let p = nextInsertionPoint()
+        var element = PageElement(kind: .score, x: p.x, y: p.y, width: 560)
+        element.score = ScoreData()
+        guard let view = addElement(element) as? ScoreElementView else { return }
+        DispatchQueue.main.async { view.staff.activate() }
+    }
+
     func insertTable(rows: Int, columns: Int) {
         guard ref != nil else { return }
         let p = nextInsertionPoint()
@@ -669,6 +679,8 @@ final class CanvasController: NSObject {
             item.setString(element.fileName ?? "", forType: .string)
         case .chart:
             if let tiff = (view as? ChartElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
+        case .score:
+            if let tiff = (view as? ScoreElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
         }
         let pb = NSPasteboard.general
         pb.clearContents()

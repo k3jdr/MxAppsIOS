@@ -69,6 +69,11 @@ enum OneNoteHTML {
                     body += "</tr>"
                 }
                 body += "</table></div>\n"
+            case .score:
+                // OneNote has no scores: its title, signatures and notes in letter names.
+                guard let score = element.score else { continue }
+                body += "<div style=\"position:absolute;left:\(x)px;top:\(y)px;width:\(w)px\"><p><b>♪ \(escape(score.summary))</b></p>"
+                body += "<p>\(escape(score.noteNames))</p></div>\n"
             case .chart:
                 // OneNote has no charts: the chart's data as a table, under its title.
                 guard let chart = element.chart, !chart.series.isEmpty else { continue }

@@ -141,6 +141,12 @@ enum PageExporter {
                 try? data.write(to: assetsFolder.appending(path: fileName))
                 let link = (assetsName + "/" + fileName).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? fileName
                 lines.append(element.kind == .image ? "![](\(link))" : "[\(fileName)](\(link))")
+            case .score:
+                // A score as its title, signatures and notes in letter names.
+                guard let score = element.score else { continue }
+                lines.append("*♪ \(score.summary)*")
+                lines.append("")
+                lines.append(score.noteNames)
             case .chart:
                 // A chart's data as a table, under its title.
                 guard let chart = element.chart, !chart.series.isEmpty else { continue }

@@ -421,7 +421,7 @@ struct CellSpan: Codable, Hashable {
 
 /// A container placed anywhere on the page.
 struct PageElement: Codable, Identifiable {
-    enum Kind: String, Codable { case text, image, file, audio, table, chart }
+    enum Kind: String, Codable { case text, image, file, audio, table, chart, score }
 
     var id = UUID()
     var kind: Kind
@@ -438,6 +438,8 @@ struct PageElement: Codable, Identifiable {
     var table: TableData?
     /// A chart of a table's data.
     var chart: ChartSpec?
+    /// A music score.
+    var score: ScoreData?
 
     var frame: CGRect { CGRect(x: x, y: y, width: width, height: height) }
 }
