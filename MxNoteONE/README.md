@@ -105,6 +105,15 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   Above / Below Average, Duplicate / Unique values (with Excel's fill and text colour presets or bold), **Data Bars**
   and **Color Scales**. The popover lists the table's rules to delete them; Clear Rules from the selected cells or the
   table. Rules follow inserted and deleted rows and columns and are saved with the table.
+- **Data validation** (Table ribbon's Validation menu, or right-click ▸ Data Validation on a cell or column letter): a
+  rule for the selected cells (whole columns run to the end of the table, below a header) allows a **List** — values
+  separated by commas, or a range such as `=E2:E9` — Whole Number, Decimal, Date or Text Length, with a minimum and / or
+  maximum, and blanks allowed or not. List cells show a **dropdown button** while selected or being typed in (⌥↓ opens it
+  too, or right-click ▸ Data Validation ▸ Choose from List). An entry that breaks the rule gets Excel's alert — **Stop**
+  (Retry / Cancel), **Warning** (Continue? Yes / No / Cancel) or **Information** (OK / Cancel) — with your own title and
+  message if you like; Cancel puts the old value back, Retry goes back to typing. **Circle Invalid Data** rings values
+  already in the table that break their rule. Rules (and range lists) follow inserted and deleted rows and columns and
+  are saved with the table. As in Excel, pasting isn't checked.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
   tab-separated text — so they paste into Excel, Numbers or Word as cells (hidden rows and columns are left out).

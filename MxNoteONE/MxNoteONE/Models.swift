@@ -320,6 +320,8 @@ struct TableData: Codable, Hashable {
     var numberFormats: [String: NumberFormat]?
     /// Conditional formatting rules, applied in order.
     var conditionalRules: [ConditionalRule]?
+    /// Data validation rules (the last one on a cell applies).
+    var validationRules: [ValidationRule]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {

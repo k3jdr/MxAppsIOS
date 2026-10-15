@@ -872,6 +872,12 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private var dropLine: Int?
     /// The moving corner of a ⇧-extended selection.
     private var extent: CellRef?
+    /// The cell's text before typing began (to put back an entry that breaks its validation rule).
+    private var editingOriginal: NSAttributedString?
+    /// Circle Invalid Data: values that break their cell's validation rule are circled.
+    var circleInvalid = false {
+        didSet { needsDisplay = true }
+    }
     private(set) var editing: CellRef? {
         didSet { if (editing == nil) != (oldValue == nil) { updateColumnBar() } }
     }
@@ -1564,6 +1570,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let conditional = NSMenuItem(title: "Conditional Formatting", action: nil, keyEquivalent: "")
         conditional.submenu = conditionalMenu()
         menu.addItem(conditional)
+        let validation = NSMenuItem(title: "Data Validation", action: nil, keyEquivalent: "")
+        validation.submenu = validationMenu()
+        menu.addItem(validation)
         menu.addItem(ClosureMenuItem(n > 1 ? "Auto-Fit \(n) Columns" : "Auto-Fit Column Width") { [weak self] in
             self?.autoFitColumns(columns)
         })
@@ -1780,7 +1789,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             rect.fill(using: .sourceOver)
         }
         var textRect = rect.insetBy(dx: Self.padX, dy: Self.padY)
-        if hasFilterButton(cell) { textRect.size.width -= Self.filterButtonSize }
+        if hasFilterButton(cell) || hasDropdown(cell) { textRect.size.width -= Self.filterButtonSize }
         if editing != cell {
             var text = model.displayText(cell, fitting: textRect.width)
             if let conditional, conditional.textColor != nil || conditional.bold {
@@ -1799,6 +1808,13 @@ final class TableGridView: NSView, NSTextViewDelegate {
             if !isExport { drawMisspellings(text, in: textRect) }
         }
         if hasFilterButton(cell) { drawFilterButton(cell) }
+        if hasDropdown(cell) { drawDropdownButton(cell) }
+        if circleInvalid, !isExport, !model.isValid(cell) {
+            let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2))
+            ring.lineWidth = 1.5
+            NSColor.systemRed.setStroke()
+            ring.stroke()
+        }
     }
 
     private func drawSelectionOutline(_ show: Bool) {
@@ -1855,6 +1871,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             rowBar?.removeFromSuperview()
             closeFilter()
             conditionalPopover?.close()
+            validationPopover?.close()
             if editing != nil { stopEditing(commit: true) }
             selection = []
             deactivate()
@@ -1884,6 +1901,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         guard model.contains(cell), !isExport else { return }
         if editing != nil { stopEditing(commit: true) }
         editing = cell
+        editingOriginal = model.storedText(cell)
         selection = [cell]
         anchor = cell
         extent = nil
@@ -1927,9 +1945,15 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private func stopEditing(commit: Bool) {
         guard let cell = editing else { return }
         if commit, let storage = editor.textStorage {
+            let typed = NSAttributedString(attributedString: storage)
+            let original = editingOriginal
             model.store(storage, in: cell)
             owner?.controller?.markDirty()
             model.checkpoint("Typing")
+            // An entry that breaks the cell's validation rule gets Excel's alert (after typing has ended).
+            if typed.string != original?.string, model.validationRule(cell) != nil, !model.isValid(cell) {
+                DispatchQueue.main.async { [weak self] in self?.entryBreaksRule(cell, typed: typed, original: original) }
+            }
         }
         heightCache[cell] = nil
         editing = nil
@@ -1977,6 +2001,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         guard let cell = editing else { return false }
         switch commandSelector {
+        case #selector(NSResponder.moveToEndOfParagraph(_:)) where model.validationRule(cell)?.kind == .list
+                && NSApp.currentEvent?.keyCode == 125:
+            showList(cell)
+            return true
         case #selector(NSResponder.moveParagraphBackwardAndModifySelection(_:)),
              #selector(NSResponder.moveParagraphForwardAndModifySelection(_:)):
             moveRows(up: commandSelector == #selector(NSResponder.moveParagraphBackwardAndModifySelection(_:)))
@@ -2094,6 +2122,11 @@ final class TableGridView: NSView, NSTextViewDelegate {
     override func mouseDown(with event: NSEvent) {
         guard !isExport, let owner, let window else { return }
         let p = convert(event.locationInWindow, from: nil)
+        if let cell = dropdownButton(at: p) {
+            becameActive()
+            showList(cell)
+            return
+        }
         if let cell = filterButton(at: p) {
             becameActive()
             showFilter(cell.column)
@@ -2367,6 +2400,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
             needsDisplay = true
             owner?.canvas?.selectedElement = owner
             window?.makeFirstResponder(owner?.canvas)
+        case 125 where event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.shift)
+                && model.validationRule(anchor)?.kind == .list:
+            showList(anchor)
         case 125, 126 where event.modifierFlags.contains([.option, .shift]):
             moveRows(up: event.keyCode == 126)
         case 123, 124, 125, 126:
@@ -2404,6 +2440,188 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 super.keyDown(with: event)
             }
         }
+    }
+
+    // MARK: Data validation
+
+    /// List cells show a dropdown button while selected or being typed in.
+    private func hasDropdown(_ cell: CellRef) -> Bool {
+        guard !isExport, !hasFilterButton(cell), editing == cell || (editing == nil && selection == [cell]),
+              let rule = model.validationRule(cell), rule.kind == .list, rule.dropdown else { return false }
+        return true
+    }
+
+    private func dropdownRect(_ cell: CellRef) -> NSRect {
+        let rect = cellRect(cell)
+        let size = Self.filterButtonSize
+        return NSRect(x: rect.maxX - size - 3, y: rect.minY + min(4, max(0, (rect.height - size) / 2)), width: size, height: size)
+    }
+
+    private func drawDropdownButton(_ cell: CellRef) {
+        let rect = dropdownRect(cell)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
+        NSColor.white.setFill()
+        path.fill()
+        NSColor(white: 0.6, alpha: 1).setStroke()
+        path.lineWidth = 0.75
+        path.stroke()
+        let arrow = NSBezierPath()
+        arrow.move(to: NSPoint(x: rect.midX - 3.5, y: rect.midY - 1.5))
+        arrow.line(to: NSPoint(x: rect.midX + 3.5, y: rect.midY - 1.5))
+        arrow.line(to: NSPoint(x: rect.midX, y: rect.midY + 2.5))
+        arrow.close()
+        NSColor(white: 0.3, alpha: 1).setFill()
+        arrow.fill()
+    }
+
+    private func dropdownButton(at p: NSPoint) -> CellRef? {
+        let cell = editing ?? (selection.count == 1 ? selection.first : nil)
+        guard let cell, hasDropdown(cell), dropdownRect(cell).insetBy(dx: -2, dy: -2).contains(unpinned(p)) else { return nil }
+        return cell
+    }
+
+    /// The list's values as menu items (the cell's value is ticked).
+    func listMenu(for cell: CellRef) -> NSMenu {
+        let menu = NSMenu()
+        guard let rule = model.validationRule(cell) else { return menu }
+        let current = model.shownString(cell).trimmingCharacters(in: .whitespacesAndNewlines)
+        for value in model.listValues(rule) {
+            menu.addItem(ClosureMenuItem(value, state: value.caseInsensitiveCompare(current) == .orderedSame) { [weak self] in
+                self?.choose(value, in: cell)
+            })
+        }
+        if menu.items.isEmpty {
+            let none = NSMenuItem(title: "No values in the list", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            menu.addItem(none)
+        }
+        return menu
+    }
+
+    /// The dropdown (click its button, or ⌥↓).
+    func showList(_ cell: CellRef) {
+        let rect = cellRect(cell)
+        listMenu(for: cell).popUp(positioning: nil, at: NSPoint(x: rect.minX, y: rect.maxY + 2), in: self)
+    }
+
+    /// A value picked from the list goes into the cell.
+    func choose(_ value: String, in cell: CellRef) {
+        run("Choose from List") {
+            let stored = model.storedText(cell)
+            let attrs = stored.length > 0 ? stored.attributes(at: 0, effectiveRange: nil) : model.typingAttributes(cell)
+            model.store(NSAttributedString(string: value, attributes: attrs), in: cell)
+        }
+        selection = [cell]
+        anchor = cell
+        window?.makeFirstResponder(self)
+    }
+
+    #if DEBUG
+    /// Self-tests answer the validation alert (first, second or third button).
+    nonisolated(unsafe) static var testAlertAnswer: NSApplication.ModalResponse?
+    #endif
+
+    /// Excel's alert for an entry that breaks the rule: Stop (Retry / Cancel), Warning (continue? Yes / No / Cancel),
+    /// Information (OK / Cancel). Retry and No go back to typing; Cancel puts the old value back.
+    private func entryBreaksRule(_ cell: CellRef, typed: NSAttributedString, original: NSAttributedString?) {
+        guard let rule = model.validationRule(cell), !model.isValid(cell) else { return }
+        let alert = NSAlert()
+        alert.messageText = rule.errorTitle.isEmpty ? "This value doesn't match the data validation rules for this cell." : rule.errorTitle
+        alert.informativeText = rule.errorMessage.isEmpty ? "The cell needs \(rule.explanation)." : rule.errorMessage
+        switch rule.errorStyle {
+        case .stop:
+            alert.alertStyle = .critical
+            alert.addButton(withTitle: "Retry")
+            alert.addButton(withTitle: "Cancel")
+        case .warning:
+            alert.alertStyle = .warning
+            alert.informativeText += "\n\nContinue?"
+            alert.addButton(withTitle: "Yes")
+            alert.addButton(withTitle: "No")
+            alert.addButton(withTitle: "Cancel")
+        case .information:
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Cancel")
+        }
+        #if DEBUG
+        let answer = Self.testAlertAnswer ?? alert.runModal()
+        #else
+        let answer = alert.runModal()
+        #endif
+        let keep = rule.errorStyle != .stop && answer == .alertFirstButtonReturn
+        guard !keep else { return }
+        // Put the old value back.
+        run("Cancel Entry") { model.store(original ?? NSAttributedString(), in: cell) }
+        let retry = (rule.errorStyle == .stop && answer == .alertFirstButtonReturn)
+            || (rule.errorStyle == .warning && answer == .alertSecondButtonReturn)
+        if retry {
+            // Back to typing, with the entry selected to type over.
+            becameActive()
+            beginEditing(cell)
+            editor.textStorage?.setAttributedString(typed)
+            editor.setSelectedRange(NSRange(location: 0, length: typed.length))
+            window?.makeFirstResponder(editor)
+        } else {
+            selection = [cell]
+            anchor = cell
+            needsDisplay = true
+        }
+    }
+
+    private var validationPopover: NSPopover?
+
+    /// Data Validation…: the rule for the selected cells.
+    func showValidation() {
+        let target = conditionalTarget
+        let cells = Set(targetCells.isEmpty ? [targetCell] : targetCells)
+        endEditing()
+        becameActive()
+        var rule = ValidationRule(kind: .list, firstRow: target.firstRow, lastRow: target.lastRow,
+                                  firstColumn: target.firstColumn, lastColumn: target.lastColumn)
+        let existing = cells.compactMap { model.validationRule($0) }.first
+        if let existing {
+            rule = existing
+            rule.id = UUID()
+            rule.firstRow = target.firstRow
+            rule.lastRow = target.lastRow
+            rule.firstColumn = target.firstColumn
+            rule.lastColumn = target.lastColumn
+        }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let view = ValidationView(rangeName: target.rangeName(rowCount: model.rowCount), rule: rule, isNew: existing == nil,
+            apply: { [weak self] newRule in
+                self?.run(newRule == nil ? "Clear Validation" : "Data Validation") { self?.model.setValidation(newRule, replacing: cells) }
+            },
+            close: { [weak popover] in popover?.performClose(nil) })
+        popover.contentViewController = NSHostingController(rootView: view)
+        validationPopover = popover
+        let anchor = cells.map { cellRect($0) }.reduce(NSRect.null) { $0.union($1) }
+        popover.show(relativeTo: anchor.isNull ? bounds : anchor, of: self, preferredEdge: .maxY)
+    }
+
+    func clearValidation() {
+        let cells = Set(targetCells.isEmpty ? [targetCell] : targetCells)
+        run("Clear Validation") { model.setValidation(nil, replacing: cells) }
+    }
+
+    func validationMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(ClosureMenuItem("Data Validation…") { [weak self] in self?.showValidation() })
+        if let cell = targetCells.count == 1 ? targetCells.first : editing, model.validationRule(cell)?.kind == .list {
+            let pick = NSMenuItem(title: "Choose from List", action: nil, keyEquivalent: "")
+            pick.submenu = listMenu(for: cell)
+            menu.addItem(pick)
+        }
+        let circle = ClosureMenuItem("Circle Invalid Data", state: circleInvalid) { [weak self] in self?.circleInvalid.toggle() }
+        circle.isEnabled = model.hasValidation
+        menu.addItem(circle)
+        let clear = ClosureMenuItem("Clear Validation from Selected Cells") { [weak self] in self?.clearValidation() }
+        clear.isEnabled = model.hasValidation
+        menu.addItem(clear)
+        return menu
     }
 
     // MARK: Conditional formatting
@@ -2994,6 +3212,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let conditional = NSMenuItem(title: "Conditional Formatting", action: nil, keyEquivalent: "")
         conditional.submenu = conditionalMenu()
         menu.addItem(conditional)
+        let validation = NSMenuItem(title: "Data Validation", action: nil, keyEquivalent: "")
+        validation.submenu = validationMenu()
+        menu.addItem(validation)
         menu.addItem(.separator())
         let count = targetCells.count
         menu.addItem(paletteItem(count > 1 ? "Shade Selected Cells (\(count))" : "Cell Shading") { [weak self] in self?.shadeCells($0) })

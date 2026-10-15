@@ -563,6 +563,11 @@ struct TableRibbon: View {
             RibbonButton("Percent", "percent", large: true) { grid?.setNumberFormat(.percent) }
             RibbonButton("Increase Decimal", "increase.decimalplaces", large: true) { grid?.changeDecimals(by: 1) }
             RibbonButton("Decrease Decimal", "decrease.decimalplaces", large: true) { grid?.changeDecimals(by: -1) }
+            RibbonMenu("Validation", "checkmark.seal") {
+                Button("Data Validation…") { grid?.showValidation() }
+                Button("Circle Invalid Data") { grid?.circleInvalid.toggle() }
+                Button("Clear Validation from Selected Cells") { grid?.clearValidation() }
+            }
             RibbonMenu("Conditional", "paintbrush.pointed") {
                 Button("New Rule…") { grid?.showConditionalFormatting() }
                 Button("Clear Rules from Selected Cells") { grid?.clearConditionalRules(table: false) }
