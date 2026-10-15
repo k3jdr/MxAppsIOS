@@ -8,7 +8,9 @@
 //  comparisons, and Excel's common functions — SUM, AVERAGE, COUNT, MIN,
 //  MAX, IF, ROUND, SUMIF, COUNTIF, IFERROR… Errors show as Excel shows them
 //  (#DIV/0!, #REF!, #NAME?, #VALUE!, #NUM!, #N/A) and loops as #CIRC!.
-//  References follow inserted and deleted rows and columns.
+//  References follow inserted and deleted rows and columns. Dates are
+//  Excel serial day numbers (typed dates are recognised), so date ± days
+//  and date − date work, with DATE, YEAR, MONTH, DAY, EDATE, DATEDIF…
 //
 
 import Foundation
@@ -16,6 +18,8 @@ import Foundation
 /// A formula's value.
 enum FormulaValue: Equatable {
     case number(Double)
+    /// A date (and time) as an Excel serial number: days since 30 Dec 1899, the time as the fraction.
+    case date(Double)
     case text(String)
     case bool(Bool)
     case error(String)
@@ -26,6 +30,7 @@ enum FormulaValue: Equatable {
     var display: String {
         switch self {
         case .number(let d): return Formula.format(d)
+        case .date(let d): return Formula.generalDate(d)
         case .text(let s): return s
         case .bool(let b): return b ? "TRUE" : "FALSE"
         case .error(let e): return e
@@ -49,6 +54,7 @@ enum Formula {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return .empty }
         if let number = number(from: text) { return .number(number) }
+        if let serial = dateSerial(from: text) { return .date(serial) }
         switch text.uppercased() {
         case "TRUE": return .bool(true)
         case "FALSE": return .bool(false)
@@ -71,6 +77,90 @@ enum Formula {
               var d = Double(s) else { return nil }
         if percent { d /= 100 }
         return negative ? -d : d
+    }
+
+    /// A number or a date typed in a cell, as a number (a date as its serial number).
+    static func numeric(_ text: String) -> Double? {
+        number(from: text) ?? dateSerial(from: text)
+    }
+
+    // MARK: Dates
+
+    private static let calendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = .current
+        return c
+    }()
+
+    /// Excel's day 0.
+    private static let epoch = calendar.date(from: DateComponents(year: 1899, month: 12, day: 30))!
+
+    /// Dates and times typed as in Excel (US order).
+    private static let datePatterns = [
+        "yyyy-MM-dd", "yyyy-MM-dd HH:mm", "yyyy-MM-dd'T'HH:mm", "M/d/yyyy", "M/d/yyyy h:mm a", "M/d/yyyy H:mm", "M/d/yy",
+        "d-MMM-yyyy", "d-MMM-yy", "d MMM yyyy", "MMM d, yyyy", "MMMM d, yyyy", "EEEE, MMMM d, yyyy", "EEE, MMM d, yyyy",
+        "MMMM yyyy", "MMM yyyy", "h:mm a", "H:mm",
+    ]
+
+    private static let dateParsers: [DateFormatter] = datePatterns.map { pattern in
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = calendar
+        f.timeZone = .current
+        f.dateFormat = pattern
+        f.isLenient = false
+        // Missing parts (the day of "October 2026") come from 1 Jan 2000.
+        f.defaultDate = calendar.date(from: DateComponents(year: 2000, month: 1, day: 1))
+        return f
+    }
+
+    /// A typed date or time as an Excel serial number (a time alone is the fraction of a day).
+    static func dateSerial(from text: String) -> Double? {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard s.count >= 4, s.count <= 40, s.contains(where: \.isNumber),
+              s.contains(where: { "/-:, ".contains($0) || $0.isLetter }) else { return nil }
+        for (i, parser) in dateParsers.enumerated() {
+            guard let date = parser.date(from: s) else { continue }
+            let timeOnly = datePatterns[i].hasPrefix("h:") || datePatterns[i].hasPrefix("H:")
+            let value = serial(date)
+            return timeOnly ? value - value.rounded(.down) : value
+        }
+        return nil
+    }
+
+    static func serial(_ date: Date) -> Double {
+        let day = calendar.startOfDay(for: date)
+        let days = calendar.dateComponents([.day], from: epoch, to: day).day ?? 0
+        return Double(days) + date.timeIntervalSince(day) / 86_400
+    }
+
+    static func date(fromSerial serial: Double) -> Date {
+        let days = Int(serial.rounded(.down))
+        let day = calendar.date(byAdding: .day, value: days, to: epoch) ?? epoch
+        return day.addingTimeInterval(((serial - Double(days)) * 86_400).rounded())
+    }
+
+    static func components(_ serial: Double) -> DateComponents {
+        calendar.dateComponents([.year, .month, .day, .weekday], from: date(fromSerial: serial))
+    }
+
+    static func serial(year: Int, month: Int, day: Int) -> Double? {
+        calendar.date(from: DateComponents(year: year, month: month, day: day)).map(serial)
+    }
+
+    /// A date as General shows it: 10/14/2026, with the time when there is one.
+    static func generalDate(_ serial: Double) -> String {
+        let hasTime = abs(serial - serial.rounded(.down)) > 1e-9
+        return formatDate(serial, pattern: hasTime ? (serial < 1 ? "h:mm a" : "M/d/yyyy h:mm a") : "M/d/yyyy")
+    }
+
+    static func formatDate(_ serial: Double, pattern: String) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.calendar = calendar
+        f.timeZone = .current
+        f.dateFormat = pattern
+        return f.string(from: date(fromSerial: serial))
     }
 
     /// Numbers as Excel's General format shows them.
@@ -395,10 +485,10 @@ enum Formula {
 
         private func numberValue(_ v: FormulaValue) -> Double? {
             switch v {
-            case .number(let d): return d
+            case .number(let d), .date(let d): return d
             case .bool(let b): return b ? 1 : 0
             case .empty: return 0
-            case .text(let s): return Formula.number(from: s)
+            case .text(let s): return Formula.numeric(s)
             default: return nil
             }
         }
@@ -413,7 +503,7 @@ enum Formula {
         private func truth(_ v: FormulaValue) -> Bool? {
             switch v {
             case .bool(let b): return b
-            case .number(let d): return d != 0
+            case .number(let d), .date(let d): return d != 0
             case .empty: return false
             case .text(let s):
                 if s.uppercased() == "TRUE" { return true }
@@ -440,9 +530,11 @@ enum Formula {
                 }
             default:
                 guard let x = numberValue(a), let y = numberValue(b) else { return .error("#VALUE!") }
+                // A date plus or minus days is a date; one date minus another is days.
+                let aDate = isDate(a), bDate = isDate(b)
                 switch op {
-                case "+": return .number(x + y)
-                case "-": return .number(x - y)
+                case "+": return aDate != bDate ? .date(x + y) : .number(x + y)
+                case "-": return aDate && !bDate ? .date(x - y) : .number(x - y)
                 case "*": return .number(x * y)
                 case "/": return y == 0 ? .error("#DIV/0!") : .number(x / y)
                 case "^":
@@ -453,11 +545,17 @@ enum Formula {
             }
         }
 
+        private func isDate(_ v: FormulaValue) -> Bool {
+            if case .date = v { return true }
+            if case .text(let s) = v { return Formula.number(from: s) == nil && Formula.dateSerial(from: s) != nil }
+            return false
+        }
+
         /// Excel's ordering: numbers before text before logical values; text ignores case.
         private func compare(_ a: FormulaValue, _ b: FormulaValue) -> ComparisonResult {
             func rank(_ v: FormulaValue) -> Int {
                 switch v {
-                case .number, .empty: return 0
+                case .number, .date, .empty: return 0
                 case .text: return 1
                 case .bool: return 2
                 default: return 3
@@ -468,7 +566,9 @@ enum Formula {
             if case .empty = b { if case .text = a { b = .text("") } else { b = .number(0) } }
             if rank(a) != rank(b) { return rank(a) < rank(b) ? .orderedAscending : .orderedDescending }
             switch (a, b) {
-            case (.number(let x), .number(let y)): return x == y ? .orderedSame : x < y ? .orderedAscending : .orderedDescending
+            case (.number, _) where numberValue(b) != nil && rank(b) == 0, (.date, _) where numberValue(b) != nil && rank(b) == 0:
+                let x = numberValue(a)!, y = numberValue(b)!
+                return x == y ? .orderedSame : x < y ? .orderedAscending : .orderedDescending
             case (.bool(let x), .bool(let y)): return x == y ? .orderedSame : !x ? .orderedAscending : .orderedDescending
             default: return textValue(a).caseInsensitiveCompare(textValue(b))
             }
@@ -486,6 +586,7 @@ enum Formula {
                     for item in values {
                         if item.isError, case .error(let e) = item { return .failure(FormulaValueError(e)) }
                         if case .number(let d) = item { result.append(d) }
+                        if case .date(let d) = item { result.append(d) }
                     }
                 case .error(let e): return .failure(FormulaValueError(e))
                 default:
@@ -527,10 +628,14 @@ enum Formula {
                 return withNumbers(args) { .number($0.reduce(0, +)) }
             case "AVERAGE":
                 return withNumbers(args) { $0.isEmpty ? .error("#DIV/0!") : .number($0.reduce(0, +) / Double($0.count)) }
-            case "MIN":
-                return withNumbers(args) { .number($0.min() ?? 0) }
-            case "MAX":
-                return withNumbers(args) { .number($0.max() ?? 0) }
+            case "MIN", "MAX":
+                // The earliest / latest of dates is a date.
+                let numeric = flat(args).filter { if case .number = $0 { return true }; if case .date = $0 { return true }; return false }
+                let dates = !numeric.isEmpty && numeric.allSatisfy { if case .date = $0 { return true } else { return false } }
+                return withNumbers(args) { list in
+                    let v = (name == "MIN" ? list.min() : list.max()) ?? 0
+                    return dates ? .date(v) : .number(v)
+                }
             case "PRODUCT":
                 return withNumbers(args) { .number($0.isEmpty ? 0 : $0.reduce(1, *)) }
             case "MEDIAN":
@@ -540,7 +645,11 @@ enum Formula {
                     return .number(n % 2 == 1 ? s[n / 2] : (s[n / 2 - 1] + s[n / 2]) / 2)
                 }
             case "COUNT":
-                return .number(Double(flat(args).filter { if case .number = $0 { return true } else { return false } }.count))
+                return .number(Double(flat(args).filter {
+                    if case .number = $0 { return true }
+                    if case .date = $0 { return true }
+                    return false
+                }.count))
             case "COUNTA":
                 return .number(Double(flat(args).filter { $0 != .empty }.count))
             case "COUNTBLANK":
@@ -652,10 +761,52 @@ enum Formula {
                 default: return count == 0 ? .error("#DIV/0!") : .number(total / Double(count))
                 }
             case "TODAY", "NOW":
-                let formatter = DateFormatter()
-                formatter.dateStyle = .medium
-                formatter.timeStyle = name == "NOW" ? .short : .none
-                return .text(formatter.string(from: Date()))
+                let now = Formula.serial(Date())
+                return .date(name == "NOW" ? now : now.rounded(.down))
+            case "DATE":
+                guard need(3...3), case .success(let y) = numberArg(args, 0), case .success(let m) = numberArg(args, 1),
+                      case .success(let d) = numberArg(args, 2),
+                      let serial = Formula.serial(year: Int(y), month: Int(m), day: Int(d)) else { return .error("#VALUE!") }
+                return .date(serial)
+            case "YEAR", "MONTH", "DAY", "WEEKDAY":
+                guard need(1...1), case .success(let serial) = numberArg(args, 0) else { return .error("#VALUE!") }
+                let c = Formula.components(serial)
+                switch name {
+                case "YEAR": return .number(Double(c.year ?? 0))
+                case "MONTH": return .number(Double(c.month ?? 0))
+                case "DAY": return .number(Double(c.day ?? 0))
+                default: return .number(Double(c.weekday ?? 0))
+                }
+            case "EDATE", "EOMONTH":
+                guard need(2...2), case .success(let serial) = numberArg(args, 0), case .success(let months) = numberArg(args, 1) else {
+                    return .error("#VALUE!")
+                }
+                let c = Formula.components(serial)
+                let y = c.year ?? 1900, m = (c.month ?? 1) + Int(months)
+                if name == "EDATE" {
+                    // The same day, or the month's last day when it's shorter.
+                    let last = Formula.serial(year: y, month: m + 1, day: 0).map { Formula.components($0).day ?? 28 } ?? 28
+                    return Formula.serial(year: y, month: m, day: min(c.day ?? 1, last)).map(FormulaValue.date) ?? .error("#NUM!")
+                }
+                return Formula.serial(year: y, month: m + 1, day: 0).map(FormulaValue.date) ?? .error("#NUM!")
+            case "DAYS":
+                guard need(2...2), case .success(let end) = numberArg(args, 0), case .success(let start) = numberArg(args, 1) else {
+                    return .error("#VALUE!")
+                }
+                return .number(end.rounded(.down) - start.rounded(.down))
+            case "DATEDIF":
+                guard need(3...3), case .success(let start) = numberArg(args, 0), case .success(let end) = numberArg(args, 1),
+                      start <= end else { return .error("#NUM!") }
+                let unit = textValue(arg(args, 2)).uppercased()
+                let a = Formula.components(start), b = Formula.components(end)
+                var months = ((b.year ?? 0) - (a.year ?? 0)) * 12 + (b.month ?? 0) - (a.month ?? 0)
+                if (b.day ?? 0) < (a.day ?? 0) { months -= 1 }
+                switch unit {
+                case "D": return .number(end.rounded(.down) - start.rounded(.down))
+                case "M": return .number(Double(months))
+                case "Y": return .number(Double(months / 12))
+                default: return .error("#NUM!")
+                }
             default:
                 return .error("#NAME?")
             }
@@ -779,5 +930,6 @@ enum Formula {
         ("COUNTIF", "Counts where a condition holds"), ("AVERAGEIF", "Averages where a condition holds"),
         ("IFERROR", "A value instead of an error"), ("CONCAT", "Joins text"), ("MEDIAN", "Middle number"),
         ("PRODUCT", "Multiplies numbers"), ("ABS", "Absolute value"), ("TODAY", "Today's date"),
+        ("DATE", "A date from year, month, day"), ("EDATE", "A date months later"), ("DATEDIF", "Days, months or years between"),
     ]
 }

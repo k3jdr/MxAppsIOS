@@ -78,7 +78,7 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   the column letters and row numbers: `A1`, `$B$2`, `B2:B9`. Operators `+ - * / ^ & %` and `= <> < > <= >=`.
   Functions: SUM, AVERAGE, COUNT, COUNTA, COUNTBLANK, MIN, MAX, MEDIAN, PRODUCT, ROUND / ROUNDUP / ROUNDDOWN, ABS,
   SQRT, INT, MOD, POWER, EXP, LN, LOG10, PI, IF, IFERROR, AND, OR, NOT, SUMIF, COUNTIF, AVERAGEIF (with `">5"`, `"<>x"`,
-  `"p*"` criteria), CONCAT / CONCATENATE, LEN, UPPER, LOWER, TRIM, LEFT, RIGHT, MID, TODAY, NOW. Numbers typed as
+  `"p*"` criteria), CONCAT / CONCATENATE, LEN, UPPER, LOWER, TRIM, LEFT, RIGHT, MID, and the date functions below. Numbers typed as
   `1,234.50`, `$12` or `15%` count as numbers. Errors show as Excel shows them (#DIV/0!, #REF!, #NAME?, #VALUE!, #NUM!),
   a formula that refers back to itself as #CIRC!, and one that can't be read as #ERROR!. Start with `'=` to type text
   that begins with "=".
@@ -93,6 +93,12 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   in the selected cells (whole columns too); text is left alone. Typing in a cell shows the number as typed, and
   formulas use the value. Formats move with their cells when rows and columns are inserted, deleted, sorted or moved,
   and copying to Excel gives the formatted numbers.
+- **Dates**: dates typed as `10/14/2026`, `2026-10-14`, `14-Oct-2026`, `Oct 14, 2026`, `October 2026` (and times such as
+  `3:45 PM`) are dates, kept as Excel keeps them (serial day numbers). **Date formats** (Number menu ▸ dates, or
+  right-click ▸ Number Format ▸ Date): Short Date (10/14/2026), Long Date (Wednesday, October 14, 2026), ISO
+  (2026-10-14), 14-Oct-2026, Oct 14, 2026, October 2026, Time (3:45 PM), Date and Time. Typing in a cell shows the date
+  as typed. In formulas a date plus or minus days is a date and one date minus another is days; DATE, YEAR, MONTH, DAY,
+  WEEKDAY, EDATE, EOMONTH, DAYS, DATEDIF, and TODAY / NOW (dates). MIN / MAX of dates are dates. Dates sort by date.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
   tab-separated text — so they paste into Excel, Numbers or Word as cells (hidden rows and columns are left out).

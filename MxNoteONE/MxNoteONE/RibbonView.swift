@@ -553,6 +553,10 @@ struct TableRibbon: View {
                 }
                 Button("Percent  12%") { grid?.setNumberFormat(.percent) }
                 Divider()
+                ForEach(NumberFormat.datePatterns, id: \.0) { pattern, name in
+                    Button("\(name)  \(Formula.formatDate(Formula.serial(Date()), pattern: pattern))") { grid?.setDateFormat(pattern) }
+                }
+                Divider()
                 Button("Thousands Separator") { grid?.toggleThousands() }
             }
             RibbonButton("Currency", "dollarsign", large: true) { grid?.setNumberFormat(.currency) }

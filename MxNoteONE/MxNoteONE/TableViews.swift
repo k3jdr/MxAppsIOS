@@ -322,7 +322,7 @@ final class TableModel {
             return NSAttributedString(string: shownString(cell), attributes: attrs)
         }
         // A number in a formatted cell shows in its format (typing in it shows the number as typed).
-        if numberFormat(cell) != nil, let number = Formula.number(from: raw), let shown = formatted(number, in: cell) {
+        if numberFormat(cell) != nil, let number = Formula.numeric(raw), let shown = formatted(number, in: cell) {
             let attrs = stored.length > 0 ? stored.attributes(at: 0, effectiveRange: nil) : [.font: baseFont(cell.row)]
             return NSAttributedString(string: shown, attributes: attrs)
         }
@@ -337,9 +337,10 @@ final class TableModel {
         if Formula.isFormula(raw) {
             let v = value(cell)
             if case .number(let d) = v, let shown = formatted(d, in: cell) { return shown }
+            if case .date(let d) = v, let shown = formatted(d, in: cell) { return shown }
             return v.display
         }
-        if numberFormat(cell) != nil, let number = Formula.number(from: raw), let shown = formatted(number, in: cell) { return shown }
+        if numberFormat(cell) != nil, let number = Formula.numeric(raw), let shown = formatted(number, in: cell) { return shown }
         return raw.hasPrefix("'=") ? String(raw.dropFirst()) : raw
     }
 
@@ -611,17 +612,25 @@ final class TableModel {
         let pinned = Set(all.filter { r in data.rows[r].contains { Formula.isFormula($0) && $0.contains(":") } })
         var body = all.filter { !pinned.contains($0) }
         // Numbers by value (2 before 10, -5 before 1), text ignoring case, blank cells last either way — as in Excel.
-        let key = { (r: Int) in Self.filterValue(self.shownString(CellRef(row: r, column: column))) }
+        // Numbers and dates sort by value.
+        let key = { (r: Int) -> (number: Double?, text: String) in
+            let cell = CellRef(row: r, column: column)
+            switch self.value(cell) {
+            case .number(let d), .date(let d): return (d, "x")
+            default: return (nil, Self.filterValue(self.shownString(cell)))
+            }
+        }
         body.sort {
             let a = key($0), b = key($1)
-            if a.isEmpty != b.isEmpty { return b.isEmpty }
+            let aBlank = a.number == nil && a.text.isEmpty, bBlank = b.number == nil && b.text.isEmpty
+            if aBlank != bBlank { return bBlank }
             let order: ComparisonResult
-            if let x = Formula.number(from: a), let y = Formula.number(from: b) {
+            if let x = a.number, let y = b.number {
                 order = x == y ? .orderedSame : x < y ? .orderedAscending : .orderedDescending
-            } else if (Formula.number(from: a) != nil) != (Formula.number(from: b) != nil) {
-                order = Formula.number(from: a) != nil ? .orderedAscending : .orderedDescending
+            } else if (a.number != nil) != (b.number != nil) {
+                order = a.number != nil ? .orderedAscending : .orderedDescending
             } else {
-                order = a.localizedStandardCompare(b)
+                order = a.text.localizedStandardCompare(b.text)
             }
             return ascending ? order == .orderedAscending : order == .orderedDescending
         }
@@ -2393,11 +2402,18 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
     }
 
+    func setDateFormat(_ pattern: String) {
+        let cells = formatTargets
+        run("Date Format") {
+            model.setNumberFormat(NumberFormat(kind: .date, decimals: 0, thousands: false, pattern: pattern), cells: cells)
+        }
+    }
+
     /// Increase / Decrease Decimal (a General cell becomes Number with one more or fewer decimal than it shows).
     func changeDecimals(by delta: Int) {
         let cells = formatTargets
         run(delta > 0 ? "Increase Decimal" : "Decrease Decimal") {
-            for cell in cells {
+            for cell in cells where model.numberFormat(cell)?.kind != .date {
                 var format = model.numberFormat(cell) ?? NumberFormat(kind: .number, decimals: currentDecimals(cell), thousands: false)
                 format.decimals = min(10, max(0, currentDecimals(cell) + delta))
                 model.setNumberFormat(format, cells: [cell])
@@ -2435,6 +2451,18 @@ final class TableGridView: NSView, NSTextViewDelegate {
         currency.submenu = symbols
         menu.addItem(currency)
         menu.addItem(ClosureMenuItem("Percent  12%", state: current?.kind == .percent) { [weak self] in self?.setNumberFormat(.percent) })
+        let dates = NSMenuItem(title: "Date", action: nil, keyEquivalent: "")
+        dates.state = current?.kind == .date ? .on : .off
+        let dateMenu = NSMenu()
+        let today = Formula.serial(Date())
+        for (pattern, name) in NumberFormat.datePatterns {
+            dateMenu.addItem(ClosureMenuItem("\(name)  \(Formula.formatDate(today, pattern: pattern))",
+                                             state: current?.kind == .date && current?.pattern == pattern) { [weak self] in
+                self?.setDateFormat(pattern)
+            })
+        }
+        dates.submenu = dateMenu
+        menu.addItem(dates)
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Increase Decimal") { [weak self] in self?.changeDecimals(by: 1) })
         menu.addItem(ClosureMenuItem("Decrease Decimal") { [weak self] in self?.changeDecimals(by: -1) })

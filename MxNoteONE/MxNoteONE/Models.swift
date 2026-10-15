@@ -349,12 +349,21 @@ struct TableData: Codable, Hashable {
 
 /// How a table cell shows numbers (Excel: Number, Currency, Percent).
 struct NumberFormat: Codable, Hashable {
-    enum Kind: String, Codable { case number, currency, percent }
+    enum Kind: String, Codable { case number, currency, percent, date }
     var kind: Kind
     var decimals: Int
     var thousands = true
     /// Currency symbol ($, €, £, ¥).
     var symbol: String?
+    /// Date pattern (Unicode date format, as in DateFormatter).
+    var pattern: String?
+
+    /// Date formats offered (pattern, name).
+    static let datePatterns: [(String, String)] = [
+        ("M/d/yyyy", "Short Date"), ("EEEE, MMMM d, yyyy", "Long Date"), ("yyyy-MM-dd", "ISO Date"),
+        ("d-MMM-yyyy", "Day-Month-Year"), ("MMM d, yyyy", "Month Day, Year"), ("MMMM yyyy", "Month and Year"),
+        ("h:mm a", "Time"), ("M/d/yyyy h:mm a", "Date and Time"),
+    ]
 
     static let currencySymbols = ["$", "€", "£", "¥"]
 
@@ -371,6 +380,8 @@ struct NumberFormat: Codable, Hashable {
         formatter.maximumFractionDigits = decimals
         formatter.roundingMode = .halfUp
         switch kind {
+        case .date:
+            return Formula.formatDate(value, pattern: pattern ?? "M/d/yyyy")
         case .number:
             return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
         case .currency:
