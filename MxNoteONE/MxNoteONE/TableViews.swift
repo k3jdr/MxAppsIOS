@@ -501,6 +501,11 @@ final class TableModel {
         changed()
     }
 
+    func toggleShowHeadings() {
+        data.showHeadings = data.showHeadings == true ? nil : true
+        changed()
+    }
+
     func toggleFreezeFirstColumn() {
         data.freezeFirstColumn = (data.freezeFirstColumn ?? false) ? nil : true
         changed()
@@ -1448,6 +1453,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.addItem(ClosureMenuItem("Freeze First Column", state: model.data.freezeFirstColumn ?? false) { [weak self] in
             self?.toggleFreezeFirstColumn()
         })
+        menu.addItem(ClosureMenuItem("Always Show Headings", state: model.data.showHeadings ?? false) { [weak self] in
+            self?.toggleShowHeadings()
+        })
         menu.addItem(paletteItem("Column Shading") { [weak self] in self?.shadeColumns($0) })
         return menu
     }
@@ -1568,7 +1576,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// Shows the A, B, C… bar above the table while it's being worked in (cells selected or typing).
     func updateColumnBar() {
-        let show = !isExport && TableGridView.active === self && (editing != nil || !selection.isEmpty) && window != nil
+        let inUse = TableGridView.active === self && (editing != nil || !selection.isEmpty)
+        let show = !isExport && window != nil && (inUse || model.data.showHeadings == true)
         let barWasShown = rowBarShown
         defer { if rowBarShown != barWasShown { owner?.refreshSticky() } }
         guard show, let owner, let canvas = owner.canvas else {
@@ -1673,6 +1682,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window != nil, model.data.showHeadings == true {
+            DispatchQueue.main.async { [weak self] in self?.updateColumnBar(); self?.owner?.refreshSticky() }
+        }
         if window == nil {
             columnBar?.removeFromSuperview()
             rowBar?.removeFromSuperview()
@@ -2310,6 +2322,13 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func bandRows(_ color: NSColor?) { run("Shading") { model.bandRows(color) } }
     func toggleHeaderRow() { run("Header Row") { model.toggleHeaderRow() } }
     func toggleBorders() { run("Borders") { model.toggleBorders() } }
+    /// Headings: keep the row numbers and column letters showing (they stay in view while the page scrolls).
+    func toggleShowHeadings() {
+        run("Headings") { model.toggleShowHeadings() }
+        updateColumnBar()
+        owner?.refreshSticky()
+    }
+
     func toggleFreezeHeaderRow() {
         guard model.data.headerRow else { return NSSound.beep() }
         run("Freeze Header Row") { model.toggleFreezeHeaderRow() }
@@ -2452,6 +2471,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.addItem(freezeHeader)
         menu.addItem(ClosureMenuItem("Freeze First Column", state: model.data.freezeFirstColumn ?? false) { [weak self] in
             self?.toggleFreezeFirstColumn()
+        })
+        menu.addItem(ClosureMenuItem("Always Show Headings", state: model.data.showHeadings ?? false) { [weak self] in
+            self?.toggleShowHeadings()
         })
         menu.addItem(ClosureMenuItem("Hide Borders", state: model.data.hideBorders ?? false) { [weak self] in self?.toggleBorders() })
         menu.addItem(ClosureMenuItem("Select Entire Table") { [weak self] in self?.selectTable() })

@@ -545,6 +545,7 @@ struct TableRibbon: View {
             RibbonButton("Filter", "line.3.horizontal.decrease.circle", large: true) { grid?.toggleFilter() }
             RibbonButton("Hide Columns", "eye.slash", large: true) { grid?.hideColumns() }
             RibbonButton("Unhide Columns", "eye", large: true) { grid?.unhideColumns() }
+            RibbonButton("Headings", "number.square", large: true) { grid?.toggleShowHeadings() }
             RibbonButton("Freeze Header", "rectangle.tophalf.inset.filled", large: true) { grid?.toggleFreezeHeaderRow() }
             RibbonButton("Freeze Column", "rectangle.lefthalf.inset.filled", large: true) { grid?.toggleFreezeFirstColumn() }
             RibbonButton("Hide Rows", "eye.slash", large: true) { grid?.hideRows() }

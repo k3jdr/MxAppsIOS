@@ -312,6 +312,8 @@ struct TableData: Codable, Hashable {
     var freezeFirstColumn: Bool?
     /// The header row stays in view while the page scrolls (nil = on, as before this option existed).
     var freezeHeaderRow: Bool?
+    /// Row numbers and column letters always show (Excel: Headings), not only while the table is in use.
+    var showHeadings: Bool?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {
