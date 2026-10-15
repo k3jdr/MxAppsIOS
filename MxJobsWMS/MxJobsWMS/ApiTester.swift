@@ -1,0 +1,169 @@
+//
+//  ApiTester.swift
+//  MxJobsWMS
+//
+//  "Test Call" for a Layer 3 API read: builds the request from the subscription and the
+//  node (with {{argument}} substitution and the Keychain key), sends it once, and checks
+//  the expected outcome (status codes and required JSON fields).
+//
+
+import Foundation
+
+struct ApiTestResult {
+    var url: String
+    var status: Int?
+    var elapsed: TimeInterval
+    var body: String
+    var checks: [(label: String, passed: Bool)]
+    var error: String?
+
+    var passed: Bool { error == nil && checks.allSatisfy(\.passed) }
+}
+
+enum ApiTester {
+    /// Replaces {{name}} with argument values and the built-ins {{today}} / {{yesterday}} (yyyy-MM-dd).
+    static func substitute(_ text: String, arguments: [Argument]) -> String {
+        var out = text
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        let now = Date()
+        var values: [String: String] = [
+            "today": f.string(from: now),
+            "yesterday": f.string(from: now.addingTimeInterval(-86_400)),
+        ]
+        for arg in arguments where !arg.name.isEmpty {
+            // A symbol list tests with its first symbol.
+            values[arg.name] = arg.type == .symbols
+                ? (arg.value.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? "")
+                : arg.value
+        }
+        for (k, v) in values { out = out.replacingOccurrences(of: "{{\(k)}}", with: v) }
+        return out
+    }
+
+    static func buildRequest(node: JobNode, subscription sub: ApiSubscription, key: String?) throws -> URLRequest {
+        guard let api = node.api else { throw TestError("Not an API node.") }
+        let base = sub.baseURL.hasSuffix("/") ? String(sub.baseURL.dropLast()) : sub.baseURL
+        var path = substitute(api.path, arguments: node.arguments)
+        if !path.isEmpty, !path.hasPrefix("/") { path = "/" + path }
+        guard var comps = URLComponents(string: base + path), comps.host != nil else {
+            throw TestError("Invalid URL: \(base + path)")
+        }
+        var items = comps.queryItems ?? []
+        for q in api.query where !q.key.isEmpty {
+            items.append(URLQueryItem(name: q.key, value: substitute(q.value, arguments: node.arguments)))
+        }
+        if sub.auth == .queryParameter, let key {
+            items.append(URLQueryItem(name: sub.keyName.isEmpty ? "apikey" : sub.keyName, value: key))
+        }
+        comps.queryItems = items.isEmpty ? nil : items
+        guard let url = comps.url else { throw TestError("Could not build the URL.") }
+
+        var request = URLRequest(url: url, timeoutInterval: TimeInterval(max(1, node.exceptions.timeoutSeconds)))
+        request.httpMethod = api.method.rawValue
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        for h in sub.defaultHeaders + api.headers where !h.key.isEmpty {
+            request.setValue(substitute(h.value, arguments: node.arguments), forHTTPHeaderField: h.key)
+        }
+        switch sub.auth {
+        case .header: if let key { request.setValue(key, forHTTPHeaderField: sub.keyName.isEmpty ? "X-API-Key" : sub.keyName) }
+        case .bearer: if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        case .none, .queryParameter: break
+        }
+        if api.method == .POST, !api.body.isEmpty {
+            request.httpBody = Data(substitute(api.body, arguments: node.arguments).utf8)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        return request
+    }
+
+    static func run(node: JobNode, subscription sub: ApiSubscription) async -> ApiTestResult {
+        let key = sub.auth == .none ? nil : Keychain.secret(for: sub.keychainAccount)
+        let request: URLRequest
+        do {
+            if sub.auth != .none, key == nil { throw TestError("No API key stored for “\(sub.name)”. Add one under API Subscriptions.") }
+            request = try buildRequest(node: node, subscription: sub, key: key)
+        } catch {
+            return ApiTestResult(url: "", status: nil, elapsed: 0, body: "", checks: [], error: error.localizedDescription)
+        }
+        let shownURL = redacted(request.url, sub: sub)
+        let started = Date()
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let elapsed = Date().timeIntervalSince(started)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+            var checks = [(label: "HTTP \(status) in \(node.outcome.successStatus)",
+                           passed: statusMatches(status, node.outcome.successStatus))]
+            for field in node.outcome.requiredFields where !field.isEmpty {
+                checks.append((label: "Field “\(field)” present", passed: json.map { lookup(field, in: $0) != nil } ?? false))
+            }
+            return ApiTestResult(url: shownURL, status: status, elapsed: elapsed,
+                                 body: pretty(data, json: json), checks: checks, error: nil)
+        } catch {
+            return ApiTestResult(url: shownURL, status: nil, elapsed: Date().timeIntervalSince(started),
+                                 body: "", checks: [], error: error.localizedDescription)
+        }
+    }
+
+    /// "200-299", "200,304", "2xx".
+    static func statusMatches(_ status: Int, _ spec: String) -> Bool {
+        let parts = spec.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        if parts.isEmpty { return (200..<300).contains(status) }
+        return parts.contains { part in
+            if part.hasSuffix("xx"), let d = Int(part.prefix(1)) { return status / 100 == d }
+            let bounds = part.split(separator: "-").compactMap { Int($0) }
+            if bounds.count == 2 { return (bounds[0]...bounds[1]).contains(status) }
+            return Int(part) == status
+        }
+    }
+
+    /// Dotted path lookup; array elements by index ("filings.recent.form.0"). Keys may contain
+    /// dots themselves ("Global Quote.05. price"): the longest matching key wins at each level.
+    static func lookup(_ path: String, in json: Any) -> Any? {
+        lookup(path.split(separator: ".", omittingEmptySubsequences: false).map(String.init)[...], in: json)
+    }
+
+    private static func lookup(_ parts: ArraySlice<String>, in json: Any) -> Any? {
+        guard !parts.isEmpty else { return json }
+        if let dict = json as? [String: Any] {
+            for n in stride(from: parts.count, through: 1, by: -1) {
+                let key = parts.prefix(n).joined(separator: ".")
+                if let next = dict[key], let found = lookup(parts.dropFirst(n), in: next) { return found }
+            }
+            return nil
+        }
+        if let array = json as? [Any], let i = Int(parts.first!), array.indices.contains(i) {
+            return lookup(parts.dropFirst(), in: array[i])
+        }
+        return nil
+    }
+
+    private static func pretty(_ data: Data, json: Any?) -> String {
+        var text: String
+        if let json, let out = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed]) {
+            text = String(decoding: out, as: UTF8.self)
+        } else {
+            text = String(decoding: data, as: UTF8.self)
+        }
+        if text.count > 20_000 { text = String(text.prefix(20_000)) + "\n… (truncated)" }
+        return text
+    }
+
+    private static func redacted(_ url: URL?, sub: ApiSubscription) -> String {
+        guard let url, var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url?.absoluteString ?? "" }
+        if sub.auth == .queryParameter {
+            comps.queryItems = comps.queryItems?.map {
+                $0.name == sub.keyName ? URLQueryItem(name: $0.name, value: "•••") : $0
+            }
+        }
+        return comps.string ?? url.absoluteString
+    }
+}
+
+struct TestError: LocalizedError {
+    var message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
+}

@@ -1,0 +1,151 @@
+//
+//  EditorState.swift
+//  MxJobsWMS
+//
+//  Per-window editing state (selection, zoom, open panels) and the diagram
+//  layout metrics. Menu commands reach the focused window through FocusedValues.
+//
+
+import SwiftUI
+
+nonisolated enum Metrics {
+    static let laneHeight: CGFloat = 240
+    /// Width of the lane title column on the left of the canvas.
+    static let gutter: CGFloat = 170
+    static let nodeSize = CGSize(width: 190, height: 78)
+    static let grid: CGFloat = 10
+    static let minCanvasWidth: CGFloat = 2200
+
+    static func laneTop(_ layer: Layer) -> CGFloat { CGFloat(layer.rawValue - 1) * laneHeight }
+    static func laneCenter(_ layer: Layer) -> CGFloat { laneTop(layer) + laneHeight / 2 }
+
+    static func canvasSize(for space: Jobspace) -> CGSize {
+        let maxX = space.nodes.map { CGFloat($0.x) }.max() ?? 0
+        return CGSize(width: max(minCanvasWidth, maxX + 600), height: laneHeight * 3)
+    }
+
+    /// Keeps a node centre inside its own lane and right of the gutter, snapped to the grid.
+    static func place(_ point: CGPoint, in layer: Layer) -> CGPoint {
+        let halfW = nodeSize.width / 2, halfH = nodeSize.height / 2
+        let top = laneTop(layer) + halfH + 14
+        let bottom = laneTop(layer) + laneHeight - halfH - 14
+        let x = max(gutter + halfW + 20, point.x)
+        let y = min(max(point.y, top), bottom)
+        return CGPoint(x: (x / grid).rounded() * grid, y: (y / grid).rounded() * grid)
+    }
+
+    static func layer(atY y: CGFloat) -> Layer {
+        Layer(rawValue: min(3, max(1, Int(y / laneHeight) + 1))) ?? .operations
+    }
+}
+
+extension Layer {
+    var color: Color {
+        switch self {
+        case .operations: .indigo
+        case .agents: .orange
+        case .data: .teal
+        }
+    }
+}
+
+extension NodeKind {
+    var color: Color { layer.color }
+}
+
+@Observable
+final class EditorState {
+    var selectedNodes: Set<UUID> = []
+    var selectedLink: UUID?
+    var zoom: CGFloat = 1
+    var showInspector = true
+    var showSubscriptions = false
+    var showIssues = false
+    /// Subscription to show first when the subscriptions dialog opens.
+    var subscriptionToEdit: UUID?
+    /// Bumped when API keys may have changed, so checks that read the Keychain run again.
+    var keyRevision = 0
+
+    /// The window's document; set by ContentView so menu commands can edit it.
+    @ObservationIgnored var document: Binding<JobspaceDocument>?
+
+    var hasSelection: Bool { !selectedNodes.isEmpty || selectedLink != nil }
+
+    func select(node id: UUID, extending: Bool = false) {
+        selectedLink = nil
+        if extending {
+            if selectedNodes.contains(id) { selectedNodes.remove(id) } else { selectedNodes.insert(id) }
+        } else {
+            selectedNodes = [id]
+        }
+    }
+
+    func select(link id: UUID) {
+        selectedNodes = []
+        selectedLink = id
+    }
+
+    func clearSelection() {
+        selectedNodes = []
+        selectedLink = nil
+    }
+
+    // MARK: Commands
+
+    func deleteSelection() {
+        guard let document, hasSelection else { return }
+        document.wrappedValue.space.delete(nodes: selectedNodes, links: selectedLink.map { [$0] } ?? [])
+        clearSelection()
+    }
+
+    func duplicateSelection() {
+        guard let document, !selectedNodes.isEmpty else { return }
+        selectedNodes = document.wrappedValue.space.duplicate(selectedNodes)
+    }
+
+    func selectAll() {
+        guard let document else { return }
+        selectedLink = nil
+        selectedNodes = Set(document.wrappedValue.space.nodes.map(\.id))
+    }
+
+    func nudge(dx: CGFloat, dy: CGFloat) {
+        guard let document, !selectedNodes.isEmpty else { return }
+        var space = document.wrappedValue.space
+        for i in space.nodes.indices where selectedNodes.contains(space.nodes[i].id) {
+            let p = Metrics.place(CGPoint(x: space.nodes[i].x + dx, y: space.nodes[i].y + dy), in: space.nodes[i].layer)
+            space.nodes[i].x = p.x
+            space.nodes[i].y = p.y
+        }
+        document.wrappedValue.space = space
+    }
+
+    /// Adds a node of `kind` in its lane, right of the nodes already there.
+    func add(_ kind: NodeKind, at point: CGPoint? = nil) {
+        guard let document else { return }
+        let space = document.wrappedValue.space
+        let laneNodes = space.nodes.filter { $0.layer == kind.layer }
+        let fallback = CGPoint(
+            x: (laneNodes.map { CGFloat($0.x) }.max() ?? Metrics.gutter) + Metrics.nodeSize.width + 50,
+            y: Metrics.laneCenter(kind.layer))
+        let p = Metrics.place(point ?? fallback, in: kind.layer)
+        let node = JobNode(kind: kind, x: p.x, y: p.y)
+        document.wrappedValue.space.nodes.append(node)
+        selectedLink = nil
+        selectedNodes = [node.id]
+    }
+
+    func zoomIn() { zoom = min(2, (zoom + 0.1).rounded(toPlaces: 1)) }
+    func zoomOut() { zoom = max(0.4, (zoom - 0.1).rounded(toPlaces: 1)) }
+}
+
+extension CGFloat {
+    func rounded(toPlaces places: Int) -> CGFloat {
+        let f = pow(10, CGFloat(places))
+        return (self * f).rounded() / f
+    }
+}
+
+extension FocusedValues {
+    @Entry var editor: EditorState?
+}
