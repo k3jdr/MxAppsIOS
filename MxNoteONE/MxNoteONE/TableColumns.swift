@@ -374,22 +374,17 @@ final class TableRowBar: NSView {
 
     /// The corner square above the numbers (as tall as the column bar).
     private var cornerHeight: CGFloat { TableColumnBar.height }
+    /// Where the corner is drawn: lower than the top while the column letters are pinned to the top of the view.
+    var cornerTop: CGFloat = 0 {
+        didSet { if oldValue != cornerTop { needsDisplay = true } }
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let grid else { return }
         let tops = grid.rowEdges
         NSColor(srgbRed: 0.95, green: 0.95, blue: 0.95, alpha: 1).setFill()
         bounds.fill()
-        // Corner: a small triangle, as in Excel.
-        let corner = NSBezierPath()
-        corner.move(to: NSPoint(x: bounds.width - 3, y: cornerHeight - 3))
-        corner.line(to: NSPoint(x: bounds.width - 3, y: 4))
-        corner.line(to: NSPoint(x: bounds.width - cornerHeight + 4, y: cornerHeight - 3))
-        corner.close()
-        NSColor(white: 0.7, alpha: 1).setFill()
-        corner.fill()
-        NSColor(white: 0.75, alpha: 1).setFill()
-        NSRect(x: 0, y: cornerHeight - 0.5, width: bounds.width, height: 0.5).fill()
+        defer { drawCorner() }
         let selected = grid.selectedWholeRowSet
         let filtered = grid.model.data.filters != nil
         for r in 0..<grid.model.rowCount where !grid.model.isRowHidden(r) && r + 1 < tops.count {
@@ -420,6 +415,44 @@ final class TableRowBar: NSView {
         }
         NSColor(white: 0.75, alpha: 1).setStroke()
         NSBezierPath(rect: bounds.insetBy(dx: 0.25, dy: 0.25)).stroke()
+    }
+
+    /// The select-all corner: a small triangle, as in Excel. A pinned header row gets its row number beside it.
+    private func drawCorner() {
+        if let grid, let band = grid.pinnedHeaderBand {
+            let rect = NSRect(x: 0, y: cornerHeight + band.y, width: bounds.width, height: band.height)
+            let isSelected = grid.selectedWholeRowSet.contains(0)
+            NSColor(srgbRed: 0.95, green: 0.95, blue: 0.95, alpha: 1).setFill()
+            rect.fill()
+            if isSelected {
+                NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
+                rect.fill()
+            }
+            NSColor(white: 0.6, alpha: 1).setFill()
+            NSRect(x: 0, y: rect.maxY - 1, width: rect.width, height: 1).fill()
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: isSelected ? .bold : .medium),
+                .foregroundColor: isSelected ? NSColor.controlAccentColor : NSColor(white: 0.35, alpha: 1),
+            ]
+            let size = ("1" as NSString).size(withAttributes: attrs)
+            ("1" as NSString).draw(at: NSPoint(x: (rect.width - size.width) / 2, y: rect.minY + min(4, (rect.height - size.height) / 2)),
+                                   withAttributes: attrs)
+        }
+        let top = cornerTop
+        NSColor(srgbRed: 0.95, green: 0.95, blue: 0.95, alpha: 1).setFill()
+        NSRect(x: 0, y: top, width: bounds.width, height: cornerHeight).fill()
+        let corner = NSBezierPath()
+        corner.move(to: NSPoint(x: bounds.width - 3, y: top + cornerHeight - 3))
+        corner.line(to: NSPoint(x: bounds.width - 3, y: top + 4))
+        corner.line(to: NSPoint(x: bounds.width - cornerHeight + 4, y: top + cornerHeight - 3))
+        corner.close()
+        NSColor(white: 0.7, alpha: 1).setFill()
+        corner.fill()
+        NSColor(white: 0.75, alpha: 1).setFill()
+        NSRect(x: 0, y: top + cornerHeight - 0.5, width: bounds.width, height: 0.5).fill()
+        if top > 0 {
+            NSRect(x: 0, y: top, width: bounds.width, height: 0.5).fill()
+        }
     }
 
     /// Where runs of rows hidden with Hide Row are (in bar coordinates), and which rows they are.
@@ -459,7 +492,7 @@ final class TableRowBar: NSView {
     override func mouseDown(with event: NSEvent) {
         guard let grid, let window else { return }
         let p = convert(event.locationInWindow, from: nil)
-        if p.y < cornerHeight {
+        if p.y >= cornerTop, p.y < cornerTop + cornerHeight {
             grid.selectTable()
             return
         }
@@ -467,7 +500,9 @@ final class TableRowBar: NSView {
             grid.unhideRows(rows)
             return
         }
-        guard let start = row(at: p.y) else { return }
+        var pinnedHeader: Int?
+        if let band = grid.pinnedHeaderBand, p.y >= cornerHeight + band.y, p.y < cornerHeight + band.y + band.height { pinnedHeader = 0 }
+        guard let start = pinnedHeader ?? row(at: p.y) else { return }
         let from = event.modifierFlags.contains(.shift) ? (anchorRow ?? start) : start
         if !event.modifierFlags.contains(.shift) { anchorRow = start }
         grid.selectRowRange(from, start)

@@ -820,12 +820,15 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// How far the pinned header row is drawn below the table's top (0 = not pinned).
     var stickyOffset: CGFloat = 0 {
-        didSet { if oldValue != stickyOffset { needsDisplay = true } }
+        didSet { if oldValue != stickyOffset { needsDisplay = true; rowBar?.needsDisplay = true } }
     }
 
     var headerHeight: CGFloat { rowHeights.first ?? 0 }
     var tableHeight: CGFloat { rowTops.last ?? 0 }
     private var stickyActive: Bool { stickyOffset > 0 && model.headerRowFrozen && model.rowCount > 1 }
+
+    /// Where the pinned header row is drawn (y and height in this view), while it's pinned.
+    var pinnedHeaderBand: (y: CGFloat, height: CGFloat)? { stickyActive ? (stickyOffset, headerHeight) : nil }
 
     /// A point on the pinned header counts as a point in the real header row.
     private func unpinned(_ point: NSPoint) -> NSPoint {
@@ -1532,7 +1535,23 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private(set) var rowBar: TableRowBar?
     /// The left edge of the visible part of the page (the row number bar stays inside it).
     var pageVisibleLeft: CGFloat = -.greatestFiniteMagnitude
+    /// The top edge of the visible part of the page (the column letter bar stays inside it).
+    var pageVisibleTop: CGFloat = -.greatestFiniteMagnitude
     var rowBarShown: Bool { rowBar?.superview != nil }
+
+    /// Keeps the column letter bar on the table's top, or at the top of the view while the table's top is scrolled
+    /// out of view (it never goes below the table's last row); the row bar's select-all corner follows it.
+    func positionColumnBar() {
+        guard let bar = columnBar, bar.superview != nil, let canvas = owner?.canvas else { return }
+        let top = canvas.convert(NSPoint.zero, from: self).y
+        let height = TableColumnBar.height
+        let y = max(top - height, min(pageVisibleTop, top + (rowTops.last ?? 0) - height))
+        if bar.frame.minY != y {
+            bar.setFrameOrigin(NSPoint(x: bar.frame.minX, y: y))
+            bar.needsDisplay = true
+        }
+        if let rows = rowBar { rows.cornerTop = y - rows.frame.minY }
+    }
 
     /// Keeps the row number bar beside the table, or at the visible left edge while the table's left side is
     /// scrolled out of view (it never goes past the table's right side).
@@ -1583,6 +1602,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         rows.needsDisplay = true
         positionRowBar()
+        positionColumnBar()
         window?.invalidateCursorRects(for: rows)
     }
 
@@ -2506,7 +2526,9 @@ final class TableElementView: ElementView {
     func updateStickyHeader(visible: NSRect) {
         lastVisible = visible
         grid.pageVisibleLeft = visible.minX
+        grid.pageVisibleTop = visible.minY
         grid.positionRowBar()
+        grid.positionColumnBar()
         if grid.frozenColumn != nil {
             // The frozen column sits right of the row number bar when that's showing.
             let barWidth = grid.rowBarShown ? TableRowBar.width(rows: model.rowCount) : 0
@@ -2520,7 +2542,9 @@ final class TableElementView: ElementView {
             grid.stickyOffset = 0
             return
         }
-        let offset = visible.minY - (frame.minY + Self.gripHeight)
+        // The frozen header row sits below the column letters when they're showing.
+        let barHeight = grid.rowBarShown ? TableColumnBar.height : 0
+        let offset = visible.minY + barHeight - (frame.minY + Self.gripHeight)
         grid.stickyOffset = offset > 0 ? min(offset, max(0, grid.tableHeight - grid.headerHeight)) : 0
     }
 

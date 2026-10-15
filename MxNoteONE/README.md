@@ -50,7 +50,8 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   them again, or use Unhide Columns.
 - **Rows, Excel style**: row numbers (1, 2, 3…) run down the table's left side next to the column letters; the
   corner where they meet selects the whole table. When the page scrolls sideways the row numbers stay at the left edge
-  of the view (a frozen first column sits just to their right). Click a number to select the row, ⇧-click or drag for several.
+  of the view (a frozen first column sits just to their right); when it scrolls down the column letters and the
+  corner stay at the top of the view, with a frozen header row (numbered 1) just below them. Click a number to select the row, ⇧-click or drag for several.
   Right-click a number for insert / delete / clear, Hide / Unhide Rows, Move Up / Down and Row Shading.
 - **Hide and show rows**: Hide Row (row numbers, right-click a cell, or the Table ribbon). Hidden rows keep their
   text and are skipped by the arrow keys and by Move Row Up / Down; the numbers jump past them and a double line
