@@ -18,6 +18,9 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 
 ## Pages
 
+Right-click the empty space in the pages list for **Add New**: New Page, New Subpage, New Page from Template, New
+Section and New Section Group. Right-click a page for its own menu.
+
 - **Text containers** hold rich text (fonts, colours, highlights, lists, inline pictures). Typing grows the container.
 - **Bullets and numbering**: Return continues the list, Return on an empty item ends it, Tab / Shift-Tab indent items.
 - **Tags**: ☐ To Do, ⭐ Important, ❓ Question, ❗ Critical, 💡 Idea, 📌 Remember for Later, 📖 Definition, 📞 Phone Number,
@@ -220,10 +223,17 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Select notes, move the cursor | **← →**, or click a note | |
 | Delete | **Delete** | |
 | Play from the selected note (again: stop) | **Space** | Score tab ▸ Play, right-click ▸ Play |
+| Add a note to the chord (above its top note) | **⇧A–G** | Score tab ▸ Chord Note |
+| Chord symbols above the staff (C, Am7, G/B) | **⌃K**, then Space for the next note, Return to finish | Score tab, right-click |
+| Lyrics under the notes | **⌃L**, then Space / Tab for the next note, **-** for the next syllable | Score tab, right-click |
+| Move the note to another guitar string | **⌥↑ / ⌥↓** | Score tab |
 
 Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
 and the bar don't already give them, and last to the end of the bar; ledger lines, ties and a final bar line are
-drawn. Clef, key (C to F♯ and G♭ major), time (4/4, 3/4, 2/4, 2/2, 6/8, 3/8, 9/8, 12/8, 5/4), tempo and title are on
+drawn. Chord notes share a stem (notes a step apart sit side by side) and sound together; lyrics are spaced so words
+don't run together, with hyphens between syllables. **Guitar Tab** (Score tab or right-click) adds a six-string TAB
+staff under the music with each note's string and fret in standard tuning (treble-clef guitar music sounds an
+octave lower), chosen automatically — lowest fret, one string per chord note — unless moved with ⌥↑ / ⌥↓. Clef, key (C to F♯ and G♭ major), time (4/4, 3/4, 2/4, 2/2, 6/8, 3/8, 9/8, 12/8, 5/4), tempo and title are on
 the Score tab and the right-click menu, as is Copy Score as Picture. Playback uses the Mac's General MIDI piano, and the
 note sounding is shown in orange. Every change can be undone. PDF and print show the score; Markdown export and OneNote
 sync write its title, signatures and the notes by name.

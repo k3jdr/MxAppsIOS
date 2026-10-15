@@ -67,9 +67,17 @@ struct PagesList: View {
                 let hasSubpages = store.hasSubpages(meta.id, in: section)
                 PageRow(meta: meta, ref: ref, hasSubpages: hasSubpages)
                     .tag(meta.id)
-                    .contextMenu { PageMenu(ref: ref, meta: meta, hasSubpages: hasSubpages) }
             }
             .onMove { store.movePages(in: section, from: $0, to: $1) }
+        }
+        // Right-click a page for its menu; right-click the empty space below for Add New.
+        .contextMenu(forSelectionType: UUID.self) { ids in
+            if let id = ids.first, let meta = pages.first(where: { $0.id == id }) {
+                let ref = PageRef(notebookID: section.notebookID, sectionID: section.sectionID, pageID: meta.id)
+                PageMenu(ref: ref, meta: meta, hasSubpages: store.hasSubpages(meta.id, in: section))
+            } else {
+                AddNewMenu(section: section)
+            }
         }
         .onDeleteCommand {
             if let ref = store.currentPageRef { store.deletePage(ref) }
@@ -100,6 +108,30 @@ struct PagesList: View {
                 }
             }
         }
+    }
+}
+
+/// Right-click in the empty part of the pages list: add a page (blank or from a template), a subpage or a section.
+struct AddNewMenu: View {
+    let section: SectionRef
+    @Bindable private var store = NotebookStore.shared
+
+    var body: some View {
+        Button("New Page") { store.addPageToCurrentSection() }
+        Button("New Subpage") { store.addPageToCurrentSection(subpage: true) }
+            .disabled(store.pages(in: section)?.isEmpty ?? true)
+        Menu("New Page from Template") {
+            ForEach(PageTemplate.choices.filter { $0 != .blank }) { template in
+                Button {
+                    store.addPageToCurrentSection(template: template)
+                } label: {
+                    Label(template.title, systemImage: template.symbol)
+                }
+            }
+        }
+        Divider()
+        Button("New Section") { _ = store.addSection(to: section.notebookID) }
+        Button("New Section Group") { store.addSectionGroup(to: section.notebookID) }
     }
 }
 

@@ -15,6 +15,11 @@
 //  staff to put a note at that pitch; drag a note up or down. The Score
 //  ribbon tab has the same tools. Playback uses the Mac's General MIDI piano.
 //
+//  Chords: ⇧A–G adds a note to the chord; ⌃K types chord symbols (C, Am7,
+//  G/B) above the staff. ⌃L types lyrics under the notes (Space or Tab: next
+//  note, - : next syllable). Guitar Tab adds a TAB staff with each note's
+//  string and fret (standard tuning); ⌥↑ / ⌥↓ move a note to another string.
+//
 
 import AppKit
 import AVFoundation
@@ -66,10 +71,26 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var alter: Int?
     /// Tied to the next note.
     var tie = false
+    /// More notes sounding with this one (a chord).
+    var chord: [ChordTone]?
+    /// A chord symbol above the staff (C, Am7, G/B).
+    var chordSymbol: String?
+    /// A syllable under the note (ending in "-" when the word goes on).
+    var lyric: String?
+    /// The guitar string for the TAB staff (0 = low E … 5 = high E); nil = chosen automatically.
+    var tabString: Int?
 
     /// Length in quarter notes.
     var beats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) }
     /// Steps up from C0 (for staff positions).
+    var diatonic: Int { octave * 7 + step }
+}
+
+/// A note added to a chord.
+struct ChordTone: Codable, Hashable {
+    var step: Int
+    var octave: Int
+    var alter: Int?
     var diatonic: Int { octave * 7 + step }
 }
 
@@ -91,6 +112,8 @@ struct ScoreData: Codable, Hashable {
     /// Quarter notes per minute.
     var tempo = 100
     var notes: [ScoreNote] = []
+    /// A guitar TAB staff under the music.
+    var showTab: Bool?
 
     /// A bar's length in quarter notes.
     var measureLength: Double { Double(beats) * 4 / Double(beatUnit) }
@@ -161,6 +184,44 @@ struct ScoreData: Codable, Hashable {
         return alter != (alterBefore(index) ?? keyAlter(note.step))
     }
 
+    /// Every pitch a note sounds (the note and its chord tones), as MIDI numbers.
+    func midis(_ index: Int) -> [Int] {
+        guard let main = midi(index) else { return [] }
+        let tones = (notes[index].chord ?? []).map { Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step)) }
+        return [main] + tones
+    }
+
+    /// Guitar strings in standard tuning (low E to high E), as MIDI numbers.
+    static let tuning = [40, 45, 50, 55, 59, 64]
+
+    /// Each pitch's string and fret for the TAB staff (guitar sounds an octave below treble-clef notation).
+    func tab(_ index: Int) -> [(string: Int, fret: Int)] {
+        let shift = clef == .treble ? 12 : 0
+        let pitches = midis(index).map { $0 - shift }
+        guard !pitches.isEmpty else { return [] }
+        var used = Set<Int>(), result: [(Int, Int)] = []
+        // The note's own string when chosen (and playable there).
+        if let chosen = notes[index].tabString, Self.tuning.indices.contains(chosen) {
+            let fret = pitches[0] - Self.tuning[chosen]
+            if fret >= 0, fret <= 24 {
+                result.append((chosen, fret))
+                used.insert(chosen)
+            }
+        }
+        // The rest, highest first, each on the free string with the lowest fret.
+        let rest = result.isEmpty ? pitches : Array(pitches.dropFirst())
+        for pitch in rest.sorted(by: >) {
+            let options = Self.tuning.indices.filter { !used.contains($0) && pitch - Self.tuning[$0] >= 0 && pitch - Self.tuning[$0] <= 20 }
+            guard let string = options.min(by: { pitch - Self.tuning[$0] < pitch - Self.tuning[$1] }) else { continue }
+            result.append((string, pitch - Self.tuning[string]))
+            used.insert(string)
+        }
+        return result
+    }
+
+    var hasChordSymbols: Bool { notes.contains { !($0.chordSymbol ?? "").isEmpty } }
+    var hasLyrics: Bool { notes.contains { !($0.lyric ?? "").isEmpty } }
+
     /// A short description (for exports and search).
     var summary: String {
         let key = Self.keyNames.first { $0.0 == keyFifths }?.1 ?? ""
@@ -174,7 +235,12 @@ struct ScoreData: Codable, Hashable {
             if n.rest { return "r" + length }
             let alter = soundingAlter(i)
             let name = ["C", "D", "E", "F", "G", "A", "B"][n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "")
-            return "\(name)\(n.octave) \(length)" + (n.tie ? "~" : "")
+            let tones = (n.chord ?? []).map { t in
+                ["C", "D", "E", "F", "G", "A", "B"][t.step] + ((t.alter ?? keyAlter(t.step)) > 0 ? "♯" : (t.alter ?? keyAlter(t.step)) < 0 ? "♭" : "") + "\(t.octave)"
+            }
+            let symbol = (n.chordSymbol ?? "").isEmpty ? "" : "[\(n.chordSymbol!)] "
+            let lyric = (n.lyric ?? "").isEmpty ? "" : " “\(n.lyric!)”"
+            return symbol + "\(name)\(n.octave)" + tones.map { "+" + $0 }.joined() + " \(length)" + (n.tie ? "~" : "") + lyric
         }.joined(separator: " · ")
     }
 }
@@ -214,12 +280,16 @@ final class ScorePlayer {
     nonisolated(unsafe) static var muted = false
     #endif
 
-    /// A single note (heard while entering notes).
-    func preview(_ midi: Int) {
+    /// A single note or chord (heard while entering notes).
+    func preview(_ midi: Int) { preview([midi]) }
+
+    func preview(_ midis: [Int]) {
         start()
-        let key = UInt8(max(0, min(127, midi)))
-        sampler.startNote(key, withVelocity: 80, onChannel: 0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.sampler.stopNote(key, onChannel: 0) }
+        let keys = midis.map { UInt8(max(0, min(127, $0))) }
+        for key in keys { sampler.startNote(key, withVelocity: 80, onChannel: 0) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            for key in keys { self?.sampler.stopNote(key, onChannel: 0) }
+        }
     }
 
     /// Plays from a note to the end, highlighting each note in the view.
@@ -241,18 +311,16 @@ final class ScorePlayer {
                 length += score.notes[last].beats
             }
             let index = i
-            let midi = score.midi(i)
+            let keys = score.midis(i).map { UInt8(max(0, min(127, $0))) }
             let on = DispatchWorkItem { [weak self] in
                 self?.view?.playing = index
-                if let midi {
-                    let key = UInt8(max(0, min(127, midi)))
+                for key in keys {
                     self?.sampler.startNote(key, withVelocity: 90, onChannel: 0)
                     self?.sounding.insert(key)
                 }
             }
             let off = DispatchWorkItem { [weak self] in
-                if let midi {
-                    let key = UInt8(max(0, min(127, midi)))
+                for key in keys {
                     self?.sampler.stopNote(key, onChannel: 0)
                     self?.sounding.remove(key)
                 }
@@ -284,7 +352,7 @@ final class ScorePlayer {
 // MARK: - The staff view
 
 /// Draws a score and edits it (it's the first responder while a score is being worked on).
-final class ScoreView: NSView {
+final class ScoreView: NSView, NSTextFieldDelegate {
     /// The score being edited (the Score ribbon tab acts on it).
     static weak var active: ScoreView? {
         didSet {
@@ -319,7 +387,15 @@ final class ScoreView: NSView {
     static let space: CGFloat = 8
     private var space: CGFloat { Self.space }
     private let titleHeight: CGFloat = 26
-    private var systemHeight: CGFloat { space * 13 }
+    private var chordBand: CGFloat { score.hasChordSymbols ? space * 2.6 : 0 }
+    private var lyricBand: CGFloat { score.hasLyrics ? space * 2.8 : 0 }
+    private var tabBand: CGFloat { score.showTab == true ? space * 10 : 0 }
+    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand }
+    /// TAB lines' spacing.
+    private var tabGap: CGFloat { space * 1.3 }
+
+    static let lyricFont = NSFont.systemFont(ofSize: 12)
+    static let chordFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
 
     struct Placed {
         let index: Int
@@ -350,7 +426,21 @@ final class ScoreView: NSView {
         case .half: base = 4.4
         case .whole: base = 5.4
         }
-        return space * (base + (note.dotted ? 0.7 : 0) + (score.showsAccidental(index) ? 1.3 : 0))
+        var width = space * (base + (note.dotted ? 0.7 : 0) + (score.showsAccidental(index) ? 1.3 : 0))
+        // Chord notes a step apart sit side by side; accidentals on chord notes need room.
+        if let chord = note.chord, !chord.isEmpty {
+            let positions = ([note.diatonic] + chord.map(\.diatonic)).sorted()
+            if zip(positions, positions.dropFirst()).contains(where: { $1 - $0 == 1 }) { width += space * 1.2 }
+            if chord.contains(where: { $0.alter != nil && $0.alter != score.keyAlter($0.step) }) { width += space * 1.2 }
+        }
+        // Words and chord names don't run into the next note.
+        if let lyric = note.lyric, !lyric.isEmpty {
+            width = max(width, (lyric as NSString).size(withAttributes: [.font: Self.lyricFont]).width + space * 1.2)
+        }
+        if let symbol = note.chordSymbol, !symbol.isEmpty {
+            width = max(width, (symbol as NSString).size(withAttributes: [.font: Self.chordFont]).width + space * 1.2)
+        }
+        return width
     }
 
     private func headerWidth(system: Int) -> CGFloat {
@@ -412,8 +502,13 @@ final class ScoreView: NSView {
 
     /// The top of a system's staff.
     private func staffTop(_ system: Int) -> CGFloat {
-        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5
+        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5 + chordBand
     }
+
+    private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 }
+
+    /// The TAB staff's top line (high E).
+    private func tabTop(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 4.2 + lyricBand }
 
     /// Half-spaces up from the bottom line.
     private func position(_ note: ScoreNote) -> Int { note.diatonic - score.clef.bottomLine }
@@ -446,7 +541,72 @@ final class ScoreView: NSView {
             }
         }
         drawNotes(ink: ink)
+        drawWords(ink: ink)
+        if score.showTab == true { drawTab(ink: ink) }
         drawCaret()
+    }
+
+    /// Chord symbols above the staff, lyrics under it (with hyphens between syllables).
+    private func drawWords(ink: NSColor) {
+        for (k, p) in placed.enumerated() {
+            let note = score.notes[p.index]
+            let color = colorFor(p.index, ink: ink)
+            if let symbol = note.chordSymbol, !symbol.isEmpty {
+                let attrs: [NSAttributedString.Key: Any] = [.font: Self.chordFont, .foregroundColor: color]
+                (symbol as NSString).draw(at: NSPoint(x: p.x - space * 0.2, y: staffTop(p.system) - space * 2 - chordBand + space * 0.2),
+                                          withAttributes: attrs)
+            }
+            guard let lyric = note.lyric, !lyric.isEmpty else { continue }
+            let attrs: [NSAttributedString.Key: Any] = [.font: Self.lyricFont, .foregroundColor: color]
+            let word = lyric.hasSuffix("-") ? String(lyric.dropLast()) : lyric
+            let size = (word as NSString).size(withAttributes: attrs)
+            let center = p.x + space * 0.62
+            (word as NSString).draw(at: NSPoint(x: center - size.width / 2, y: lyricY(p.system)), withAttributes: attrs)
+            if lyric.hasSuffix("-"), k + 1 < placed.count, placed[k + 1].system == p.system {
+                let nextWord = (score.notes[placed[k + 1].index].lyric ?? "").replacingOccurrences(of: "-", with: "")
+                let nextLeft = placed[k + 1].x + space * 0.62 - (nextWord as NSString).size(withAttributes: attrs).width / 2
+                let mid = (center + size.width / 2 + nextLeft) / 2
+                ("-" as NSString).draw(at: NSPoint(x: mid - 2.5, y: lyricY(p.system)), withAttributes: attrs)
+            }
+        }
+    }
+
+    /// The TAB staff: six strings (high E on top) with each note's fret.
+    private func drawTab(ink: NSColor) {
+        let fretFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+        for s in 0..<systemCount {
+            let top = tabTop(s)
+            ink.setFill()
+            for line in 0..<6 {
+                NSRect(x: space, y: top + CGFloat(line) * tabGap - 0.5, width: bounds.width - space * 2, height: 1).fill()
+            }
+            // T A B down the left, over a white strip (as printed tab).
+            let tabAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: tabGap * 1.15), .foregroundColor: ink]
+            NSColor.white.setFill()
+            NSRect(x: space * 1.6, y: top + tabGap * 0.35, width: space * 1.9, height: tabGap * 4.3).fill()
+            for (i, letter) in ["T", "A", "B"].enumerated() {
+                let size = (letter as NSString).size(withAttributes: tabAttrs)
+                (letter as NSString).draw(at: NSPoint(x: space * 2.55 - size.width / 2, y: top + tabGap * (0.5 + CGFloat(i) * 1.4)),
+                                          withAttributes: tabAttrs)
+            }
+        }
+        for bar in barLines {
+            ink.setFill()
+            NSRect(x: bar.x - 0.5, y: tabTop(bar.system), width: bar.final ? 3 : 1, height: tabGap * 5).fill()
+        }
+        for p in placed where !score.notes[p.index].rest {
+            let color = colorFor(p.index, ink: ink)
+            let attrs: [NSAttributedString.Key: Any] = [.font: fretFont, .foregroundColor: color]
+            for spot in score.tab(p.index) {
+                let text = "\(spot.fret)"
+                let size = (text as NSString).size(withAttributes: attrs)
+                let cy = tabTop(p.system) + CGFloat(5 - spot.string) * tabGap
+                let box = NSRect(x: p.x + space * 0.62 - size.width / 2 - 1.5, y: cy - size.height / 2, width: size.width + 3, height: size.height)
+                NSColor.white.setFill()
+                box.fill()
+                (text as NSString).draw(at: NSPoint(x: box.minX + 1.5, y: box.minY), withAttributes: attrs)
+            }
+        }
     }
 
     private func drawStaff(_ system: Int, ink: NSColor) {
@@ -528,7 +688,11 @@ final class ScoreView: NSView {
         return groups.filter { g in Set(g.compactMap { i in placed.first { $0.index == i }?.system }).count == 1 }
     }
 
+    /// Each note's lowest and highest head (y), for stems through chords.
+    private var stemSpans: [Int: (low: CGFloat, high: CGFloat)] = [:]
+
     private func drawNotes(ink: NSColor) {
+        stemSpans = [:]
         let groups = beamGroups()
         var beamed: [Int: (group: [Int], up: Bool)] = [:]
         for g in groups {
@@ -562,12 +726,54 @@ final class ScoreView: NSView {
                 head.lineWidth = note.duration == .whole ? 1.6 : 1.4
                 head.stroke()
             }
+            // Chord notes: more heads on the same stem (a step apart: side by side).
+            let tones = note.chord ?? []
+            let allPositions = ([pos] + tones.map { $0.diatonic - score.clef.bottomLine }).sorted()
+            let up = beamed[p.index]?.up ?? (allPositions.reduce(0, +) / allPositions.count < 4)
+            if !tones.isEmpty {
+                var shifted = Set<Int>()
+                for (k, tp) in allPositions.enumerated() where k > 0 && tp - allPositions[k - 1] == 1 && !shifted.contains(allPositions[k - 1]) {
+                    shifted.insert(up ? tp : allPositions[k - 1])
+                }
+                for tone in tones {
+                    let tp = tone.diatonic - score.clef.bottomLine
+                    let tx = shifted.contains(tp) ? (up ? p.x + w - 1 : p.x - w + 1) : p.x
+                    let ty = y(position: tp, system: p.system)
+                    color.setFill()
+                    if tp <= -2 { for l in stride(from: -2, through: tp, by: -2) { ledger(x: tx, y: y(position: l, system: p.system)) } }
+                    if tp >= 10 { for l in stride(from: 10, through: tp, by: 2) { ledger(x: tx, y: y(position: l, system: p.system)) } }
+                    if let alter = tone.alter, alter != score.keyAlter(tone.step) {
+                        drawAccidental(alter, x: p.x - space * 1.35 - (score.showsAccidental(p.index) ? space * 1.2 : 0), y: ty, ink: color)
+                    }
+                    let extra = NSBezierPath(ovalIn: NSRect(x: -w / 2, y: -h / 2, width: w, height: h))
+                    var t = AffineTransform(translationByX: tx + w / 2, byY: ty)
+                    if note.duration != .whole { t.rotate(byDegrees: -20) }
+                    extra.transform(using: t)
+                    color.set()
+                    if note.duration.rawValue >= 4 { extra.fill() } else { extra.lineWidth = 1.4; extra.stroke() }
+                }
+                if shifted.contains(pos) {
+                    // The note itself moved beside its neighbour: redraw it there.
+                    NSColor.white.setFill()
+                    head.fill()
+                    let moved = NSBezierPath(ovalIn: NSRect(x: -w / 2, y: -h / 2, width: w, height: h))
+                    var t = AffineTransform(translationByX: (up ? p.x + w - 1 : p.x - w + 1) + w / 2, byY: cy)
+                    if note.duration != .whole { t.rotate(byDegrees: -20) }
+                    moved.transform(using: t)
+                    color.set()
+                    if note.duration.rawValue >= 4 { moved.fill() } else { moved.lineWidth = 1.4; moved.stroke() }
+                }
+            }
+            // The stem runs from the far head to past the near one.
+            let lowY = y(position: allPositions.first!, system: p.system), highY = y(position: allPositions.last!, system: p.system)
+            stemSpans[p.index] = (lowY, highY)
             // Stem and flags (beamed notes get their stems with the beam).
             if note.duration != .whole, beamed[p.index] == nil {
-                let up = pos < 4
                 let sx = up ? p.x + w - 0.6 : p.x + 0.6
-                let end = up ? cy - space * 3.5 : cy + space * 3.5
-                NSRect(x: sx - 0.6, y: min(cy, end), width: 1.2, height: abs(end - cy)).fill()
+                let from = up ? lowY : highY
+                let end = up ? highY - space * 3.5 : lowY + space * 3.5
+                color.setFill()
+                NSRect(x: sx - 0.6, y: min(from, end), width: 1.2, height: abs(end - from)).fill()
                 if note.duration.rawValue >= 8 {
                     for f in 0..<(note.duration == .sixteenth ? 2 : 1) {
                         let fy = end + (up ? 1 : -1) * CGFloat(f) * space * 0.8
@@ -612,13 +818,17 @@ final class ScoreView: NSView {
             func beamY(_ x: CGFloat) -> CGFloat { first.y + slope * (x - first.x) }
             var offset: CGFloat = up ? -space * 3.5 : space * 3.5
             for pt in points {
-                let needed = up ? (pt.y - space * 3) - beamY(pt.x) : (pt.y + space * 3) - beamY(pt.x)
+                let span = stemSpans[pt.i] ?? (pt.y, pt.y)
+                let near = up ? span.high : span.low
+                let needed = up ? (near - space * 3) - beamY(pt.x) : (near + space * 3) - beamY(pt.x)
                 offset = up ? min(offset, needed) : max(offset, needed)
             }
             for pt in points {
                 colorFor(pt.i, ink: ink).setFill()
                 let end = beamY(pt.x) + offset
-                NSRect(x: pt.x - 0.6, y: min(pt.y, end), width: 1.2, height: abs(end - pt.y)).fill()
+                let span = stemSpans[pt.i] ?? (pt.y, pt.y)
+                let from = up ? span.low : span.high
+                NSRect(x: pt.x - 0.6, y: min(from, end), width: 1.2, height: abs(end - from)).fill()
             }
             ink.setFill()
             for level in 0..<2 {
@@ -729,7 +939,7 @@ final class ScoreView: NSView {
         // Focus moving to another container on the page ends editing (not the ribbon or a panel).
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window, let canvas = self.owner?.canvas else { return }
-            if let view = window.firstResponder as? NSView, view !== self, view.isDescendant(of: canvas) {
+            if let view = window.firstResponder as? NSView, view !== self, !view.isDescendant(of: self), view.isDescendant(of: canvas) {
                 if ScoreView.active === self { ScoreView.active = nil }
                 self.needsDisplay = true
             }
@@ -817,6 +1027,148 @@ final class ScoreView: NSView {
 
     func toggleTie() { changeSelected("Tie") { $0.tie.toggle() } }
 
+    // MARK: Chords, guitar strings
+
+    /// Adds a note to the chord: the step in the octave just above the chord's top note (⇧A–G).
+    func addChordTone(step: Int) {
+        guard let i = target, !score.notes[i].rest else { return NSSound.beep() }
+        let note = score.notes[i]
+        let top = ([note.diatonic] + (note.chord ?? []).map(\.diatonic)).max()!
+        var octave = top / 7
+        if octave * 7 + step <= top { octave += 1 }
+        edit("Add Chord Note") { $0.notes[i].chord = ($0.notes[i].chord ?? []) + [ChordTone(step: step, octave: octave)] }
+        ScorePlayer.shared.preview(score.midis(i))
+    }
+
+    func clearChordTones() {
+        changeSelected("Remove Chord Notes") { $0.chord = nil }
+    }
+
+    /// The selected note onto the next higher (+1) or lower (-1) guitar string, where it can be played.
+    func moveString(by delta: Int) {
+        guard let i = target, !score.notes[i].rest, let current = score.tab(i).first?.string else { return NSSound.beep() }
+        let shift = score.clef == .treble ? 12 : 0
+        guard let pitch = score.midi(i).map({ $0 - shift }) else { return }
+        var string = current + delta
+        while ScoreData.tuning.indices.contains(string) {
+            let fret = pitch - ScoreData.tuning[string]
+            if fret >= 0 && fret <= 24 {
+                let chosen = string
+                edit("Guitar String") { $0.notes[i].tabString = chosen }
+                return
+            }
+            string += delta
+        }
+        NSSound.beep()
+    }
+
+    func toggleTab() {
+        edit("Guitar Tab") { $0.showTab = $0.showTab == true ? nil : true }
+    }
+
+    // MARK: Lyrics and chord symbols (typed under / above the notes)
+
+    enum WordKind { case lyric, chordSymbol }
+    private var field: NSTextField?
+    private var fieldKind: WordKind = .lyric
+    private var fieldIndex = 0
+
+    /// ⌃L lyrics / ⌃K chord symbols, starting at the selected (or just-typed, or first) note.
+    func beginWords(_ kind: WordKind) {
+        guard !score.notes.isEmpty else { return NSSound.beep() }
+        var index = target ?? (cursor > 0 ? cursor - 1 : 0)
+        if kind == .lyric, score.notes[index].rest, let next = nextNote(after: index, kind: kind) { index = next }
+        openField(kind, at: index)
+    }
+
+    private func nextNote(after index: Int, kind: WordKind, backwards: Bool = false) -> Int? {
+        var i = index + (backwards ? -1 : 1)
+        while score.notes.indices.contains(i) {
+            // Lyrics skip rests; chord symbols can go on any note or rest.
+            if kind == .chordSymbol || !score.notes[i].rest { return i }
+            i += backwards ? -1 : 1
+        }
+        return nil
+    }
+
+    private func openField(_ kind: WordKind, at index: Int) {
+        field?.removeFromSuperview()
+        layoutNotes()
+        guard let p = placed.first(where: { $0.index == index }) else { return }
+        fieldKind = kind
+        fieldIndex = index
+        selected = index
+        lastEntered = nil
+        cursor = index + 1
+        let font = kind == .lyric ? Self.lyricFont : Self.chordFont
+        let text = (kind == .lyric ? score.notes[index].lyric : score.notes[index].chordSymbol) ?? ""
+        let f = NSTextField(string: text)
+        f.font = font
+        f.isBordered = true
+        f.focusRingType = .none
+        f.delegate = self
+        f.alignment = kind == .lyric ? .center : .left
+        let width = max(space * 7, (text as NSString).size(withAttributes: [.font: font]).width + space * 3)
+        let yTop = kind == .lyric ? lyricY(p.system) - 2 : staffTop(p.system) - space * 2.2 - max(chordBand, space * 2.4) + space * 0.2
+        f.frame = NSRect(x: kind == .lyric ? p.x + space * 0.62 - width / 2 : p.x - space * 0.4, y: yTop, width: width, height: font.pointSize + 8)
+        addSubview(f)
+        field = f
+        window?.makeFirstResponder(f)
+        f.currentEditor()?.selectAll(nil)
+        needsDisplay = true
+    }
+
+    /// Saves the field's words on its note.
+    private func commitField() {
+        guard let f = field else { return }
+        let text = f.stringValue.trimmingCharacters(in: .whitespaces)
+        let i = fieldIndex, kind = fieldKind
+        guard score.notes.indices.contains(i) else { return }
+        let old = kind == .lyric ? score.notes[i].lyric : score.notes[i].chordSymbol
+        guard (old ?? "") != text else { return }
+        edit(kind == .lyric ? "Lyrics" : "Chord Symbol") { data in
+            if kind == .lyric { data.notes[i].lyric = text.isEmpty ? nil : text } else { data.notes[i].chordSymbol = text.isEmpty ? nil : text }
+        }
+    }
+
+    func endWords() {
+        commitField()
+        field?.removeFromSuperview()
+        field = nil
+        window?.makeFirstResponder(self)
+        needsDisplay = true
+    }
+
+    /// Space (or Tab) goes on to the next note; "-" ends a syllable (the word goes on under the next note).
+    private func advance(backwards: Bool = false) {
+        commitField()
+        guard let next = nextNote(after: fieldIndex, kind: fieldKind, backwards: backwards) else { return endWords() }
+        openField(fieldKind, at: next)
+    }
+
+    func controlTextDidChange(_ note: Notification) {
+        guard let f = field else { return }
+        let text = f.stringValue
+        if text.hasSuffix(" ") {
+            f.stringValue = String(text.dropLast())
+            advance()
+        } else if fieldKind == .lyric, text.hasSuffix("-"), text.count > 1 {
+            advance()
+        }
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        switch selector {
+        case #selector(NSResponder.insertTab(_:)): advance(); return true
+        case #selector(NSResponder.insertBacktab(_:)): advance(backwards: true); return true
+        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.cancelOperation(_:)): endWords(); return true
+        default: return false
+        }
+    }
+
+    /// The words field (for self-tests and the ribbon).
+    var wordsField: NSTextField? { field }
+
     func toggleRest() {
         changeSelected("Rest") { $0.rest.toggle() }
     }
@@ -864,6 +1216,8 @@ final class ScoreView: NSView {
         switch event.keyCode {
         case 123: return moveCursor(by: -1)
         case 124: return moveCursor(by: 1)
+        case 126 where event.modifierFlags.contains(.option): return moveString(by: 1)
+        case 125 where event.modifierFlags.contains(.option): return moveString(by: -1)
         case 126: return moveSelected(steps: command ? 7 : 1)
         case 125: return moveSelected(steps: command ? -7 : -1)
         case 51, 117: return deleteSelected()
@@ -877,9 +1231,17 @@ final class ScoreView: NSView {
             return
         default: break
         }
+        if event.modifierFlags.contains(.control) {
+            switch chars {
+            case "k": return beginWords(.chordSymbol)
+            case "l": return beginWords(.lyric)
+            default: return super.keyDown(with: event)
+            }
+        }
         guard !command else { return super.keyDown(with: event) }
         if let letter = chars.first, let step = ["c", "d", "e", "f", "g", "a", "b"].firstIndex(of: String(letter)) {
-            return insert(step: step)
+            // ⇧ adds the note to the chord.
+            return event.modifierFlags.contains(.shift) ? addChordTone(step: step) : insert(step: step)
         }
         switch chars {
         case "0": insert(step: nil)
@@ -928,6 +1290,7 @@ final class ScoreView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard !isExport else { return }
+        if field != nil { endWords() }
         owner?.canvas?.selectedElement = nil
         activate()
         let p = convert(event.locationInWindow, from: nil)
@@ -1055,6 +1418,9 @@ final class ScoreElementView: ElementView {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem(ScorePlayer.shared.isPlaying ? "Stop" : "Play") { [weak self] in self?.staff.togglePlay() })
         menu.addItem(ClosureMenuItem("Score Title…") { [weak self] in self?.editTitle() })
+        menu.addItem(ClosureMenuItem("Chord Symbols…  ⌃K") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.chordSymbol) })
+        menu.addItem(ClosureMenuItem("Lyrics…  ⌃L") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.lyric) })
+        menu.addItem(ClosureMenuItem("Guitar Tab", state: score.showTab == true) { [weak self] in self?.staff.toggleTab() })
         let clef = NSMenuItem(title: "Clef", action: nil, keyEquivalent: "")
         let clefs = NSMenu()
         for c in ScoreData.Clef.allCases {

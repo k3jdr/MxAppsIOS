@@ -532,6 +532,20 @@ struct ScoreRibbon: View {
             RibbonButton("Note / Rest (R)", "arrow.left.arrow.right") { act { $0.toggleRest() } }
             RibbonButton("Delete", "delete.left") { act { $0.deleteSelected() } }
         }
+        RibbonGroup("Chords & Lyrics") {
+            RibbonMenu("Chord Note", "music.quarternote.3") {
+                ForEach(Array(["C", "D", "E", "F", "G", "A", "B"].enumerated()), id: \.offset) { step, name in
+                    Button("Add \(name) to the Chord  (⇧\(name))") { act { $0.addChordTone(step: step) } }
+                }
+                Divider()
+                Button("Remove Chord Notes") { act { $0.clearChordTones() } }
+            }
+            RibbonButton("Chord Symbol (⌃K)", "textformat.abc", large: true) { staff?.beginWords(.chordSymbol) }
+            RibbonButton("Lyrics (⌃L)", "text.quote", large: true) { staff?.beginWords(.lyric) }
+            RibbonButton("Guitar Tab", "guitars", large: true, active: staff?.owner?.score.showTab == true) { act { $0.toggleTab() } }
+            RibbonButton("String Up (⌥↑)", "arrow.up.circle") { act { $0.moveString(by: 1) } }
+            RibbonButton("String Down (⌥↓)", "arrow.down.circle") { act { $0.moveString(by: -1) } }
+        }
         RibbonGroup("Score") {
             RibbonButton(editor.scorePlaying ? "Stop" : "Play (Space)", editor.scorePlaying ? "stop.fill" : "play.fill", large: true,
                          active: editor.scorePlaying) { act { $0.togglePlay() } }
