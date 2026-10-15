@@ -123,6 +123,8 @@ final class NotebookStore {
     var alert: AlertInfo?
     var sheet: ActiveSheet?
     var showFullPage = false
+    /// MxNoteONE is covered until Touch ID / the Mac password confirms it's you (Settings ▸ Security).
+    var appLocked = DeviceUnlock.appLockEnabled
     var focusSearchRequest = 0
     /// Bumped to make the canvas reload the current page from disk.
     var reloadToken = 0
@@ -1097,6 +1099,7 @@ final class NotebookStore {
         nb.manifest.sections.modify(ref.sectionID) { $0.protection = protection }
         nb.keys[ref.sectionID] = key
         nb.unlocked.insert(ref.sectionID)
+        if DeviceUnlock.isEnrolled(ref.sectionID) { DeviceUnlock.save(key, for: ref.sectionID) }
         saveSection(nb, ref.sectionID)
         saveManifest(nb)
         return true
@@ -1112,15 +1115,47 @@ final class NotebookStore {
             return
         }
         nb.manifest.sections.modify(ref.sectionID) { $0.protection = nil }
+        DeviceUnlock.remove(ref.sectionID)
         nb.keys[ref.sectionID] = nil
         nb.unlocked.remove(ref.sectionID)
         saveSection(nb, ref.sectionID)
         saveManifest(nb)
     }
 
-    func unlock(_ ref: SectionRef, password: String) -> Bool {
-        guard let nb = notebook(ref.notebookID), let protection = node(ref)?.protection,
+    /// Unlocks with the password; `rememberWithDevice` keeps the key so Touch ID can open the section next time.
+    func unlock(_ ref: SectionRef, password: String, rememberWithDevice: Bool = false) -> Bool {
+        guard node(ref)?.protection != nil, let protection = node(ref)?.protection,
               let key = NoteCrypto.unlock(protection, password: password) else { return false }
+        if rememberWithDevice { DeviceUnlock.save(key, for: ref.sectionID) }
+        return unlock(ref, key: key)
+    }
+
+    /// Opens a section with Touch ID (or Apple Watch / the Mac password) when its key is kept on this Mac.
+    func unlockWithDevice(_ ref: SectionRef, completion: @escaping @MainActor (Bool) -> Void = { _ in }) {
+        let name = node(ref)?.name ?? "the section"
+        DeviceUnlock.key(for: ref.sectionID, reason: "open the protected section “\(name)”") { [weak self] key in
+            guard let self, let key else { return completion(false) }
+            let ok = self.unlock(ref, key: key)
+            // A key from before the password changed no longer opens it.
+            if !ok { DeviceUnlock.remove(ref.sectionID) }
+            completion(ok)
+        }
+    }
+
+    func canUnlockWithDevice(_ ref: SectionRef) -> Bool {
+        DeviceUnlock.isAvailable && DeviceUnlock.isEnrolled(ref.sectionID)
+    }
+
+    /// Starts or stops opening an unlocked section with Touch ID.
+    func setDeviceUnlock(_ ref: SectionRef, _ on: Bool) {
+        guard let nb = notebook(ref.notebookID) else { return }
+        if on, let key = nb.keys[ref.sectionID] { DeviceUnlock.save(key, for: ref.sectionID) } else { DeviceUnlock.remove(ref.sectionID) }
+    }
+
+    /// Unlocks with the section's key (checked against the section before it's used).
+    private func unlock(_ ref: SectionRef, key: SymmetricKey) -> Bool {
+        guard let nb = notebook(ref.notebookID), let protection = node(ref)?.protection,
+              NoteCrypto.verifier(for: key) == protection.verifier else { return false }
         nb.keys[ref.sectionID] = key
         nb.sections[ref.sectionID] = loadSectionContent(nb, ref.sectionID, key: key)
         nb.unlocked.insert(ref.sectionID)
@@ -1146,13 +1181,22 @@ final class NotebookStore {
         }
     }
 
+    /// Asks for Touch ID / the Mac password to show MxNoteONE again.
+    func unlockApp() {
+        DeviceUnlock.authenticate(reason: "open MxNoteONE") { [weak self] ok in
+            if ok { self?.appLocked = false }
+        }
+    }
+
     func appDidResignActive() {
         autoLockTask?.cancel()
         let minutes = Prefs.autoLockMinutes
-        guard minutes > 0, notebooks.contains(where: { !$0.unlocked.isEmpty }) else { return }
+        guard minutes > 0, notebooks.contains(where: { !$0.unlocked.isEmpty }) || DeviceUnlock.appLockEnabled else { return }
         autoLockTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(minutes * 60))
-            if !Task.isCancelled { self?.lockAll() }
+            guard !Task.isCancelled else { return }
+            self?.lockAll()
+            if DeviceUnlock.appLockEnabled { self?.canvas?.flush(); self?.appLocked = true }
         }
     }
 

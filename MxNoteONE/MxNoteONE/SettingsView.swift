@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.ruleLinesKey) private var ruleLines = RuleLines.none.rawValue
     @AppStorage(Prefs.notebooksFolderKey) private var notebooksFolder = ""
     @AppStorage(Prefs.autoLockKey) private var autoLockMinutes = 10
+    @AppStorage(DeviceUnlock.appLockKey) private var appLock = false
     @State private var useOfficeFonts = OfficeFonts.enabled
 
     private var officeFontsStatus: String {
@@ -88,6 +89,25 @@ struct SettingsView: View {
                     Text("After 10 minutes away").tag(10)
                     Text("After 30 minutes away").tag(30)
                     Text("After 1 hour away").tag(60)
+                }
+            }
+            Section("Security") {
+                if DeviceUnlock.isAvailable {
+                    Toggle("Require \(DeviceUnlock.methodName) to open MxNoteONE", isOn: Binding(
+                        get: { appLock },
+                        set: { on in
+                            // Turning it on or off is confirmed by the Mac first.
+                            DeviceUnlock.authenticate(reason: on ? "require Touch ID to open MxNoteONE" : "stop requiring Touch ID") { ok in
+                                if ok { appLock = on }
+                            }
+                        }))
+                    Text("MxNoteONE also locks after the time chosen above. Protected sections can open with \(DeviceUnlock.methodName) too — choose “Use \(DeviceUnlock.methodName) to unlock next time” when you unlock one, or right-click the section.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("This Mac can't confirm its owner (no Touch ID, Apple Watch or login password check is available).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

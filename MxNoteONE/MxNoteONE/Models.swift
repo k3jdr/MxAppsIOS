@@ -318,6 +318,8 @@ struct TableData: Codable, Hashable {
     var rowHeightOverrides: [Int: Double]?
     /// Number formats of cells ("row,column" → format); other cells show numbers as typed (General).
     var numberFormats: [String: NumberFormat]?
+    /// Conditional formatting rules, applied in order.
+    var conditionalRules: [ConditionalRule]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {

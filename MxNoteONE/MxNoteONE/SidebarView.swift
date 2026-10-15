@@ -187,9 +187,17 @@ struct SectionRow: View {
             Divider()
             if node.isProtected {
                 if store.isLocked(ref) {
+                    if store.canUnlockWithDevice(ref) {
+                        Button("Unlock with \(DeviceUnlock.methodName)") { store.unlockWithDevice(ref) }
+                    }
                     Button("Unlock Section…") { store.sheet = .password(ref, .unlock) }
                 } else {
                     Button("Lock Section") { store.lock(ref) }
+                    if DeviceUnlock.isAvailable {
+                        Toggle("Unlock with \(DeviceUnlock.methodName)", isOn: Binding(
+                            get: { DeviceUnlock.isEnrolled(ref.sectionID) },
+                            set: { store.setDeviceUnlock(ref, $0) }))
+                    }
                     Button("Change Password…") { store.sheet = .password(ref, .change) }
                     Button("Remove Password…") { store.sheet = .password(ref, .remove) }
                 }

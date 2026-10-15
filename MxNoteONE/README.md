@@ -99,6 +99,12 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   (2026-10-14), 14-Oct-2026, Oct 14, 2026, October 2026, Time (3:45 PM), Date and Time. Typing in a cell shows the date
   as typed. In formulas a date plus or minus days is a date and one date minus another is days; DATE, YEAR, MONTH, DAY,
   WEEKDAY, EDATE, EOMONTH, DAYS, DATEDIF, and TODAY / NOW (dates). MIN / MAX of dates are dates. Dates sort by date.
+- **Conditional formatting** (Table ribbon's Conditional menu, or right-click ▸ Conditional Formatting on a cell or column
+  letter): rules for the selected cells — whole columns run to the end of the table, below a header — as in Excel:
+  Greater Than, Less Than, Between, Equal To, Not Equal To, Text That Contains, Blank, Not Blank, Top / Bottom items,
+  Above / Below Average, Duplicate / Unique values (with Excel's fill and text colour presets or bold), **Data Bars**
+  and **Color Scales**. The popover lists the table's rules to delete them; Clear Rules from the selected cells or the
+  table. Rules follow inserted and deleted rows and columns and are saved with the table.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
   tab-separated text — so they paste into Excel, Numbers or Word as cells (hidden rows and columns are left out).
@@ -314,6 +320,13 @@ Name.mxnotebook/
 **Password-protected sections** encrypt their section file, pages and assets with AES-GCM using a key derived from the
 password (PBKDF2-SHA256, 200,000 rounds). Locked sections are hidden from search and the Tag Summary. Sections lock
 again after a time away from the app (Settings). A forgotten password cannot be recovered.
+
+**Touch ID, Apple Watch or your Mac password**: when you unlock a protected section, tick “Use Touch ID to unlock next
+time” (or right-click an unlocked section ▸ Unlock with Touch ID). The section's key is kept in your login Keychain —
+for this app, on this Mac — and is used only after macOS confirms it's you (Touch ID, an Apple Watch, or your login
+password); the section then opens with **Unlock with Touch ID**. Changing the password updates the kept key; removing
+the password or turning the option off deletes it. **Settings ▸ Security ▸ Require Touch ID to open MxNoteONE** covers
+the window until macOS confirms it's you — at launch and again after the auto-lock time away.
 
 **Recycle Bin**: deleted pages and sections are kept for 60 days per notebook; restore or delete them from
 View ▸ Recycle Bin.

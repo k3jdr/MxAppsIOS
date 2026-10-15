@@ -20,6 +20,7 @@ extension TableData {
     mutating func shiftColumns(at index: Int, by delta: Int) {
         shiftFormulas(rows: false, at: index, by: delta)
         moveNumberFormats(rows: false, at: index, by: delta)
+        shiftConditionalRules(rows: false, at: index, by: delta)
         if var hidden = hiddenColumns {
             if delta < 0 { hidden.removeAll { $0 == index } }
             hidden = hidden.map { $0 >= index + (delta < 0 ? 1 : 0) ? $0 + delta : $0 }
@@ -95,6 +96,7 @@ extension TableData {
         filteredRows = shifted(filteredRows)
         hiddenRows = shifted(hiddenRows)
         moveNumberFormats(rows: true, at: index, by: delta)
+        shiftConditionalRules(rows: true, at: index, by: delta)
         if let heights = rowHeightOverrides {
             var moved: [Int: Double] = [:]
             for (r, h) in heights where !(delta < 0 && r == index) {

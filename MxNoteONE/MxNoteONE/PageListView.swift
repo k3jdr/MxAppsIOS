@@ -239,6 +239,7 @@ struct LockedSectionView: View {
     @Bindable private var store = NotebookStore.shared
     @State private var password = ""
     @State private var failed = false
+    @State private var rememberWithDevice = true
 
     var body: some View {
         VStack(spacing: 14) {
@@ -263,6 +264,21 @@ struct LockedSectionView: View {
                 }
             }
             Button("Unlock", action: unlock)
+            if DeviceUnlock.isAvailable {
+                if store.canUnlockWithDevice(ref) {
+                    Divider().frame(width: 200)
+                    Button {
+                        store.unlockWithDevice(ref)
+                    } label: {
+                        Label("Unlock with \(DeviceUnlock.methodName)", systemImage: DeviceUnlock.symbol)
+                    }
+                    .controlSize(.large)
+                } else {
+                    Toggle("Use \(DeviceUnlock.methodName) to unlock next time", isOn: $rememberWithDevice)
+                        .toggleStyle(.checkbox)
+                        .font(.caption)
+                }
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -273,7 +289,8 @@ struct LockedSectionView: View {
     }
 
     private func unlock() {
-        failed = !store.unlock(ref, password: password)
+        failed = !store.unlock(ref, password: password,
+                                rememberWithDevice: rememberWithDevice && DeviceUnlock.isAvailable && !store.canUnlockWithDevice(ref))
         if !failed { password = "" }
     }
 }

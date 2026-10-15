@@ -347,6 +347,9 @@ final class TableModel {
     // MARK: Formulas
 
     private var valueCache: [CellRef: FormulaValue] = [:]
+    /// Conditional formatting's numbers and value counts per rule (worked out again after any change).
+    var conditionalNumbers: [UUID: [Double]] = [:]
+    var conditionalCounts: [UUID: [String: Int]] = [:]
     private var evaluating: Set<CellRef> = []
 
     /// A cell's value: its formula's result, or its text as a number / logical / text.
@@ -425,6 +428,8 @@ final class TableModel {
         }
         storedCache[cell] = text
         valueCache.removeAll()
+        conditionalNumbers.removeAll()
+        conditionalCounts.removeAll()
     }
 
     static func isBlack(_ color: NSColor?) -> Bool {
@@ -463,6 +468,8 @@ final class TableModel {
     func changed() {
         storedCache.removeAll()
         valueCache.removeAll()
+        conditionalNumbers.removeAll()
+        conditionalCounts.removeAll()
         onChange?()
     }
 
@@ -1554,6 +1561,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let numbers = NSMenuItem(title: "Number Format", action: nil, keyEquivalent: "")
         numbers.submenu = numberFormatMenu()
         menu.addItem(numbers)
+        let conditional = NSMenuItem(title: "Conditional Formatting", action: nil, keyEquivalent: "")
+        conditional.submenu = conditionalMenu()
+        menu.addItem(conditional)
         menu.addItem(ClosureMenuItem(n > 1 ? "Auto-Fit \(n) Columns" : "Auto-Fit Column Width") { [weak self] in
             self?.autoFitColumns(columns)
         })
@@ -1755,6 +1765,16 @@ final class TableGridView: NSView, NSTextViewDelegate {
             shade.nsColor.setFill()
             rect.fill()
         }
+        // Conditional formatting: a fill or colour scale, then a data bar under the text.
+        let conditional = isExport || editing != cell ? model.conditionalStyle(cell) : nil
+        if let fill = conditional?.fill {
+            fill.setFill()
+            rect.fill()
+        }
+        if let bar = conditional?.bar {
+            let barRect = NSRect(x: rect.minX + 2, y: rect.minY + 3, width: (rect.width - 4) * bar.fraction, height: rect.height - 6)
+            NSGradient(starting: bar.color.withAlphaComponent(0.85), ending: bar.color.withAlphaComponent(0.25))?.draw(in: barRect, angle: 0)
+        }
         if showSelection && selection.contains(cell) {
             NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
             rect.fill(using: .sourceOver)
@@ -1762,7 +1782,19 @@ final class TableGridView: NSView, NSTextViewDelegate {
         var textRect = rect.insetBy(dx: Self.padX, dy: Self.padY)
         if hasFilterButton(cell) { textRect.size.width -= Self.filterButtonSize }
         if editing != cell {
-            let text = model.displayText(cell, fitting: textRect.width)
+            var text = model.displayText(cell, fitting: textRect.width)
+            if let conditional, conditional.textColor != nil || conditional.bold {
+                let styled = NSMutableAttributedString(attributedString: text)
+                let all = NSRange(location: 0, length: styled.length)
+                if let color = conditional.textColor { styled.addAttribute(.foregroundColor, value: color, range: all) }
+                if conditional.bold {
+                    styled.enumerateAttribute(.font, in: all) { value, range, _ in
+                        let font = value as? NSFont ?? Prefs.defaultFont
+                        styled.addAttribute(.font, value: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask), range: range)
+                    }
+                }
+                text = styled
+            }
             drawText(text, in: textRect)
             if !isExport { drawMisspellings(text, in: textRect) }
         }
@@ -1822,6 +1854,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             columnBar?.removeFromSuperview()
             rowBar?.removeFromSuperview()
             closeFilter()
+            conditionalPopover?.close()
             if editing != nil { stopEditing(commit: true) }
             selection = []
             deactivate()
@@ -2373,6 +2406,73 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
     }
 
+    // MARK: Conditional formatting
+
+    private var conditionalPopover: NSPopover?
+
+    /// The block of cells new rules apply to: the selection (whole columns run to the table's end, below a header).
+    private var conditionalTarget: ConditionalRule {
+        let cells = targetCells.isEmpty ? [targetCell] : Array(targetCells)
+        var rows: [Int] = [], columns: [Int] = []
+        for cell in cells {
+            let span = model.span(cell)
+            rows += Array(span.row..<(span.row + span.rows))
+            columns += Array(span.column..<(span.column + span.columns))
+        }
+        let wholeColumns = !selectedWholeColumns.isEmpty && Set(columns).isSubset(of: selectedWholeColumns)
+        let header = model.data.headerRow || model.filterOn ? 1 : 0
+        return ConditionalRule(kind: .greater, firstRow: wholeColumns ? min(header, model.rowCount - 1) : rows.min()!,
+                               lastRow: wholeColumns ? nil : rows.max()!, firstColumn: columns.min()!, lastColumn: columns.max()!)
+    }
+
+    /// Conditional Formatting…: a popover to add a rule for the selected cells and manage the table's rules.
+    func showConditionalFormatting() {
+        let target = conditionalTarget
+        endEditing()
+        becameActive()
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let view = ConditionalFormatView(
+            rangeName: target.rangeName(rowCount: model.rowCount), rules: model.data.conditionalRules ?? [], rowCount: model.rowCount,
+            add: { [weak self] kind, v1, v2, style, low, high in
+                var rule = target
+                rule.kind = kind
+                rule.value1 = v1
+                rule.value2 = v2
+                rule.fill = style?.fill
+                rule.textColor = style?.text
+                rule.bold = style?.bold ?? false
+                rule.low = low
+                rule.high = high
+                self?.run("Conditional Formatting") { self?.model.addConditionalRule(rule) }
+            },
+            delete: { [weak self] id in self?.run("Delete Rule") { self?.model.removeConditionalRule(id) } },
+            close: { [weak popover] in popover?.performClose(nil) })
+        popover.contentViewController = NSHostingController(rootView: view)
+        conditionalPopover = popover
+        let cells = targetCells.isEmpty ? [targetCell] : targetCells
+        let anchor = cells.map { cellRect($0) }.reduce(NSRect.null) { $0.union($1) }
+        popover.show(relativeTo: anchor.isNull ? bounds : anchor, of: self, preferredEdge: .maxY)
+    }
+
+    func clearConditionalRules(table: Bool) {
+        let cells = table ? nil : Set(targetCells.isEmpty ? [targetCell] : targetCells)
+        run("Clear Rules") { model.clearConditionalRules(in: cells) }
+    }
+
+    func conditionalMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(ClosureMenuItem("New Rule…") { [weak self] in self?.showConditionalFormatting() })
+        let clearCells = ClosureMenuItem("Clear Rules from Selected Cells") { [weak self] in self?.clearConditionalRules(table: false) }
+        clearCells.isEnabled = model.hasConditionalRules
+        menu.addItem(clearCells)
+        let clearTable = ClosureMenuItem("Clear Rules from Table") { [weak self] in self?.clearConditionalRules(table: true) }
+        clearTable.isEnabled = model.hasConditionalRules
+        menu.addItem(clearTable)
+        return menu
+    }
+
     // MARK: Number formats
 
     /// The cells number formats apply to: the selection (whole columns included), or the cell being typed in.
@@ -2891,6 +2991,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let numbers = NSMenuItem(title: "Number Format", action: nil, keyEquivalent: "")
         numbers.submenu = numberFormatMenu()
         menu.addItem(numbers)
+        let conditional = NSMenuItem(title: "Conditional Formatting", action: nil, keyEquivalent: "")
+        conditional.submenu = conditionalMenu()
+        menu.addItem(conditional)
         menu.addItem(.separator())
         let count = targetCells.count
         menu.addItem(paletteItem(count > 1 ? "Shade Selected Cells (\(count))" : "Cell Shading") { [weak self] in self?.shadeCells($0) })

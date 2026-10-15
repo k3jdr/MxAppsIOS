@@ -37,8 +37,9 @@ struct MainView: View {
             // Showing the sidebar again (its toolbar button, or dragging a column out) ends Full Page View.
             if newValue == .all, store.showFullPage, !FullPageView.changing { store.showFullPage = false }
         }
-        .navigationTitle(store.windowTitle)
-        .navigationSubtitle(store.windowSubtitle)
+        // Nothing of the notebooks shows while MxNoteONE is locked.
+        .navigationTitle(store.appLocked ? "MxNoteONE" : store.windowTitle)
+        .navigationSubtitle(store.appLocked ? "Locked" : store.windowSubtitle)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { store.goBack() } label: { Label("Back", systemImage: "chevron.left") }
@@ -56,6 +57,10 @@ struct MainView: View {
                 .help("Full Page View (⌥⌘F)")
             }
         }
+        .overlay {
+            if store.appLocked { AppLockView() }
+        }
+        .toolbar(store.appLocked ? .hidden : .automatic, for: .windowToolbar)
         .alert(store.alert?.title ?? "", isPresented: Binding(get: { store.alert != nil },
                                                              set: { if !$0 { store.alert = nil } })) {
             Button("OK", role: .cancel) {}
@@ -223,5 +228,33 @@ enum FullPageView {
             if let found = splitViewController(in: subview) { return found }
         }
         return nil
+    }
+}
+
+// MARK: - App lock
+
+/// Covers MxNoteONE until Touch ID / an Apple Watch / the Mac password confirms it's you.
+struct AppLockView: View {
+    private var store: NotebookStore { .shared }
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.background)
+            VStack(spacing: 16) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.secondary)
+                Text("MxNoteONE is locked").font(.title2.weight(.semibold))
+                Button {
+                    store.unlockApp()
+                } label: {
+                    Label("Unlock with \(DeviceUnlock.methodName)", systemImage: DeviceUnlock.symbol)
+                        .padding(.horizontal, 8)
+                }
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .onAppear { store.unlockApp() }
     }
 }
