@@ -45,7 +45,7 @@ enum TableClipboard {
             columns.map { c -> String in
                 let cell = CellRef(row: r, column: c)
                 guard model.master(cell) == cell else { return "" }
-                let text = model.text(cell)
+                let text = model.shownString(cell)
                 guard text.contains(where: { $0 == "\t" || $0 == "\n" || $0 == "\"" }) else { return text }
                 return "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
             }.joined(separator: "\t")
@@ -78,7 +78,7 @@ enum TableClipboard {
                 var attrs = ""
                 if rowSpan > 1 { attrs += " rowspan=\"\(rowSpan)\"" }
                 if colSpan > 1 { attrs += " colspan=\"\(colSpan)\"" }
-                let text = model.storedText(master)
+                let text = model.shownText(master)
                 var style = ""
                 if let shade = model.data.shade(master.row, master.column) { style += "background:\(hex(shade.nsColor));" }
                 if text.length > 0, let paragraph = text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle {

@@ -73,6 +73,20 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Column widths**: drag a column border to resize that column (in the table or in the column letter bar); the table
   grows or shrinks with it. **Double-click a border to auto-fit** the column to its widest shown cell on one line
   (with whole columns selected, all of them fit). Also Auto-Fit Column Width / Auto-Fit All Columns by right-click.
+- **Formulas, Excel style**: type `=` in a cell to enter a formula — the cell shows the result, and typing in it shows
+  the formula again (hover a formula cell to see it). Enter finishes a formula and selects the cell below. References use
+  the column letters and row numbers: `A1`, `$B$2`, `B2:B9`. Operators `+ - * / ^ & %` and `= <> < > <= >=`.
+  Functions: SUM, AVERAGE, COUNT, COUNTA, COUNTBLANK, MIN, MAX, MEDIAN, PRODUCT, ROUND / ROUNDUP / ROUNDDOWN, ABS,
+  SQRT, INT, MOD, POWER, EXP, LN, LOG10, PI, IF, IFERROR, AND, OR, NOT, SUMIF, COUNTIF, AVERAGEIF (with `">5"`, `"<>x"`,
+  `"p*"` criteria), CONCAT / CONCATENATE, LEN, UPPER, LOWER, TRIM, LEFT, RIGHT, MID, TODAY, NOW. Numbers typed as
+  `1,234.50`, `$12` or `15%` count as numbers. Errors show as Excel shows them (#DIV/0!, #REF!, #NAME?, #VALUE!, #NUM!),
+  a formula that refers back to itself as #CIRC!, and one that can't be read as #ERROR!. Start with `'=` to type text
+  that begins with "=".
+  - **AutoSum** (Table ribbon, or right-click ▸ Formulas): sums the numbers just above the cell (else just left of it).
+    **Formulas** menu: inserts a function with the caret inside its brackets.
+  - References follow inserted and deleted rows and columns (a deleted cell becomes #REF!, a range just shrinks).
+    Sorting and moving rows take a formula's relative row references with it; rows of totals (formulas over a range)
+    stay in place when sorting. Sorting, filters, auto-fit and copying use the results.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
   tab-separated text — so they paste into Excel, Numbers or Word as cells (hidden rows and columns are left out).

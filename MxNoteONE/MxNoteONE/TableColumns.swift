@@ -18,6 +18,7 @@ import SwiftUI
 extension TableData {
     /// Keeps hidden columns and filters on their columns when a column is inserted (+1) or removed (-1).
     mutating func shiftColumns(at index: Int, by delta: Int) {
+        shiftFormulas(rows: false, at: index, by: delta)
         if var hidden = hiddenColumns {
             if delta < 0 { hidden.removeAll { $0 == index } }
             hidden = hidden.map { $0 >= index + (delta < 0 ? 1 : 0) ? $0 + delta : $0 }
@@ -30,8 +31,37 @@ extension TableData {
         }
     }
 
+    /// Formulas' references follow a row or column inserted (+1) or removed (-1), as in Excel.
+    mutating func shiftFormulas(rows: Bool, at index: Int, by delta: Int) {
+        for r in self.rows.indices {
+            for c in self.rows[r].indices where Formula.isFormula(self.rows[r][c]) {
+                setFormula(Formula.shift(self.rows[r][c], rows: rows, at: index, by: delta), r, c)
+            }
+        }
+    }
+
+    /// After rows are put in a new order, formulas that moved take their relative row references along.
+    mutating func offsetMovedFormulas(_ order: [Int]) {
+        for (new, old) in order.enumerated() where new != old && rows.indices.contains(new) {
+            for c in rows[new].indices where Formula.isFormula(rows[new][c]) {
+                setFormula(Formula.offset(rows[new][c], rows: new - old), new, c)
+            }
+        }
+    }
+
+    /// Replaces a formula's text, keeping the cell's formatting.
+    private mutating func setFormula(_ formula: String, _ r: Int, _ c: Int) {
+        guard formula != rows[r][c] else { return }
+        rows[r][c] = formula
+        if let data = richData(r, c), let text = TableData.attributedCell(data) {
+            let attrs = text.length > 0 ? text.attributes(at: 0, effectiveRange: nil) : [:]
+            rich![r][c] = TableData.cellData(NSAttributedString(string: formula, attributes: attrs))
+        }
+    }
+
     /// Keeps filtered and hidden rows hidden when a row is inserted (+1) or removed (-1).
     mutating func shiftRows(at index: Int, by delta: Int) {
+        shiftFormulas(rows: true, at: index, by: delta)
         func shifted(_ list: [Int]?) -> [Int]? {
             guard var rows = list else { return nil }
             if delta < 0 { rows.removeAll { $0 == index } }
@@ -79,6 +109,8 @@ extension TableData {
 // MARK: - Model
 
 extension TableModel {
+    var hasFormulas: Bool { data.rows.contains { $0.contains(where: Formula.isFormula) } }
+
     func isColumnHidden(_ column: Int) -> Bool { data.hiddenColumns?.contains(column) ?? false }
     /// Hidden by a filter or with Hide Row.
     func isRowHidden(_ row: Int) -> Bool {
@@ -203,7 +235,7 @@ extension TableModel {
 
     /// The column's different values, sorted ("" for blank cells).
     func values(in column: Int) -> [String] {
-        let all = Set(filterRows.map { Self.filterValue(text(master(CellRef(row: $0, column: column)))) })
+        let all = Set(filterRows.map { Self.filterValue(shownString(master(CellRef(row: $0, column: column)))) })
         return all.sorted { $0.isEmpty != $1.isEmpty ? !$0.isEmpty : $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
@@ -235,7 +267,7 @@ extension TableModel {
         let hidden = filterRows.filter { r in
             filters.contains { f in
                 guard f.column < columnCount else { return false }
-                let value = Self.filterValue(text(master(CellRef(row: r, column: f.column))))
+                let value = Self.filterValue(shownString(master(CellRef(row: r, column: f.column))))
                 if f.excluded.contains(value) { return true }
                 if let needle = f.contains, !needle.isEmpty, !value.localizedCaseInsensitiveContains(needle) { return true }
                 return false

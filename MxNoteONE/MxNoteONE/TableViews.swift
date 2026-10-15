@@ -179,6 +179,7 @@ extension TableData {
         var newIndex = Array(repeating: 0, count: order.count)
         for (new, old) in order.enumerated() { newIndex[old] = new }
         remapRows(newIndex)
+        offsetMovedFormulas(order)
         if let merges {
             self.merges = merges.map { var m = $0; if m.rows == 1, m.row < newIndex.count { m.row = newIndex[m.row] }; return m }
         }
@@ -302,9 +303,72 @@ final class TableModel {
         return result
     }
 
-    /// The cell's text as shown: text without a chosen colour is black, or white on dark shading.
+    /// The cell's text as shown: a formula's result; text without a chosen colour is black, or white on dark shading.
     func displayText(_ cell: CellRef) -> NSAttributedString {
-        let text = NSMutableAttributedString(attributedString: storedText(cell))
+        autoColored(shownText(cell), cell)
+    }
+
+    /// The cell's text as typed (a formula, not its result), for typing in the cell.
+    func editingText(_ cell: CellRef) -> NSAttributedString {
+        autoColored(storedText(cell), cell)
+    }
+
+    /// Stored text, with a formula replaced by its result (in the formula's formatting).
+    func shownText(_ cell: CellRef) -> NSAttributedString {
+        let stored = storedText(cell)
+        let raw = stored.string
+        if Formula.isFormula(raw) {
+            let attrs = stored.length > 0 ? stored.attributes(at: 0, effectiveRange: nil) : [.font: baseFont(cell.row)]
+            return NSAttributedString(string: value(cell).display, attributes: attrs)
+        }
+        // A leading apostrophe keeps text that starts with "=" as text ('=A1 shows =A1).
+        if raw.hasPrefix("'="), stored.length > 1 { return stored.attributedSubstring(from: NSRange(location: 1, length: stored.length - 1)) }
+        return stored
+    }
+
+    /// What the cell shows, as plain text (a formula's result).
+    func shownString(_ cell: CellRef) -> String {
+        let raw = text(cell)
+        if Formula.isFormula(raw) { return value(cell).display }
+        return raw.hasPrefix("'=") ? String(raw.dropFirst()) : raw
+    }
+
+    // MARK: Formulas
+
+    private var valueCache: [CellRef: FormulaValue] = [:]
+    private var evaluating: Set<CellRef> = []
+
+    /// A cell's value: its formula's result, or its text as a number / logical / text.
+    func value(_ cell: CellRef) -> FormulaValue {
+        guard contains(cell) else { return .error("#REF!") }
+        let cell = master(cell)
+        let raw = text(cell)
+        guard Formula.isFormula(raw) else {
+            return raw.hasPrefix("'=") ? .text(String(raw.dropFirst())) : Formula.value(ofText: raw)
+        }
+        if let cached = valueCache[cell] { return cached }
+        guard !evaluating.contains(cell) else { return .error("#CIRC!") }
+        evaluating.insert(cell)
+        let result = Formula.evaluate(raw) { [unowned self] ref in
+            let target = CellRef(row: ref.row, column: ref.column)
+            guard self.contains(target) else { return nil }
+            // A covered part of a merged cell is empty, as in Excel.
+            if self.master(target) != target { return .empty }
+            if self.evaluating.contains(target) { return .error("#CIRC!") }
+            let v = self.value(target)
+            if case .error("#CIRC!") = v { return v }
+            return v
+        }
+        evaluating.remove(cell)
+        valueCache[cell] = result
+        return result
+    }
+
+    /// Formula results are worked out again after any change.
+    func invalidateValues() { valueCache.removeAll() }
+
+    private func autoColored(_ source: NSAttributedString, _ cell: CellRef) -> NSAttributedString {
+        let text = NSMutableAttributedString(attributedString: source)
         let auto = autoColor(cell)
         text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attrs, range, _ in
             let value = attrs[.foregroundColor]
@@ -349,6 +413,7 @@ final class TableModel {
             if data.rich!.allSatisfy({ $0.allSatisfy { $0 == nil } }) { data.rich = nil }
         }
         storedCache[cell] = text
+        valueCache.removeAll()
     }
 
     static func isBlack(_ color: NSColor?) -> Bool {
@@ -386,6 +451,7 @@ final class TableModel {
 
     func changed() {
         storedCache.removeAll()
+        valueCache.removeAll()
         onChange?()
     }
 
@@ -529,16 +595,28 @@ final class TableModel {
     func sort(byColumn column: Int, ascending: Bool) {
         guard canSort else { return NSSound.beep() }
         let skip = firstRowIsHeader && rowCount > 1 ? 1 : 0
-        var body = Array(skip..<rowCount)
-        // Numbers in order (2 before 10), case ignored, blank cells last either way — as in Excel.
-        let key = { (r: Int) in Self.filterValue(self.data.rows[r][column]) }
+        // Rows of totals (formulas over a range, such as =SUM(B2:B9)) stay where they are; the rest are sorted
+        // into the other places.
+        let all = Array(skip..<rowCount)
+        let pinned = Set(all.filter { r in data.rows[r].contains { Formula.isFormula($0) && $0.contains(":") } })
+        var body = all.filter { !pinned.contains($0) }
+        // Numbers by value (2 before 10, -5 before 1), text ignoring case, blank cells last either way — as in Excel.
+        let key = { (r: Int) in Self.filterValue(self.shownString(CellRef(row: r, column: column))) }
         body.sort {
             let a = key($0), b = key($1)
             if a.isEmpty != b.isEmpty { return b.isEmpty }
-            let order = a.localizedStandardCompare(b)
+            let order: ComparisonResult
+            if let x = Formula.number(from: a), let y = Formula.number(from: b) {
+                order = x == y ? .orderedSame : x < y ? .orderedAscending : .orderedDescending
+            } else if (Formula.number(from: a) != nil) != (Formula.number(from: b) != nil) {
+                order = Formula.number(from: a) != nil ? .orderedAscending : .orderedDescending
+            } else {
+                order = a.localizedStandardCompare(b)
+            }
             return ascending ? order == .orderedAscending : order == .orderedDescending
         }
-        data.reorderRows(Array(0..<skip) + body)
+        var rest = body.makeIterator()
+        data.reorderRows(Array(0..<skip) + all.map { pinned.contains($0) ? $0 : rest.next()! })
         applyFilters()
         changed()
     }
@@ -1231,6 +1309,12 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private func updateCursor(_ event: NSEvent) {
         guard !isExport, NotebookStore.shared.editor.tool == .type else { return }
         let p = convert(event.locationInWindow, from: nil)
+        // A formula cell shows its formula as a tip.
+        if let cell = cell(at: p), cell != editing, Formula.isFormula(model.text(cell)) {
+            if toolTip != model.text(cell) { toolTip = model.text(cell) }
+        } else if toolTip != nil {
+            toolTip = nil
+        }
         // While typing in a cell, the editor shows its own cursor (and links) inside the cell.
         if let editing, cellRect(editing).insetBy(dx: Self.padX, dy: Self.padY).contains(p) { return }
         cursor(at: p).set()
@@ -1749,7 +1833,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         anchor = cell
         extent = nil
         editorUndo = UndoManager()
-        editor.textStorage?.setAttributedString(model.displayText(cell, fitting: blockWidth(cell) - 2 * Self.padX))
+        editor.textStorage?.setAttributedString(model.editingText(cell))
         editor.typingAttributes = editor.textStorage?.length ?? 0 > 0
             ? editor.textStorage!.attributes(at: 0, effectiveRange: nil) : model.typingAttributes(cell)
         editor.insertionPointColor = model.autoColor(cell)
@@ -1808,6 +1892,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
         CodeHighlighter.recolor(editor)
         guard let cell = editing, let storage = editor.textStorage else { return }
         model.store(storage, in: cell)
+        // Formula results elsewhere may have changed size.
+        if model.hasFormulas { heightCache = heightCache.filter { $0.key == cell } }
         owner?.controller?.markDirty()
         relayout()
     }
@@ -1844,6 +1930,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
             stopEditing(commit: true)
             model.tab(from: cell, backward: commandSelector == #selector(NSResponder.insertBacktab(_:)))
             if model.focusRequest == nil { beginEditing(cell) } else { continueAtFocusRequest() }
+            return true
+        case #selector(NSResponder.insertNewline(_:)) where Formula.isFormula(textView.string):
+            // Enter finishes a formula and selects the cell below, as in Excel.
+            finishFormula(cell)
             return true
         case #selector(NSResponder.insertNewline(_:)):
             // OneNote: Enter is a new line in the cell; in the last row it adds a row; ⌘Enter inserts a row below.
@@ -1930,7 +2020,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let scratch = NoteTextView(usingTextLayoutManager: false)
         scratch.isRichText = true
         for cell in cells.sorted(by: { ($0.row, $0.column) < ($1.row, $1.column) }) {
-            scratch.textStorage?.setAttributedString(model.displayText(cell))
+            scratch.textStorage?.setAttributedString(model.editingText(cell))
             scratch.typingAttributes = model.typingAttributes(cell)
             scratch.setSelectedRange(NSRange(location: 0, length: scratch.textStorage?.length ?? 0))
             body(scratch)
@@ -2259,6 +2349,76 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 super.keyDown(with: event)
             }
         }
+    }
+
+    // MARK: Formulas
+
+    /// Enter in a formula: keeps it and selects the cell below (the next shown row).
+    private func finishFormula(_ cell: CellRef) {
+        endEditing()
+        let below = model.shownRow(from: model.span(cell).row + model.span(cell).rows, step: 1)
+        let next = below.map { model.master(CellRef(row: $0, column: cell.column)) } ?? cell
+        selection = [next]
+        anchor = next
+        needsDisplay = true
+    }
+
+    /// AutoSum (Σ): a SUM of the numbers just above the cell, else just left of it.
+    func autoSum() {
+        let cell = editing ?? targetCell
+        let column = TableData.columnName(cell.column)
+        func isNumber(_ r: Int, _ c: Int) -> Bool {
+            if case .number = model.value(CellRef(row: r, column: c)) { return true }
+            return false
+        }
+        var formula = "=SUM()"
+        var top = cell.row
+        while top - 1 >= 0, isNumber(top - 1, cell.column) { top -= 1 }
+        if top < cell.row {
+            formula = "=SUM(\(column)\(top + 1):\(column)\(cell.row))"
+        } else {
+            var left = cell.column
+            while left - 1 >= 0, isNumber(cell.row, left - 1) { left -= 1 }
+            if left < cell.column {
+                formula = "=SUM(\(TableData.columnName(left))\(cell.row + 1):\(TableData.columnName(cell.column - 1))\(cell.row + 1))"
+            }
+        }
+        startFormula(formula, in: cell, caretBack: formula == "=SUM()" ? 1 : 0)
+    }
+
+    /// Insert Function: in a formula being typed it goes in at the caret, otherwise the cell gets "=NAME()".
+    func insertFunction(_ name: String) {
+        let call = name + "()"
+        let back = ["TODAY", "NOW", "PI"].contains(name) ? 0 : 1
+        if editing != nil, Formula.isFormula(editor.string) || editor.string == "=" {
+            editor.insertText(call, replacementRange: editor.selectedRange())
+            let caret = editor.selectedRange().location - back
+            editor.setSelectedRange(NSRange(location: max(0, caret), length: 0))
+            return
+        }
+        startFormula("=" + call, in: editing ?? targetCell, caretBack: back)
+    }
+
+    /// Types a formula into a cell (replacing its text), leaving the caret near the end to adjust it; Enter finishes.
+    private func startFormula(_ formula: String, in cell: CellRef, caretBack: Int) {
+        becameActive()
+        beginEditing(cell)
+        let storage = editor.textStorage!
+        let attrs = storage.length > 0 ? storage.attributes(at: 0, effectiveRange: nil) : model.typingAttributes(cell)
+        editor.insertText(NSAttributedString(string: formula, attributes: attrs), replacementRange: NSRange(location: 0, length: storage.length))
+        editor.setSelectedRange(NSRange(location: (formula as NSString).length - caretBack, length: 0))
+        window?.makeFirstResponder(editor)
+    }
+
+    /// The Formulas menu: AutoSum and the common functions.
+    func formulasMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(ClosureMenuItem("AutoSum (Σ)") { [weak self] in self?.autoSum() })
+        menu.addItem(.separator())
+        for (name, about) in Formula.menuFunctions {
+            menu.addItem(ClosureMenuItem("\(name) — \(about)") { [weak self] in self?.insertFunction(name) })
+        }
+        return menu
     }
 
     // MARK: Copy and paste (Excel-compatible)
@@ -2606,6 +2766,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
             })
             menu.addItem(.separator())
         }
+        let formulas = NSMenuItem(title: "Formulas", action: nil, keyEquivalent: "")
+        formulas.submenu = formulasMenu()
+        menu.addItem(formulas)
+        menu.addItem(.separator())
         let count = targetCells.count
         menu.addItem(paletteItem(count > 1 ? "Shade Selected Cells (\(count))" : "Cell Shading") { [weak self] in self?.shadeCells($0) })
         if model.data.headerRow || cell.row == 0 {
