@@ -67,6 +67,14 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Sorting** sorts numbers in order (2 before 10), ignores case and puts blank cells last. It leaves the first row
   in place as a header. For a table without Header Row, right-click ▸
   **Sort Includes First Row** sorts every row.
+- **Inserting rows and columns**: Insert Row Above / Below (and Insert Column Left / Right) add as many rows (or columns)
+  as are selected — select three rows and the menu says Insert 3 Rows Above — and the new ones are selected.
+- **Fill Down / Fill Right** (⌘D / ⌘R, right-click ▸ Fill, or the Table ribbon's Fill menu): the selection's top row
+  (or left column) is copied into the rest of it; with one cell selected the cell above (or left) comes in. Formulas
+  move their relative references along as in Excel (=B2*C2 → =B3*C3; `$` parts stay), and number formats and shading
+  come too. **Fill handle**: drag the small square at the selection's bottom-right corner down or right to fill — two
+  or more evenly spaced numbers or dates continue as a series (1, 2 → 3, 4, 5; weekly dates) — or double-click it to
+  fill down as far as the column beside has data.
 - **Moving rows**: right-click ▸ Move Row Up / Down, the Table ribbon's Row Up / Row Down, or ⌥⇧↑ / ⌥⇧↓ (also while
   typing in a cell). Or select whole rows (right-click ▸ Select Row, or drag across them) and drag them up or down; a
   line shows where they'll go. The header row stays first.

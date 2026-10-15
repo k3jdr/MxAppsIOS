@@ -1331,6 +1331,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// Resize on column borders, move on the outer edges, pointing hand on links, text cursor in cells.
     func cursor(at p: NSPoint) -> NSCursor {
+        if let handle = fillHandleRect, handle.insetBy(dx: -3, dy: -3).contains(p) { return .crosshair }
         if filterButton(at: p) != nil { return .arrow }
         if columnBorder(at: p) != nil { return .resizeLeftRight }
         if rowBorder(at: p) != nil { return .resizeUpDown }
@@ -1391,6 +1392,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         grid.stroke()
         drawSelectionOutline(showSelection)
+        if showSelection || (editing == nil && !selection.isEmpty) { drawFillHandle() }
         if let dropLine, rowTops.indices.contains(dropLine) {
             NSColor.controlAccentColor.setFill()
             NSRect(x: 0, y: rowTops[dropLine] - 1.5, width: columnLefts.last ?? bounds.width, height: 3).fill()
@@ -1583,8 +1585,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
             self.autoFitColumns(Array(0..<self.model.columnCount))
         })
         menu.addItem(.separator())
-        menu.addItem(ClosureMenuItem("Insert Column Left") { [weak self] in self?.insertColumnLeft() })
-        menu.addItem(ClosureMenuItem("Insert Column Right") { [weak self] in self?.insertColumnRight() })
+        menu.addItem(ClosureMenuItem(insertCount.columns > 1 ? "Insert \(insertCount.columns) Columns Left" : "Insert Column Left") { [weak self] in self?.insertColumnLeft() })
+        menu.addItem(ClosureMenuItem(insertCount.columns > 1 ? "Insert \(insertCount.columns) Columns Right" : "Insert Column Right") { [weak self] in self?.insertColumnRight() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Columns" : "Delete Column") { [weak self] in self?.deleteColumns() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Clear \(n) Columns" : "Clear Column") { [weak self] in self?.clearCells() })
         menu.addItem(.separator())
@@ -1655,8 +1657,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.autoenablesItems = false
         let rows = targetRowList
         let n = rows.count
-        menu.addItem(ClosureMenuItem("Insert Row Above") { [weak self] in self?.insertRowAbove() })
-        menu.addItem(ClosureMenuItem("Insert Row Below") { [weak self] in self?.insertRowBelow() })
+        menu.addItem(ClosureMenuItem(insertCount.rows > 1 ? "Insert \(insertCount.rows) Rows Above" : "Insert Row Above") { [weak self] in self?.insertRowAbove() })
+        menu.addItem(ClosureMenuItem(insertCount.rows > 1 ? "Insert \(insertCount.rows) Rows Below" : "Insert Row Below") { [weak self] in self?.insertRowBelow() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Rows" : "Delete Row") { [weak self] in self?.deleteRows() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Clear \(n) Rows" : "Clear Row") { [weak self] in self?.clearCells() })
         menu.addItem(.separator())
@@ -2125,6 +2127,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     override func mouseDown(with event: NSEvent) {
         guard !isExport, let owner, let window else { return }
         let p = convert(event.locationInWindow, from: nil)
+        if let handle = fillHandleRect, handle.insetBy(dx: -3, dy: -3).contains(p) {
+            dragFillHandle(event)
+            return
+        }
         if let cell = dropdownButton(at: p) {
             becameActive()
             showList(cell)
@@ -2403,6 +2409,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
             needsDisplay = true
             owner?.canvas?.selectedElement = owner
             window?.makeFirstResponder(owner?.canvas)
+        case 2 where event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command:
+            fillDown()
+        case 15 where event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command:
+            fillRight()
         case 125 where event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.shift)
                 && model.validationRule(anchor)?.kind == .list:
             showList(anchor)
@@ -3240,10 +3250,191 @@ final class TableGridView: NSView, NSTextViewDelegate {
     private var selectedRows: [Int] { Set(targetCells.map(\.row)).sorted() }
     private var selectedColumns: [Int] { Set(targetCells.map(\.column)).sorted() }
 
-    func insertRowAbove() { run("Insert Row") { model.insertRow(at: selectedRows.first ?? targetCell.row) } }
-    func insertRowBelow() { run("Insert Row") { model.insertRow(at: (selectedRows.last ?? targetCell.row) + 1) } }
-    func insertColumnLeft() { run("Insert Column") { model.addColumn(at: selectedColumns.first ?? targetCell.column) } }
-    func insertColumnRight() { run("Insert Column") { model.addColumn(at: (selectedColumns.last ?? targetCell.column) + 1) } }
+    /// Insert Row Above / Below: as many rows as are selected (as in Excel), next to the selection.
+    func insertRowAbove() { insertRows(below: false) }
+    func insertRowBelow() { insertRows(below: true) }
+    func insertColumnLeft() { insertColumns(right: false) }
+    func insertColumnRight() { insertColumns(right: true) }
+
+    /// Shown rows (or columns) of the selection, or the cell being typed in.
+    private var insertCount: (rows: Int, columns: Int) {
+        let rows = Set(targetCells.flatMap { c in (c.row..<(c.row + model.span(c).rows)).filter { !model.isRowHidden($0) } })
+        let columns = Set(targetCells.flatMap { c in (c.column..<(c.column + model.span(c).columns)).filter { !model.isColumnHidden($0) } })
+        // Whole columns selected: one row at a time (and whole rows: one column), as in Excel.
+        let wholeColumns = !selectedWholeColumns.isEmpty && selectedWholeRowSet.isEmpty
+        let wholeRows = !selectedWholeRowSet.isEmpty && selectedWholeColumns.isEmpty
+        return (wholeColumns ? 1 : max(1, rows.count), wholeRows ? 1 : max(1, columns.count))
+    }
+
+    private func insertRows(below: Bool) {
+        let n = insertCount.rows
+        let top = selectedRows.first ?? targetCell.row
+        let bottom = (selectedRows.last ?? targetCell.row) + model.span(model.master(CellRef(row: selectedRows.last ?? targetCell.row, column: targetCell.column))).rows - 1
+        let at = below ? bottom + 1 : top
+        run(n > 1 ? "Insert \(n) Rows" : "Insert Row") { for _ in 0..<n { model.insertRow(at: at) } }
+        // The new rows are selected.
+        selectRange(CellRef(row: at, column: 0), CellRef(row: at + n - 1, column: model.columnCount - 1))
+        anchor = CellRef(row: at, column: 0)
+    }
+
+    private func insertColumns(right: Bool) {
+        let n = insertCount.columns
+        let left = selectedColumns.first ?? targetCell.column
+        let last = selectedColumns.last ?? targetCell.column
+        let at = right ? last + 1 : left
+        run(n > 1 ? "Insert \(n) Columns" : "Insert Column") { for _ in 0..<n { model.addColumn(at: at) } }
+        selectRange(CellRef(row: 0, column: at), CellRef(row: model.rowCount - 1, column: at + n - 1))
+        anchor = CellRef(row: 0, column: at)
+    }
+
+    // MARK: Fill
+
+    /// The selected block: its shown rows and columns.
+    private var selectionBlock: (rows: [Int], columns: [Int])? {
+        let cells = targetCells.isEmpty ? [] : Array(targetCells)
+        guard !cells.isEmpty else { return nil }
+        var rows: [Int] = [], columns: [Int] = []
+        for cell in cells {
+            let span = model.span(cell)
+            rows += Array(span.row..<(span.row + span.rows))
+            columns += Array(span.column..<(span.column + span.columns))
+        }
+        return ((rows.min()!...rows.max()!).filter { !model.isRowHidden($0) },
+                (columns.min()!...columns.max()!).filter { !model.isColumnHidden($0) })
+    }
+
+    /// Fill Down (⌘D): the block's top row goes into the rows below it; with one row selected, the row above comes
+    /// down into it. Formulas move their relative references along.
+    func fillDown() {
+        guard let block = selectionBlock, let top = block.rows.first else { return NSSound.beep() }
+        var sources = [top], targets = Array(block.rows.dropFirst())
+        if targets.isEmpty {
+            guard let above = model.shownRow(from: top - 1, step: -1) else { return NSSound.beep() }
+            sources = [above]
+            targets = [top]
+        }
+        fill(down: true, sources: sources, targets: targets, lanes: block.columns, series: false, name: "Fill Down")
+    }
+
+    /// Fill Right (⌘R): the block's left column goes into the columns right of it (or the column left comes in).
+    func fillRight() {
+        guard let block = selectionBlock, let left = block.columns.first else { return NSSound.beep() }
+        var sources = [left], targets = Array(block.columns.dropFirst())
+        if targets.isEmpty {
+            guard let before = model.shownColumn(from: left - 1, step: -1) else { return NSSound.beep() }
+            sources = [before]
+            targets = [left]
+        }
+        fill(down: false, sources: sources, targets: targets, lanes: block.rows, series: false, name: "Fill Right")
+    }
+
+    private func fill(down: Bool, sources: [Int], targets: [Int], lanes: [Int], series: Bool, name: String) {
+        let all = sources + targets
+        let rows = down ? (all.min()!...all.max()!) : (lanes.min()!...lanes.max()!)
+        let columns = down ? (lanes.min()!...lanes.max()!) : (all.min()!...all.max()!)
+        guard model.canFill(rows: rows, columns: columns) else {
+            NotebookStore.shared.showAlert("Can't fill merged cells", "Unmerge the cells in the block first.")
+            return
+        }
+        run(name) { model.fill(down: down, sources: sources, targets: targets, lanes: lanes, series: series) }
+        selectRange(CellRef(row: rows.lowerBound, column: columns.lowerBound), CellRef(row: rows.upperBound, column: columns.upperBound))
+    }
+
+    /// The fill handle: a small square at the selection's bottom-right corner.
+    private var fillHandleRect: NSRect? {
+        guard !isExport, editing == nil, let block = selectionBlock, let r = block.rows.last, let c = block.columns.last else { return nil }
+        let rect = cellRect(model.master(CellRef(row: r, column: c)))
+        guard rect.width > 0 else { return nil }
+        return NSRect(x: rect.maxX - 3.5, y: rect.maxY - 3.5, width: 7, height: 7)
+    }
+
+    /// Where a fill handle drag would fill to.
+    private var fillPreview: NSRect? {
+        didSet { needsDisplay = true }
+    }
+
+    private func drawFillHandle() {
+        if let preview = fillPreview {
+            let path = NSBezierPath(rect: preview.insetBy(dx: 1, dy: 1))
+            path.lineWidth = 1.5
+            path.setLineDash([4, 3], count: 2, phase: 0)
+            NSColor.controlAccentColor.setStroke()
+            path.stroke()
+        }
+        guard let handle = fillHandleRect else { return }
+        NSColor.white.setFill()
+        handle.insetBy(dx: -1, dy: -1).fill()
+        NSColor.controlAccentColor.setFill()
+        handle.fill()
+    }
+
+    /// Dragging the fill handle down or right fills (continuing number series); double-clicking it fills down as
+    /// far as the column beside has data, as in Excel.
+    private func dragFillHandle(_ event: NSEvent) {
+        guard let window, let block = selectionBlock, let bottom = block.rows.last, let right = block.columns.last,
+              let top = block.rows.first, let left = block.columns.first else { return }
+        if event.clickCount == 2 {
+            // Down to the last row of data in the neighbouring column.
+            let neighbour = left > 0 ? left - 1 : right + 1
+            guard neighbour < model.columnCount else { return NSSound.beep() }
+            var end = bottom
+            while end + 1 < model.rowCount, !model.shownString(CellRef(row: end + 1, column: neighbour)).trimmingCharacters(in: .whitespaces).isEmpty {
+                end += 1
+            }
+            guard end > bottom else { return }
+            fillHandleTargets(down: true, block: block, to: end)
+            return
+        }
+        var target: (down: Bool, to: Int)?
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
+                           mode: .eventTracking) { ev, stop in
+            guard let ev, ev.type == .leftMouseDragged else {
+                stop.pointee = true
+                return
+            }
+            let p = self.convert(ev.locationInWindow, from: nil)
+            guard let cell = self.cell(at: p) else { return }
+            let span = self.model.span(cell)
+            let lastRow = span.row + span.rows - 1, lastColumn = span.column + span.columns - 1
+            if lastRow > bottom, lastRow - bottom >= lastColumn - right {
+                target = (true, lastRow)
+                self.fillPreview = self.cellRect(CellRef(row: top, column: left)).union(self.cellRect(CellRef(row: lastRow, column: right)))
+            } else if lastColumn > right {
+                target = (false, lastColumn)
+                self.fillPreview = self.cellRect(CellRef(row: top, column: left)).union(self.cellRect(CellRef(row: bottom, column: lastColumn)))
+            } else {
+                target = nil
+                self.fillPreview = nil
+            }
+        }
+        fillPreview = nil
+        if let target { fillHandleTargets(down: target.down, block: block, to: target.to) }
+    }
+
+    /// A fill handle drag down or right to a row or column: the selected block is the source.
+    func fillHandleTargets(down: Bool, block: (rows: [Int], columns: [Int]), to end: Int) {
+        if down {
+            let targets = ((block.rows.last! + 1)...end).filter { !model.isRowHidden($0) }
+            fill(down: true, sources: block.rows, targets: targets, lanes: block.columns, series: true, name: "Fill")
+        } else {
+            let targets = ((block.columns.last! + 1)...end).filter { !model.isColumnHidden($0) }
+            fill(down: false, sources: block.columns, targets: targets, lanes: block.rows, series: true, name: "Fill")
+        }
+    }
+
+    /// The Fill menu.
+    func fillMenu() -> NSMenu {
+        let menu = NSMenu()
+        let down = ClosureMenuItem("Fill Down") { [weak self] in self?.fillDown() }
+        down.keyEquivalent = "d"
+        down.keyEquivalentModifierMask = .command
+        menu.addItem(down)
+        let right = ClosureMenuItem("Fill Right") { [weak self] in self?.fillRight() }
+        right.keyEquivalent = "r"
+        right.keyEquivalentModifierMask = .command
+        menu.addItem(right)
+        return menu
+    }
 
     func deleteRows() {
         let rows = selectedRows.isEmpty ? [targetCell.row] : selectedRows
@@ -3365,6 +3556,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let validation = NSMenuItem(title: "Data Validation", action: nil, keyEquivalent: "")
         validation.submenu = validationMenu()
         menu.addItem(validation)
+        let fills = NSMenuItem(title: "Fill", action: nil, keyEquivalent: "")
+        fills.submenu = fillMenu()
+        menu.addItem(fills)
         let charts = NSMenuItem(title: "Insert Chart", action: nil, keyEquivalent: "")
         charts.submenu = chartMenu()
         menu.addItem(charts)
@@ -3408,10 +3602,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
         split.submenu = splitMenu
         menu.addItem(split)
         menu.addItem(.separator())
-        menu.addItem(ClosureMenuItem("Insert Row Above") { [weak self] in self?.insertRowAbove() })
-        menu.addItem(ClosureMenuItem("Insert Row Below") { [weak self] in self?.insertRowBelow() })
-        menu.addItem(ClosureMenuItem("Insert Column Left") { [weak self] in self?.insertColumnLeft() })
-        menu.addItem(ClosureMenuItem("Insert Column Right") { [weak self] in self?.insertColumnRight() })
+        menu.addItem(ClosureMenuItem(insertCount.rows > 1 ? "Insert \(insertCount.rows) Rows Above" : "Insert Row Above") { [weak self] in self?.insertRowAbove() })
+        menu.addItem(ClosureMenuItem(insertCount.rows > 1 ? "Insert \(insertCount.rows) Rows Below" : "Insert Row Below") { [weak self] in self?.insertRowBelow() })
+        menu.addItem(ClosureMenuItem(insertCount.columns > 1 ? "Insert \(insertCount.columns) Columns Left" : "Insert Column Left") { [weak self] in self?.insertColumnLeft() })
+        menu.addItem(ClosureMenuItem(insertCount.columns > 1 ? "Insert \(insertCount.columns) Columns Right" : "Insert Column Right") { [weak self] in self?.insertColumnRight() })
         menu.addItem(.separator())
         let rows = selectedRows.count, columns = selectedColumns.count
         menu.addItem(ClosureMenuItem(rows > 1 ? "Delete \(rows) Rows" : "Delete Row") { [weak self] in self?.deleteRows() })

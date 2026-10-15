@@ -525,6 +525,10 @@ struct TableRibbon: View {
             RibbonButton("Insert Below", "arrow.down.square", large: true) { grid?.insertRowBelow() }
             RibbonButton("Insert Left", "arrow.left.square", large: true) { grid?.insertColumnLeft() }
             RibbonButton("Insert Right", "arrow.right.square", large: true) { grid?.insertColumnRight() }
+            RibbonMenu("Fill", "arrow.down.to.line.compact") {
+                Button("Fill Down  ⌘D") { grid?.fillDown() }
+                Button("Fill Right  ⌘R") { grid?.fillRight() }
+            }
         }
         RibbonGroup("Merge") {
             RibbonButton("Merge Cells", "rectangle.compress.vertical", large: true) { grid?.mergeCells() }

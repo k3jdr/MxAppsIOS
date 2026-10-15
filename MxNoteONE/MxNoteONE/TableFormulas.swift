@@ -906,8 +906,8 @@ enum Formula {
 
     /// A formula moved to another row (sorting, moving rows): its relative row references move with it, as when
     /// Excel sorts; $-anchored rows stay.
-    static func offset(_ formula: String, rows delta: Int) -> String {
-        guard delta != 0, isFormula(formula), let tokens = tokenize(String(formula.dropFirst())) else { return formula }
+    static func offset(_ formula: String, rows delta: Int, columns across: Int = 0) -> String {
+        guard delta != 0 || across != 0, isFormula(formula), let tokens = tokenize(String(formula.dropFirst())) else { return formula }
         let body = String(formula.dropFirst())
         var out = ""
         var cursor = body.startIndex
@@ -915,7 +915,8 @@ enum Formula {
             guard case .ref(let text) = token, var ref = parseRef(text) else { continue }
             out += body[cursor..<range.lowerBound]
             if !ref.absoluteRow { ref.row += delta }
-            out += ref.row >= 0 ? ref.text : "#REF!"
+            if !ref.absoluteColumn { ref.column += across }
+            out += ref.row >= 0 && ref.column >= 0 ? ref.text : "#REF!"
             cursor = range.upperBound
         }
         out += body[cursor...]
