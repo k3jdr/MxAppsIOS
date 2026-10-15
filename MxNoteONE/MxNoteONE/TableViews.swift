@@ -1530,10 +1530,28 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     private(set) var columnBar: TableColumnBar?
     private(set) var rowBar: TableRowBar?
+    /// The left edge of the visible part of the page (the row number bar stays inside it).
+    var pageVisibleLeft: CGFloat = -.greatestFiniteMagnitude
+    var rowBarShown: Bool { rowBar?.superview != nil }
+
+    /// Keeps the row number bar beside the table, or at the visible left edge while the table's left side is
+    /// scrolled out of view (it never goes past the table's right side).
+    func positionRowBar() {
+        guard let bar = rowBar, bar.superview != nil, let canvas = owner?.canvas else { return }
+        let left = canvas.convert(NSPoint.zero, from: self).x
+        let width = bar.frame.width
+        let x = max(left - width, min(pageVisibleLeft, left + (columnLefts.last ?? 0) - width))
+        if bar.frame.minX != x {
+            bar.setFrameOrigin(NSPoint(x: x, y: bar.frame.minY))
+            bar.needsDisplay = true
+        }
+    }
 
     /// Shows the A, B, C… bar above the table while it's being worked in (cells selected or typing).
     func updateColumnBar() {
         let show = !isExport && TableGridView.active === self && (editing != nil || !selection.isEmpty) && window != nil
+        let barWasShown = rowBarShown
+        defer { if rowBarShown != barWasShown { owner?.refreshSticky() } }
         guard show, let owner, let canvas = owner.canvas else {
             columnBar?.removeFromSuperview()
             rowBar?.removeFromSuperview()
@@ -1564,6 +1582,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             canvas.addSubview(rows)
         }
         rows.needsDisplay = true
+        positionRowBar()
         window?.invalidateCursorRects(for: rows)
     }
 
@@ -2485,8 +2504,13 @@ final class TableElementView: ElementView {
     /// Pins the header row while the table's top is above the visible area and some of its body is still in view,
     /// and the frozen first column while the table's left is scrolled out of view.
     func updateStickyHeader(visible: NSRect) {
+        lastVisible = visible
+        grid.pageVisibleLeft = visible.minX
+        grid.positionRowBar()
         if grid.frozenColumn != nil {
-            let offset = visible.minX - frame.minX
+            // The frozen column sits right of the row number bar when that's showing.
+            let barWidth = grid.rowBarShown ? TableRowBar.width(rows: model.rowCount) : 0
+            let offset = visible.minX + barWidth - frame.minX
             let room = max(0, (grid.columnEdges.last ?? 0) - grid.frozenWidth)
             grid.stickyLeft = offset > 0 ? min(offset, room) : 0
         } else {
@@ -2498,6 +2522,13 @@ final class TableElementView: ElementView {
         }
         let offset = visible.minY - (frame.minY + Self.gripHeight)
         grid.stickyOffset = offset > 0 ? min(offset, max(0, grid.tableHeight - grid.headerHeight)) : 0
+    }
+
+    private var lastVisible: NSRect?
+
+    /// Re-pins the header row, first column and row number bar for the last visible area.
+    func refreshSticky() {
+        if let lastVisible { updateStickyHeader(visible: lastVisible) }
     }
 
     func fitTableHeight(_ height: CGFloat) {
