@@ -493,6 +493,11 @@ final class TableModel {
         changed()
     }
 
+    func toggleFreezeFirstColumn() {
+        data.freezeFirstColumn = (data.freezeFirstColumn ?? false) ? nil : true
+        changed()
+    }
+
     func toggleBorders() {
         data.hideBorders = !(data.hideBorders ?? false)
         changed()
@@ -816,8 +821,68 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// A point on the pinned header counts as a point in the real header row.
     private func unpinned(_ point: NSPoint) -> NSPoint {
+        var point = point
+        if stickyColumnActive, point.x >= stickyLeft, point.x < stickyLeft + frozenWidth { point.x -= stickyLeft }
         guard stickyActive, point.y >= stickyOffset, point.y < stickyOffset + headerHeight else { return point }
         return NSPoint(x: point.x, y: point.y - stickyOffset)
+    }
+
+    // MARK: Frozen first column
+
+    /// How far the frozen first column is drawn right of its place (0 = not pinned).
+    var stickyLeft: CGFloat = 0 {
+        didSet {
+            guard oldValue != stickyLeft else { return }
+            needsDisplay = true
+            positionEditor()
+            columnBar?.needsDisplay = true
+        }
+    }
+
+    /// The column that stays in view (the first shown one), when Freeze First Column is on.
+    var frozenColumn: Int? {
+        guard model.data.freezeFirstColumn == true, model.shownColumns.count > 1 else { return nil }
+        return model.shownColumns.first
+    }
+
+    var frozenWidth: CGFloat {
+        guard let c = frozenColumn, c + 1 < columnLefts.count else { return 0 }
+        return columnLefts[c + 1] - columnLefts[c]
+    }
+
+    var stickyColumnActive: Bool { stickyLeft > 0 && frozenColumn != nil && !isExport }
+
+    private func drawFrozenColumn(_ showSelection: Bool) {
+        guard stickyColumnActive, let column = frozenColumn else { return }
+        let width = frozenWidth, height = rowTops.last ?? 0
+        let band = NSRect(x: stickyLeft, y: 0, width: width, height: height)
+        NSColor.white.setFill()
+        band.fill()
+        NSGradient(starting: NSColor(white: 0, alpha: 0.18), ending: NSColor(white: 0, alpha: 0))?
+            .draw(in: NSRect(x: band.maxX, y: 0, width: 4, height: height), angle: 0)
+        NSGraphicsContext.saveGraphicsState()
+        band.clip()
+        let shift = NSAffineTransform()
+        shift.translateX(by: stickyLeft, yBy: 0)
+        shift.concat()
+        let cells = model.visibleCells.filter { $0.column == column }
+        let lines = NSBezierPath()
+        for cell in cells {
+            drawCell(cell, showSelection: showSelection)
+            lines.appendRect(cellRect(cell))
+        }
+        lines.lineWidth = 0.75
+        Self.borderColor.setStroke()
+        if !(model.data.hideBorders ?? false) { lines.stroke() }
+        if showSelection {
+            NSColor.controlAccentColor.setStroke()
+            for cell in cells where selection.contains(cell) {
+                let path = NSBezierPath(rect: cellRect(cell).insetBy(dx: 1, dy: 1))
+                path.lineWidth = 1.5
+                path.stroke()
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawStickyHeader() {
@@ -838,6 +903,17 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 shade.nsColor.setFill()
                 rect.fill()
             }
+            drawText(model.displayText(cell, fitting: rect.width - 2 * Self.padX), in: rect.insetBy(dx: Self.padX, dy: Self.padY))
+            grid.appendRect(rect)
+        }
+        // Frozen first column too: its header cell stays in the corner.
+        if stickyColumnActive, let column = frozenColumn {
+            let cell = model.master(CellRef(row: 0, column: column))
+            var rect = cellRect(cell)
+            rect.origin = NSPoint(x: stickyLeft, y: stickyOffset)
+            rect.size = NSSize(width: frozenWidth, height: headerHeight)
+            (model.data.shade(0, column)?.nsColor ?? .white).setFill()
+            rect.fill()
             drawText(model.displayText(cell, fitting: rect.width - 2 * Self.padX), in: rect.insetBy(dx: Self.padX, dy: Self.padY))
             grid.appendRect(rect)
         }
@@ -1157,32 +1233,13 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let showSelection = !isExport && (selection.count > 1 || (editing == nil && !selection.isEmpty))
         let hideBorders = model.data.hideBorders ?? false
         let visible = model.visibleCells
-        for cell in visible {
-            do {
-                let (r, c) = (cell.row, cell.column)
-                let rect = cellRect(cell)
-                guard rect.intersects(dirtyRect) else { continue }
-                if let shade = model.data.shade(r, c) {
-                    shade.nsColor.setFill()
-                    rect.fill()
-                }
-                if showSelection && selection.contains(cell) {
-                    NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
-                    rect.fill(using: .sourceOver)
-                }
-                var textRect = rect.insetBy(dx: Self.padX, dy: Self.padY)
-                if hasFilterButton(cell) { textRect.size.width -= Self.filterButtonSize }
-                if editing != cell {
-                    let text = model.displayText(cell, fitting: textRect.width)
-                    drawText(text, in: textRect)
-                    if !isExport { drawMisspellings(text, in: textRect) }
-                }
-                if hasFilterButton(cell) { drawFilterButton(cell) }
-            }
+        for cell in visible where cellRect(cell).intersects(dirtyRect) {
+            drawCell(cell, showSelection: showSelection)
         }
         let grid = NSBezierPath()
         for cell in visible { grid.appendRect(cellRect(cell)) }
         defer { drawStickyHeader() }
+        defer { drawFrozenColumn(showSelection) }
         if hideBorders {
             guard !isExport, editing != nil || !selection.isEmpty else { return drawSelectionOutline(showSelection) }
             grid.lineWidth = 0.5
@@ -1241,6 +1298,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     private func filterButton(at p: NSPoint) -> CellRef? {
         guard model.filterOn, model.rowCount > 1 else { return nil }
+        let p = unpinned(p)
         for c in model.shownColumns {
             let cell = model.master(CellRef(row: 0, column: c))
             if cell.row == 0, filterButtonRect(cell).insetBy(dx: -2, dy: -2).contains(p) { return cell }
@@ -1373,6 +1431,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.addItem(ClosureMenuItem(n > 1 ? "Delete \(n) Columns" : "Delete Column") { [weak self] in self?.deleteColumns() })
         menu.addItem(ClosureMenuItem(n > 1 ? "Clear \(n) Columns" : "Clear Column") { [weak self] in self?.clearCells() })
         menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Freeze First Column", state: model.data.freezeFirstColumn ?? false) { [weak self] in
+            self?.toggleFreezeFirstColumn()
+        })
         menu.addItem(paletteItem("Column Shading") { [weak self] in self?.shadeColumns($0) })
         return menu
     }
@@ -1495,6 +1556,27 @@ final class TableGridView: NSView, NSTextViewDelegate {
         window?.invalidateCursorRects(for: rows)
     }
 
+    /// A cell's shading, selection tint, text and filter button.
+    private func drawCell(_ cell: CellRef, showSelection: Bool) {
+        let rect = cellRect(cell)
+        if let shade = model.data.shade(cell.row, cell.column) {
+            shade.nsColor.setFill()
+            rect.fill()
+        }
+        if showSelection && selection.contains(cell) {
+            NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
+            rect.fill(using: .sourceOver)
+        }
+        var textRect = rect.insetBy(dx: Self.padX, dy: Self.padY)
+        if hasFilterButton(cell) { textRect.size.width -= Self.filterButtonSize }
+        if editing != cell {
+            let text = model.displayText(cell, fitting: textRect.width)
+            drawText(text, in: textRect)
+            if !isExport { drawMisspellings(text, in: textRect) }
+        }
+        if hasFilterButton(cell) { drawFilterButton(cell) }
+    }
+
     private func drawSelectionOutline(_ show: Bool) {
         guard show else { return }
         NSColor.controlAccentColor.setStroke()
@@ -1601,7 +1683,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
         guard let editing, model.contains(editing) else { return }
         let rect = cellRect(editing).insetBy(dx: Self.padX, dy: Self.padY)
         editor.textContainer?.containerSize = NSSize(width: rect.width, height: .greatestFiniteMagnitude)
-        editor.frame = NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: max(rect.height, 14))
+        let shift = stickyColumnActive && editing.column == frozenColumn ? stickyLeft : 0
+        editor.frame = NSRect(x: rect.minX + shift, y: rect.minY, width: rect.width, height: max(rect.height, 14))
     }
 
     /// Stops typing in the cell (keeping the text) and leaves the cell selected.
@@ -2177,6 +2260,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     func bandRows(_ color: NSColor?) { run("Shading") { model.bandRows(color) } }
     func toggleHeaderRow() { run("Header Row") { model.toggleHeaderRow() } }
     func toggleBorders() { run("Borders") { model.toggleBorders() } }
+    func toggleFreezeFirstColumn() {
+        run("Freeze First Column") { model.toggleFreezeFirstColumn() }
+        owner?.controller?.updateStickyHeaders()
+    }
     func sort(ascending: Bool) { let column = targetCell.column; run("Sort") { model.sort(byColumn: column, ascending: ascending) } }
     func clearCells() { let cells = targetCells; run("Clear") { model.clear(cells) } }
 
@@ -2304,6 +2391,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
             menu.addItem(ClosureMenuItem("Clear All Filters") { [weak self] in self?.clearAllFilters() })
         }
         menu.addItem(ClosureMenuItem("Header Row", state: model.data.headerRow) { [weak self] in self?.toggleHeaderRow() })
+        menu.addItem(ClosureMenuItem("Freeze First Column", state: model.data.freezeFirstColumn ?? false) { [weak self] in
+            self?.toggleFreezeFirstColumn()
+        })
         menu.addItem(ClosureMenuItem("Hide Borders", state: model.data.hideBorders ?? false) { [weak self] in self?.toggleBorders() })
         menu.addItem(ClosureMenuItem("Select Entire Table") { [weak self] in self?.selectTable() })
         return menu
@@ -2372,13 +2462,21 @@ final class TableElementView: ElementView {
         }
     }
 
-    /// Pins the header row while the table's top is above the visible area and some of its body is still in view.
-    func updateStickyHeader(visibleTop: CGFloat) {
+    /// Pins the header row while the table's top is above the visible area and some of its body is still in view,
+    /// and the frozen first column while the table's left is scrolled out of view.
+    func updateStickyHeader(visible: NSRect) {
+        if grid.frozenColumn != nil {
+            let offset = visible.minX - frame.minX
+            let room = max(0, (grid.columnEdges.last ?? 0) - grid.frozenWidth)
+            grid.stickyLeft = offset > 0 ? min(offset, room) : 0
+        } else {
+            grid.stickyLeft = 0
+        }
         guard model.data.headerRow, model.rowCount > 1 else {
             grid.stickyOffset = 0
             return
         }
-        let offset = visibleTop - (frame.minY + Self.gripHeight)
+        let offset = visible.minY - (frame.minY + Self.gripHeight)
         grid.stickyOffset = offset > 0 ? min(offset, max(0, grid.tableHeight - grid.headerHeight)) : 0
     }
 

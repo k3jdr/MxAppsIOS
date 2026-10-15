@@ -814,9 +814,9 @@ final class CanvasController: NSObject {
     /// Tables whose header row has scrolled above the visible area keep it pinned at the top of the view.
     func updateStickyHeaders() {
         guard mode == .live else { return }
-        let top = scrollView.documentVisibleRect.minY
+        let visible = scrollView.documentVisibleRect
         for view in canvas.elementViews {
-            (view as? TableElementView)?.updateStickyHeader(visibleTop: top)
+            (view as? TableElementView)?.updateStickyHeader(visible: visible)
         }
     }
 

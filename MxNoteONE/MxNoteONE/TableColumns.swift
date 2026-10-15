@@ -261,6 +261,26 @@ final class TableColumnBar: NSView {
                 (name as NSString).draw(at: NSPoint(x: rect.midX - size.width / 2, y: (bounds.height - size.height) / 2), withAttributes: attrs)
             }
         }
+        // The frozen first column's letter stays with the column.
+        if grid.stickyColumnActive, let c = grid.frozenColumn {
+            let rect = NSRect(x: grid.stickyLeft, y: 0, width: grid.frozenWidth, height: bounds.height)
+            let isSelected = selected.contains(c)
+            NSColor(srgbRed: 0.95, green: 0.95, blue: 0.95, alpha: 1).setFill()
+            rect.fill()
+            if isSelected {
+                NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
+                rect.fill()
+            }
+            NSColor(white: 0.6, alpha: 1).setFill()
+            NSRect(x: rect.maxX - 1, y: 0, width: 1, height: rect.height).fill()
+            let name = TableData.columnName(c) + (grid.model.isFiltered(c) ? " ⏷" : "")
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 10, weight: isSelected ? .bold : .medium),
+                .foregroundColor: isSelected ? NSColor.controlAccentColor : NSColor(white: 0.35, alpha: 1),
+            ]
+            let size = (name as NSString).size(withAttributes: attrs)
+            (name as NSString).draw(at: NSPoint(x: rect.midX - size.width / 2, y: (bounds.height - size.height) / 2), withAttributes: attrs)
+        }
         // Hidden columns: a double line where they are (click it to show them).
         for edge in hiddenEdges() {
             NSColor(white: 0.45, alpha: 1).setFill()
@@ -296,6 +316,7 @@ final class TableColumnBar: NSView {
 
     private func column(at x: CGFloat) -> Int? {
         guard let grid else { return nil }
+        if grid.stickyColumnActive, x >= grid.stickyLeft, x < grid.stickyLeft + grid.frozenWidth { return grid.frozenColumn }
         let lefts = grid.columnEdges
         for c in 0..<grid.model.columnCount where !grid.model.isColumnHidden(c) && c + 1 < lefts.count {
             if x >= lefts[c] && x < lefts[c + 1] { return c }
