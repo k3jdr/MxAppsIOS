@@ -73,6 +73,13 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 - **Column widths**: drag a column border to resize that column (in the table or in the column letter bar); the table
   grows or shrinks with it. **Double-click a border to auto-fit** the column to its widest shown cell on one line
   (with whole columns selected, all of them fit). Also Auto-Fit Column Width / Auto-Fit All Columns by right-click.
+- **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
+  table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
+  tab-separated text — so they paste into Excel, Numbers or Word as cells (hidden rows and columns are left out).
+  ⌘V reads cells copied from Excel (or any HTML table, or tab-separated text) into the table from the selected cell,
+  with their formatting, fill and merges; the table grows to fit. One copied cell fills every selected cell. While
+  typing in a cell, pasting several cells fills the table from that cell; one cell's text goes in at the caret.
+  Fonts the import can't see (such as Calibri) come in as the notebook's default font.
 - **Row heights**: rows fit their content. Drag a row's bottom border (in the table or the row numbers) to give it a
   height of its own — text that doesn't fit is cut off, and the row opens up while you type in it. **Double-click the
   border to auto-fit** the row to its content again (with whole rows selected, all of them). Also Auto-Fit Row Height /

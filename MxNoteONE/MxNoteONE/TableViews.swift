@@ -798,6 +798,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         editor.isContinuousSpellCheckingEnabled = true
         editor.focusRingType = .none
         editor.delegate = self
+        editor.pasteHandler = { [weak self] in self?.pasteWhileTyping() ?? false }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -2246,36 +2247,99 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
     }
 
+    // MARK: Copy and paste (Excel-compatible)
+
+    /// Copy: the selected block (shown rows and columns) as an HTML table with its formatting, and as
+    /// tab-separated text — Excel, Numbers and Word paste it as cells.
     @objc func copy(_ sender: Any?) {
         guard !selection.isEmpty else { return }
-        let rows = selection.map(\.row), columns = selection.map(\.column)
-        let text = (rows.min()!...rows.max()!).map { r in
-            (columns.min()!...columns.max()!).map { c in
-                selection.contains(CellRef(row: r, column: c)) ? model.text(CellRef(row: r, column: c)) : ""
-            }.joined(separator: "\t")
-        }.joined(separator: "\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        var rows: [Int] = [], columns: [Int] = []
+        for cell in selection {
+            let span = model.span(cell)
+            rows += Array(span.row..<(span.row + span.rows))
+            columns += Array(span.column..<(span.column + span.columns))
+        }
+        TableClipboard.write(model, rows: (rows.min()!...rows.max()!).filter { !model.isRowHidden($0) },
+                             columns: (columns.min()!...columns.max()!).filter { !model.isColumnHidden($0) })
     }
 
     @objc func cut(_ sender: Any?) {
         copy(sender)
         model.clear(selection)
         model.checkpoint("Cut")
+        heightCache.removeAll()
+        relayout()
     }
 
+    /// Paste: cells from Excel (with their formatting and shading) or tab-separated text, starting at the selected
+    /// cell; the table grows to fit. One copied cell fills every selected cell.
     @objc func paste(_ sender: Any?) {
-        guard let text = NSPasteboard.general.string(forType: .string),
+        guard let table = TableClipboard.read(),
               let start = selection.min(by: { ($0.row, $0.column) < ($1.row, $1.column) }) else { return }
-        for (r, line) in text.components(separatedBy: "\n").enumerated() {
-            for (c, value) in line.components(separatedBy: "\t").enumerated() {
-                let cell = CellRef(row: start.row + r, column: start.column + c)
-                if model.contains(cell) { model.store(NSAttributedString(string: value, attributes: model.typingAttributes(cell)), in: cell) }
-            }
+        pasteCells(table, at: start)
+    }
+
+    /// Paste while typing in a cell: copied cells go into the table from this cell; one copied cell's text goes in
+    /// at the caret. Other text pastes as usual.
+    private func pasteWhileTyping() -> Bool {
+        guard let cell = editing, TableClipboard.hasCells, let table = TableClipboard.read() else { return false }
+        if table.rowCount == 1, table.columnCount == 1, let only = table.cells[CellRef(row: 0, column: 0)] {
+            editor.insertText(styled(only.text, for: cell), replacementRange: editor.selectedRange())
+            return true
         }
-        model.checkpoint("Paste")
-        heightCache.removeAll()
-        model.onChange?()
+        endEditing()
+        selection = [cell]
+        pasteCells(table, at: cell)
+        return true
+    }
+
+    /// Pasted text in the cell's own font when it came without formatting.
+    private func styled(_ text: NSAttributedString, for cell: CellRef) -> NSAttributedString {
+        guard text.length > 0, text.attribute(.font, at: 0, effectiveRange: nil) == nil else { return text }
+        return NSAttributedString(string: text.string, attributes: model.typingAttributes(cell))
+    }
+
+    func pasteCells(_ table: PastedTable, at start: CellRef) {
+        let single = table.rowCount == 1 && table.columnCount == 1
+        let fillSelection = single && selection.count > 1 ? selection : nil
+        run("Paste") {
+            if let targets = fillSelection, let only = table.cells[CellRef(row: 0, column: 0)] {
+                for cell in targets { place(only, at: cell) }
+                return
+            }
+            while model.rowCount < start.row + table.rowCount { model.insertRow(at: model.rowCount) }
+            while model.columnCount < start.column + table.columnCount { model.addColumn(at: model.columnCount) }
+            for (offset, pasted) in table.cells {
+                let target = CellRef(row: start.row + offset.row, column: start.column + offset.column)
+                place(pasted, at: target)
+                // Merged cells come across merged, where the cells are free.
+                if pasted.rows > 1 || pasted.columns > 1 {
+                    let span = CellSpan(row: target.row, column: target.column,
+                                        rows: min(pasted.rows, model.rowCount - target.row),
+                                        columns: min(pasted.columns, model.columnCount - target.column))
+                    let overlaps = (model.data.merges ?? []).contains { m in
+                        m.row < span.row + span.rows && span.row < m.row + m.rows
+                            && m.column < span.column + span.columns && span.column < m.column + m.columns
+                    }
+                    if !overlaps, span.rows * span.columns > 1 { model.data.merges = (model.data.merges ?? []) + [span] }
+                }
+            }
+            model.changed()
+        }
+        let end = CellRef(row: min(model.rowCount - 1, start.row + max(table.rowCount, 1) - 1),
+                          column: min(model.columnCount - 1, start.column + max(table.columnCount, 1) - 1))
+        if fillSelection == nil { selectRange(start, end) }
+        anchor = start
+        window?.makeFirstResponder(self)
+    }
+
+    private func place(_ pasted: PastedTable.Cell, at target: CellRef) {
+        guard model.contains(target), model.master(target) == target else { return }
+        model.store(styled(pasted.text, for: target), in: target)
+        if let shade = pasted.shading {
+            model.data.padShading()
+            model.data.shading![target.row][target.column] = shade
+        }
     }
 
     @objc override func selectAll(_ sender: Any?) {

@@ -301,6 +301,13 @@ final class NoteTextView: NSTextView {
     /// The text container edited last (formatting from the ribbon goes here).
     static weak var current: NoteTextView?
     private var linkTracking: NSTrackingArea?
+    /// Handles Paste instead of the text view when it returns true (table cells paste copied cells into the table).
+    var pasteHandler: (() -> Bool)?
+
+    override func paste(_ sender: Any?) {
+        if pasteHandler?() == true { return }
+        super.paste(sender)
+    }
 
     // MARK: Pointing hand over links
 
