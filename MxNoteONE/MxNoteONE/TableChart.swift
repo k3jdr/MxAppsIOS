@@ -3,7 +3,8 @@
 //  MxNoteONE
 //
 //  Charts from table data, as in Excel: select columns in a table and insert
-//  a Column, Bar, Line, Area, Pie or Donut chart. The first column gives the
+//  a Column, Bar, Line, Area, Pie, Donut or Scatter chart (with a trendline),
+//  with axis titles. The first column gives the
 //  categories and the others the series (named by the header row). A chart
 //  is its own container on the page; it follows its table as you type
 //  (hidden and filtered rows are left out, as in Excel) and keeps the last
@@ -21,9 +22,11 @@ extension Notification.Name {
 
 struct ChartSpec: Codable, Hashable {
     enum Kind: String, Codable, CaseIterable, Identifiable {
-        case column, bar, line, area, pie, donut
+        case column, bar, line, area, pie, donut, scatter
         var id: String { rawValue }
         var title: String { rawValue.capitalized }
+        /// Pie and donut charts have no axes.
+        var hasAxes: Bool { self != .pie && self != .donut }
         var symbol: String {
             switch self {
             case .column: "chart.bar"
@@ -32,6 +35,7 @@ struct ChartSpec: Codable, Hashable {
             case .area: "chart.line.uptrend.xyaxis"
             case .pie: "chart.pie"
             case .donut: "circle.circle"
+            case .scatter: "chart.dots.scatter"
             }
         }
     }
@@ -53,6 +57,14 @@ struct ChartSpec: Codable, Hashable {
     /// The data last drawn.
     var categories: [String] = []
     var series: [Series] = []
+    /// The first column as numbers (scatter charts), and whether they're dates.
+    var xValues: [Double?]?
+    var xIsDate: Bool?
+    /// Axis titles (nil or empty = none).
+    var xTitle: String?
+    var yTitle: String?
+    /// A straight trendline (least squares) through each series of a scatter chart.
+    var trendline: Bool?
 }
 
 enum ChartBuilder {
@@ -67,6 +79,15 @@ enum ChartBuilder {
         spec.categoryColumn = categoryColumn
         spec.seriesColumns = seriesColumns
         spec.categories = rows.map { source.shownString(CellRef(row: $0, column: categoryColumn)) }
+        var dates = true, anyX = false
+        spec.xValues = rows.map { r in
+            switch source.value(CellRef(row: r, column: categoryColumn)) {
+            case .number(let d): dates = false; anyX = true; return d
+            case .date(let d): anyX = true; return d
+            default: return nil
+            }
+        }
+        spec.xIsDate = anyX && dates
         spec.series = seriesColumns.map { c in
             ChartSpec.Series(name: names[c], values: rows.map { r in
                 switch source.value(CellRef(row: r, column: c)) {
@@ -85,6 +106,8 @@ private struct ChartPoint: Identifiable {
     let category: String
     let series: String
     let value: Double
+    /// The x value (scatter charts).
+    var x: Double?
 }
 
 struct ChartContent: View {
@@ -97,7 +120,8 @@ struct ChartContent: View {
                 guard let value = series.values[i] else { continue }
                 // Repeated category names stay separate bars.
                 let label = spec.categories[..<i].contains(category) ? "\(category) (\(i + 1))" : (category.isEmpty ? "(\(i + 1))" : category)
-                result.append(ChartPoint(id: result.count, category: label, series: series.name, value: value))
+                let x = spec.xValues.flatMap { i < $0.count ? $0[i] : nil }
+                result.append(ChartPoint(id: result.count, category: label, series: series.name, value: value, x: x))
             }
         }
         return result
@@ -115,6 +139,11 @@ struct ChartContent: View {
             } else {
                 chart
                     .chartLegend(spec.legend ? .visible : .hidden)
+                    .modifier(AxisTitles(x: spec.kind.hasAxes ? spec.xTitle : nil, y: spec.kind.hasAxes ? spec.yTitle : nil))
+                    // Scatter axes fit the data (as in Excel) rather than starting at zero.
+                    .modifier(ScatterScale(on: spec.kind == .scatter))
+                    // A fresh chart when its titles change (Swift Charts keeps an axis label's space otherwise).
+                    .id("\(spec.xTitle ?? "")|\(spec.yTitle ?? "")|\(spec.kind)")
             }
         }
         .padding(10)
@@ -149,6 +178,37 @@ struct ChartContent: View {
                 AreaMark(x: .value("Category", p.category), y: .value("Value", p.value))
                     .foregroundStyle(by: .value("Series", p.series))
             }
+        case .scatter:
+            // Points at (x, y); rows without a number in the first column are left out.
+            let plotted = data.filter { $0.x != nil }
+            let date = spec.xIsDate == true
+            Chart {
+                ForEach(plotted) { p in
+                    if date {
+                        PointMark(x: .value("X", Formula.date(fromSerial: p.x!)), y: .value("Value", p.value))
+                            .foregroundStyle(by: .value("Series", p.series))
+                    } else {
+                        PointMark(x: .value("X", p.x!), y: .value("Value", p.value))
+                            .foregroundStyle(by: .value("Series", p.series))
+                    }
+                }
+                if spec.trendline == true {
+                    ForEach(Self.trendlines(plotted), id: \.series) { line in
+                        ForEach([line.start, line.end], id: \.0) { point in
+                            if date {
+                                LineMark(x: .value("X", Formula.date(fromSerial: point.0)), y: .value("Value", point.1),
+                                         series: .value("Trend", line.series + " trend"))
+                                    .foregroundStyle(by: .value("Series", line.series))
+                                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                            } else {
+                                LineMark(x: .value("X", point.0), y: .value("Value", point.1), series: .value("Trend", line.series + " trend"))
+                                    .foregroundStyle(by: .value("Series", line.series))
+                                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                            }
+                        }
+                    }
+                }
+            }
         case .pie, .donut:
             // One series: slices by category.
             let first = data.filter { $0.series == spec.series.first?.name && $0.value > 0 }
@@ -157,6 +217,64 @@ struct ChartContent: View {
                     .foregroundStyle(by: .value("Category", p.category))
             }
         }
+    }
+}
+
+/// Axis titles, only when there are any.
+private struct AxisTitles: ViewModifier {
+    let x: String?
+    let y: String?
+
+    func body(content: Content) -> some View {
+        switch (x?.isEmpty == false ? x : nil, y?.isEmpty == false ? y : nil) {
+        case let (x?, y?):
+            content
+                .chartXAxisLabel(position: .bottom, alignment: .center) { Text(x).font(.caption.weight(.semibold)) }
+                .chartYAxisLabel(position: .leading, alignment: .center) { Text(y).font(.caption.weight(.semibold)) }
+        case let (x?, nil):
+            content.chartXAxisLabel(position: .bottom, alignment: .center) { Text(x).font(.caption.weight(.semibold)) }
+        case let (nil, y?):
+            content.chartYAxisLabel(position: .leading, alignment: .center) { Text(y).font(.caption.weight(.semibold)) }
+        default:
+            content
+        }
+    }
+}
+
+private struct ScatterScale: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content
+                .chartXScale(domain: .automatic(includesZero: false))
+                .chartYScale(domain: .automatic(includesZero: false))
+        } else {
+            content
+        }
+    }
+}
+
+extension ChartContent {
+    struct Trend {
+        let series: String
+        let start: (Double, Double)
+        let end: (Double, Double)
+    }
+
+    /// Least-squares lines through each series' points, from its smallest to largest x.
+    fileprivate static func trendlines(_ points: [ChartPoint]) -> [Trend] {
+        Dictionary(grouping: points, by: \.series).compactMap { series, list in
+            let xs = list.compactMap(\.x), ys = list.map(\.value)
+            guard xs.count >= 2, let lo = xs.min(), let hi = xs.max(), hi > lo else { return nil }
+            let n = Double(xs.count)
+            let mx = xs.reduce(0, +) / n, my = ys.reduce(0, +) / n
+            let sxy = zip(xs, ys).reduce(0) { $0 + ($1.0 - mx) * ($1.1 - my) }
+            let sxx = xs.reduce(0) { $0 + ($1 - mx) * ($1 - mx) }
+            let slope = sxy / sxx, intercept = my - slope * mx
+            return Trend(series: series, start: (lo, intercept + slope * lo), end: (hi, intercept + slope * hi))
+        }
+        .sorted { $0.series < $1.series }
     }
 }
 
@@ -260,6 +378,14 @@ final class ChartElementView: ElementView {
         types.submenu = typeMenu
         menu.addItem(types)
         menu.addItem(ClosureMenuItem("Chart Title…") { [weak self] in self?.editTitle() })
+        let axes = ClosureMenuItem("Axis Titles…") { [weak self] in self?.editAxisTitles() }
+        axes.isEnabled = spec.kind.hasAxes
+        menu.addItem(axes)
+        if spec.kind == .scatter {
+            menu.addItem(ClosureMenuItem("Trendline", state: spec.trendline == true) { [weak self] in
+                self?.update({ $0.trendline = !($0.trendline ?? false) }, actionName: "Trendline")
+            })
+        }
         menu.addItem(ClosureMenuItem("Legend", state: spec.legend) { [weak self] in
             self?.update({ $0.legend.toggle() }, actionName: "Legend")
         })
@@ -283,6 +409,29 @@ final class ChartElementView: ElementView {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let title = field.stringValue
         update({ $0.title = title }, actionName: "Chart Title")
+    }
+
+    /// Axis Titles…: the horizontal and vertical axes' titles.
+    private func editAxisTitles() {
+        let alert = NSAlert()
+        alert.messageText = "Axis Titles"
+        let horizontal = NSTextField(string: spec.xTitle ?? "")
+        horizontal.placeholderString = spec.kind == .bar ? "Horizontal (values)" : "Horizontal (\(spec.categoryField))"
+        let vertical = NSTextField(string: spec.yTitle ?? "")
+        vertical.placeholderString = spec.kind == .bar ? "Vertical (\(spec.categoryField))" : "Vertical (values)"
+        let stack = NSStackView(views: [horizontal, vertical])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.frame = NSRect(x: 0, y: 0, width: 280, height: 56)
+        for field in [horizontal, vertical] { field.widthAnchor.constraint(equalToConstant: 280).isActive = true }
+        alert.accessoryView = stack
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = horizontal
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let x = horizontal.stringValue, y = vertical.stringValue
+        update({ $0.xTitle = x.isEmpty ? nil : x; $0.yTitle = y.isEmpty ? nil : y }, actionName: "Axis Titles")
     }
 
     /// The chart as a picture.

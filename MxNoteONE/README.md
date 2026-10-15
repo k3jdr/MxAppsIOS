@@ -120,12 +120,14 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   below the source (under any earlier ones), keeping the value field's number format; Min / Max of dates are dates.
   Every row of the source counts, filtered or not, as in Excel. **Refresh Pivot Table** (right-click the pivot, or the
   Pivot menu) works it out again from the source, finding the fields by name even if columns moved.
-- **Charts** (Table ribbon's Chart menu, or right-click ▸ Insert Chart): **Column, Bar, Line, Area, Pie, Donut**. Select
+- **Charts** (Table ribbon's Chart menu, or right-click ▸ Insert Chart): **Column, Bar, Line, Area, Pie, Donut, Scatter**. Select
   columns — the first gives the categories, columns of numbers the series (named by the header row) — or one column of
   numbers (labelled by the table's first column), or just a cell for the whole table. The chart is its own container
   below the table; it follows the table as you type, and leaves out hidden and filtered rows (and a pivot table's grand
   total), as Excel does. Right-click a chart for Chart Type, Chart Title…, Legend, Refresh Chart and Copy Chart as
-  Picture; resize it from its edge. A chart keeps the data it last drew, so it still shows if its table is deleted.
+  Picture; resize it from its edge. **Scatter** charts plot the first column's numbers (or dates) across against the
+  other columns, with axes fitted to the data and an optional dashed least-squares **Trendline** per series.
+  **Axis Titles…** names the horizontal and vertical axes (scatter charts start with the field names). A chart keeps the data it last drew, so it still shows if its table is deleted.
   Markdown export and OneNote sync write a chart as its title and data table.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus

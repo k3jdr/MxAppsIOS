@@ -2507,6 +2507,12 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         let category = columns[0]
         let series = columns.dropFirst().filter(numeric)
+        // A scatter chart plots the first column's numbers (or dates) across.
+        if kind == .scatter, !numeric(category) {
+            NotebookStore.shared.showAlert("Scatter charts need numbers across",
+                                           "The first selected column (\(names[category])) has no numbers or dates. Select a column of numbers first, then the values to plot against it.")
+            return
+        }
         guard !series.isEmpty else {
             NotebookStore.shared.showAlert("No numbers to chart", "Select a column of labels and one or more columns of numbers.")
             return
@@ -2514,6 +2520,11 @@ final class TableGridView: NSView, NSTextViewDelegate {
         var spec = ChartSpec(source: owner.element.id, categoryField: names[category], categoryColumn: category,
                              seriesFields: series.map { names[$0] }, seriesColumns: Array(series), kind: kind,
                              title: series.count == 1 ? names[series[0]] : "")
+        // Axis titles from the field names (as a start; Axis Titles… changes them).
+        if kind == .scatter {
+            spec.xTitle = names[category]
+            spec.yTitle = series.count == 1 ? names[series[0]] : nil
+        }
         ChartBuilder.refresh(&spec, from: model)
         endEditing()
         let width: CGFloat = kind == .pie || kind == .donut ? 360 : 460
