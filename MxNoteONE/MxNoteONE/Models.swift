@@ -322,6 +322,8 @@ struct TableData: Codable, Hashable {
     var conditionalRules: [ConditionalRule]?
     /// Data validation rules (the last one on a cell applies).
     var validationRules: [ValidationRule]?
+    /// A pivot table: how it summarises its source table (Refresh Pivot Table works it out again).
+    var pivot: PivotSpec?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {

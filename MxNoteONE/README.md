@@ -114,6 +114,12 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   message if you like; Cancel puts the old value back, Retry goes back to typing. **Circle Invalid Data** rings values
   already in the table that break their rule. Rules (and range lists) follow inserted and deleted rows and columns and
   are saved with the table. As in Excel, pasting isn't checked.
+- **Pivot tables** (Table ribbon's Pivot menu, or right-click ▸ Create Pivot Table…): summarise a table — its first row
+  names the fields — by one field down the rows and optionally another across the columns: Sum, Count, Average, Min,
+  Max or Count Distinct of a value field (or a count of rows), with grand totals in bold. The pivot is a new table
+  below the source (under any earlier ones), keeping the value field's number format; Min / Max of dates are dates.
+  Every row of the source counts, filtered or not, as in Excel. **Refresh Pivot Table** (right-click the pivot, or the
+  Pivot menu) works it out again from the source, finding the fields by name even if columns moved.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
   tab-separated text — so they paste into Excel, Numbers or Word as cells (hidden rows and columns are left out).

@@ -1872,6 +1872,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             closeFilter()
             conditionalPopover?.close()
             validationPopover?.close()
+            pivotPopover?.close()
             if editing != nil { stopEditing(commit: true) }
             selection = []
             deactivate()
@@ -2311,7 +2312,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
     }
 
     /// Fits every column without its own undo step (a table just pasted onto the page).
-    func fitAllColumns() {
+    func fitAllColumns(_ name: String = "Paste") {
         model.freezeColumnWidths()
         var delta: CGFloat = 0
         for c in 0..<model.columnCount where !model.isColumnHidden(c) {
@@ -2321,7 +2322,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         }
         if abs(delta) >= 0.5 { model.onWidthChange?(delta) }
         model.changed()
-        model.checkpoint("Paste")
+        model.checkpoint(name)
     }
 
     /// Dragging a column border (also from the column letter bar).
@@ -2440,6 +2441,79 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 super.keyDown(with: event)
             }
         }
+    }
+
+    // MARK: Pivot tables
+
+    private var pivotPopover: NSPopover?
+
+    /// Pivot Table…: choose the fields; the pivot table goes below this table.
+    func showPivot() {
+        guard model.rowCount > 1 else { return NSSound.beep() }
+        endEditing()
+        becameActive()
+        let fields = PivotBuilder.fields(model)
+        // Suggest the first column of numbers (after the first) as the values.
+        let numeric = (1..<model.columnCount).first { c in
+            (1..<model.rowCount).contains { r in
+                if case .number = model.value(CellRef(row: r, column: c)) { return true }
+                return false
+            }
+        }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let view = PivotView(fields: fields, suggestedValue: numeric,
+            create: { [weak self] row, column, value, summary, totals in
+                self?.createPivot(row: row, column: column, value: value, summary: summary, totals: totals)
+            },
+            close: { [weak popover] in popover?.performClose(nil) })
+        popover.contentViewController = NSHostingController(rootView: view)
+        pivotPopover = popover
+        let cell = targetCell
+        popover.show(relativeTo: cellRect(cell), of: self, preferredEdge: .maxY)
+    }
+
+    func createPivot(row: Int, column: Int?, value: Int?, summary: PivotSpec.Summary, totals: Bool) {
+        guard let owner, let controller = owner.controller else { return }
+        let names = PivotBuilder.fields(model)
+        let spec = PivotSpec(source: owner.element.id, rowField: names[row], rowColumn: row,
+                             columnField: column.map { names[$0] }, columnColumn: column,
+                             valueField: value.map { names[$0] }, valueColumn: value, summary: summary, grandTotals: totals)
+        guard let data = PivotBuilder.build(spec, from: model) else { return NSSound.beep() }
+        endEditing()
+        // Below the source, and below anything already under it (earlier pivot tables).
+        let width = CGFloat(data.columnCount) * 110
+        let strip = NSRect(x: owner.frame.minX, y: owner.frame.minY, width: max(width, owner.frame.width), height: .greatestFiniteMagnitude)
+        let below = controller.canvas.elementViews.filter { $0 !== owner && $0.frame.minY >= owner.frame.minY && $0.frame.intersects(strip) }
+        let top = below.map(\.frame.maxY).max().map { max($0, owner.frame.maxY) } ?? owner.frame.maxY
+        var element = PageElement(kind: .table, x: owner.frame.minX, y: top + 24, width: width)
+        element.table = data
+        guard let view = controller.addElement(element) as? TableElementView else { return }
+        view.grid.fitAllColumns("Pivot Table")
+        controller.undoManager?.setActionName("Pivot Table")
+        controller.canvas.selectedElement = view
+    }
+
+    /// The source table of this pivot table, when it's on the page.
+    private var pivotSource: TableElementView? {
+        guard let spec = model.data.pivot else { return nil }
+        return owner?.controller?.canvas.elementViews.first { $0.element.id == spec.source } as? TableElementView
+    }
+
+    /// Refresh Pivot Table: summarises the source table again (its fields are found by name).
+    func refreshPivot() {
+        guard let spec = model.data.pivot else { return }
+        guard let source = pivotSource, let data = PivotBuilder.build(spec, from: source.model) else {
+            NotebookStore.shared.showAlert("Can't refresh the pivot table",
+                                           pivotSource == nil ? "Its source table isn't on this page any more."
+                                                              : "The source table no longer has the fields “\(spec.rowField)”\(spec.valueField.map { " and “\($0)”" } ?? "").")
+            return
+        }
+        run("Refresh Pivot Table") {
+            model.data = data
+            model.changed()
+        }
+        fitAllColumns("Refresh Pivot Table")
     }
 
     // MARK: Data validation
@@ -3215,6 +3289,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let validation = NSMenuItem(title: "Data Validation", action: nil, keyEquivalent: "")
         validation.submenu = validationMenu()
         menu.addItem(validation)
+        menu.addItem(ClosureMenuItem("Create Pivot Table…") { [weak self] in self?.showPivot() })
+        if model.data.pivot != nil {
+            menu.addItem(ClosureMenuItem("Refresh Pivot Table") { [weak self] in self?.refreshPivot() })
+        }
         menu.addItem(.separator())
         let count = targetCells.count
         menu.addItem(paletteItem(count > 1 ? "Shade Selected Cells (\(count))" : "Cell Shading") { [weak self] in self?.shadeCells($0) })

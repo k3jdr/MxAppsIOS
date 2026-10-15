@@ -563,6 +563,10 @@ struct TableRibbon: View {
             RibbonButton("Percent", "percent", large: true) { grid?.setNumberFormat(.percent) }
             RibbonButton("Increase Decimal", "increase.decimalplaces", large: true) { grid?.changeDecimals(by: 1) }
             RibbonButton("Decrease Decimal", "decrease.decimalplaces", large: true) { grid?.changeDecimals(by: -1) }
+            RibbonMenu("Pivot", "tablecells.badge.ellipsis") {
+                Button("Create Pivot Table…") { grid?.showPivot() }
+                Button("Refresh Pivot Table") { grid?.refreshPivot() }
+            }
             RibbonMenu("Validation", "checkmark.seal") {
                 Button("Data Validation…") { grid?.showValidation() }
                 Button("Circle Invalid Data") { grid?.circleInvalid.toggle() }
