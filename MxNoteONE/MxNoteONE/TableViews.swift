@@ -3332,6 +3332,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
             entry.image = Palette.swatch(color)
             menu.addItem(entry)
         }
+        for entry in Palette.customItems(title, isValid: { [weak self] in self?.window != nil }, apply: { apply($0) }) {
+            menu.addItem(entry)
+        }
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("No Color") { apply(nil) })
         item.submenu = menu
@@ -3384,6 +3387,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
         for (name, color) in Palette.text {
             let entry = ClosureMenuItem(name) { TextFormatter.setTextColor(color) }
             entry.image = Palette.swatch(color)
+            colors.addItem(entry)
+        }
+        for entry in Palette.customItems("Text Color", isValid: { [weak self] in self?.window != nil },
+                                         apply: { TextFormatter.setTextColor($0) }) {
             colors.addItem(entry)
         }
         textColor.submenu = colors

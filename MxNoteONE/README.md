@@ -127,7 +127,11 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   total), as Excel does. Right-click a chart for Chart Type, Chart Title…, Legend, Refresh Chart and Copy Chart as
   Picture; resize it from its edge. **Scatter** charts plot the first column's numbers (or dates) across against the
   other columns, with axes fitted to the data and an optional dashed least-squares **Trendline** per series.
-  **Axis Titles…** names the horizontal and vertical axes (scatter charts start with the field names). A chart keeps the data it last drew, so it still shows if its table is deleted.
+  **Axis Titles…** names the horizontal and vertical axes (scatter charts start with the field names).
+  **Series Colors** (pie and donut: **Slice Colors**) picks each series' colour — Excel's colours, recent colours or
+  More Colors… (the macOS colour picker); Automatic goes back. **Value Axis Format**: Automatic follows the table's
+  number format for the values (so currency stays currency), or General, Number (1,234 / 1,234.00), Currency ($ € £),
+  Percent (12% / 12.5%) or Compact (1.2K, 3.4M). A scatter chart's horizontal axis follows its column's format. A chart keeps the data it last drew, so it still shows if its table is deleted.
   Markdown export and OneNote sync write a chart as its title and data table.
 - **Copy and paste with Excel**: ⌘C / ⌘X on selected cells puts them on the clipboard the way Excel does — an HTML
   table with fonts, bold / italic / underline, colours, shading, alignment, merged cells and column widths, plus
@@ -154,6 +158,8 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
   table's left side scrolls out of view, its first column stays pinned at the left edge of the page (with its column
   letter), so each row's label stays visible. You can click and type in the pinned column. With a header row too,
   the header's first cell stays in the corner. It's saved with the table.
+- **Any colour**: every shading menu (cells, rows, columns, header row, banded rows, table — right-click or the Table
+  ribbon) and Text Color also offer **More Colors…** (the macOS colour picker) and the **Recent Colors** picked there.
 - **Formatting selected cells**: with cells selected (not typing), the Home ribbon's font, size, bold, colours and
   alignment apply to the text in every selected cell.
 - **Merge and split cells**: select neighbouring cells, then right-click ▸ **Merge Cells** (or Table tab ▸ Merge Cells);

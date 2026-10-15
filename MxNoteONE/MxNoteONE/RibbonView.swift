@@ -488,13 +488,34 @@ struct ViewRibbon: View {
 struct TableRibbon: View {
     private var grid: TableGridView? { TableGridView.active }
 
-    private func palette(_ apply: @escaping (NSColor?) -> Void) -> some View {
+    private func palette(_ title: String = "Shading", _ apply: @escaping (NSColor?) -> Void) -> some View {
         Group {
             ForEach(Palette.shading, id: \.0) { name, color in
                 Button { apply(color) } label: { Label { Text(name) } icon: { swatch(color) } }
             }
+            custom(title) { apply($0) }
             Divider()
             Button("No Color") { apply(nil) }
+        }
+    }
+
+    /// Recent colours and More Colors… (the macOS colour picker).
+    private func custom(_ title: String, _ apply: @escaping (NSColor) -> Void) -> some View {
+        Group {
+            let recent = RecentColors.shared.colors
+            if !recent.isEmpty {
+                Divider()
+                Section("Recent Colors") {
+                    ForEach(recent.indices, id: \.self) { i in
+                        Button { apply(recent[i]) } label: { Label { Text("#" + RecentColors.hex(recent[i])) } icon: { swatch(recent[i]) } }
+                    }
+                }
+            }
+            Divider()
+            Button("More Colors…") {
+                let grid = TableGridView.active
+                ColorPicker.shared.pick(title, isValid: { [weak grid] in grid?.window != nil }, apply: apply)
+            }
         }
     }
 
@@ -519,11 +540,12 @@ struct TableRibbon: View {
             RibbonButton("Table", "trash", large: true) { grid?.deleteTable() }
         }
         RibbonGroup("Shading") {
-            RibbonMenu("Cells", "paintbrush.fill") { palette { grid?.shadeCells($0) } }
-            RibbonMenu("Rows", "line.3.horizontal") { palette { grid?.shadeRows($0) } }
-            RibbonMenu("Columns", "rectangle.split.3x1") { palette { grid?.shadeColumns($0) } }
-            RibbonMenu("Header", "rectangle.topthird.inset.filled") { palette { grid?.shadeHeaderRow($0) } }
-            RibbonMenu("Banded Rows", "list.bullet.rectangle") { palette { grid?.bandRows($0) } }
+            RibbonMenu("Cells", "paintbrush.fill") { palette("Cell Shading") { grid?.shadeCells($0) } }
+            RibbonMenu("Rows", "line.3.horizontal") { palette("Row Shading") { grid?.shadeRows($0) } }
+            RibbonMenu("Columns", "rectangle.split.3x1") { palette("Column Shading") { grid?.shadeColumns($0) } }
+            RibbonMenu("Header", "rectangle.topthird.inset.filled") { palette("Header Row Shading") { grid?.shadeHeaderRow($0) } }
+            RibbonMenu("Banded Rows", "list.bullet.rectangle") { palette("Banded Rows") { grid?.bandRows($0) } }
+            RibbonMenu("Table", "tablecells.fill") { palette("Table Shading") { grid?.shadeTable($0) } }
         }
         RibbonGroup("Cell Text") {
             RibbonButton("Bold", "bold") { TextFormatter.toggleBold() }
@@ -532,6 +554,7 @@ struct TableRibbon: View {
                 ForEach(Palette.text, id: \.0) { name, color in
                     Button { TextFormatter.setTextColor(color) } label: { Label { Text(name) } icon: { swatch(color) } }
                 }
+                custom("Text Color") { TextFormatter.setTextColor($0) }
             }
             RibbonButton("Align Left", "text.alignleft") { TextFormatter.setAlignment(.left) }
             RibbonButton("Center", "text.aligncenter") { TextFormatter.setAlignment(.center) }

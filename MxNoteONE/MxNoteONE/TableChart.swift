@@ -65,6 +65,70 @@ struct ChartSpec: Codable, Hashable {
     var yTitle: String?
     /// A straight trendline (least squares) through each series of a scatter chart.
     var trendline: Bool?
+    /// Colours chosen for series (pie and donut: for categories), by name.
+    var colors: [String: RGBA]?
+    /// How the value axis shows numbers (nil = as the table's value column does).
+    var valueFormat: AxisFormat?
+    /// The table's number formats of the first series and of the first column (for automatic axes).
+    var sourceFormat: NumberFormat?
+    var sourceXFormat: NumberFormat?
+
+    /// Number formats for chart axes.
+    enum AxisFormat: Codable, Hashable {
+        case general
+        case compact
+        case format(NumberFormat)
+
+        static let choices: [(String, AxisFormat)] = [
+            ("General", .general), ("Number  1,234", .format(NumberFormat(kind: .number, decimals: 0))),
+            ("Number  1,234.00", .format(NumberFormat(kind: .number, decimals: 2))),
+            ("Currency  $1,234", .format(NumberFormat(kind: .currency, decimals: 0, symbol: "$"))),
+            ("Currency  $1,234.00", .format(NumberFormat(kind: .currency, decimals: 2, symbol: "$"))),
+            ("Currency  €1,234", .format(NumberFormat(kind: .currency, decimals: 0, symbol: "€"))),
+            ("Currency  £1,234", .format(NumberFormat(kind: .currency, decimals: 0, symbol: "£"))),
+            ("Percent  12%", .format(NumberFormat(kind: .percent, decimals: 0))),
+            ("Percent  12.5%", .format(NumberFormat(kind: .percent, decimals: 1))),
+            ("Compact  1.2K, 3.4M", .compact),
+        ]
+
+        func string(_ value: Double) -> String {
+            switch self {
+            case .general: return Formula.format(value)
+            case .format(let f): return f.string(value)
+            case .compact:
+                let a = abs(value)
+                let (div, suffix): (Double, String) = a >= 1e12 ? (1e12, "T") : a >= 1e9 ? (1e9, "B") : a >= 1e6 ? (1e6, "M") : a >= 1e3 ? (1e3, "K") : (1, "")
+                let scaled = value / div
+                let text = scaled == scaled.rounded() ? String(format: "%.0f", scaled) : String(format: "%.1f", scaled)
+                return text + suffix
+            }
+        }
+    }
+
+    /// The value axis's format in use.
+    var effectiveValueFormat: AxisFormat? {
+        valueFormat ?? sourceFormat.map { .format($0) }
+    }
+
+    /// Default series colours (as Excel's).
+    static let defaultColors: [RGBA] = [0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000, 0x5B9BD5, 0x70AD47, 0x264478, 0x9E480E, 0x636363, 0x997300]
+        .map(HighlightStyle.hex)
+
+    /// Names the colours go with: series, or categories for pie and donut charts.
+    var colorNames: [String] {
+        kind == .pie || kind == .donut ? Self.labels(categories) : series.map(\.name)
+    }
+
+    func color(at index: Int, name: String) -> RGBA {
+        colors?[name] ?? Self.defaultColors[index % Self.defaultColors.count]
+    }
+
+    /// Category labels as drawn (repeats and blanks numbered so each is its own bar or slice).
+    static func labels(_ categories: [String]) -> [String] {
+        categories.enumerated().map { i, category in
+            categories[..<i].contains(category) ? "\(category) (\(i + 1))" : (category.isEmpty ? "(\(i + 1))" : category)
+        }
+    }
 }
 
 enum ChartBuilder {
@@ -88,6 +152,8 @@ enum ChartBuilder {
             }
         }
         spec.xIsDate = anyX && dates
+        spec.sourceFormat = seriesColumns.first.flatMap { c in rows.lazy.compactMap { source.numberFormat(CellRef(row: $0, column: c)) }.first }
+        spec.sourceXFormat = rows.lazy.compactMap { source.numberFormat(CellRef(row: $0, column: categoryColumn)) }.first
         spec.series = seriesColumns.map { c in
             ChartSpec.Series(name: names[c], values: rows.map { r in
                 switch source.value(CellRef(row: r, column: c)) {
@@ -115,11 +181,12 @@ struct ChartContent: View {
 
     private var points: [ChartPoint] {
         var result: [ChartPoint] = []
+        let labels = ChartSpec.labels(spec.categories)
         for series in spec.series {
-            for (i, category) in spec.categories.enumerated() where i < series.values.count {
+            for i in spec.categories.indices where i < series.values.count {
                 guard let value = series.values[i] else { continue }
                 // Repeated category names stay separate bars.
-                let label = spec.categories[..<i].contains(category) ? "\(category) (\(i + 1))" : (category.isEmpty ? "(\(i + 1))" : category)
+                let label = labels[i]
                 let x = spec.xValues.flatMap { i < $0.count ? $0[i] : nil }
                 result.append(ChartPoint(id: result.count, category: label, series: series.name, value: value, x: x))
             }
@@ -140,6 +207,10 @@ struct ChartContent: View {
                 chart
                     .chartLegend(spec.legend ? .visible : .hidden)
                     .modifier(AxisTitles(x: spec.kind.hasAxes ? spec.xTitle : nil, y: spec.kind.hasAxes ? spec.yTitle : nil))
+                    // Series (or slice) colours: chosen ones, else Excel's.
+                    .chartForegroundStyleScale(domain: spec.colorNames,
+                                               range: spec.colorNames.enumerated().map { spec.color(at: $0.offset, name: $0.element).nsColor.swiftUI })
+                    .modifier(ValueAxis(spec: spec))
                     // Scatter axes fit the data (as in Excel) rather than starting at zero.
                     .modifier(ScatterScale(on: spec.kind == .scatter))
                     // A fresh chart when its titles change (Swift Charts keeps an axis label's space otherwise).
@@ -216,6 +287,46 @@ struct ChartContent: View {
                 SectorMark(angle: .value("Value", p.value), innerRadius: .ratio(spec.kind == .donut ? 0.55 : 0), angularInset: 1)
                     .foregroundStyle(by: .value("Category", p.category))
             }
+        }
+    }
+}
+
+extension NSColor {
+    var swiftUI: Color { Color(nsColor: self) }
+}
+
+/// Axis labels in the chosen number format (the value axis; a scatter chart's horizontal axis too).
+private struct ValueAxis: ViewModifier {
+    let spec: ChartSpec
+
+    func body(content: Content) -> some View {
+        let value = spec.effectiveValueFormat
+        let across: ChartSpec.AxisFormat? = spec.kind == .scatter && spec.xIsDate != true ? spec.sourceXFormat.map { .format($0) } : nil
+        switch spec.kind {
+        case .bar:
+            if let value {
+                content.chartXAxis { AxisMarks { v in
+                    AxisGridLine(); AxisTick()
+                    AxisValueLabel { if let d = v.as(Double.self) { Text(value.string(d)) } }
+                } }
+            } else { content }
+        case .pie, .donut:
+            content
+        default:
+            let withY = Group {
+                if let value {
+                    content.chartYAxis { AxisMarks { v in
+                        AxisGridLine(); AxisTick()
+                        AxisValueLabel { if let d = v.as(Double.self) { Text(value.string(d)) } }
+                    } }
+                } else { content }
+            }
+            if let across {
+                withY.chartXAxis { AxisMarks { v in
+                    AxisGridLine(); AxisTick()
+                    AxisValueLabel { if let d = v.as(Double.self) { Text(across.string(d)) } }
+                } }
+            } else { withY }
         }
     }
 }
@@ -389,6 +500,22 @@ final class ChartElementView: ElementView {
         menu.addItem(ClosureMenuItem("Legend", state: spec.legend) { [weak self] in
             self?.update({ $0.legend.toggle() }, actionName: "Legend")
         })
+        menu.addItem(colorsItem())
+        if spec.kind.hasAxes {
+            let format = NSMenuItem(title: "Value Axis Format", action: nil, keyEquivalent: "")
+            let formats = NSMenu()
+            formats.addItem(ClosureMenuItem("Automatic (as in the table)", state: spec.valueFormat == nil) { [weak self] in
+                self?.update({ $0.valueFormat = nil }, actionName: "Axis Format")
+            })
+            formats.addItem(.separator())
+            for (title, choice) in ChartSpec.AxisFormat.choices {
+                formats.addItem(ClosureMenuItem(title, state: spec.valueFormat == choice) { [weak self] in
+                    self?.update({ $0.valueFormat = choice }, actionName: "Axis Format")
+                })
+            }
+            format.submenu = formats
+            menu.addItem(format)
+        }
         let refresh = ClosureMenuItem("Refresh Chart") { [weak self] in self?.reload() }
         refresh.isEnabled = sourceTable != nil
         menu.addItem(refresh)
@@ -409,6 +536,40 @@ final class ChartElementView: ElementView {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let title = field.stringValue
         update({ $0.title = title }, actionName: "Chart Title")
+    }
+
+    /// Colors: a colour for each series (pie and donut charts: each slice).
+    private func colorsItem() -> NSMenuItem {
+        let item = NSMenuItem(title: spec.kind == .pie || spec.kind == .donut ? "Slice Colors" : "Series Colors", action: nil, keyEquivalent: "")
+        let menu = NSMenu()
+        for (i, name) in spec.colorNames.enumerated() {
+            let entry = NSMenuItem(title: name, action: nil, keyEquivalent: "")
+            entry.image = Palette.swatch(spec.color(at: i, name: name).nsColor)
+            let colors = NSMenu()
+            for (j, color) in ChartSpec.defaultColors.enumerated() {
+                let choice = ClosureMenuItem("Color \(j + 1)") { [weak self] in self?.setColor(color, for: name) }
+                choice.image = Palette.swatch(color.nsColor)
+                colors.addItem(choice)
+            }
+            for extra in Palette.customItems("\(name) Color", isValid: { [weak self] in self?.window != nil },
+                                             apply: { [weak self] in self?.setColor(RGBA($0), for: name) }) {
+                colors.addItem(extra)
+            }
+            colors.addItem(.separator())
+            colors.addItem(ClosureMenuItem("Automatic") { [weak self] in self?.setColor(nil, for: name) })
+            entry.submenu = colors
+            menu.addItem(entry)
+        }
+        item.submenu = menu
+        return item
+    }
+
+    func setColor(_ color: RGBA?, for name: String) {
+        update({ spec in
+            var colors = spec.colors ?? [:]
+            colors[name] = color
+            spec.colors = colors.isEmpty ? nil : colors
+        }, actionName: "Chart Color")
     }
 
     /// Axis Titles…: the horizontal and vertical axes' titles.
