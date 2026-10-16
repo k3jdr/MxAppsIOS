@@ -52,7 +52,8 @@ enum MusicXML {
             if st.clef == .percussion { return "Drums" }
             return count == 1 ? (score.showTab == true ? "Guitar" : "Music") : "Staff \(group[0] + 1)"
         }
-        out += "  <identification><encoding><software>MxNoteONE</software></encoding></identification>\n  <part-list>"
+        let creator = (score.composer ?? "").isEmpty ? "" : "<creator type=\"composer\">\(escape(score.composer!))</creator>"
+        out += "  <identification>\(creator)<encoding><software>MxNoteONE</software></encoding></identification>\n  <part-list>"
         for (p, group) in groups.enumerated() {
             out += "<score-part id=\"P\(p + 1)\"><part-name>\(escape(partName(group)))</part-name>"
             // A drum staff: its instruments and their General MIDI drum sounds (channel 10).
@@ -78,8 +79,13 @@ enum MusicXML {
             for m in 0..<barCount {
                 out += "    <measure number=\"\(m + 1)\">\n"
                 let mark = score.mark(m)
-                if mark.repeatStart == true {
-                    out += "      <barline location=\"left\"><bar-style>heavy-light</bar-style><repeat direction=\"forward\"/></barline>\n"
+                if let perLine = score.barsPerLine, m > 0, m % perLine == 0 { out += "      <print new-system=\"yes\"/>\n" }
+                // An ending starts at its first bar; a repeat may start there too.
+                let endingStarts = mark.ending.map { score.mark(m - 1).ending != $0 } ?? false
+                if mark.repeatStart == true || endingStarts {
+                    out += "      <barline location=\"left\">" + (mark.repeatStart == true ? "<bar-style>heavy-light</bar-style>" : "")
+                        + (endingStarts ? "<ending number=\"\(mark.ending!)\" type=\"start\">\(mark.ending!).</ending>" : "")
+                        + (mark.repeatStart == true ? "<repeat direction=\"forward\"/>" : "") + "</barline>\n"
                 }
                 if m > 0, let fifths = mark.keyFifths {
                     out += "      <attributes><key><fifths>\(fifths)</fifths></key></attributes>\n"
@@ -124,10 +130,16 @@ enum MusicXML {
                         previous = length
                     }
                 }
+                // An ending stops at its last bar (closed, or left open for the last ending).
+                let endingStops = mark.ending.map { score.mark(m + 1).ending != $0 } ?? false
+                let lastEnding = (score.barMarks ?? [:]).values.compactMap(\.ending).max() ?? 0
+                let stop = endingStops ? "<ending number=\"\(mark.ending!)\" type=\"\(mark.ending! < lastEnding ? "stop" : "discontinue")\"/>" : ""
                 if mark.repeatEnd == true {
-                    out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style><repeat direction=\"backward\"/></barline>\n"
+                    out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style>\(stop)<repeat direction=\"backward\"/></barline>\n"
                 } else if m == barCount - 1 {
-                    out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style></barline>\n"
+                    out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style>\(stop)</barline>\n"
+                } else if !stop.isEmpty {
+                    out += "      <barline location=\"right\">\(stop)</barline>\n"
                 }
                 out += "    </measure>\n"
             }
@@ -204,7 +216,8 @@ enum MusicXML {
                 if let actual = note.tupletActual {
                     x += "<time-modification><actual-notes>\(actual)</actual-notes><normal-notes>\(note.tupletNormal)</normal-notes></time-modification>"
                 }
-                if stemDown { x += "<stem>down</stem>" }
+                if main, note.slash == "beat" { x += "<stem>none</stem>" } else if stemDown { x += "<stem>down</stem>" }
+                if note.slash != nil, !note.rest { x += "<notehead>slash</notehead>" }
                 if let drum, !note.rest, drum.head != .normal {
                     x += "<notehead>\(drum.head == .x ? "x" : drum.head == .circleX ? "circle-x" : "diamond")</notehead>"
                 }
@@ -358,6 +371,8 @@ enum MusicXML {
             return node?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         score.title = text(rootElement, "work/work-title") ?? text(rootElement, "movement-title") ?? ""
+        if let composer = (try? rootElement.nodes(forXPath: "identification/creator[@type='composer']"))?.first?.stringValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !composer.isEmpty { score.composer = composer }
         var skippedGrace = 0, extraVoices = 0
         /// One staff of one part (`shared`: the first, which also gives the key changes, tempo and repeats).
         func readStaff(_ part: XMLElement, staff staffNumber: Int, shared: Bool, into base: ScoreData) -> ScoreData {
@@ -371,6 +386,8 @@ enum MusicXML {
             var pendingDynamic: [Bool: String] = [:], pendingHairpin: [Bool: Int] = [:]
             // The bar being read and its key (a key change sets a new one from that bar).
             var barIndex = -1, key = 0
+            var openEnding: Int?
+            var systemBreaks: [Int] = []
             let stepNames = ["C", "D", "E", "F", "G", "A", "B"]
             let typeNames: [String: ScoreNote.Duration] = ["whole": .whole, "breve": .whole, "half": .half, "quarter": .quarter,
                                                            "eighth": .eighth, "16th": .sixteenth, "32nd": .sixteenth, "64th": .sixteenth]
@@ -380,6 +397,8 @@ enum MusicXML {
             let mine = "\(staffNumber)"
             for measure in part.elements(forName: "measure") {
                 barIndex += 1
+                if shared, let ending = openEnding { score.setMark(barIndex) { $0.ending = ending } }
+                if shared, measure.elements(forName: "print").contains(where: { $0.attribute(forName: "new-system")?.stringValue == "yes" }) { systemBreaks.append(barIndex) }
                 defer {
                     v2Bars.append(v2)
                     v2 = []; v2pos = 0; time = 0
@@ -473,6 +492,14 @@ enum MusicXML {
                         }
                     case "barline":
                         guard shared else { break }
+                        // 1st / 2nd endings: from their start to their stop.
+                        if let ending = e.elements(forName: "ending").first, let number = ending.attribute(forName: "number")?.stringValue?
+                            .split(separator: ",").first.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) {
+                            switch ending.attribute(forName: "type")?.stringValue {
+                            case "start": openEnding = number; score.setMark(barIndex) { $0.ending = number }
+                            default: score.setMark(barIndex) { $0.ending = number }; openEnding = nil
+                            }
+                        }
                         switch e.elements(forName: "repeat").first?.attribute(forName: "direction")?.stringValue {
                         case "forward": score.setMark(barIndex) { $0.repeatStart = true }
                         case "backward": score.setMark(barIndex) { $0.repeatEnd = true }
@@ -560,6 +587,10 @@ enum MusicXML {
                             note.tuplet = true
                             note.tupletRatio = actual == 3 && normal == 2 ? nil : [actual, normal]
                         }
+                        // A slash: on the middle line, playing the chord in effect ("beat" when it has no stem).
+                        if text(e, "notehead") == "slash", !note.rest {
+                            note.slash = text(e, "stem") == "none" ? "beat" : "rhythm"
+                        }
                         if let graceElement {
                             note.grace = graceElement.attribute(forName: "slash")?.stringValue == "yes" ? "acciaccatura" : "appoggiatura"
                             note.tuplet = nil; note.tupletRatio = nil
@@ -622,6 +653,10 @@ enum MusicXML {
                     line += bar + ScoreData.rests(for: max(0, score.measureLength - filled))
                 }
                 score.setLine(1, line)
+            }
+            // Lines that always break after the same number of bars: so many bars per line.
+            if shared, let first = systemBreaks.first, first > 0, systemBreaks.enumerated().allSatisfy({ $0.element == first * ($0.offset + 1) }) {
+                score.barsPerLine = first
             }
             return score
         }

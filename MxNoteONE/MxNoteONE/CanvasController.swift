@@ -586,11 +586,35 @@ final class CanvasController: NSObject {
     }
 
     /// Insert ▸ Music Score: an empty treble staff in 4/4, ready for notes.
-    func insertScore(piano: Bool = false, drums: Bool = false) {
+    func insertScore(piano: Bool = false, drums: Bool = false, leadSheet: Bool = false, chordChart: Bool = false) {
         guard ref != nil else { return }
         let p = nextInsertionPoint()
         var element = PageElement(kind: .score, x: p.x, y: p.y, width: 560)
         var score = ScoreData()
+        if leadSheet || chordChart {
+            // A lead sheet: title, composer, a style and tempo, four bars a line — melody, chord symbols and lyrics.
+            score.title = chordChart ? "Chord Chart" : "Lead Sheet"
+            score.composer = "Composer"
+            score.barsPerLine = 4
+            score.tempo = 120
+            score.setMark(0) { $0.tempoText = "Medium Swing" }
+            if chordChart {
+                // Eight bars of beat slashes over a progression to start from (they play the chords).
+                let middle = score.middleLine
+                for (bar, chord) in ["C", "Am7", "Dm7", "G7", "C", "A7", "Dm7 G7", "C"].enumerated() {
+                    let chords = chord.split(separator: " ").map(String.init)
+                    for beat in 0..<4 {
+                        var n = ScoreNote(duration: .quarter)
+                        n.slash = "beat"
+                        n.step = middle.step
+                        n.octave = middle.octave
+                        if beat == 0 { n.chordSymbol = chords[0] } else if beat == 2, chords.count > 1 { n.chordSymbol = chords[1] }
+                        score.notes.append(n)
+                    }
+                    _ = bar
+                }
+            }
+        }
         if drums {
             // A drum score: a percussion staff, eighth notes ready.
             score.clef = .percussion

@@ -274,6 +274,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | On a drum staff: kick, snare, hi-hat, open / pedal hi-hat, crash, ride, ride bell, high / mid / floor tom, side stick (⇧: played with the note) | **K S H O P C R B T M F X** | Score tab ▸ Add ▸ Drum |
 | Guitar chord diagrams over the chord symbols | | Score tab ▸ Chord Diagrams, right-click |
 | Capo (fret 1–9) | | Score tab ▸ Capo, right-click ▸ Capo |
+| Slashes for the selection or bar (beat or rhythmic), Slash Entry | | Score tab ▸ Lead Sheet ▸ Slashes, right-click ▸ Lead Sheet |
+| 1st / 2nd / 3rd endings, bars per line, composer | | Score tab ▸ Lead Sheet, right-click ▸ Lead Sheet |
 
 Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
 and the bar don't already give them, and last to the end of the bar; ledger lines, ties and a final bar line are
@@ -334,6 +336,16 @@ not played. Extensions are drawn as the nearest shape (A13 as A7). A **Capo** (f
 music; chord names show the shape played after the sounding chord — E♭ (C) — the diagrams show that shape, and TAB
 counts frets from the capo. The music still sounds as written. MusicXML keeps both (staff-details capo, harmony frames).
 
+**Lead sheets and slash notation** — **Insert ▸ Lead Sheet** (or the Insert tab's Lead Sheet button) starts a
+lead sheet: title, composer, a style and tempo ("Medium Swing"), four bars a line, ready for a melody with chord
+symbols and lyrics. **Insert ▸ Chord Chart (Slashes)** starts an eight-bar chart of beat slashes. **Fill Bar with
+Slashes** turns the selected bars (or the bar at the caret) into one slash a beat and keeps each chord symbol on its
+beat; **Rhythmic Slashes** turns the selected notes into stemmed slashes on the middle line, keeping their rhythm,
+chords and lyrics; **Slash Entry** makes typed notes slashes. Slashes play the chord in effect (bass and voicing), so a
+chart comps itself. **1st / 2nd / 3rd endings** bracket their bars — the 1st is played before the repeat and skipped
+after it. **Bars per Line** (2, 3, 4, 5, 6 or 8, or as many as fit) puts that many bars on each line, squeezing the spacing a little
+if need be. MusicXML keeps all of it (slash noteheads, endings, the composer, line breaks).
+
 **Tuplets beyond triplets** — 2 in the time of 3 (a duplet in 6/8), 4:3, 5:4, 6:4, 7:4 and 9:8 — are numbered and
 bracketed like triplets, fill their bar correctly and play in time. **Grace notes** sit small before their note and take
 no time in the bar: an **acciaccatura** (slashed) is crushed in just before the beat; an **appoggiatura** takes half of
@@ -348,7 +360,7 @@ play together. While you write in one voice the other is shown in grey; clicking
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score — every part and staff (a piano part's two staves become a grand staff; other parts each a staff, named) —
 with title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
+strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, 1st and 2nd endings, slash notation, the composer, line breaks, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
 voices, staves beyond a part's first two, cue notes) is listed. Right-click a score (or the Score tab) ▸ **Export
 MusicXML…** saves it as MusicXML 4.0 with all of that: a piano grand staff as one part with two staves, every other
 staff as a part of its own.

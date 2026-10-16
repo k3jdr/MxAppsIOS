@@ -88,6 +88,9 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var grace: String?
     /// On a percussion staff: the drum (DrumKit id) — its place, notehead and sound.
     var drum: String?
+    /// Slash notation: "beat" (a stemless slash per beat) or "rhythm" (slashes with stems showing the rhythm). A slash
+    /// sits on the middle line and plays the chord symbol in effect.
+    var slash: String?
     /// A dynamic marking under the note (pp … ff, sfz, fp).
     var dynamic: String?
     /// A slur starts here / ends here.
@@ -140,6 +143,8 @@ struct ScoreBarMark: Codable, Hashable {
     var keyFifths: Int?
     var repeatStart: Bool?
     var repeatEnd: Bool?
+    /// A bar of a 1st (or 2nd…) ending: played only on that time through the repeat.
+    var ending: Int?
     /// A new tempo from this bar (quarter notes a minute), with a word for it (Allegro, a tempo…) and the note the
     /// metronome mark counts in ("quarter", "dotted", "half", "eighth").
     var tempo: Int?
@@ -148,7 +153,7 @@ struct ScoreBarMark: Codable, Hashable {
     /// Gradually slower (-1, rit.) or faster (1, accel.) from this bar to the next tempo change.
     var gradual: Int?
     var isEmpty: Bool {
-        keyFifths == nil && repeatStart != true && repeatEnd != true && tempo == nil && (tempoText ?? "").isEmpty && tempoUnit == nil && gradual == nil
+        keyFifths == nil && repeatStart != true && repeatEnd != true && ending == nil && tempo == nil && (tempoText ?? "").isEmpty && tempoUnit == nil && gradual == nil
     }
 }
 
@@ -178,6 +183,10 @@ struct ScoreData: Codable, Hashable {
     var capo: Int?
     /// Guitar chord diagrams over the chord symbols.
     var chordDiagrams: Bool?
+    /// Under the title, at the right (a lead sheet's composer, arranger…).
+    var composer: String?
+    /// So many bars on each line (lead sheets: 4); nil fits as many as there's room for.
+    var barsPerLine: Int?
 
     /// How a chord symbol is written: with a capo, the shape played too — "E♭ (C)".
     func chordLabel(_ symbol: String) -> String {
@@ -314,21 +323,56 @@ struct ScoreData: Codable, Hashable {
 
     /// Bars in the order they play: at an end repeat, back to the last start repeat (or the beginning), once.
     func playOrder(bars: Int) -> [Int] {
-        var order: [Int] = [], b = 0, start = 0, repeated = Set<Int>()
+        var order: [Int] = [], b = 0, start = 0, repeated = Set<Int>(), secondTime = false
         while b < bars, order.count < 5000 {
-            if mark(b).repeatStart == true { start = b }
+            let m = mark(b)
+            if m.repeatStart == true { start = b }
+            // The second time through, the 1st ending is skipped (the 2nd ending follows the repeat sign).
+            if secondTime, m.ending == 1 {
+                if m.repeatEnd == true { secondTime = false; start = b + 1 }
+                b += 1
+                continue
+            }
             order.append(b)
-            if mark(b).repeatEnd == true {
+            if m.repeatEnd == true {
                 if !repeated.contains(b) {
                     repeated.insert(b)
                     b = start
+                    secondTime = true
                     continue
                 }
+                secondTime = false
                 start = b + 1
             }
             b += 1
         }
         return order
+    }
+
+    // MARK: Slash notation
+
+    /// The middle line's note (where slashes sit).
+    var middleLine: (step: Int, octave: Int) {
+        let d = clef.bottomLine + 4
+        return (d % 7, d / 7)
+    }
+
+    /// The chord symbol in effect at a note (its own, else the last one before it).
+    func chordSymbol(at index: Int) -> String? {
+        notes[...index].last { !($0.chordSymbol ?? "").isEmpty }?.chordSymbol
+    }
+
+    /// The notes of a chord symbol, voiced for comping: the bass (or root) low, the chord above middle C.
+    static func voicing(_ symbol: String) -> [Int] {
+        guard let chord = GuitarChords.parse(symbol) else { return [] }
+        let intervals: [String: [Int]] = [
+            "": [0, 4, 7], "m": [0, 3, 7], "7": [0, 4, 7, 10], "maj7": [0, 4, 7, 11], "m7": [0, 3, 7, 10], "sus2": [0, 2, 7],
+            "sus4": [0, 5, 7], "7sus4": [0, 5, 7, 10], "dim": [0, 3, 6], "dim7": [0, 3, 6, 9], "aug": [0, 4, 8], "6": [0, 4, 7, 9],
+            "m6": [0, 3, 7, 9], "9": [0, 4, 10, 14], "add9": [0, 4, 7, 14], "m7b5": [0, 3, 6, 10], "5": [0, 7],
+        ]
+        let bass = 36 + (chord.bass ?? chord.root)
+        let root = 53 + ((chord.root - 5 + 12) % 12)   // F3 … E4
+        return [bass] + (intervals[chord.quality] ?? [0, 4, 7]).map { root + $0 }
     }
 
     /// Accidentals a new key cancels with naturals (steps and whether they were sharps).
@@ -478,6 +522,8 @@ struct ScoreData: Codable, Hashable {
         guard !note.rest else { return nil }
         // A drum's General MIDI sound.
         if let drum = DrumKit.instrument(note.drum) { return drum.midi }
+        // A slash plays its chord (its first note stands for it).
+        if note.slash != nil { return midis(index).first }
         return Self.midi(step: note.step, octave: note.octave, alter: soundingAlter(index))
     }
 
@@ -510,12 +556,15 @@ struct ScoreData: Codable, Hashable {
     func showsAccidental(_ index: Int) -> Bool {
         let note = notes[index]
         // The continuation of a tie doesn't repeat its accidental.
-        guard !note.rest, let alter = note.alter, !tiedFrom(index), clef != .percussion else { return false }
+        guard !note.rest, let alter = note.alter, !tiedFrom(index), clef != .percussion, note.slash == nil else { return false }
         return alter != (alterBefore(index) ?? keyAlter(note.step, at: index))
     }
 
     /// Every pitch a note sounds (the note and its chord tones), as MIDI numbers.
     func midis(_ index: Int) -> [Int] {
+        if notes[index].slash != nil, !notes[index].rest {
+            return chordSymbol(at: index).map(Self.voicing) ?? []
+        }
         guard let main = midi(index) else { return [] }
         let tones = (notes[index].chord ?? []).map {
             DrumKit.instrument($0.drum)?.midi ?? Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step, at: index))
@@ -530,6 +579,7 @@ struct ScoreData: Codable, Hashable {
     func tab(_ index: Int) -> [(string: Int, fret: Int)] {
         // Guitar sounds an octave below treble-clef notation; with a capo, frets count from it.
         let shift = (clef == .treble ? 12 : 0) + (capo ?? 0)
+        guard notes[index].slash == nil else { return [] }
         let pitches = midis(index).map { $0 - shift }
         guard !pitches.isEmpty else { return [] }
         var used = Set<Int>(), result: [(Int, Int)] = []
@@ -692,6 +742,7 @@ struct ScoreData: Codable, Hashable {
         let length = ["", "w", "h", "", "q", "", "", "", "8", "", "", "", "", "", "", "", "16"][n.duration.rawValue] + (n.dotted ? "." : "")
             + (n.tupletActual.map(Self.superscript) ?? "") + (n.grace != nil ? " grace" : "")
         if n.rest { return "r" + length + marks(n) }
+        if n.slash != nil { return ((n.chordSymbol ?? "").isEmpty ? "" : "[\(n.chordSymbol!)] ") + "/ \(length)" + marks(n) }
         if let drum = DrumKit.instrument(n.drum) {
             let others = (n.chord ?? []).compactMap { DrumKit.instrument($0.drum)?.name }
             return ([drum.name] + others).joined(separator: "+") + " \(length)" + marks(n)
@@ -1030,6 +1081,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// The tuplet new notes go in ([actual, normal]; nil: none).
     static var inputTuplet: [Int]?
     static var inputTriplet: Bool { inputTuplet == [3, 2] }
+    /// New notes are entered as rhythmic slashes.
+    static var inputSlash = false
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { !isExport }
@@ -1038,7 +1091,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     static let space: CGFloat = 8
     private var space: CGFloat { Self.space }
-    private let titleHeight: CGFloat = 26
+    /// Room for the title (and the composer under it, at the right).
+    private var titleHeight: CGFloat {
+        let full = fullScore
+        if full.title.isEmpty && (full.composer ?? "").isEmpty { return 0 }
+        return 26 + ((full.composer ?? "").isEmpty ? 0 : 14)
+    }
     // Room around a staff (for the staff being drawn; the functions take any staff's score).
     private func chordBand(_ st: ScoreData) -> CGFloat {
         guard st.hasChordSymbols else { return 0 }
@@ -1048,7 +1106,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func tabBand(_ st: ScoreData) -> CGFloat { st.showTab == true ? space * 10 : 0 }
     private func dynamicBand(_ st: ScoreData) -> CGFloat { st.hasDynamics ? space * 3 : 0 }
     private func markBandAbove(_ st: ScoreData) -> CGFloat {
-        st.notes.contains { $0.fermata == true || $0.ornament != nil || (st.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0
+        let endings = (st.barMarks ?? [:]).values.contains { $0.ending != nil } ? space * 2.2 : 0
+        return endings + (st.notes.contains { $0.fermata == true || $0.ornament != nil || (st.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0)
     }
     private func markBandBelow(_ st: ScoreData) -> CGFloat {
         st.hasSecondVoice && st.line(1).contains { $0.fermata == true || $0.ornament != nil || $0.articulations != nil } ? space * 3.4 : 0
@@ -1122,7 +1181,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private var caretSpots: [(x: CGFloat, system: Int)] = []
     /// Bar lines (x, system), and where each system's notes start.
     private var barLines: [(x: CGFloat, system: Int, style: BarStyle)] = []
-    private var systemCount = 1
+    private(set) var systemCount = 1
     private var systemStarts: [CGFloat] = []
     /// Each system's first bar (its key signature is that bar's key).
     private var systemFirstBars: [Int] = [0]
@@ -1137,7 +1196,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// The height the score needs at a width.
     func neededHeight() -> CGFloat {
         layoutNotes()
-        return (score.title.isEmpty ? 0 : titleHeight) + CGFloat(systemCount) * systemHeight + space
+        return titleHeight + CGFloat(systemCount) * systemHeight + space
     }
 
     private func width(of note: ScoreNote, index: Int, in line: ScoreData? = nil) -> CGFloat {
@@ -1247,15 +1306,18 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let endRoom = (0..<barCount).map { score.mark($0).repeatEnd == true ? space * 1.2 : 0 }
         let keyRoom = (0..<barCount).map { keyChangeWidth(bar: $0) }
         func fixed(_ m: Int, atStart: Bool) -> CGFloat { repeatRoom[m] + endRoom[m] + (atStart ? 0 : keyRoom[m]) }
-        // Bars into systems (lines).
+        // Bars into systems (lines). With Bars per Line, a line takes that many bars, squeezed a little if need be.
+        let perLine = fullScore.barsPerLine
+        let squeeze: CGFloat = perLine == nil ? 1 : 0.7
         var systems: [[Int]] = [[]]
         var used = headerWidth(fifths: score.keyFifths, first: true)
         for (m, w) in widths.enumerated() {
-            if !systems[systems.count - 1].isEmpty, used + w + fixed(m, atStart: false) > usable {
+            let full = perLine.map { systems[systems.count - 1].count >= $0 } ?? false
+            if !systems[systems.count - 1].isEmpty, full || used + w * squeeze + fixed(m, atStart: false) > usable {
                 systems.append([])
                 used = headerWidth(fifths: score.fifths(inBar: m), first: false)
             }
-            used += w + fixed(m, atStart: systems[systems.count - 1].isEmpty)
+            used += w * squeeze + fixed(m, atStart: systems[systems.count - 1].isEmpty)
             systems[systems.count - 1].append(m)
         }
         systemCount = systems.count
@@ -1270,8 +1332,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             systemStarts.append(start)
             let natural = bars.reduce(0) { $0 + widths[$1] }
             let fixedRoom = bars.enumerated().reduce(0) { $0 + fixed($1.element, atStart: $1.offset == 0) }
-            // Full lines are spread to the width (not the last one).
-            let stretch = s < systems.count - 1 && natural > 0 ? max(1, (usable - header - fixedRoom) / natural) : 1
+            // Full lines are spread to the width (not the last one, unless it has its Bars per Line); a line too wide is squeezed.
+            let fit = natural > 0 ? (usable - header - fixedRoom) / natural : 1
+            let spread = s < systems.count - 1 || perLine.map { bars.count >= $0 } == true
+            let stretch = spread ? max(squeeze, fit) : max(squeeze, min(1, fit))
             var x = start
             for (k, m) in bars.enumerated() {
                 barStarts[m] = (k == 0 && m > 0 ? x - space * 0.4 : x, s)
@@ -1324,7 +1388,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// The top of a system's staff.
     private func staffTop(_ system: Int) -> CGFloat {
-        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight
+        titleHeight + CGFloat(system) * systemHeight
             + (staffOffsets.indices.contains(drawingStaff) ? staffOffsets[drawingStaff] : tempoBand + space * 4.5)
     }
 
@@ -1354,6 +1418,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: ink]
             let size = (score.title as NSString).size(withAttributes: attrs)
             (score.title as NSString).draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: 4), withAttributes: attrs)
+        }
+        if let composer = fullScore.composer, !composer.isEmpty {
+            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: ink]
+            let size = (composer as NSString).size(withAttributes: attrs)
+            (composer as NSString).draw(at: NSPoint(x: bounds.width - space * 1.5 - size.width, y: 26), withAttributes: attrs)
         }
         // Each staff in turn (the code below draws "the staff"), then what joins them, then the tempo marks.
         for st in 0..<fullScore.staffCount {
@@ -1394,6 +1463,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         drawStaffGroups(ink: ink)
         useStaff(0)
+        drawEndings(ink: ink)
         drawTempos(ink: ink)
         if let capo = fullScore.capo, capo > 0 {
             let attrs: [NSAttributedString.Key: Any] = [.font: Self.tempoWordFont, .foregroundColor: ink]
@@ -1403,6 +1473,43 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         useStaff(staffIndex)
         drawCaret()
+    }
+
+    // MARK: 1st and 2nd endings
+
+    /// Brackets over the bars of each ending, numbered "1." "2."; the last ending is left open at its end.
+    private func drawEndings(ink: NSColor) {
+        let marks = fullScore.barMarks ?? [:]
+        let bars = marks.filter { $0.value.ending != nil }.map(\.key).sorted()
+        guard !bars.isEmpty else { return }
+        // Runs of bars with the same ending.
+        var runs: [(number: Int, from: Int, to: Int)] = []
+        for b in bars {
+            let n = marks[b]?.ending ?? 0
+            if let last = runs.last, last.number == n, last.to == b - 1 { runs[runs.count - 1].to = b } else { runs.append((n, b, b)) }
+        }
+        let highest = runs.map(\.number).max() ?? 1
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: ink]
+        ink.setFill()
+        for run in runs {
+            guard let start = barStarts[run.from] else { continue }
+            let endBar = barLines.indices.contains(run.to) ? barLines[run.to] : nil
+            for s in start.system...max(start.system, endBar?.system ?? start.system) {
+                let y = staffTop(s) - space * 2.4
+                let from = s == start.system ? start.x + space * 0.2 : (systemStarts.indices.contains(s) ? systemStarts[s] : start.x)
+                let to = (s == endBar?.system ? endBar!.x : lineEnd) - space * 0.4
+                guard to > from else { continue }
+                NSRect(x: from, y: y, width: to - from, height: 1.2).fill()
+                if s == start.system {
+                    NSRect(x: from, y: y, width: 1.2, height: space * 1.6).fill()
+                    ("\(run.number)." as NSString).draw(at: NSPoint(x: from + space * 0.4, y: y + 1), withAttributes: attrs)
+                }
+                // The 1st ending closes over its last bar line; the last one stays open.
+                if s == endBar?.system, run.number < highest {
+                    NSRect(x: to - 1.2, y: y, width: 1.2, height: space * 1.6).fill()
+                }
+            }
+        }
     }
 
     // MARK: Several staves
@@ -1940,6 +2047,13 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             for i in bar {
                 let note = score.notes[i]
                 if note.grace != nil { continue }
+                // Beat slashes have no stems, so no beams either.
+                if note.slash == "beat" {
+                    if current.count > 1 { groups.append(current) }
+                    current = []; currentBeat = -1
+                    position += note.beats
+                    continue
+                }
                 let beatIndex = Int((position + 1e-9) / beat)
                 if !note.rest, note.duration.rawValue >= 8, beatIndex == currentBeat || current.isEmpty {
                     current.append(i)
@@ -2011,7 +2125,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             if note.duration != .whole { transform.rotate(byDegrees: -20) }
             head.transform(using: transform)
             color.set()
-            if let drum = DrumKit.instrument(note.drum), drum.head != .normal {
+            if note.slash != nil {
+                // A slash across the middle of the staff (hollow for halves and wholes).
+                drawSlash(x: p.x, y: cy, filled: note.duration.rawValue >= 4, color: color)
+            } else if let drum = DrumKit.instrument(note.drum), drum.head != .normal {
                 // Cymbals and hi-hats: an x (the open hi-hat with a circle over it); the ride bell: a diamond.
                 DrumKit.drawHead(drum.head, x: p.x, y: cy, width: w, height: h, color: color, filled: note.duration.rawValue >= 4)
             } else if note.duration.rawValue >= 4 {
@@ -2065,7 +2182,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             stemSpans[p.index] = (lowY, highY)
             shapes[NoteRef(voice: v, index: p.index)] = (up, lowY, highY)
             // Stem and flags (beamed notes get their stems with the beam).
-            if note.duration != .whole, beamed[p.index] == nil {
+            if note.duration != .whole, beamed[p.index] == nil, note.slash != "beat" {
                 let sx = up ? p.x + w - 0.6 : p.x + 0.6
                 let from = up ? lowY : highY
                 let end = up ? highY - space * 3.5 : lowY + space * 3.5
@@ -2241,6 +2358,18 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         stemSpans[p.index] = (cy, cy)
         shapes[NoteRef(voice: v, index: p.index)] = (up, cy, cy)
+    }
+
+    /// A slash notehead: a thick stroke rising from the second line to the fourth.
+    private func drawSlash(x: CGFloat, y: CGFloat, filled: Bool, color: NSColor) {
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: x - space * 0.1, y: y + space))
+        path.line(to: NSPoint(x: x + space * 0.5, y: y + space))
+        path.line(to: NSPoint(x: x + space * 1.45, y: y - space))
+        path.line(to: NSPoint(x: x + space * 0.85, y: y - space))
+        path.close()
+        color.set()
+        if filled { path.fill() } else { path.lineWidth = 1.3; path.stroke() }
     }
 
     private func ledger(x: CGFloat, y: CGFloat) {
@@ -2471,6 +2600,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 for o in 1...7 where abs(o * 7 + step - reference) < abs(best * 7 + step - reference) { best = o }
                 note.octave = best
             }
+        }
+        // Slash entry: rhythmic slashes on the middle line (they play the chord symbol in effect).
+        if Self.inputSlash, step != nil {
+            note.slash = "rhythm"
+            (note.step, note.octave) = cur.middleLine
+            note.alter = nil
         }
         let at = min(cursor, cur.notes.count)
         editVoice(step == nil ? "Add Rest" : "Add Note") { $0.notes.insert(note, at: at) }
@@ -2912,6 +3047,107 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     // MARK: Articulations and ornaments
 
+    // MARK: Lead sheets and slash notation
+
+    /// Slash Entry: letters type rhythmic slashes (on and off).
+    func toggleSlashEntry() {
+        Self.inputSlash.toggle()
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// The selected notes as slashes — "rhythm" (with stems) or "beat" (without) — or back to notes (nil).
+    func setSlash(_ style: String?) {
+        let notes = markTargets
+        guard !notes.isEmpty else { return NSSound.beep() }
+        let middle = cur.middleLine
+        editVoice(style == nil ? "Slashes to Notes" : style == "beat" ? "Beat Slashes" : "Rhythmic Slashes") { s in
+            for i in notes where !s.notes[i].rest && s.notes[i].grace == nil {
+                s.notes[i].slash = style
+                if style != nil {
+                    s.notes[i].step = middle.step
+                    s.notes[i].octave = middle.octave
+                    s.notes[i].alter = nil
+                    s.notes[i].chord = nil
+                    s.notes[i].drum = nil
+                }
+            }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Fill with Slashes: the bar (or the bars selected) as one beat slash per beat — a chord chart — keeping the
+    /// chord symbols on the beats where they were.
+    func fillWithSlashes() {
+        let line = cur
+        var bars: [Int] = []
+        if let r = selectedRange, r.count > 1 { bars = Array(Set(r.map { line.bar(of: $0) })).sorted() } else { bars = [currentBar] }
+        let compound = line.beatUnit == 8 && line.beats % 3 == 0
+        let beat: (length: Double, duration: ScoreNote.Duration, dotted: Bool) =
+            compound ? (1.5, .quarter, true) : line.beatUnit == 2 ? (2, .half, false) : line.beatUnit == 8 ? (0.5, .eighth, false) : (1, .quarter, false)
+        let middle = line.middleLine
+        editVoice("Fill with Slashes") { s in
+            let measures = s.notes.isEmpty ? [] : s.measures
+            for b in bars.sorted(by: >) {
+                var symbols: [(Double, String)] = []
+                if measures.indices.contains(b) {
+                    var t = 0.0
+                    for i in measures[b] {
+                        if let c = s.notes[i].chordSymbol, !c.isEmpty { symbols.append((t, c)) }
+                        t += s.notes[i].beats
+                    }
+                }
+                let count = max(1, Int((s.measureLength / beat.length).rounded()))
+                var slashes: [ScoreNote] = []
+                for k in 0..<count {
+                    var n = ScoreNote(duration: beat.duration, dotted: beat.dotted)
+                    n.slash = "beat"
+                    n.step = middle.step
+                    n.octave = middle.octave
+                    let onset = Double(k) * beat.length
+                    n.chordSymbol = symbols.first { $0.0 >= onset - 1e-6 && $0.0 < onset + beat.length - 1e-6 }?.1
+                    slashes.append(n)
+                }
+                if measures.indices.contains(b) { s.notes.replaceSubrange(measures[b], with: slashes) } else { s.notes += slashes }
+            }
+        }
+        selected = nil
+        cursor = cur.notes.count
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// So many bars on each line (nil: as many as fit).
+    func setBarsPerLine(_ n: Int?) {
+        edit("Bars per Line") { $0.barsPerLine = n }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// A 1st (2nd, 3rd) ending over the current bar — the same again takes it off.
+    func toggleEnding(_ number: Int) {
+        let bar = currentBar
+        edit("\(number == 1 ? "1st" : number == 2 ? "2nd" : "\(number)rd") Ending") { s in
+            s.setMark(bar) { $0.ending = $0.ending == number ? nil : number }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    var endingHere: Int? { score.mark(currentBar).ending }
+
+    /// The composer (or arranger, lyricist…) shown under the title.
+    func editComposer() {
+        let alert = NSAlert()
+        alert.messageText = "Composer"
+        alert.informativeText = "Shown under the title at the right — composer, arranger, \"Words and music by…\"."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.stringValue = fullScore.composer ?? ""
+        alert.accessoryView = field
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let text = field.stringValue.trimmingCharacters(in: .whitespaces)
+        edit("Composer") { $0.composer = text.isEmpty ? nil : text }
+    }
+
     /// The notes marks go on: the selected run, else the selected note (or the one just typed).
     private var markTargets: [Int] {
         if let r = selectedRange { return Array(r) }
@@ -3223,7 +3459,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     private func system(at y: CGFloat) -> Int {
-        let base = score.title.isEmpty ? 0 : titleHeight
+        let base = titleHeight
         return max(0, min(systemCount - 1, Int((y - base) / max(1, systemHeight))))
     }
 
@@ -3505,6 +3741,31 @@ final class ScoreElementView: ElementView {
         }
         grace.submenu = graces
         menu.addItem(grace)
+        let lead = NSMenuItem(title: "Lead Sheet", action: nil, keyEquivalent: "")
+        let leadMenu = NSMenu()
+        leadMenu.addItem(ClosureMenuItem("Fill Bar with Slashes") { [weak self] in self?.staff.fillWithSlashes() })
+        leadMenu.addItem(ClosureMenuItem("Rhythmic Slashes") { [weak self] in self?.staff.setSlash("rhythm") })
+        leadMenu.addItem(ClosureMenuItem("Beat Slashes") { [weak self] in self?.staff.setSlash("beat") })
+        leadMenu.addItem(ClosureMenuItem("Slashes Back to Notes") { [weak self] in self?.staff.setSlash(nil) })
+        leadMenu.addItem(ClosureMenuItem("Slash Entry", state: ScoreView.inputSlash) { [weak self] in self?.staff.toggleSlashEntry() })
+        leadMenu.addItem(.separator())
+        for n in 1...3 {
+            leadMenu.addItem(ClosureMenuItem("\(n == 1 ? "1st" : n == 2 ? "2nd" : "3rd") Ending (bar \(staff.currentBar + 1))", state: staff.endingHere == n) { [weak self] in
+                self?.staff.toggleEnding(n)
+            })
+        }
+        leadMenu.addItem(.separator())
+        let perLine = NSMenuItem(title: "Bars per Line", action: nil, keyEquivalent: "")
+        let perLineMenu = NSMenu()
+        perLineMenu.addItem(ClosureMenuItem("As Many as Fit", state: score.barsPerLine == nil) { [weak self] in self?.staff.setBarsPerLine(nil) })
+        for n in [2, 3, 4, 5, 6, 8] {
+            perLineMenu.addItem(ClosureMenuItem("\(n)", state: score.barsPerLine == n) { [weak self] in self?.staff.setBarsPerLine(n) })
+        }
+        perLine.submenu = perLineMenu
+        leadMenu.addItem(perLine)
+        leadMenu.addItem(ClosureMenuItem("Composer…") { [weak self] in self?.staff.editComposer() })
+        lead.submenu = leadMenu
+        menu.addItem(lead)
         let articulation = NSMenuItem(title: "Articulations & Ornaments", action: nil, keyEquivalent: "")
         let arts = NSMenu()
         for (id, name, key) in ScoreData.articulationKinds {

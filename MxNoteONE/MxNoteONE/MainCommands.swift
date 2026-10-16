@@ -209,6 +209,8 @@ struct MainCommands: Commands {
             Button("Music Score") { canvas?.insertScore() }
             Button("Piano Score (Grand Staff)") { canvas?.insertScore(piano: true) }
             Button("Drum Score (Percussion Staff)") { canvas?.insertScore(drums: true) }
+            Button("Lead Sheet") { canvas?.insertScore(leadSheet: true) }
+            Button("Chord Chart (Slashes)") { canvas?.insertScore(chordChart: true) }
             Divider()
             Button("Diagram (draw.io)") { canvas?.newDiagram() }
                 .keyboardShortcut("d", modifiers: [.command, .control])

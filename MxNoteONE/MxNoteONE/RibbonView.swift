@@ -448,6 +448,7 @@ struct InsertRibbon: View {
             RibbonButton("Score", "music.note.list", large: true) { canvas?.insertScore() }
             RibbonButton("Piano", "pianokeys", large: true) { canvas?.insertScore(piano: true) }
             RibbonButton("Drums", "circle.grid.cross", large: true) { canvas?.insertScore(drums: true) }
+            RibbonButton("Lead Sheet", "music.note.list", large: true) { canvas?.insertScore(leadSheet: true) }
             RibbonButton("MusicXML", "square.and.arrow.down", large: true) { canvas?.chooseMusicXML() }
         }
         RibbonGroup("Files") {
@@ -675,6 +676,29 @@ struct ScoreRibbon: View {
                 }
             }
             RibbonButton("Piano Staff", "pianokeys", active: staff?.fullScore.grandStaff == true) { act { $0.makeGrandStaff() } }
+        }
+        RibbonGroup("Lead Sheet") {
+            RibbonMenu("Slashes", "line.diagonal") {
+                Button("Fill Bar with Slashes") { act { $0.fillWithSlashes() } }
+                Button("Rhythmic Slashes (selected notes)") { act { $0.setSlash("rhythm") } }
+                Button("Beat Slashes (selected notes)") { act { $0.setSlash("beat") } }
+                Button("Slashes Back to Notes") { act { $0.setSlash(nil) } }
+                Divider()
+                Toggle("Slash Entry", isOn: Binding(get: { ScoreView.inputSlash }, set: { _ in act { $0.toggleSlashEntry() } }))
+            }
+            .tip("Slashes", "Slash notation: Fill Bar with Slashes (a beat slash per beat, keeping the chords), rhythmic slashes with stems, or Slash Entry to type them. Slashes play the chord symbol in effect.")
+            RibbonMenu("Endings", "1.square") {
+                Button("1st Ending") { act { $0.toggleEnding(1) } }
+                Button("2nd Ending") { act { $0.toggleEnding(2) } }
+                Button("3rd Ending") { act { $0.toggleEnding(3) } }
+            }
+            .tip("Endings", "1st and 2nd endings (voltas) over the selected note's bar: the 1st is played the first time through the repeat, the 2nd after it.")
+            RibbonMenu(staff?.fullScore.barsPerLine.map { "\($0) per Line" } ?? "Bars per Line", "rectangle.split.3x1") {
+                Button("As Many as Fit") { act { $0.setBarsPerLine(nil) } }
+                ForEach([2, 3, 4, 5, 6, 8], id: \.self) { n in Button("\(n)") { act { $0.setBarsPerLine(n) } } }
+            }
+            .tip("Bars per Line", "So many bars on each line — lead sheets usually have 4.")
+            RibbonButton("Composer", "person.text.rectangle") { staff?.editComposer() }
         }
         RibbonGroup("Bars") {
             let bar = staff?.currentBar ?? 0
