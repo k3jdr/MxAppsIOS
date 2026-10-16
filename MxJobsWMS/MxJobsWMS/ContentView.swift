@@ -14,6 +14,7 @@ struct ContentView: View {
     var body: some View {
         // Re-run the checks when keys change in the subscriptions dialog.
         let _ = editor.keyRevision
+        let _ = KeychainChanges.shared.revision  // re-run the key checks when a key is saved or removed
         let issues = Validator.check(document.space)
         NavigationSplitView {
             PaletteView(editor: editor)

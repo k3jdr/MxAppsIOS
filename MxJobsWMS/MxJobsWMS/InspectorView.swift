@@ -92,6 +92,7 @@ private struct JobspaceInspector: View {
 struct KeyStatus: View {
     var subscription: ApiSubscription
     var body: some View {
+        let _ = KeychainChanges.shared.revision  // redraw when a key is saved or removed
         if subscription.auth == .none {
             Text("No key needed").font(.caption).foregroundStyle(.secondary)
         } else if subscription.auth == .localService {

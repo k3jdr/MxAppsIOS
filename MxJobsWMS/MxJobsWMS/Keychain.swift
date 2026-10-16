@@ -7,7 +7,17 @@
 //
 
 import Foundation
+import Observation
 import Security
+
+/// Bumped whenever a key is saved or removed. Views that show key status read it, so they redraw
+/// (the Keychain itself is not observable).
+@Observable
+final class KeychainChanges {
+    static let shared = KeychainChanges()
+    private(set) var revision = 0
+    func bump() { revision += 1 }
+}
 
 enum Keychain {
     private static let service = "com.k3jdr.MxJobsWMS"
@@ -50,6 +60,7 @@ enum Keychain {
             add[kSecAttrLabel as String] = "MxJobsWMS: \(label)"
             status = SecItemAdd(add as CFDictionary, nil)
         }
+        if status == errSecSuccess { KeychainChanges.shared.bump() }
         return status == errSecSuccess
     }
 
@@ -60,5 +71,6 @@ enum Keychain {
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(match as CFDictionary)
+        KeychainChanges.shared.bump()
     }
 }
