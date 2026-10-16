@@ -731,6 +731,14 @@ struct ScoreRibbon: View {
             RibbonButton("Chord Symbol (⌃K)", "textformat.abc", large: true) { staff?.beginWords(.chordSymbol) }
             RibbonButton("Lyrics (⌃L)", "text.quote", large: true) { staff?.beginWords(.lyric) }
             RibbonButton("Guitar Tab", "guitars", large: true, active: staff?.owner?.score.showTab == true) { act { $0.toggleTab() } }
+            RibbonButton("Chord Diagrams", "squareshape.split.3x3", large: true, active: staff?.owner?.score.chordDiagrams == true) { act { $0.toggleChordDiagrams() } }
+            RibbonMenu(staff?.owner?.score.capo.map { "Capo \($0)" } ?? "Capo", "dial.low") {
+                Button("No Capo") { act { $0.setCapo(0) } }
+                Divider()
+                ForEach(1...9, id: \.self) { fret in
+                    Button("Capo \(fret)") { act { $0.setCapo(fret) } }
+                }
+            }
             RibbonButton("String Up (⌥↑)", "arrow.up.circle") { act { $0.moveString(by: 1) } }
             RibbonButton("String Down (⌥↓)", "arrow.down.circle") { act { $0.moveString(by: -1) } }
         }

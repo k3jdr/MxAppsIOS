@@ -170,6 +170,17 @@ struct ScoreData: Codable, Hashable {
     var voices: [[ScoreNote]]?
     /// A guitar TAB staff under the music.
     var showTab: Bool?
+    /// A capo on this fret (guitar): TAB frets count from it; chord names and diagrams show the shapes played.
+    var capo: Int?
+    /// Guitar chord diagrams over the chord symbols.
+    var chordDiagrams: Bool?
+
+    /// How a chord symbol is written: with a capo, the shape played too — "E♭ (C)".
+    func chordLabel(_ symbol: String) -> String {
+        guard let capo, capo > 0 else { return symbol }
+        let shape = GuitarChords.transposed(symbol, by: -capo)
+        return shape == symbol ? symbol : "\(symbol) (\(shape))"
+    }
     /// Key changes and repeat signs, by bar (0 = the first bar).
     var barMarks: [Int: ScoreBarMark]?
     /// More staves under the first (a piano's left hand, other instruments), sharing the bars.
@@ -509,7 +520,8 @@ struct ScoreData: Codable, Hashable {
 
     /// Each pitch's string and fret for the TAB staff (guitar sounds an octave below treble-clef notation).
     func tab(_ index: Int) -> [(string: Int, fret: Int)] {
-        let shift = clef == .treble ? 12 : 0
+        // Guitar sounds an octave below treble-clef notation; with a capo, frets count from it.
+        let shift = (clef == .treble ? 12 : 0) + (capo ?? 0)
         let pitches = midis(index).map { $0 - shift }
         guard !pitches.isEmpty else { return [] }
         var used = Set<Int>(), result: [(Int, Int)] = []
@@ -634,7 +646,7 @@ struct ScoreData: Codable, Hashable {
     /// A short description (for exports and search).
     var summary: String {
         let key = Self.keyNames.first { $0.0 == keyFifths }?.1 ?? ""
-        return "\(title.isEmpty ? "Music score" : title) — \(staffCount > 1 ? "\(staffCount) staves\(grandStaff == true ? " (piano)" : ""), " : "")\(measures.count) bars, \(beats)/\(beatUnit), \(key), ♩ = \(tempo)"
+        return "\(title.isEmpty ? "Music score" : title)\(capo.map { " (capo \($0))" } ?? "") — \(staffCount > 1 ? "\(staffCount) staves\(grandStaff == true ? " (piano)" : ""), " : "")\(measures.count) bars, \(beats)/\(beatUnit), \(key), ♩ = \(tempo)"
     }
 
     /// The melody in letter names (for exports): C4 q, D#4 8., r h…
@@ -986,7 +998,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private var space: CGFloat { Self.space }
     private let titleHeight: CGFloat = 26
     // Room around a staff (for the staff being drawn; the functions take any staff's score).
-    private func chordBand(_ st: ScoreData) -> CGFloat { st.hasChordSymbols ? space * 2.6 : 0 }
+    private func chordBand(_ st: ScoreData) -> CGFloat {
+        guard st.hasChordSymbols else { return 0 }
+        return space * 2.6 + (st.chordDiagrams == true ? GuitarChords.size(space: space).height + space * 0.4 : 0)
+    }
     private func lyricBand(_ st: ScoreData) -> CGFloat { st.hasLyrics ? space * 2.8 : 0 }
     private func tabBand(_ st: ScoreData) -> CGFloat { st.showTab == true ? space * 10 : 0 }
     private func dynamicBand(_ st: ScoreData) -> CGFloat { st.hasDynamics ? space * 3 : 0 }
@@ -1107,7 +1122,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             width = max(width, (lyric as NSString).size(withAttributes: [.font: Self.lyricFont]).width + space * 1.2)
         }
         if let symbol = note.chordSymbol, !symbol.isEmpty {
-            width = max(width, (symbol as NSString).size(withAttributes: [.font: Self.chordFont]).width + space * 1.2)
+            width = max(width, (score.chordLabel(symbol) as NSString).size(withAttributes: [.font: Self.chordFont]).width + space * 1.2)
+            if score.chordDiagrams == true { width = max(width, GuitarChords.size(space: space).width + space * 1.4) }
         }
         if let dynamic = note.dynamic {
             width = max(width, (dynamic as NSString).size(withAttributes: [.font: Self.dynamicFont]).width + space * 1.0)
@@ -1337,6 +1353,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         drawStaffGroups(ink: ink)
         useStaff(0)
         drawTempos(ink: ink)
+        if let capo = fullScore.capo, capo > 0 {
+            let attrs: [NSAttributedString.Key: Any] = [.font: Self.tempoWordFont, .foregroundColor: ink]
+            let label = "Capo \(capo)" as NSString
+            let size = label.size(withAttributes: attrs)
+            label.draw(at: NSPoint(x: bounds.width - space * 1.5 - size.width, y: tempoY(0) - size.height / 2), withAttributes: attrs)
+        }
         useStaff(staffIndex)
         drawCaret()
     }
@@ -1761,8 +1783,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let color = colorFor(NoteRef(voice: 0, index: p.index), ink: ink)
             if let symbol = note.chordSymbol, !symbol.isEmpty {
                 let attrs: [NSAttributedString.Key: Any] = [.font: Self.chordFont, .foregroundColor: color]
-                (symbol as NSString).draw(at: NSPoint(x: p.x - space * 0.2, y: staffTop(p.system) - space * 2 - chordBand - markBandAbove + space * 0.2),
-                                          withAttributes: attrs)
+                let top = staffTop(p.system) - space * 2 - chordBand - markBandAbove + space * 0.2
+                (score.chordLabel(symbol) as NSString).draw(at: NSPoint(x: p.x - space * 0.2, y: top), withAttributes: attrs)
+                // The chord's diagram under its name (with a capo, the shape played).
+                if score.chordDiagrams == true, let diagram = GuitarChords.diagram(for: symbol, capo: score.capo ?? 0) {
+                    GuitarChords.draw(diagram.shape, at: NSPoint(x: p.x - space * 0.9, y: top + space * 2.2), space: space, color: color)
+                }
             }
             guard let lyric = note.lyric, !lyric.isEmpty else { continue }
             let attrs: [NSAttributedString.Key: Any] = [.font: Self.lyricFont, .foregroundColor: color]
@@ -2481,6 +2507,18 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     func toggleTab() {
         edit("Guitar Tab") { $0.showTab = $0.showTab == true ? nil : true }
+    }
+
+    /// Guitar chord diagrams over the chord symbols.
+    func toggleChordDiagrams() {
+        edit("Chord Diagrams") { $0.chordDiagrams = $0.chordDiagrams == true ? nil : true }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// A capo (0: none): TAB counts frets from it; chord names and diagrams show the shapes played.
+    func setCapo(_ fret: Int) {
+        edit(fret == 0 ? "Remove Capo" : "Capo") { $0.capo = fret > 0 ? fret : nil }
+        NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
     // MARK: Lyrics and chord symbols (typed under / above the notes)
@@ -3277,6 +3315,16 @@ final class ScoreElementView: ElementView {
         menu.addItem(ClosureMenuItem("Chord Symbols…  ⌃K") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.chordSymbol) })
         menu.addItem(ClosureMenuItem("Lyrics…  ⌃L") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.lyric) })
         menu.addItem(ClosureMenuItem("Guitar Tab", state: score.showTab == true) { [weak self] in self?.staff.toggleTab() })
+        menu.addItem(ClosureMenuItem("Chord Diagrams", state: score.chordDiagrams == true) { [weak self] in self?.staff.toggleChordDiagrams() })
+        let capo = NSMenuItem(title: score.capo.map { "Capo (fret \($0))" } ?? "Capo", action: nil, keyEquivalent: "")
+        let capos = NSMenu()
+        capos.addItem(ClosureMenuItem("No Capo", state: score.capo == nil) { [weak self] in self?.staff.setCapo(0) })
+        capos.addItem(.separator())
+        for fret in 1...9 {
+            capos.addItem(ClosureMenuItem("Capo \(fret)", state: score.capo == fret) { [weak self] in self?.staff.setCapo(fret) })
+        }
+        capo.submenu = capos
+        menu.addItem(capo)
         let clef = NSMenuItem(title: score.staffCount > 1 ? "Clef (\(score.staffTitle(staff.currentStaff)))" : "Clef", action: nil, keyEquivalent: "")
         let clefs = NSMenu()
         for c in ScoreData.Clef.allCases {

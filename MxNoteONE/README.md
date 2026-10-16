@@ -264,6 +264,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Chord symbols above the staff (C, Am7, G/B) | **⌃K**, then Space for the next note, Return to finish | Score tab, right-click |
 | Lyrics under the notes | **⌃L**, then Space / Tab for the next note, **-** for the next syllable | Score tab, right-click |
 | Move the note to another guitar string | **⌥↑ / ⌥↓** | Score tab |
+| Guitar chord diagrams over the chord symbols | | Score tab ▸ Chord Diagrams, right-click |
+| Capo (fret 1–9) | | Score tab ▸ Capo, right-click ▸ Capo |
 
 Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
 and the bar don't already give them, and last to the end of the bar; ledger lines, ties and a final bar line are
@@ -308,6 +310,13 @@ bars, key, time, tempo, repeats and title; notes that sound together line up acr
 together (a staff without its own dynamics follows the top one). Click a staff, or press ⌥⌘↑ / ⌥⌘↓, to write on it;
 each staff has its own clef, two voices, slurs, dynamics, lyrics and the rest. The others show a little lighter while
 you write. Staves can be moved up and down, named (the name goes into MusicXML) and removed.
+
+**Chord diagrams and capo** — **Chord Diagrams** draws a guitar diagram under each chord symbol: the usual open
+chord where there is one (C, G7, Am7, Dsus4, Gmaj7…), else a barre shape on the 6th or 5th string, whichever sits lower
+on the neck (F 133211, Bm x24432, E♭ at the 6th fret) — strings, frets, the nut or "6fr", dots, the barre, ○ open and ×
+not played. Extensions are drawn as the nearest shape (A13 as A7). A **Capo** (frets 1–9) is marked "Capo 3" over the
+music; chord names show the shape played after the sounding chord — E♭ (C) — the diagrams show that shape, and TAB
+counts frets from the capo. The music still sounds as written. MusicXML keeps both (staff-details capo, harmony frames).
 
 **Tuplets beyond triplets** — 2 in the time of 3 (a duplet in 6/8), 4:3, 5:4, 6:4, 7:4 and 9:8 — are numbered and
 bracketed like triplets, fill their bar correctly and play in time. **Grace notes** sit small before their note and take

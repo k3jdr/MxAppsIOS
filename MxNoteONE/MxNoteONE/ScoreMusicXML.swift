@@ -74,6 +74,7 @@ enum MusicXML {
                     out += "<time><beats>\(score.beats)</beats><beat-type>\(score.beatUnit)</beat-type></time>"
                     if group.count == 2 { out += "<staves>2</staves>" }
                     for (k, st) in group.enumerated() { out += clefXML(staffScores[st].clef, number: group.count == 2 ? k + 1 : nil) }
+                    if p == 0, let capo = score.capo, capo > 0 { out += "<staff-details><capo>\(capo)</capo></staff-details>" }
                     out += "</attributes>\n"
                     if p == 0 { out += tempoXML(score, bar: 0) }
                 } else if p == 0, mark.tempo != nil || !(mark.tempoText ?? "").isEmpty {
@@ -150,7 +151,10 @@ enum MusicXML {
         let starts = Set(groups.compactMap(\.first)), stops = Set(groups.compactMap(\.last))
         for i in bar {
             let note = score.notes[i]
-            if let symbol = note.chordSymbol, !symbol.isEmpty { out += "      " + harmony(symbol) + "\n" }
+            if let symbol = note.chordSymbol, !symbol.isEmpty {
+                let frame = score.chordDiagrams == true ? GuitarChords.diagram(for: symbol, capo: score.capo ?? 0)?.shape : nil
+                out += "      " + harmony(symbol, frame: frame) + "\n"
+            }
             if let d = note.dynamic, ScoreData.dynamics.contains(d) {
                 let level = ScoreData.dynamicLevels[d] ?? (d == "sfz" ? 120 : 100)
                 out += "      <direction placement=\"below\"><direction-type><dynamics><\(d)/></dynamics></direction-type>"
@@ -241,7 +245,18 @@ enum MusicXML {
     ]
 
     /// A chord symbol as MusicXML harmony (root, kind, bass); one that isn't a chord name goes in as words.
-    private static func harmony(_ symbol: String) -> String {
+    /// A chord diagram as MusicXML's harmony frame (strings 6 = low E … 1).
+    private static func frameXML(_ shape: GuitarChords.Shape) -> String {
+        let rows = max(4, (shape.frets.compactMap { $0 }.max() ?? 0) - shape.baseFret + 1)
+        var x = "<frame><frame-strings>6</frame-strings><frame-frets>\(min(rows, 5))</frame-frets>"
+        if shape.baseFret > 1 { x += "<first-fret>\(shape.baseFret)</first-fret>" }
+        for (s, f) in shape.frets.enumerated() {
+            if let f { x += "<frame-note><string>\(6 - s)</string><fret>\(f)</fret></frame-note>" }
+        }
+        return x + "</frame>"
+    }
+
+    private static func harmony(_ symbol: String, frame: GuitarChords.Shape? = nil) -> String {
         let pattern = "^([A-G])([#♯b♭]?)(.*?)(?:/([A-G])([#♯b♭]?))?$"
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let m = regex.firstMatch(in: symbol, range: NSRange(location: 0, length: (symbol as NSString).length)) else {
@@ -256,6 +271,7 @@ enum MusicXML {
         if !part(4).isEmpty {
             x += "<bass><bass-step>\(part(4))</bass-step>\(alter(part(5)).replacingOccurrences(of: "root-alter", with: "bass-alter"))</bass>"
         }
+        if let frame { x += frameXML(frame) }
         return x + "</harmony>"
     }
 
@@ -366,6 +382,7 @@ enum MusicXML {
                                 score.beatUnit = u
                             }
                         }
+                        if shared, let capo = text(e, "staff-details/capo").flatMap(Int.init), capo > 0 { score.capo = capo }
                         // This staff's clef (a two-staff part numbers them).
                         if !seenClef, let clef = e.elements(forName: "clef").first(where: {
                             ($0.attribute(forName: "number")?.stringValue ?? "1") == mine
@@ -438,6 +455,7 @@ enum MusicXML {
                         }
                     case "harmony":
                         if (text(e, "staff") ?? "1") == mine { pendingSymbol = symbol(from: e) }
+                        if shared, e.elements(forName: "frame").first != nil { score.chordDiagrams = true }
                     case "note":
                         if e.elements(forName: "cue").first != nil { skippedGrace += 1; continue }
                         let graceElement = e.elements(forName: "grace").first

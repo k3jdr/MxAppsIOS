@@ -24,6 +24,14 @@ final class ScriptsIDE {
     enum InspectorTab: String, CaseIterable, Identifiable {
         case variables = "Variables", tables = "Tables", packages = "Packages", help = "Help"
         var id: String { rawValue }
+        var symbol: String {
+            switch self {
+            case .variables: "ladybug"
+            case .tables: "tablecells"
+            case .packages: "shippingbox"
+            case .help: "questionmark.circle"
+            }
+        }
     }
 
     /// The notebook whose scripts are shown (the one in use, unless another is picked).
@@ -275,7 +283,7 @@ struct ScriptsWindowView: View {
         let session = ide.session
         HSplitView {
             ScriptListView()
-                .frame(minWidth: 170, idealWidth: 210, maxWidth: 320)
+                .frame(minWidth: 170, idealWidth: 210, maxWidth: 320, maxHeight: .infinity)
             VSplitView {
                 VStack(spacing: 0) {
                     if session.pythonMissing { PythonMissingBanner() }
@@ -289,16 +297,19 @@ struct ScriptsWindowView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                .frame(minHeight: 200)
+                .frame(minHeight: 200, idealHeight: 480, maxHeight: .infinity)
                 ConsoleView()
-                    .frame(minHeight: 110, idealHeight: 200)
+                    .frame(minHeight: 110, idealHeight: 200, maxHeight: .infinity)
             }
-            .frame(minWidth: 420)
+            .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+            .layoutPriority(1)
             if ide.showInspector {
                 InspectorView()
-                    .frame(minWidth: 250, idealWidth: 300, maxWidth: 460)
+                    .frame(minWidth: 250, idealWidth: 300, maxWidth: 460, maxHeight: .infinity)
             }
         }
+        // Every pane fills the window (no empty bands above and below).
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar { toolbar }
         .navigationTitle(ide.notebook.map { "Scripts — \($0.name)" } ?? "Notebook Scripts")
         .navigationSubtitle(statusText)
@@ -615,11 +626,25 @@ struct InspectorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $ide.inspector) {
-                ForEach(ScriptsIDE.InspectorTab.allCases) { Text($0.rawValue).tag($0) }
+            // Icon tabs with the tab's name beside the selected one — they fit the narrowest pane.
+            HStack(spacing: 2) {
+                ForEach(ScriptsIDE.InspectorTab.allCases) { tab in
+                    Button { ide.inspector = tab } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: tab.symbol)
+                            if ide.inspector == tab { Text(tab.rawValue).lineLimit(1) }
+                        }
+                        .font(.system(size: 12, weight: ide.inspector == tab ? .semibold : .regular))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: ide.inspector == tab ? .infinity : nil)
+                        .background(ide.inspector == tab ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 6))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(tab.rawValue)
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .padding(8)
             Divider()
             switch ide.inspector {
@@ -629,6 +654,7 @@ struct InspectorView: View {
             case .help: HelpPane()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: ide.session.state) { if ide.session.state == .paused { ide.inspector = .variables } }
     }
 }
@@ -663,6 +689,7 @@ struct VariablesPane: View {
         } else {
             ContentUnavailableView("Not Debugging", systemImage: "ladybug",
                                    description: Text("Click a line number to set a breakpoint, then Debug (⇧⌘R). The script stops there and its variables show here; step with F6, F7, F8."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -837,7 +864,7 @@ struct CodeEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView()
+        let scroll = EditorScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = true
         scroll.autohidesScrollers = true
@@ -951,6 +978,22 @@ struct CodeEditor: NSViewRepresentable {
                 tv.scrollRangeToVisible(r)
             }
         }
+    }
+}
+
+/// The editor's scroll view: the line numbers beside the text, never over it.
+final class EditorScrollView: NSScrollView {
+    override func tile() {
+        super.tile()
+        guard rulersVisible, let ruler = verticalRulerView else { return }
+        let width = ruler.requiredThickness
+        var clip = contentView.frame
+        if clip.minX < width {
+            clip.size.width -= width - clip.minX
+            clip.origin.x = width
+            contentView.frame = clip
+        }
+        ruler.frame = NSRect(x: 0, y: clip.minY, width: width, height: clip.height)
     }
 }
 
