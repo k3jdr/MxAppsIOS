@@ -1409,7 +1409,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         } else if url.scheme == OneNoteImport.missingScheme {
             ImportActivity.shared.locateMissingPictures()
         } else {
-            NSWorkspace.shared.open(url)
+            WebBrowser.open(url)
         }
     }
 
@@ -2090,6 +2090,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
         if url?.scheme == OneNoteImport.missingScheme {
             endEditing()
             ImportActivity.shared.locateMissingPictures()
+            return true
+        }
+        if let url, WebBrowser.isWeb(url) {
+            WebBrowser.open(url)
             return true
         }
         return false

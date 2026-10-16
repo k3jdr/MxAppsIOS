@@ -977,7 +977,7 @@ enum TextFormatter {
                 NotebookStore.shared.beginInsertLink()
             })
             items.append(ClosureMenuItem("Open Link") {
-                if found.url.scheme == NotebookStore.linkScheme { NotebookStore.shared.openLink(found.url) } else { NSWorkspace.shared.open(found.url) }
+                if found.url.scheme == NotebookStore.linkScheme { NotebookStore.shared.openLink(found.url) } else { WebBrowser.open(found.url) }
             })
             items.append(ClosureMenuItem("Copy Link Address") {
                 NSPasteboard.general.clearContents()

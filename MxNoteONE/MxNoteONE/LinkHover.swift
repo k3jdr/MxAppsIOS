@@ -289,7 +289,8 @@ struct LinkCard: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            Text(info.isInternal ? "Click to go to it" : info.url.scheme == "mailto" ? "Click to write an email" : "Click to follow the link")
+            Text(info.isInternal ? "Click to go to it" : info.url.scheme == "mailto" ? "Click to write an email"
+                 : WebBrowser.isWeb(info.url) ? "Click to open in \(WebBrowser.current?.name ?? "your browser")" : "Click to follow the link")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
             Divider()

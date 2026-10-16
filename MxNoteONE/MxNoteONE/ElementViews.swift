@@ -619,6 +619,11 @@ final class TextElementView: ElementView, NSTextViewDelegate {
             ImportActivity.shared.locateMissingPictures()
             return true
         }
+        // Web links: the browser chosen in Settings.
+        if let url, WebBrowser.isWeb(url) {
+            WebBrowser.open(url)
+            return true
+        }
         return false
     }
 }

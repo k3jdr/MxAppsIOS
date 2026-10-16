@@ -196,8 +196,7 @@ final class PageCanvasView: NSView {
     func build(from page: PageContent) {
         style = page.style
         titleField.stringValue = page.title
-        dateLabel.stringValue = page.created.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
-            + "      " + page.created.formatted(date: .omitted, time: .shortened)
+        showDates(created: page.created, updated: nil)
         for element in page.elements {
             if let view = makeView(for: element) { addElementView(view) }
         }
@@ -205,6 +204,29 @@ final class PageCanvasView: NSView {
         // Printing draws the title itself (an NSTextField clips its glyphs when printed).
         if isExport { titleField.isHidden = true }
         updateSize()
+    }
+
+    /// A date as the page header shows it: Thursday, October 15, 2026      9:12 PM
+    static func headerDate(_ date: Date) -> String {
+        date.formatted(.dateTime.weekday(.wide).month(.wide).day().year()) + "      " + date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// Under the title: when the page was created, and to its right when it was last updated.
+    func showDates(created: Date, updated: Date?) {
+        let gray = NSColor(white: 0.45, alpha: 1)
+        let font = NSFont.systemFont(ofSize: 12)
+        let text = NSMutableAttributedString(string: Self.headerDate(created), attributes: [.font: font, .foregroundColor: gray])
+        var tip = "Created " + Self.headerDate(created).replacingOccurrences(of: "      ", with: " at ")
+        if let updated {
+            text.append(NSAttributedString(string: "     │     ", attributes: [.font: font, .foregroundColor: NSColor(white: 0.72, alpha: 1)]))
+            text.append(NSAttributedString(string: "Updated  ", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: gray]))
+            text.append(NSAttributedString(string: Self.headerDate(updated), attributes: [.font: font, .foregroundColor: gray]))
+            tip += "\nLast updated " + Self.headerDate(updated).replacingOccurrences(of: "      ", with: " at ")
+        }
+        dateLabel.attributedStringValue = text
+        dateLabel.toolTip = tip
+        dateLabel.sizeToFit()
+        dateLabel.frame.size.height = 18
     }
 
     func makeView(for element: PageElement) -> ElementView? {

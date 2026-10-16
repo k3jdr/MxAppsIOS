@@ -14,7 +14,7 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 | **Sidebar**   | Open notebooks, each with its**sections** (coloured tabs) and **section groups** (folders, can nest). Right-click a notebook, section or group to rename, recolour, move up/down or into a group, password protect, export or delete it. **+** adds a section, section group or notebook; the tag and trash buttons open the Tag Summary and Recycle Bin. The search field searches every open notebook.                                                                                                                                                             |
 | **Page list** | Pages of the selected section with date and first line. Subpages are indented (two levels) and can be collapsed; drag to reorder (subpages move with their page). Right-click for New Page / Subpage, Make Subpage, Promote, Move or Copy…, Duplicate, Copy Link to Page, Export as PDF / Markdown, Print, Delete. While the search field has text, this column shows the search results instead.                                                                                                                                                                   |
 | **Ribbon**    | **Home**: font and size boxes showing the selected text's font and size ("Mixed" / "–" when the selection mixes several; with table cells selected, the cells' font), bold / italic / underline / strikethrough buttons lit when the selection has them, then font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: type, pen, highlighter, eraser, line, arrow, rectangle, ellipse, pen colours and thickness. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
-| **Page**      | A title and creation date, then a free-form canvas: click anywhere to start a text container there. Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper.                                                                                 |
+| **Page**      | A title, and under it the date and time the page was created │ **Updated** and when it was last changed (hover for both in words), then a free-form canvas: click anywhere to start a text container there. Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper.                                                                                 |
 
 ## Pages
 
@@ -244,6 +244,9 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Select a run of notes | **⇧← ⇧→**, or ⇧-click | |
 | Slur over the selected notes (one note: to the next); again takes it off | **S** | Score tab ▸ Expression, right-click |
 | Crescendo / diminuendo hairpin over them | **<  /  >** | Score tab ▸ Expression, right-click |
+| Staccato / tenuto / accent / marcato on the selected notes (again: off) | **⇧S  ⇧N  ⇧V  ⇧O** | Score tab ▸ Articulation, right-click ▸ Articulations & Ornaments |
+| Fermata | **⇧H** | Score tab ▸ Articulation |
+| Trill, mordent, inverted mordent, turn; staccatissimo | | Score tab ▸ Articulation ▸ Ornament, right-click |
 | Dynamic under the selected note (ppp … fff, sfz, fp) | | Score tab ▸ Expression ▸ Dynamic, right-click ▸ Dynamic |
 | Key change from the bar of the selected note (or the cursor) | | Score tab ▸ Bars ▸ Key Change, right-click ▸ Key Change from Bar *n* |
 | Start / end repeat on that bar | | Score tab ▸ Bars ▸ Start Repeat \|: / End Repeat :\|, right-click |
@@ -274,6 +277,13 @@ voices, voice 1's over and voice 2's under); slurs and hairpins that run onto th
 follows them: each level plays louder or softer, a hairpin grows or fades towards the next dynamic (or by two levels),
 sfz accents its note and fp plays loud then soft; a second voice without its own dynamics follows voice 1's.
 
+**Articulations and ornaments** — staccato, staccatissimo, tenuto, accent and marcato sit by the note head (with two
+voices, past each voice's stems); trills, mordents, inverted mordents, turns and fermatas go outside the staff. They
+play: staccato shortens a note to half (staccatissimo to a third), tenuto and slurred notes are held full length,
+accents and marcato are louder, a fermata holds its note twice as long while everything after waits, and ornaments
+play their quick notes in the key (a trill alternates with the note above; a mordent dips to the note below; an
+inverted mordent goes to the note above; a turn goes above, back, below and back).
+
 **Key changes** start at a bar: a double bar line, naturals cancelling the old key's sharps or flats, then the new
 key; later lines start with the key in effect, and the notes sound in it. In the first bar, Key Change sets the score's
 key signature. **Repeat signs** (|: and :|) play the passage twice: an end repeat goes back to the last start repeat,
@@ -288,7 +298,7 @@ play together. While you write in one voice the other is shown in grey; clicking
 **MusicXML** — the format MuseScore, Finale, Sibelius and Dorico exchange scores in. **Insert ▸ Music Score from
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score: title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, dynamics, hairpins, slurs, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
+strings, dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
 out (other parts, staves and voices, grace notes) is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
 A tie carries its note's accidental across the bar line.
 
@@ -335,6 +345,14 @@ switches between Dark+ and Light+ (the block at the caret changes; new blocks us
 - Enter keeps the indent and adds a level after `{ [ ( :`; Enter on an empty last line leaves the block.
 - Tab types four spaces and ⇧Tab removes them. Backspace in leading spaces steps back to the previous four-space stop.
 - Clear Formatting (⇧⌘N) turns a block back into normal text.
+
+## Web links
+
+**Settings ▸ General ▸ Web Links ▸ Open web links in:** chooses the browser MxNoteONE opens web links in — for example
+DuckDuckGo — while Safari (or whatever the Mac's default is) stays the default for every other app. It applies to
+links clicked in text boxes and table cells, Open Link on the right-click menu, and OneNote for the Web; the link's
+hover card says which browser it will open in. Email links still open in Mail and page links stay in MxNoteONE. If
+the chosen browser is removed, links go back to the Mac's default.
 
 ## Spelling
 

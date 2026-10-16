@@ -109,6 +109,7 @@ final class CanvasController: NSObject {
         content = page
         canvas.showsPage = true
         canvas.build(from: page)
+        canvas.showDates(created: page.created, updated: store.meta(newRef)?.modified)
         scrollView.contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(scrollView.contentView)
         if store.focusTitleOnLoad {
@@ -128,6 +129,7 @@ final class CanvasController: NSObject {
         content = page
         canvas.showsPage = true
         canvas.build(from: page)
+        canvas.showDates(created: page.created, updated: store.meta(ref)?.modified)
     }
 
     func markDirty() {
@@ -158,6 +160,8 @@ final class CanvasController: NSObject {
         self.content = content
         let index = PageIndexer.index(texts: canvas.indexTexts())
         store.savePage(content, ref: ref, plainText: index.text, tags: index.tags)
+        // The header's "Updated" time moves on.
+        canvas.showDates(created: content.created, updated: store.meta(ref)?.modified)
     }
 
     func titleChanged() {

@@ -165,7 +165,7 @@ struct OneDriveNotebookMenu: View {
                 Button("Open in OneNote") { NSWorkspace.shared.open(url) }
             }
             if let url = link.webURL.flatMap(URL.init(string:)) {
-                Button("Open in OneNote for the Web") { NSWorkspace.shared.open(url) }
+                Button("Open in OneNote for the Web") { WebBrowser.open(url) }
             }
             Button("Stop Syncing with OneDrive") { sync.unlink(notebook) }
         } else {

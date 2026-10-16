@@ -5,6 +5,7 @@
 //  MusicXML, the format MuseScore, Finale, Sibelius and Dorico exchange
 //  scores in: a score exports as MusicXML 4.0 (notes, rests, dots, ties,
 //  accidentals, chords, chord symbols, lyrics, dynamics, hairpins, slurs,
+//  articulations, ornaments, fermatas,
 //  key and key changes, repeats,
 //  time, clef, tempo, and
 //  guitar strings and frets when the TAB staff is on), and MusicXML files —
@@ -126,6 +127,12 @@ enum MusicXML {
                 if main, note.slurEnd == true { notations += "<slur type=\"stop\" number=\"1\"/>" }
                 if main, note.slurStart == true { notations += "<slur type=\"start\" number=\"1\"/>" }
                 if main, note.tie, !note.rest { notations += "<tied type=\"start\"/>" }
+                if main {
+                    let arts = (note.articulations ?? []).compactMap { articulationXML[$0] }
+                    if !arts.isEmpty { notations += "<articulations>" + arts.joined() + "</articulations>" }
+                    if let o = note.ornament, let x = ornamentXML[o] { notations += "<ornaments>\(x)</ornaments>" }
+                    if note.fermata == true { notations += "<fermata type=\"\(voice == 2 ? "inverted" : "upright")\"/>" }
+                }
                 if let tabSpot { notations += "<technical><string>\(6 - tabSpot.string)</string><fret>\(tabSpot.fret)</fret></technical>" }
                 if !notations.isEmpty { x += "<notations>\(notations)</notations>" }
                 if main, let lyric = note.lyric, !lyric.isEmpty { x += lyricXML(score, i) }
@@ -148,6 +155,10 @@ enum MusicXML {
         }
         return out
     }
+    private static let articulationXML = ["staccato": "<staccato/>", "staccatissimo": "<staccatissimo/>", "tenuto": "<tenuto/>",
+                                          "accent": "<accent/>", "marcato": "<strong-accent type=\"up\"/>"]
+    private static let ornamentXML = ["trill": "<trill-mark/>", "mordent": "<mordent/>", "prall": "<inverted-mordent/>", "turn": "<turn/>"]
+
     /// A lyric with its syllable kind ("Twin-" "kle" → begin, end).
     private static func lyricXML(_ score: ScoreData, _ i: Int) -> String {
         let lyric = score.notes[i].lyric ?? ""
@@ -391,6 +402,19 @@ enum MusicXML {
                         }
                     }
                     if let d = pendingDynamic.removeValue(forKey: inSecond) { note.dynamic = d }
+                    // Articulations, ornaments, fermata.
+                    for notation in e.elements(forName: "notations") {
+                        let names = notation.elements(forName: "articulations").flatMap { ($0.children ?? []).compactMap { ($0 as? XMLElement)?.name } }
+                        let kinds: [String: String] = ["staccato": "staccato", "staccatissimo": "staccatissimo", "spiccato": "staccatissimo",
+                                                       "tenuto": "tenuto", "detached-legato": "tenuto", "accent": "accent", "strong-accent": "marcato"]
+                        let found = names.compactMap { kinds[$0] }
+                        if !found.isEmpty { note.articulations = Array(NSOrderedSet(array: (note.articulations ?? []) + found)) as? [String] }
+                        let ornaments: [String: String] = ["trill-mark": "trill", "mordent": "mordent", "inverted-mordent": "prall", "turn": "turn",
+                                                           "inverted-turn": "turn", "delayed-turn": "turn"]
+                        if let o = notation.elements(forName: "ornaments").flatMap({ ($0.children ?? []).compactMap { ($0 as? XMLElement)?.name } })
+                            .compactMap({ ornaments[$0] }).first { note.ornament = o }
+                        if !notation.elements(forName: "fermata").isEmpty { note.fermata = true }
+                    }
                     if let h = pendingHairpin.removeValue(forKey: inSecond) { note.hairpin = h }
                     if inSecond {
                         // In step with voice 1: rests where voice 2 starts later.

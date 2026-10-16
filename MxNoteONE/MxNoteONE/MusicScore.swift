@@ -89,6 +89,12 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     /// A hairpin starts here (1 crescendo, -1 diminuendo) / ends here.
     var hairpin: Int?
     var hairpinEnd: Bool?
+    /// Articulations on the note (staccato, staccatissimo, tenuto, accent, marcato).
+    var articulations: [String]?
+    /// A fermata (hold) over the note.
+    var fermata: Bool?
+    /// An ornament: trill, mordent, prall (inverted mordent) or turn.
+    var ornament: String?
 
     /// Length in quarter notes.
     var beats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) * (tuplet == true ? 2.0 / 3.0 : 1) }
@@ -384,6 +390,24 @@ struct ScoreData: Codable, Hashable {
         return result
     }
 
+    // MARK: Articulations and ornaments
+
+    /// (id, name, key) — the keys as in MuseScore.
+    static let articulationKinds: [(String, String, String)] = [
+        ("staccato", "Staccato", "⇧S"), ("staccatissimo", "Staccatissimo", ""), ("tenuto", "Tenuto", "⇧N"),
+        ("accent", "Accent", "⇧V"), ("marcato", "Marcato", "⇧O"),
+    ]
+    static let ornamentKinds: [(String, String)] = [("trill", "Trill"), ("mordent", "Mordent"), ("prall", "Inverted Mordent"), ("turn", "Turn")]
+
+    /// The pitch a step above (1) or below (-1) a note, in the key (for ornaments).
+    func neighbor(_ index: Int, _ direction: Int) -> Int? {
+        let note = notes[index]
+        guard !note.rest else { return nil }
+        let d = note.diatonic + direction
+        let step = ((d % 7) + 7) % 7, octave = d / 7
+        return Self.midi(step: step, octave: octave, alter: keyAlter(step, at: index))
+    }
+
     // MARK: Dynamics, hairpins and slurs
 
     static let dynamics = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "sfz", "fp"]
@@ -489,11 +513,20 @@ struct ScoreData: Codable, Hashable {
             + (hasSecondVoice ? " ‖ voice 2: " + forVoice(1).noteNames : "")
     }
 
+    /// Articulations, fermata and ornament in words (‹stacc. tr›).
+    private func marks(_ n: ScoreNote) -> String {
+        let short = ["staccato": "stacc.", "staccatissimo": "staccatiss.", "tenuto": "ten.", "accent": "acc.", "marcato": "marc.",
+                     "trill": "tr", "mordent": "mord.", "prall": "prall", "turn": "turn"]
+        let words = (n.articulations ?? []).compactMap { short[$0] } + (n.ornament.flatMap { short[$0] }.map { [$0] } ?? [])
+            + (n.fermata == true ? ["fermata"] : [])
+        return words.isEmpty ? "" : " ‹" + words.joined(separator: " ") + "›"
+    }
+
     /// One note by name (C4 q, D♯4 8., r h…).
     private func name(_ i: Int, _ n: ScoreNote) -> String {
         let length = ["", "w", "h", "", "q", "", "", "", "8", "", "", "", "", "", "", "", "16"][n.duration.rawValue] + (n.dotted ? "." : "")
             + (n.tuplet == true ? "³" : "")
-        if n.rest { return "r" + length }
+        if n.rest { return "r" + length + marks(n) }
         let alter = soundingAlter(i)
         let name = ["C", "D", "E", "F", "G", "A", "B"][n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "")
         let tones = (n.chord ?? []).map { t in
@@ -503,7 +536,7 @@ struct ScoreData: Codable, Hashable {
             + (n.hairpin.map { $0 > 0 ? "cresc. " : "dim. " } ?? "") + (n.slurStart == true ? "(" : "")
         let lyric = (n.lyric ?? "").isEmpty ? "" : " “\(n.lyric!)”"
         return symbol + "\(name)\(n.octave)" + tones.map { "+" + $0 }.joined() + " \(length)" + (n.tie ? "~" : "")
-            + (n.slurEnd == true ? ")" : "") + lyric
+            + (n.slurEnd == true ? ")" : "") + marks(n) + lyric
     }
 }
 
@@ -566,14 +599,18 @@ final class ScorePlayer {
         let barCount = barsByVoice.map(\.count).max() ?? 0
         var order = score.playOrder(bars: barCount)
         if let first = order.firstIndex(of: startBar) { order = Array(order[first...]) }
-        var end = 0.0
+        #if DEBUG
+        Self.plan = []
+        #endif
+        // 1. What sounds: each voice's notes in playing order (tied notes as one), with when and how long (in beats).
+        struct Sound { let voice: Int; let index: Int; var time: Double; var length: Double; let velocity: Int }
+        var sounds: [Sound] = []
         for v in lines.indices {
             let line = lines[v]
             let onsets = line.onsets
             // How loud: the voice's own dynamics, else voice 1's at the same time.
             let ownDynamics = line.notes.contains { $0.dynamic != nil || $0.hairpin != nil }
             let loudness: [Int] = ownDynamics || v == 0 ? line.velocities : onsets.map { lines[0].level(at: $0) }
-            // The notes in playing order, each with when it starts (quarter notes from the start).
             var events: [(index: Int, time: Double)] = []
             var barTime = 0.0
             for (k, b) in order.enumerated() {
@@ -597,29 +634,77 @@ final class ScorePlayer {
                     last += 1
                     length += line.notes[events[last].index].beats
                 }
-                let ref = NoteRef(voice: v, index: i)
-                let keys = line.midis(i).map { UInt8(max(0, min(127, $0))) }
-                let velocity = UInt8(max(1, min(127, loudness[i])))
-                let time = events[j].time * secondsPerBeat
-                let on = DispatchWorkItem { [weak self] in
-                    self?.view?.playing.insert(ref)
-                    for key in keys {
-                        self?.sampler.startNote(key, withVelocity: velocity, onChannel: 0)
+                sounds.append(Sound(voice: v, index: i, time: events[j].time, length: length, velocity: loudness[i]))
+                j = last + 1
+            }
+        }
+        // 2. Fermatas hold their note about twice as long; everything after waits.
+        let holds = sounds.filter { lines[$0.voice].notes[$0.index].fermata == true }.map { ($0.time, $0.length) }
+        func delay(_ t: Double) -> Double { holds.reduce(0) { $0 + ($1.0 + $1.1 <= t + 1e-6 ? $1.1 : 0) } }
+        // 3. Schedule: articulations shape length and loudness; ornaments play their notes.
+        var end = 0.0
+        for sound in sounds {
+            let line = lines[sound.voice]
+            let note = line.notes[sound.index]
+            let ref = NoteRef(voice: sound.voice, index: sound.index)
+            let held = note.fermata == true ? sound.length * 2 : sound.length
+            let start = (sound.time + delay(sound.time)) * secondsPerBeat
+            let span = held * secondsPerBeat
+            let marks = Set(note.articulations ?? [])
+            let inSlur = line.slurs.contains { $0.0 <= sound.index && sound.index < $0.1 }
+            let sounding = marks.contains("staccatissimo") ? 0.3 : marks.contains("staccato") ? 0.5
+                : marks.contains("tenuto") || inSlur ? 1.0 : 0.95
+            var velocity = sound.velocity
+            if marks.contains("accent") { velocity += 18 }
+            if marks.contains("marcato") { velocity += 28 }
+            let vel = UInt8(max(1, min(127, velocity)))
+            let keys = line.midis(sound.index).map { UInt8(max(0, min(127, $0))) }
+            // The highlight lasts the whole note.
+            let on = DispatchWorkItem { [weak self] in self?.view?.playing.insert(ref) }
+            let off = DispatchWorkItem { [weak self] in self?.view?.playing.remove(ref) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + start, execute: on)
+            DispatchQueue.main.asyncAfter(deadline: .now() + start + span * 0.97, execute: off)
+            work += [on, off]
+            end = max(end, start + span)
+            guard !keys.isEmpty else { continue }
+            // The pitches: the note (and chord) as written, or an ornament's quick notes on the main pitch.
+            var parts: [(keys: [UInt8], at: Double, length: Double)] = [(keys, 0, span * sounding)]
+            if let ornament = note.ornament, let main = keys.first {
+                let up = line.neighbor(sound.index, 1).map { UInt8(max(0, min(127, $0))) } ?? main
+                let down = line.neighbor(sound.index, -1).map { UInt8(max(0, min(127, $0))) } ?? main
+                let quick = min(0.09, span / 4)
+                let others = Array(keys.dropFirst())
+                var run: [UInt8]
+                switch ornament {
+                case "trill": run = (0..<max(2, Int(span / quick))).map { $0 % 2 == 0 ? up : main }
+                case "mordent": run = [main, down]
+                case "prall": run = [main, up]
+                default: run = [up, main, down]   // turn
+                }
+                parts = run.enumerated().map { ([$0.element], Double($0.offset) * quick, quick * 0.95) }
+                let after = Double(run.count) * quick
+                if ornament != "trill", after < span { parts.append(([main], after, (span - after) * sounding)) }
+                if !others.isEmpty { parts.append((others, 0, span * sounding)) }
+            }
+            #if DEBUG
+            Self.plan.append((ref, start, span, parts.map { ($0.keys, $0.at, $0.length) }))
+            #endif
+            for part in parts {
+                let down = DispatchWorkItem { [weak self] in
+                    for key in part.keys {
+                        self?.sampler.startNote(key, withVelocity: vel, onChannel: 0)
                         self?.sounding.insert(key)
                     }
                 }
-                let off = DispatchWorkItem { [weak self] in
-                    self?.view?.playing.remove(ref)
-                    for key in keys {
+                let up = DispatchWorkItem { [weak self] in
+                    for key in part.keys {
                         self?.sampler.stopNote(key, onChannel: 0)
                         self?.sounding.remove(key)
                     }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + time, execute: on)
-                DispatchQueue.main.asyncAfter(deadline: .now() + time + length * secondsPerBeat * 0.95, execute: off)
-                work += [on, off]
-                end = max(end, time + length * secondsPerBeat)
-                j = last + 1
+                DispatchQueue.main.asyncAfter(deadline: .now() + start + part.at, execute: down)
+                DispatchQueue.main.asyncAfter(deadline: .now() + start + part.at + max(0.03, part.length), execute: up)
+                work += [down, up]
             }
         }
         guard !work.isEmpty else { return stop() }
@@ -629,6 +714,11 @@ final class ScorePlayer {
         view.needsDisplay = true
         NotebookStore.shared.editor.scorePlaying = true
     }
+
+    #if DEBUG
+    /// Self-tests: what the last play scheduled (note, start, length in seconds, and its pitches).
+    nonisolated(unsafe) static var plan: [(ref: NoteRef, start: Double, span: Double, parts: [(keys: [UInt8], at: Double, length: Double)])] = []
+    #endif
 
     func stop() {
         work.forEach { $0.cancel() }
@@ -703,7 +793,15 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private var tabBand: CGFloat { score.showTab == true ? space * 10 : 0 }
     /// Dynamics and hairpins under the staff.
     private var dynamicBand: CGFloat { score.hasDynamics ? space * 3 : 0 }
-    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand + dynamicBand }
+    /// Room over the staff for marks above notes (fermatas, ornaments, and voice 1's articulations past its stems),
+    /// and under it for voice 2's.
+    private var markBandAbove: CGFloat {
+        score.notes.contains { $0.fermata == true || $0.ornament != nil || (score.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0
+    }
+    private var markBandBelow: CGFloat {
+        score.hasSecondVoice && score.line(1).contains { $0.fermata == true || $0.ornament != nil || $0.articulations != nil } ? space * 3.4 : 0
+    }
+    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand + dynamicBand + markBandAbove + markBandBelow }
     /// TAB lines' spacing.
     private var tabGap: CGFloat { space * 1.3 }
 
@@ -902,16 +1000,16 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// The top of a system's staff.
     private func staffTop(_ system: Int) -> CGFloat {
-        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5 + chordBand
+        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5 + chordBand + markBandAbove
     }
 
-    private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 + dynamicBand }
+    private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 + dynamicBand + markBandBelow }
 
     /// The middle of the dynamics band (under the staff, clear of stems and ledger lines).
-    private func dynamicY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.6 }
+    private func dynamicY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.6 + markBandBelow }
 
     /// The TAB staff's top line (high E).
-    private func tabTop(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 4.2 + lyricBand + dynamicBand }
+    private func tabTop(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 4.2 + lyricBand + dynamicBand + markBandBelow }
 
     /// Half-spaces up from the bottom line.
     private func position(_ note: ScoreNote) -> Int { note.diatonic - score.clef.bottomLine }
@@ -961,10 +1059,134 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         drawNotes(ink: ink)
         drawSlurs(ink: ink)
+        drawMarks(ink: ink)
         drawDynamics(ink: ink)
         drawWords(ink: ink)
         if score.showTab == true { drawTab(ink: ink) }
         drawCaret()
+    }
+
+    // MARK: Articulations, ornaments, fermatas
+
+    /// Articulations by the note head (away from the stem; with two voices, past each voice's stems), then ornaments
+    /// and a fermata beyond them, outside the staff.
+    private func drawMarks(ink: NSColor) {
+        let two = score.hasSecondVoice
+        for p in placed {
+            let line = score.forVoice(p.voice)
+            let note = line.notes[p.index]
+            let marks = ScoreData.articulationKinds.map(\.0).filter { (note.articulations ?? []).contains($0) }
+            guard !marks.isEmpty || note.ornament != nil || note.fermata == true else { continue }
+            let ref = NoteRef(voice: p.voice, index: p.index)
+            let color = colorFor(ref, ink: ink)
+            let top = staffTop(p.system), bottom = top + space * 4
+            let cx = p.x + space * 0.62
+            let shape = shapes[ref] ?? (up: true, low: top + space * 2.5, high: top + space * 1.5)
+            // Articulations: on the head's side (stem up → under the note), or past the stem with two voices.
+            let above = two ? p.voice == 0 : !shape.up
+            var y: CGFloat
+            if two {
+                y = above ? shape.high - space * 4.4 : shape.low + space * 4.4
+            } else {
+                y = above ? shape.high - space * 1.2 : shape.low + space * 1.2
+            }
+            color.set()
+            for mark in marks {
+                // Dots and lines sit in a space, not on a staff line.
+                if y > top - 1, y < bottom + 1, ["staccato", "tenuto", "staccatissimo"].contains(mark) {
+                    let k = ((y - top) / space)
+                    if abs(k - k.rounded()) < 0.25 { y += above ? -space * 0.5 : space * 0.5 }
+                }
+                drawArticulation(mark, x: cx, y: y, above: above, color: color)
+                y += above ? -space * 1.1 : space * 1.1
+            }
+            // Ornaments and fermatas: outside the staff, beyond any articulations.
+            let outsideAbove = two ? p.voice == 0 : true
+            var oy = outsideAbove ? min(top - space * 1.4, (above && !marks.isEmpty ? y : shape.high - (shape.up ? space * 4.4 : space * 1.4)) - space * 0.4)
+                                  : max(bottom + space * 1.4, (!above && !marks.isEmpty ? y : shape.low + space * 4.4) + space * 0.4)
+            if let ornament = note.ornament {
+                drawOrnament(ornament, x: cx, y: oy, color: color)
+                oy += outsideAbove ? -space * 1.6 : space * 1.6
+            }
+            if note.fermata == true {
+                let glyph = outsideAbove ? "\u{1D110}" : "\u{1D111}"
+                let font = NSFont(name: "Apple Symbols", size: space * 3.4) ?? .systemFont(ofSize: space * 3)
+                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+                let size = (glyph as NSString).size(withAttributes: attrs)
+                (glyph as NSString).draw(at: NSPoint(x: cx - size.width / 2, y: oy - size.height * (outsideAbove ? 0.62 : 0.38)), withAttributes: attrs)
+            }
+        }
+    }
+
+    private func drawArticulation(_ mark: String, x: CGFloat, y: CGFloat, above: Bool, color: NSColor) {
+        let toward: CGFloat = above ? 1 : -1   // towards the note (down when above)
+        switch mark {
+        case "staccato":
+            let r = space * 0.22
+            NSBezierPath(ovalIn: NSRect(x: x - r, y: y - r, width: r * 2, height: r * 2)).fill()
+        case "staccatissimo":
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: x - space * 0.22, y: y - toward * space * 0.4))
+            path.line(to: NSPoint(x: x + space * 0.22, y: y - toward * space * 0.4))
+            path.line(to: NSPoint(x: x, y: y + toward * space * 0.4))
+            path.close()
+            path.fill()
+        case "tenuto":
+            NSRect(x: x - space * 0.65, y: y - 0.75, width: space * 1.3, height: 1.5).fill()
+        case "accent":
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: x - space * 0.7, y: y - space * 0.42))
+            path.line(to: NSPoint(x: x + space * 0.7, y: y))
+            path.line(to: NSPoint(x: x - space * 0.7, y: y + space * 0.42))
+            path.lineWidth = 1.3
+            path.stroke()
+        case "marcato":
+            // An upturned wedge (^) over the note, v under it.
+            let tip = y - toward * space * 0.5, base = y + toward * space * 0.5
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: x - space * 0.5, y: base))
+            path.line(to: NSPoint(x: x, y: tip))
+            path.line(to: NSPoint(x: x + space * 0.5, y: base))
+            path.line(to: NSPoint(x: x + space * 0.25, y: base))
+            path.line(to: NSPoint(x: x, y: tip + toward * space * 0.45))
+            path.line(to: NSPoint(x: x - space * 0.25, y: base))
+            path.close()
+            path.fill()
+        default:
+            break
+        }
+    }
+
+    private func drawOrnament(_ ornament: String, x: CGFloat, y: CGFloat, color: NSColor) {
+        color.set()
+        switch ornament {
+        case "trill":
+            let attrs: [NSAttributedString.Key: Any] = [.font: Self.dynamicFont, .foregroundColor: color]
+            let size = ("tr" as NSString).size(withAttributes: attrs)
+            ("tr" as NSString).draw(at: NSPoint(x: x - size.width / 2, y: y - size.height / 2), withAttributes: attrs)
+        case "mordent", "prall":
+            // A short zigzag; the mordent has a stroke through it.
+            let w = space * 1.8, h = space * 0.75
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: x - w / 2, y: y + h / 2))
+            for k in 1...4 { path.line(to: NSPoint(x: x - w / 2 + w * CGFloat(k) / 4, y: k % 2 == 1 ? y - h / 2 : y + h / 2)) }
+            path.lineWidth = 1.6
+            path.lineJoinStyle = .round
+            path.stroke()
+            if ornament == "mordent" {
+                NSRect(x: x - 0.6, y: y - h, width: 1.2, height: h * 2).fill()
+            }
+        default:
+            // Turn: an S lying on its side.
+            let w = space * 2.0, h = space * 0.8
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: x - w / 2, y: y + h * 0.1))
+            path.curve(to: NSPoint(x: x, y: y), controlPoint1: NSPoint(x: x - w / 2, y: y - h), controlPoint2: NSPoint(x: x - w * 0.1, y: y - h))
+            path.curve(to: NSPoint(x: x + w / 2, y: y - h * 0.1), controlPoint1: NSPoint(x: x + w * 0.1, y: y + h), controlPoint2: NSPoint(x: x + w / 2, y: y + h))
+            path.lineWidth = 2.0
+            path.lineCapStyle = .round
+            path.stroke()
+        }
     }
 
     // MARK: Slurs, dynamics, hairpins
@@ -1115,7 +1337,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let color = colorFor(NoteRef(voice: 0, index: p.index), ink: ink)
             if let symbol = note.chordSymbol, !symbol.isEmpty {
                 let attrs: [NSAttributedString.Key: Any] = [.font: Self.chordFont, .foregroundColor: color]
-                (symbol as NSString).draw(at: NSPoint(x: p.x - space * 0.2, y: staffTop(p.system) - space * 2 - chordBand + space * 0.2),
+                (symbol as NSString).draw(at: NSPoint(x: p.x - space * 0.2, y: staffTop(p.system) - space * 2 - chordBand - markBandAbove + space * 0.2),
                                           withAttributes: attrs)
             }
             guard let lyric = note.lyric, !lyric.isEmpty else { continue }
@@ -1917,6 +2139,68 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     var slurHere: Bool { spanTarget.map { t in cur.slurs.contains { $0.0 == t.0 } } ?? false }
     var hairpinHere: Int? { spanTarget.flatMap { t in cur.hairpins.first { $0.0 == t.0 }?.2 } }
 
+    // MARK: Articulations and ornaments
+
+    /// The notes marks go on: the selected run, else the selected note (or the one just typed).
+    private var markTargets: [Int] {
+        if let r = selectedRange { return Array(r) }
+        return target.map { [$0] } ?? []
+    }
+
+    /// Adds an articulation to the notes (or takes it off when they all have it). Staccato and staccatissimo
+    /// replace each other, as do accent and marcato.
+    func toggleArticulation(_ mark: String) {
+        let notes = markTargets
+        guard !notes.isEmpty else { return NSSound.beep() }
+        let name = ScoreData.articulationKinds.first { $0.0 == mark }?.1 ?? "Articulation"
+        let allHave = notes.allSatisfy { (cur.notes[$0].articulations ?? []).contains(mark) }
+        let rivals: [String: String] = ["staccato": "staccatissimo", "staccatissimo": "staccato", "accent": "marcato", "marcato": "accent"]
+        editVoice(name) { s in
+            for i in notes {
+                var list = (s.notes[i].articulations ?? []).filter { $0 != mark && $0 != rivals[mark] }
+                if !allHave { list.append(mark) }
+                s.notes[i].articulations = list.isEmpty ? nil : list
+            }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Sets an ornament on the notes (the same again takes it off).
+    func toggleOrnament(_ ornament: String) {
+        let notes = markTargets
+        guard !notes.isEmpty else { return NSSound.beep() }
+        let allHave = notes.allSatisfy { cur.notes[$0].ornament == ornament }
+        editVoice(ScoreData.ornamentKinds.first { $0.0 == ornament }?.1 ?? "Ornament") { s in
+            for i in notes { s.notes[i].ornament = allHave ? nil : ornament }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    func toggleFermata() {
+        let notes = markTargets
+        guard !notes.isEmpty else { return NSSound.beep() }
+        let allHave = notes.allSatisfy { cur.notes[$0].fermata == true }
+        editVoice("Fermata") { s in for i in notes { s.notes[i].fermata = allHave ? nil : true } }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Clears articulations, ornaments and fermatas from the notes.
+    func clearMarks() {
+        let notes = markTargets
+        guard !notes.isEmpty else { return NSSound.beep() }
+        editVoice("Clear Articulations") { s in
+            for i in notes { s.notes[i].articulations = nil; s.notes[i].ornament = nil; s.notes[i].fermata = nil }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Whether the selected note has a mark (for checkmarks in menus and the ribbon).
+    func hasMark(_ mark: String) -> Bool {
+        guard let i = markTargets.first, cur.notes.indices.contains(i) else { return false }
+        let note = cur.notes[i]
+        return (note.articulations ?? []).contains(mark) || note.ornament == mark || (mark == "fermata" && note.fermata == true)
+    }
+
     // MARK: Key changes and repeats
 
     /// The bar commands act on: the selected note's (or the cursor's); after a full last bar, the next one.
@@ -2016,6 +2300,17 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             }
         }
         guard !command else { return super.keyDown(with: event) }
+        // ⇧S staccato, ⇧N tenuto, ⇧V accent, ⇧O marcato, ⇧H fermata (as in MuseScore).
+        if event.modifierFlags.contains(.shift) {
+            switch chars {
+            case "s": return toggleArticulation("staccato")
+            case "n": return toggleArticulation("tenuto")
+            case "v": return toggleArticulation("accent")
+            case "o": return toggleArticulation("marcato")
+            case "h": return toggleFermata()
+            default: break
+            }
+        }
         if let letter = chars.first, let step = ["c", "d", "e", "f", "g", "a", "b"].firstIndex(of: String(letter)) {
             // ⇧ adds the note to the chord.
             return event.modifierFlags.contains(.shift) ? addChordTone(step: step) : insert(step: step)
@@ -2258,6 +2553,20 @@ final class ScoreElementView: ElementView {
         menu.addItem(ClosureMenuItem("Slur  S", state: staff.slurHere) { [weak self] in self?.staff.toggleSlur() })
         menu.addItem(ClosureMenuItem("Crescendo  <", state: staff.hairpinHere == 1) { [weak self] in self?.staff.toggleHairpin(1) })
         menu.addItem(ClosureMenuItem("Diminuendo  >", state: staff.hairpinHere == -1) { [weak self] in self?.staff.toggleHairpin(-1) })
+        let articulation = NSMenuItem(title: "Articulations & Ornaments", action: nil, keyEquivalent: "")
+        let arts = NSMenu()
+        for (id, name, key) in ScoreData.articulationKinds {
+            arts.addItem(ClosureMenuItem(key.isEmpty ? name : "\(name)  \(key)", state: staff.hasMark(id)) { [weak self] in self?.staff.toggleArticulation(id) })
+        }
+        arts.addItem(.separator())
+        for (id, name) in ScoreData.ornamentKinds {
+            arts.addItem(ClosureMenuItem(name, state: staff.hasMark(id)) { [weak self] in self?.staff.toggleOrnament(id) })
+        }
+        arts.addItem(ClosureMenuItem("Fermata  ⇧H", state: staff.hasMark("fermata")) { [weak self] in self?.staff.toggleFermata() })
+        arts.addItem(.separator())
+        arts.addItem(ClosureMenuItem("Clear Articulations & Ornaments") { [weak self] in self?.staff.clearMarks() })
+        articulation.submenu = arts
+        menu.addItem(articulation)
         // At the bar right-clicked (or the cursor's).
         let bar = staff.currentBar
         let change = NSMenuItem(title: bar == 0 ? "Key Change (first bar: the key signature)" : "Key Change from Bar \(bar + 1)", action: nil, keyEquivalent: "")

@@ -526,6 +526,28 @@ struct ScoreRibbon: View {
             RibbonButton("Crescendo (<)", "lessthan", active: staff?.hairpinHere == 1) { act { $0.toggleHairpin(1) } }
             RibbonButton("Diminuendo (>)", "greaterthan", active: staff?.hairpinHere == -1) { act { $0.toggleHairpin(-1) } }
         }
+        RibbonGroup("Articulation") {
+            Button { act { $0.toggleArticulation("staccato") } } label: { Text("•").font(.system(size: 15, weight: .bold)).frame(width: 22) }
+                .help("Staccato (⇧S)")
+            Button { act { $0.toggleArticulation("tenuto") } } label: { Text("–").font(.system(size: 15, weight: .bold)).frame(width: 22) }
+                .help("Tenuto (⇧N)")
+            Button { act { $0.toggleArticulation("accent") } } label: { Text(">").font(.system(size: 15, weight: .bold)).frame(width: 22) }
+                .help("Accent (⇧V)")
+            Button { act { $0.toggleArticulation("marcato") } } label: { Text("^").font(.system(size: 15, weight: .bold)).frame(width: 22) }
+                .help("Marcato (⇧O)")
+            Button { act { $0.toggleFermata() } } label: { Text("\u{1D110}").font(.custom("Apple Symbols", size: 22)).frame(width: 22) }
+                .help("Fermata (⇧H)")
+            RibbonMenu("Ornament", "waveform.path") {
+                ForEach(ScoreData.ornamentKinds, id: \.0) { id, name in
+                    Button(name) { act { $0.toggleOrnament(id) } }
+                }
+                Button("Staccatissimo") { act { $0.toggleArticulation("staccatissimo") } }
+                Divider()
+                Button("Clear Articulations & Ornaments") { act { $0.clearMarks() } }
+            }
+            .help("Trill, mordent, inverted mordent, turn")
+        }
+        .buttonStyle(.borderless)
         RibbonGroup("Bars") {
             let bar = staff?.currentBar ?? 0
             let mark = staff?.score.mark(bar) ?? ScoreBarMark()

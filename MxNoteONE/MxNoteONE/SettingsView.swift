@@ -16,6 +16,8 @@ struct SettingsView: View {
     @AppStorage(Prefs.autoLockKey) private var autoLockMinutes = 10
     @AppStorage(DeviceUnlock.appLockKey) private var appLock = false
     @State private var useOfficeFonts = OfficeFonts.enabled
+    @AppStorage(WebBrowser.key) private var browserID = ""
+    @State private var browsers = WebBrowser.installed()
 
     private var officeFontsStatus: String {
         let available = OfficeFonts.fontFiles()
@@ -61,6 +63,26 @@ struct SettingsView: View {
                     }))
                 .disabled(OfficeFonts.fontFiles().files.isEmpty)
                 Text(officeFontsStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Section("Web Links") {
+                Picker("Open web links in:", selection: $browserID) {
+                    Text("Mac default (\(WebBrowser.systemDefault?.name ?? "Safari"))").tag("")
+                    Divider()
+                    ForEach(browsers) { app in
+                        Label { Text(app.name) } icon: { Image(nsImage: app.icon) }.tag(app.id)
+                    }
+                    // A browser chosen before that has since been removed.
+                    if !browserID.isEmpty, !browsers.contains(where: { $0.id == browserID }) {
+                        Text("\(browserID) (not installed)").tag(browserID)
+                    }
+                }
+                .onAppear { browsers = WebBrowser.installed() }
+                Text(browserID.isEmpty
+                     ? "Links in your notes open in the browser the Mac uses for everything."
+                     : "Links in your notes (text, tables, the link card) open in \(browsers.first { $0.id == browserID }?.name ?? "the chosen browser") — other apps still use the Mac's default. Email and page links open as usual.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
