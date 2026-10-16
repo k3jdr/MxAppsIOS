@@ -513,6 +513,19 @@ struct ScoreRibbon: View {
             RibbonButton("Dot (.)", "circle.fill", active: ScoreView.inputDotted) { act { $0.toggleDot() } }
             RibbonButton("Triplet (⌃3)", "3.square", active: ScoreView.inputTriplet) { act { $0.toggleTriplet() } }
         }
+        RibbonGroup("Expression") {
+            RibbonMenu("Dynamic", "speaker.wave.2") {
+                ForEach(ScoreData.dynamics, id: \.self) { d in
+                    Button(d) { act { $0.setDynamic(d) } }
+                }
+                Divider()
+                Button("Remove Dynamic") { act { $0.setDynamic(nil) } }
+            }
+            .help("A dynamic under the selected note")
+            RibbonButton("Slur (S)", "point.topleft.down.to.point.bottomright.curvepath", active: staff?.slurHere == true) { act { $0.toggleSlur() } }
+            RibbonButton("Crescendo (<)", "lessthan", active: staff?.hairpinHere == 1) { act { $0.toggleHairpin(1) } }
+            RibbonButton("Diminuendo (>)", "greaterthan", active: staff?.hairpinHere == -1) { act { $0.toggleHairpin(-1) } }
+        }
         RibbonGroup("Bars") {
             let bar = staff?.currentBar ?? 0
             let mark = staff?.score.mark(bar) ?? ScoreBarMark()

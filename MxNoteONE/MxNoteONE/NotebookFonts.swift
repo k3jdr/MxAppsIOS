@@ -99,9 +99,9 @@ enum NotebookFonts {
                     switch content.elements[i].kind {
                     case .text where change.textBoxes:
                         guard let data = content.elements[i].rtfd,
-                              let text = NSAttributedString(rtfd: data, documentAttributes: nil), text.length > 0 else { continue }
+                              let text = NoteRichText.text(data), text.length > 0 else { continue }
                         let converted = change.convert(text)
-                        content.elements[i].rtfd = converted.rtfd(from: NSRange(location: 0, length: converted.length), documentAttributes: [:])
+                        content.elements[i].rtfd = NoteRichText.data(converted)
                         changed = true
                     case .table where change.tables:
                         guard var table = content.elements[i].table else { continue }

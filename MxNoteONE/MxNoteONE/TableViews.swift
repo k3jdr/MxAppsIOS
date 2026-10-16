@@ -61,11 +61,11 @@ extension TableData {
 
     /// Formatted cell text from stored data (RTFD, which can hold pictures; older tables used RTF).
     static func attributedCell(_ data: Data) -> NSAttributedString? {
-        NSAttributedString(rtfd: data, documentAttributes: nil) ?? NSAttributedString(rtf: data, documentAttributes: nil)
+        NoteRichText.text(data)
     }
 
     static func cellData(_ text: NSAttributedString) -> Data? {
-        text.rtfd(from: NSRange(location: 0, length: text.length), documentAttributes: [:])
+        NoteRichText.data(text)
     }
 
     func richData(_ row: Int, _ column: Int) -> Data? {
@@ -1361,9 +1361,18 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     /// The hover card for a link in a cell that isn't being typed in: Edit Link and Remove type in the cell.
     private func hoverLink(at p: NSPoint) {
-        let found = character(at: p).flatMap { cell, text, index -> (CellRef, URL)? in
+        let hit = character(at: p)
+        let found = hit.flatMap { cell, text, index -> (CellRef, URL)? in
             let value = text.attribute(.link, at: index, effectiveRange: nil)
             return (value as? URL ?? (value as? String).flatMap { URL(string: $0) }).map { (cell, $0) }
+        }
+        // The link's words and hover text.
+        var words: String?, tip: NSAttributedString?
+        if let (_, text, index) = hit, found != nil {
+            var range = NSRange()
+            _ = text.attribute(.link, at: index, longestEffectiveRange: &range, in: NSRange(location: 0, length: text.length))
+            words = (text.string as NSString).substring(with: range)
+            tip = NoteRichText.tip(in: text, at: index)
         }
         let rect = found.map { cellRect($0.0).insetBy(dx: Self.padX, dy: Self.padY) } ?? .zero
         LinkHover.shared.pointer(over: found?.1, rect: rect, in: self) { [weak self] in
@@ -1375,7 +1384,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
                 guard let self, let (cell, url) = found, let range = self.typeInLink(url, in: cell) else { return }
                 self.editor.setSelectedRange(range)
                 TextFormatter.removeLink()
-            })
+            }, tip: tip, text: words)
         }
     }
 

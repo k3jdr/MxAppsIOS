@@ -39,7 +39,7 @@ enum OneNoteHTML {
             let x = Int(element.x.rounded()), y = Int((element.y + grip).rounded()), w = Int(element.width.rounded())
             switch element.kind {
             case .text:
-                guard let data = element.rtfd, let text = NSAttributedString(rtfd: data, documentAttributes: nil),
+                guard let data = element.rtfd, let text = NoteRichText.text(data),
                       text.length > 0 else { continue }
                 body += "<div style=\"position:absolute;left:\(x)px;top:\(y)px;width:\(w)px\">"
                 body += textHTML(text, parts: &parts) + "</div>\n"
@@ -350,7 +350,7 @@ enum OneNoteHTML {
 
     static func textElement(_ text: NSAttributedString, x: CGFloat, y: CGFloat, width: CGFloat) -> PageElement {
         var element = PageElement(kind: .text, x: max(0, x), y: max(0, y), width: max(width, 80))
-        element.rtfd = text.rtfd(from: NSRange(location: 0, length: text.length), documentAttributes: [:])
+        element.rtfd = NoteRichText.data(text)
         let height = text.boundingRect(with: NSSize(width: max(width - 8, 40), height: .greatestFiniteMagnitude),
                                        options: [.usesLineFragmentOrigin, .usesFontLeading]).height
         element.height = ceil(height) + 8 + ElementView.gripHeight

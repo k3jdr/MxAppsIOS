@@ -425,7 +425,7 @@ final class TextElementView: ElementView, NSTextViewDelegate {
     override init(element: PageElement) {
         super.init(element: element)
         configureTextView()
-        if let data = element.rtfd, let text = NSAttributedString(rtfd: data, documentAttributes: nil) {
+        if let data = element.rtfd, let text = NoteRichText.text(data) {
             textView.textStorage?.setAttributedString(text)
         }
         addSubview(textView)
@@ -520,7 +520,7 @@ final class TextElementView: ElementView, NSTextViewDelegate {
     override func makeElement() -> PageElement {
         var e = super.makeElement()
         if let storage = textView.textStorage {
-            e.rtfd = storage.rtfd(from: NSRange(location: 0, length: storage.length), documentAttributes: [:])
+            e.rtfd = NoteRichText.data(storage)
         }
         return e
     }

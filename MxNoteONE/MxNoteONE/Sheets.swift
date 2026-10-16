@@ -307,6 +307,9 @@ struct LinkSheet: View {
     @State private var address = ""
     @State private var filter = ""
     @State private var page: PageRef?
+    /// The hover text shown on the link's card.
+    @State private var tip = NSAttributedString()
+    @State private var tipBox = TipEditorBox()
 
     private var store: NotebookStore { .shared }
 
@@ -340,10 +343,11 @@ struct LinkSheet: View {
         DialogFrame(editing ? "Edit Link" : "Link", okTitle: editing ? "Update" : "Insert", okDisabled: url == nil) {
             if let url, let tv = store.linkTextView {
                 let title = text.isEmpty ? (page.flatMap { store.meta($0)?.displayTitle } ?? address) : text
+                let hover = tip.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : tip
                 if editing {
-                    TextFormatter.replaceLink(url, title: title, in: tv, range: store.linkRange)
+                    TextFormatter.replaceLink(url, title: title, in: tv, range: store.linkRange, tip: hover)
                 } else {
-                    TextFormatter.addLink(url, title: title, in: tv, range: store.linkRange)
+                    TextFormatter.addLink(url, title: title, in: tv, range: store.linkRange, tip: hover)
                 }
             }
             store.linkExisting = nil
@@ -355,6 +359,25 @@ struct LinkSheet: View {
                 TextField("Address:", text: $address, prompt: Text("https://… or pick a page below"))
                     .onChange(of: address) { if !address.isEmpty { page = nil } }
                     .help("A web address (https://…), an email address, or a link copied with Copy Link to Page or Paragraph")
+            }
+            HStack {
+                Text("Hover text — shown when the pointer rests on the link:")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                TipToolbar(box: tipBox)
+            }
+            TipEditor(text: $tip, box: tipBox)
+                .frame(height: 64)
+                .help("Your own description for the link's hover card (optional). Format it with the buttons or ⌘B ⌘I ⌘U.")
+            if let url {
+                DisclosureGroup("Hover card preview") {
+                    LinkCard(info: LinkInfo(url, tip: tip, text: text.isEmpty ? nil : text), edit: {}, copy: {}, remove: {}, preview: true)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+                        .padding(.vertical, 4)
+                }
+                .font(.caption)
             }
             Text("Or link to a page in your notebooks:")
                 .font(.caption)
@@ -371,7 +394,7 @@ struct LinkSheet: View {
                     .tag(ref)
                 }
             }
-            .frame(height: 200)
+            .frame(height: 150)
             .onChange(of: page) { if page != nil { address = "" } }
             .help("Pick a page to link to it (the link follows the page if it's renamed or moved)")
             if editing {
@@ -392,6 +415,11 @@ struct LinkSheet: View {
             if let tv = store.linkTextView, let storage = tv.textStorage, store.linkRange.length > 0,
                NSMaxRange(store.linkRange) <= storage.length {
                 text = (storage.string as NSString).substring(with: store.linkRange)
+                // The link's hover text, to edit.
+                if store.linkExisting != nil, let existing = NoteRichText.tip(in: storage, at: store.linkRange.location) {
+                    tip = existing
+                    tipBox.textView?.textStorage?.setAttributedString(existing)
+                }
             }
             // Editing a link: its address (a link to a whole page shows as that page in the list).
             if let existing = store.linkExisting {

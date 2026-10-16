@@ -861,7 +861,7 @@ enum TextFormatter {
     }
 
     /// Makes the range a link; with an empty range, inserts the title as a link.
-    static func addLink(_ url: URL, title: String, in tv: NSTextView, range: NSRange) {
+    static func addLink(_ url: URL, title: String, in tv: NSTextView, range: NSRange, tip: NSAttributedString? = nil) {
         guard let storage = tv.textStorage else { return }
         tv.window?.makeFirstResponder(tv)
         let range = NSRange(location: min(range.location, storage.length),
@@ -869,15 +869,18 @@ enum TextFormatter {
         if range.length > 0 {
             changeAttributes(tv, ranges: [range], actionName: "Link") { storage, range in
                 storage.addAttribute(.link, value: url, range: range)
+                if let tip, tip.length > 0 { storage.addAttribute(.linkTip, value: tip, range: range) } else { storage.removeAttribute(.linkTip, range: range) }
             }
         } else {
             var attrs = tv.typingAttributes
             attrs[.link] = url
+            attrs[.linkTip] = tip?.length ?? 0 > 0 ? tip : nil
             let text = NSAttributedString(string: title.isEmpty ? url.absoluteString : title, attributes: attrs)
             guard tv.shouldChangeText(in: range, replacementString: text.string) else { return }
             storage.replaceCharacters(in: range, with: text)
             tv.didChangeText()
             attrs[.link] = nil
+            attrs[.linkTip] = nil
             tv.typingAttributes = attrs
             tv.setSelectedRange(NSRange(location: range.location + (text.string as NSString).length, length: 0))
         }
@@ -901,13 +904,14 @@ enum TextFormatter {
     }
 
     /// Edit Link: the link's text and address both change (the text keeps its formatting).
-    static func replaceLink(_ url: URL, title: String, in tv: NSTextView, range: NSRange) {
+    static func replaceLink(_ url: URL, title: String, in tv: NSTextView, range: NSRange, tip: NSAttributedString? = nil) {
         guard let storage = tv.textStorage, NSMaxRange(range) <= storage.length else { return }
         let current = (storage.string as NSString).substring(with: range)
-        guard !title.isEmpty, title != current else { return addLink(url, title: title, in: tv, range: range) }
+        guard !title.isEmpty, title != current else { return addLink(url, title: title, in: tv, range: range, tip: tip) }
         tv.window?.makeFirstResponder(tv)
         var attrs = range.length > 0 ? storage.attributes(at: range.location, effectiveRange: nil) : tv.typingAttributes
         attrs[.link] = url
+        attrs[.linkTip] = tip?.length ?? 0 > 0 ? tip : nil
         guard tv.shouldChangeText(in: range, replacementString: title) else { return }
         storage.replaceCharacters(in: range, with: NSAttributedString(string: title, attributes: attrs))
         tv.didChangeText()
@@ -1009,6 +1013,7 @@ enum TextFormatter {
             }
             changeAttributes(tv, ranges: [range], actionName: "Remove Link") { storage, range in
                 storage.removeAttribute(.link, range: range)
+                storage.removeAttribute(.linkTip, range: range)
             }
         }
     }

@@ -1486,8 +1486,12 @@ enum PageIndexer {
         for element in elements {
             switch element.kind {
             case .text:
-                if let data = element.rtfd, let s = NSAttributedString(rtfd: data, documentAttributes: nil) {
+                if let data = element.rtfd, let s = NoteRichText.text(data) {
                     texts.append(s.string)
+                    // Links' hover texts are found by search too.
+                    s.enumerateAttribute(.linkTip, in: NSRange(location: 0, length: s.length)) { value, _, _ in
+                        if let tip = value as? NSAttributedString { texts.append(tip.string) }
+                    }
                 }
             case .table:
                 texts.append(element.table?.rows.map { $0.joined(separator: " ") }.joined(separator: "\n") ?? "")

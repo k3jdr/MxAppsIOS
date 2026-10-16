@@ -192,7 +192,7 @@ final class CanvasController: NSObject {
     func createTextElement(at point: NSPoint, text: NSAttributedString? = nil, width: CGFloat = 520) -> TextElementView? {
         var element = PageElement(kind: .text, x: max(4, canvas.snappedX(point.x - 8)),
                                   y: max(4, canvas.snappedY(point.y - ElementView.gripHeight - 10)), width: width)
-        if let text { element.rtfd = text.rtfd(from: NSRange(location: 0, length: text.length), documentAttributes: [:]) }
+        if let text { element.rtfd = NoteRichText.data(text) }
         guard let view = addElement(element, undoable: text != nil) as? TextElementView else { return nil }
         view.focus()
         return view
@@ -354,7 +354,7 @@ final class CanvasController: NSObject {
         let tableView = addElement(element) as? TableElementView
         if let trailing, let tableView {
             var rest = PageElement(kind: .text, x: x, y: tableView.frame.maxY + 14, width: view.frame.width)
-            rest.rtfd = trailing.rtfd(from: NSRange(location: 0, length: trailing.length), documentAttributes: [:])
+            rest.rtfd = NoteRichText.data(trailing)
             addElement(rest)
         }
         undoManager?.endUndoGrouping()

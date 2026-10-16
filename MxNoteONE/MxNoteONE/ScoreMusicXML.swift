@@ -4,7 +4,8 @@
 //
 //  MusicXML, the format MuseScore, Finale, Sibelius and Dorico exchange
 //  scores in: a score exports as MusicXML 4.0 (notes, rests, dots, ties,
-//  accidentals, chords, chord symbols, lyrics, key and key changes, repeats,
+//  accidentals, chords, chord symbols, lyrics, dynamics, hairpins, slurs,
+//  key and key changes, repeats,
 //  time, clef, tempo, and
 //  guitar strings and frets when the TAB staff is on), and MusicXML files —
 //  .musicxml, .xml or compressed .mxl — import as a score (the first part's
@@ -91,6 +92,15 @@ enum MusicXML {
         for i in bar {
             let note = score.notes[i]
             if let symbol = note.chordSymbol, !symbol.isEmpty { out += "      " + harmony(symbol) + "\n" }
+            if let d = note.dynamic, ScoreData.dynamics.contains(d) {
+                let level = ScoreData.dynamicLevels[d] ?? (d == "sfz" ? 120 : 100)
+                out += "      <direction placement=\"below\"><direction-type><dynamics><\(d)/></dynamics></direction-type>"
+                out += "<voice>\(voice)</voice><sound dynamics=\"\(Int((Double(level) * 100 / 90).rounded()))\"/></direction>\n"
+            }
+            if let pin = note.hairpin {
+                out += "      <direction placement=\"below\"><direction-type><wedge type=\"\(pin > 0 ? "crescendo" : "diminuendo")\"/></direction-type>"
+                out += "<voice>\(voice)</voice></direction>\n"
+            }
             let tiedFrom = i > 0 && score.notes[i - 1].tie && !note.rest
             let tab = score.showTab == true ? score.tab(i) : []
             func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?) -> String {
@@ -113,6 +123,8 @@ enum MusicXML {
                 if main, note.tuplet == true, starts.contains(i) { notations += "<tuplet type=\"start\" bracket=\"\(note.duration.rawValue >= 8 ? "no" : "yes")\"/>" }
                 if main, note.tuplet == true, stops.contains(i) { notations += "<tuplet type=\"stop\"/>" }
                 if main, tiedFrom { notations += "<tied type=\"stop\"/>" }
+                if main, note.slurEnd == true { notations += "<slur type=\"stop\" number=\"1\"/>" }
+                if main, note.slurStart == true { notations += "<slur type=\"start\" number=\"1\"/>" }
                 if main, note.tie, !note.rest { notations += "<tied type=\"start\"/>" }
                 if let tabSpot { notations += "<technical><string>\(6 - tabSpot.string)</string><fret>\(tabSpot.fret)</fret></technical>" }
                 if !notations.isEmpty { x += "<notations>\(notations)</notations>" }
@@ -129,6 +141,9 @@ enum MusicXML {
                 let midi = ScoreData.midi(step: tone.step, octave: tone.octave, alter: alter)
                 out += noteXML(chord: true, step: tone.step, octave: tone.octave, alter: alter,
                                accidental: tone.alter != nil && tone.alter != score.keyAlter(tone.step, at: i) ? tone.alter : nil, main: false, tabSpot: spot(midi))
+            }
+            if note.hairpinEnd == true {
+                out += "      <direction placement=\"below\"><direction-type><wedge type=\"stop\"/></direction-type><voice>\(voice)</voice></direction>\n"
             }
         }
         return out
@@ -236,6 +251,8 @@ enum MusicXML {
         var divisions = 1.0
         var seenAttributes = false
         var pendingSymbol: String?
+        // Dynamics and hairpins for the next note (by voice), slurs on the notes.
+        var pendingDynamic: [Bool: String] = [:], pendingHairpin: [Bool: Int] = [:]
         var skippedVoices = 0, skippedGrace = 0
         // The bar being read and its key (a key change sets a new one from that bar).
         var barIndex = -1, key = 0
@@ -277,6 +294,27 @@ enum MusicXML {
                     }
                     seenAttributes = true
                 case "direction":
+                    let directionVoice = text(e, "voice") ?? "1"
+                    let second = directionVoice != "1" && (secondVoice == nil || secondVoice == directionVoice)
+                    if let marks = e.elements(forName: "direction-type").first?.elements(forName: "dynamics").first,
+                       let name = (marks.children ?? []).compactMap({ ($0 as? XMLElement)?.name }).first(where: { ScoreData.dynamics.contains($0) || $0 == "sf" || $0 == "sffz" }) {
+                        pendingDynamic[second] = name == "sf" || name == "sffz" ? "sfz" : name
+                    }
+                    if let wedge = e.elements(forName: "direction-type").first?.elements(forName: "wedge").first,
+                       let type = wedge.attribute(forName: "type")?.stringValue {
+                        switch type {
+                        case "crescendo": pendingHairpin[second] = 1
+                        case "diminuendo": pendingHairpin[second] = -1
+                        case "stop":
+                            // Ends on the note just before.
+                            if second {
+                                if let k = v2.lastIndex(where: { !$0.rest }) ?? v2.indices.last { v2[k].hairpinEnd = true }
+                            } else if !score.notes.isEmpty {
+                                score.notes[score.notes.count - 1].hairpinEnd = true
+                            }
+                        default: break
+                        }
+                    }
                     if let tempo = (e.elements(forName: "sound").first?.attribute(forName: "tempo")?.stringValue).flatMap(Double.init)
                         ?? text(e, "direction-type/metronome/per-minute").flatMap(Double.init) {
                         score.tempo = max(20, min(300, Int(tempo.rounded())))
@@ -345,6 +383,15 @@ enum MusicXML {
                     }
                     note.tie = e.elements(forName: "tie").contains { $0.attribute(forName: "type")?.stringValue == "start" }
                     if text(e, "time-modification/actual-notes") == "3", text(e, "time-modification/normal-notes") == "2" { note.tuplet = true }
+                    for slur in e.elements(forName: "notations").flatMap({ $0.elements(forName: "slur") }) {
+                        switch slur.attribute(forName: "type")?.stringValue {
+                        case "start": note.slurStart = true
+                        case "stop": note.slurEnd = true
+                        default: break
+                        }
+                    }
+                    if let d = pendingDynamic.removeValue(forKey: inSecond) { note.dynamic = d }
+                    if let h = pendingHairpin.removeValue(forKey: inSecond) { note.hairpin = h }
                     if inSecond {
                         // In step with voice 1: rests where voice 2 starts later.
                         if time > v2pos + 1e-6 { v2 += ScoreData.rests(for: time - v2pos) }

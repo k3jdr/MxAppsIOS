@@ -17,6 +17,9 @@ import SwiftUI
 struct LinkHoverActions {
     var edit: () -> Void
     var remove: () -> Void
+    /// The link's own hover text (written in Edit Link), and its words.
+    var tip: NSAttributedString?
+    var text: String?
 }
 
 @MainActor
@@ -49,6 +52,8 @@ final class LinkHover {
     func testRemove() { let a = actions; close(); a?.remove() }
     var shownURL: URL? { isShown ? url : nil }
     var cardView: NSView? { popover?.contentViewController?.view }
+    var shownTip: NSAttributedString? { isShown ? actions?.tip : nil }
+    var shownText: String? { isShown ? actions?.text : nil }
     #endif
 
     /// How long the pointer rests on a link before the card shows.
@@ -88,7 +93,7 @@ final class LinkHover {
         let popover = NSPopover()
         popover.behavior = .applicationDefined
         popover.animates = false
-        let card = LinkCard(info: LinkInfo(url), edit: { [weak self] in
+        let card = LinkCard(info: LinkInfo(url, tip: actions.tip, text: actions.text), edit: { [weak self] in
             self?.close()
             actions.edit()
         }, copy: { [weak self] in
@@ -160,11 +165,21 @@ struct LinkInfo {
     /// Notebook › section for a page, else the full address.
     var detail: String
     var symbol: String
+    /// The hover text written for this link (Edit Link ▸ Hover text).
+    var tip: NSAttributedString?
+    /// The link's words in the notes.
+    var text: String?
+    /// For a page: the start of its text, and when it was last changed.
+    var preview: String?
+    var updated: Date?
     var isInternal: Bool { url.scheme == NotebookStore.linkScheme }
 
     @MainActor
-    init(_ url: URL) {
+    init(_ url: URL, tip: NSAttributedString? = nil, text: String? = nil) {
         self.url = url
+        self.tip = tip?.length ?? 0 > 0 ? tip : nil
+        let words = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.text = words?.isEmpty == false ? words : nil
         let store = NotebookStore.shared
         if url.scheme == NotebookStore.linkScheme {
             symbol = "doc.text"
@@ -174,6 +189,11 @@ struct LinkInfo {
                 let section = nb?.manifest.sections.find(ref.sectionID)?.name
                 detail = [nb?.name, section].compactMap { $0 }.joined(separator: " › ")
                 if url.query != nil { detail += " (a paragraph on the page)" }
+                updated = meta.modified
+                // The page's opening words (after its title).
+                var body = meta.plainText.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                if body.hasPrefix(meta.title), !meta.title.isEmpty { body = String(body.dropFirst(meta.title.count)).trimmingCharacters(in: .whitespaces) }
+                if !body.isEmpty { preview = body.count > 160 ? String(body.prefix(160)) + "…" : body }
             } else {
                 let parts = url.pathComponents.filter { $0 != "/" }
                 switch url.host() {
@@ -224,8 +244,16 @@ struct LinkCard: View {
     let copy: () -> Void
     let remove: () -> Void
 
+    var preview = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let tip = info.tip {
+                Text(LinkCard.attributed(tip))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                Divider()
+            }
             HStack(spacing: 6) {
                 Image(systemName: info.symbol)
                     .foregroundStyle(Color.accentColor)
@@ -241,6 +269,25 @@ struct LinkCard: View {
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
+            }
+            if let previewText = info.preview {
+                Text(previewText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let updated = info.updated {
+                Text("Updated \(updated.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            if let text = info.text, text != info.title, text != info.url.absoluteString {
+                Text("Link text: “\(text)”")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             Text(info.isInternal ? "Click to go to it" : info.url.scheme == "mailto" ? "Click to write an email" : "Click to follow the link")
                 .font(.system(size: 10))
@@ -258,9 +305,29 @@ struct LinkCard: View {
             .controlSize(.small)
             .focusable(false)
             .fixedSize()
+            .disabled(preview)
         }
         .padding(10)
         .frame(minWidth: 250, maxWidth: 360, alignment: .leading)
+    }
+
+    /// Formatted hover text for SwiftUI: font size, bold, italic, underline, strikethrough and colour.
+    static func attributed(_ text: NSAttributedString) -> AttributedString {
+        var result = AttributedString()
+        text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attrs, range, _ in
+            var run = AttributedString((text.string as NSString).substring(with: range))
+            let font = attrs[.font] as? NSFont
+            let traits = font.map { NSFontManager.shared.traits(of: $0) } ?? []
+            var f = Font.system(size: font?.pointSize ?? 12)
+            if traits.contains(.boldFontMask) { f = f.bold() }
+            if traits.contains(.italicFontMask) { f = f.italic() }
+            run.font = f
+            if let color = attrs[.foregroundColor] as? NSColor { run.foregroundColor = Color(nsColor: color) }
+            if (attrs[.underlineStyle] as? Int ?? 0) != 0 { run.underlineStyle = .single }
+            if (attrs[.strikethroughStyle] as? Int ?? 0) != 0 { run.strikethroughStyle = .single }
+            result += run
+        }
+        return result
     }
 }
 
@@ -299,7 +366,8 @@ extension NoteTextView {
                 self.window?.makeFirstResponder(self)
                 self.setSelectedRange(spot.range)
                 TextFormatter.removeLink()
-            })
+            }, tip: spot.flatMap { NoteRichText.tip(in: self?.textStorage ?? NSAttributedString(), at: $0.range.location) },
+               text: spot.flatMap { ((self?.string ?? "") as NSString).substring(with: $0.range) })
         }
     }
 }

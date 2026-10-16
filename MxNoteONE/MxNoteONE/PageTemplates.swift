@@ -195,7 +195,7 @@ struct RichText {
 
     func element(x: Double, y: Double, width: Double = 560) -> PageElement {
         var element = PageElement(kind: .text, x: x, y: y, width: width)
-        element.rtfd = text.rtfd(from: NSRange(location: 0, length: text.length), documentAttributes: [:])
+        element.rtfd = NoteRichText.data(text)
         return element
     }
 }

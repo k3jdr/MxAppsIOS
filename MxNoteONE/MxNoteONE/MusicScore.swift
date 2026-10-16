@@ -81,6 +81,14 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var tabString: Int?
     /// A triplet note: three in the time of two.
     var tuplet: Bool?
+    /// A dynamic marking under the note (pp … ff, sfz, fp).
+    var dynamic: String?
+    /// A slur starts here / ends here.
+    var slurStart: Bool?
+    var slurEnd: Bool?
+    /// A hairpin starts here (1 crescendo, -1 diminuendo) / ends here.
+    var hairpin: Int?
+    var hairpinEnd: Bool?
 
     /// Length in quarter notes.
     var beats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) * (tuplet == true ? 2.0 / 3.0 : 1) }
@@ -376,6 +384,84 @@ struct ScoreData: Codable, Hashable {
         return result
     }
 
+    // MARK: Dynamics, hairpins and slurs
+
+    static let dynamics = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "sfz", "fp"]
+    /// MIDI velocities for the levels.
+    static let dynamicLevels: [String: Int] = ["ppp": 24, "pp": 36, "p": 50, "mp": 64, "mf": 80, "f": 96, "ff": 112, "fff": 124]
+    static let defaultVelocity = 80
+
+    /// Slurs as (first note, last note).
+    var slurs: [(Int, Int)] { spans(start: { $0.slurStart == true }, end: { $0.slurEnd == true }) }
+    /// Hairpins as (first note, last note, 1 crescendo / -1 diminuendo).
+    var hairpins: [(Int, Int, Int)] {
+        spans(start: { $0.hairpin != nil }, end: { $0.hairpinEnd == true }).map { ($0.0, $0.1, notes[$0.0].hairpin ?? 1) }
+    }
+
+    /// Each start paired with the next end after it.
+    private func spans(start: (ScoreNote) -> Bool, end: (ScoreNote) -> Bool) -> [(Int, Int)] {
+        var result: [(Int, Int)] = [], open: Int?
+        for (i, note) in notes.enumerated() {
+            if let o = open, i > o, end(note) { result.append((o, i)); open = nil }
+            if start(note) { open = i }
+        }
+        return result
+    }
+
+    var hasDynamics: Bool {
+        (0..<Self.voiceCount).contains { v in line(v).contains { $0.dynamic != nil || $0.hairpin != nil } }
+    }
+
+    /// How loud each note plays (MIDI velocity): the dynamic in effect, hairpins growing or fading to the next
+    /// dynamic (or by two levels), sfz and fp accenting their note.
+    var velocities: [Int] {
+        let onsets = self.onsets
+        var result = Array(repeating: Self.defaultVelocity, count: notes.count)
+        var level = Self.defaultVelocity
+        let pins = hairpins
+        var i = 0
+        while i < notes.count {
+            if let d = notes[i].dynamic {
+                if let v = Self.dynamicLevels[d] { level = v }
+                if d == "fp" { level = Self.dynamicLevels["p"]! }
+            }
+            if let pin = pins.first(where: { $0.0 == i }) {
+                let from = level
+                // Towards the next dynamic after the hairpin (if it goes that way), else two levels on.
+                let next = notes[(pin.1)...].lazy.compactMap { $0.dynamic.flatMap { Self.dynamicLevels[$0] } }.first
+                let to = next.flatMap { (($0 - from) * pin.2) > 0 ? $0 : nil } ?? max(20, min(127, from + pin.2 * 30))
+                let span = max(1e-6, onsets[pin.1] - onsets[pin.0])
+                for k in pin.0...pin.1 {
+                    result[k] = from + Int((Double(to - from) * (onsets[k] - onsets[pin.0]) / span).rounded())
+                }
+                accent(pin.0...pin.1)
+                level = to
+                i = pin.1 + 1
+                continue
+            }
+            result[i] = level
+            accent(i...i)
+            i += 1
+        }
+        func accent(_ range: ClosedRange<Int>) {
+            for k in range {
+                if notes[k].dynamic == "sfz" { result[k] = min(127, max(result[k], 112) + 8) }
+                if notes[k].dynamic == "fp" { result[k] = 100 }
+            }
+        }
+        return result
+    }
+
+    /// The dynamic level at a time (from this line's notes, accents left out) — for a voice without its own dynamics.
+    func level(at time: Double) -> Int {
+        let onsets = self.onsets, v = velocities
+        guard let k = onsets.lastIndex(where: { $0 <= time + 1e-6 }) else { return Self.defaultVelocity }
+        if notes[k].dynamic == "sfz" || notes[k].dynamic == "fp" {
+            return notes[k].dynamic == "fp" ? Self.dynamicLevels["p"]! : (k > 0 ? v[k - 1] : Self.defaultVelocity)
+        }
+        return v[k]
+    }
+
     var hasChordSymbols: Bool { notes.contains { !($0.chordSymbol ?? "").isEmpty } }
     var hasLyrics: Bool { notes.contains { !($0.lyric ?? "").isEmpty } }
 
@@ -413,9 +499,11 @@ struct ScoreData: Codable, Hashable {
         let tones = (n.chord ?? []).map { t in
             ["C", "D", "E", "F", "G", "A", "B"][t.step] + ((t.alter ?? keyAlter(t.step, at: i)) > 0 ? "♯" : (t.alter ?? keyAlter(t.step, at: i)) < 0 ? "♭" : "") + "\(t.octave)"
         }
-        let symbol = (n.chordSymbol ?? "").isEmpty ? "" : "[\(n.chordSymbol!)] "
+        let symbol = ((n.chordSymbol ?? "").isEmpty ? "" : "[\(n.chordSymbol!)] ") + (n.dynamic.map { "*\($0)* " } ?? "")
+            + (n.hairpin.map { $0 > 0 ? "cresc. " : "dim. " } ?? "") + (n.slurStart == true ? "(" : "")
         let lyric = (n.lyric ?? "").isEmpty ? "" : " “\(n.lyric!)”"
-        return symbol + "\(name)\(n.octave)" + tones.map { "+" + $0 }.joined() + " \(length)" + (n.tie ? "~" : "") + lyric
+        return symbol + "\(name)\(n.octave)" + tones.map { "+" + $0 }.joined() + " \(length)" + (n.tie ? "~" : "")
+            + (n.slurEnd == true ? ")" : "") + lyric
     }
 }
 
@@ -482,6 +570,9 @@ final class ScorePlayer {
         for v in lines.indices {
             let line = lines[v]
             let onsets = line.onsets
+            // How loud: the voice's own dynamics, else voice 1's at the same time.
+            let ownDynamics = line.notes.contains { $0.dynamic != nil || $0.hairpin != nil }
+            let loudness: [Int] = ownDynamics || v == 0 ? line.velocities : onsets.map { lines[0].level(at: $0) }
             // The notes in playing order, each with when it starts (quarter notes from the start).
             var events: [(index: Int, time: Double)] = []
             var barTime = 0.0
@@ -508,11 +599,12 @@ final class ScorePlayer {
                 }
                 let ref = NoteRef(voice: v, index: i)
                 let keys = line.midis(i).map { UInt8(max(0, min(127, $0))) }
+                let velocity = UInt8(max(1, min(127, loudness[i])))
                 let time = events[j].time * secondsPerBeat
                 let on = DispatchWorkItem { [weak self] in
                     self?.view?.playing.insert(ref)
                     for key in keys {
-                        self?.sampler.startNote(key, withVelocity: 90, onChannel: 0)
+                        self?.sampler.startNote(key, withVelocity: velocity, onChannel: 0)
                         self?.sounding.insert(key)
                     }
                 }
@@ -573,6 +665,14 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// The selected note (clicked or arrowed to), and where new notes go (an index from 0 to the number of notes).
     private(set) var selected: Int?
+    /// The other end of a selection of several notes (⇧← ⇧→ or ⇧-click), from `selected`.
+    private(set) var rangeEnd: Int?
+    /// The selected notes, first to last (one note, or a run).
+    var selectedRange: ClosedRange<Int>? {
+        guard let s = selected else { return nil }
+        guard let e = rangeEnd, cur.notes.indices.contains(e) else { return s...s }
+        return min(s, e)...max(s, e)
+    }
     private(set) var cursor = 0
     /// The note just typed: ↑ ↓, accidentals and ties act on it, while number keys and . set the next note's length.
     private(set) var lastEntered: Int?
@@ -601,7 +701,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private var chordBand: CGFloat { score.hasChordSymbols ? space * 2.6 : 0 }
     private var lyricBand: CGFloat { score.hasLyrics ? space * 2.8 : 0 }
     private var tabBand: CGFloat { score.showTab == true ? space * 10 : 0 }
-    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand }
+    /// Dynamics and hairpins under the staff.
+    private var dynamicBand: CGFloat { score.hasDynamics ? space * 3 : 0 }
+    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand + dynamicBand }
     /// TAB lines' spacing.
     private var tabGap: CGFloat { space * 1.3 }
 
@@ -659,6 +761,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         if let symbol = note.chordSymbol, !symbol.isEmpty {
             width = max(width, (symbol as NSString).size(withAttributes: [.font: Self.chordFont]).width + space * 1.2)
+        }
+        if let dynamic = note.dynamic {
+            width = max(width, (dynamic as NSString).size(withAttributes: [.font: Self.dynamicFont]).width + space * 1.0)
         }
         return width
     }
@@ -800,10 +905,13 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5 + chordBand
     }
 
-    private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 }
+    private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 + dynamicBand }
+
+    /// The middle of the dynamics band (under the staff, clear of stems and ledger lines).
+    private func dynamicY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.6 }
 
     /// The TAB staff's top line (high E).
-    private func tabTop(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 4.2 + lyricBand }
+    private func tabTop(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 4.2 + lyricBand + dynamicBand }
 
     /// Half-spaces up from the bottom line.
     private func position(_ note: ScoreNote) -> Int { note.diatonic - score.clef.bottomLine }
@@ -852,9 +960,115 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             drawKeySignature(change.to, cancelling: change.from, x: change.x + space * 0.5, system: change.system, ink: ink)
         }
         drawNotes(ink: ink)
+        drawSlurs(ink: ink)
+        drawDynamics(ink: ink)
         drawWords(ink: ink)
         if score.showTab == true { drawTab(ink: ink) }
         drawCaret()
+    }
+
+    // MARK: Slurs, dynamics, hairpins
+
+    /// Where a line (system) ends on the right.
+    private var lineEnd: CGFloat { bounds.width - space * 1.5 }
+
+    /// Slurs: curves over (or under) the notes they join — over when stems go down, under when they go up
+    /// (with two voices: voice 1 over, voice 2 under). A slur running onto the next line is drawn in two parts.
+    private func drawSlurs(ink: NSColor) {
+        let two = score.hasSecondVoice
+        for v in 0..<ScoreData.voiceCount where !score.line(v).isEmpty {
+            let line = score.forVoice(v)
+            for (a, b) in line.slurs {
+                guard let pa = place(v, a), let pb = place(v, b), let sa = shapes[NoteRef(voice: v, index: a)],
+                      let sb = shapes[NoteRef(voice: v, index: b)] else { continue }
+                let above = two ? v == 0 : !(sa.up && sb.up)
+                func end(_ s: (up: Bool, low: CGFloat, high: CGFloat)) -> CGFloat {
+                    above ? s.high - (s.up ? space * 3.9 : space * 1.0) : s.low + (s.up ? space * 1.0 : space * 3.9)
+                }
+                let color = colorFor(NoteRef(voice: v, index: a), ink: ink)
+                let head = space * 0.62
+                if pa.system == pb.system {
+                    slur(from: NSPoint(x: pa.x + head, y: end(sa)), to: NSPoint(x: pb.x + head, y: end(sb)), above: above, color: color)
+                } else {
+                    slur(from: NSPoint(x: pa.x + head, y: end(sa)), to: NSPoint(x: lineEnd, y: end(sa)), above: above, color: color)
+                    let start = systemStarts.indices.contains(pb.system) ? systemStarts[pb.system] : space * 6
+                    slur(from: NSPoint(x: start, y: end(sb)), to: NSPoint(x: pb.x + head, y: end(sb)), above: above, color: color)
+                }
+            }
+        }
+    }
+
+    /// A slur's curve: thin at the ends, thicker in the middle.
+    private func slur(from a: NSPoint, to b: NSPoint, above: Bool, color: NSColor) {
+        let dx = b.x - a.x
+        guard dx > 2 else { return }
+        let lift = min(space * 2.2, dx * 0.12 + space * 0.7) * (above ? -1 : 1)
+        let thick: CGFloat = 1.6 * (above ? -1 : 1)
+        let path = NSBezierPath()
+        path.move(to: a)
+        path.curve(to: b, controlPoint1: NSPoint(x: a.x + dx / 3, y: a.y + lift + thick), controlPoint2: NSPoint(x: b.x - dx / 3, y: b.y + lift + thick))
+        path.curve(to: a, controlPoint1: NSPoint(x: b.x - dx / 3, y: b.y + lift), controlPoint2: NSPoint(x: a.x + dx / 3, y: a.y + lift))
+        path.close()
+        color.set()
+        path.fill()
+        path.lineWidth = 0.5
+        path.stroke()
+    }
+
+    static let dynamicFont = NSFont(name: "Georgia-BoldItalic", size: 15) ?? NSFont.systemFont(ofSize: 15, weight: .bold)
+
+    /// Dynamic markings under the notes, and hairpins (crescendo opening, diminuendo closing) between them.
+    private func drawDynamics(ink: NSColor) {
+        guard score.hasDynamics else { return }
+        for v in 0..<ScoreData.voiceCount where !score.line(v).isEmpty {
+            let line = score.forVoice(v)
+            var textEnds: [Int: CGFloat] = [:]   // where a note's dynamic ends (a hairpin starts after it)
+            for p in placed where p.voice == v {
+                guard let d = line.notes[p.index].dynamic else { continue }
+                let color = colorFor(NoteRef(voice: v, index: p.index), ink: ink)
+                let attrs: [NSAttributedString.Key: Any] = [.font: Self.dynamicFont, .foregroundColor: color]
+                let size = (d as NSString).size(withAttributes: attrs)
+                let x = p.x + space * 0.62 - size.width / 2
+                (d as NSString).draw(at: NSPoint(x: x, y: dynamicY(p.system) - size.height / 2), withAttributes: attrs)
+                textEnds[p.index] = x + size.width
+            }
+            for (a, b, direction) in line.hairpins {
+                guard let pa = place(v, a), let pb = place(v, b) else { continue }
+                let color = colorFor(NoteRef(voice: v, index: a), ink: ink)
+                let startX = max(pa.x, (textEnds[a] ?? pa.x - space) + space * 0.6)
+                // To the end of the last note (or before its own dynamic).
+                let lastNote = line.notes[b]
+                var endX = pb.x + space * (lastNote.duration.rawValue >= 4 ? 1.6 : 2.6)
+                if lastNote.dynamic != nil, let textEnd = textEnds[b] {
+                    let width = (lastNote.dynamic! as NSString).size(withAttributes: [.font: Self.dynamicFont]).width
+                    endX = textEnd - width - space * 0.6
+                }
+                if pa.system == pb.system {
+                    hairpin(from: startX, to: endX, system: pa.system, crescendo: direction > 0, open: (false, false), color: color)
+                } else {
+                    hairpin(from: startX, to: lineEnd, system: pa.system, crescendo: direction > 0, open: (false, true), color: color)
+                    let start = systemStarts.indices.contains(pb.system) ? systemStarts[pb.system] : space * 6
+                    hairpin(from: start, to: endX, system: pb.system, crescendo: direction > 0, open: (true, false), color: color)
+                }
+            }
+        }
+    }
+
+    /// A hairpin's two lines (a part continuing on another line starts or ends half open).
+    private func hairpin(from x1: CGFloat, to x2: CGFloat, system: Int, crescendo: Bool, open: (Bool, Bool), color: NSColor) {
+        guard x2 - x1 > space else { return }
+        let mid = dynamicY(system), wide = space * 0.75
+        var left = crescendo ? 0 : wide, right = crescendo ? wide : 0
+        if open.0 { left = wide / 2 }
+        if open.1 { right = wide / 2 }
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: x1, y: mid - left))
+        path.line(to: NSPoint(x: x2, y: mid - right))
+        path.move(to: NSPoint(x: x1, y: mid + left))
+        path.line(to: NSPoint(x: x2, y: mid + right))
+        path.lineWidth = 1.1
+        color.setStroke()
+        path.stroke()
     }
 
     /// The two dots of a repeat sign (in the second and third spaces).
@@ -1027,8 +1241,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// Each note's lowest and highest head (y), for stems through chords.
     private var stemSpans: [Int: (low: CGFloat, high: CGFloat)] = [:]
+    /// Every drawn note's stem direction and head span (for slurs).
+    private var shapes: [NoteRef: (up: Bool, low: CGFloat, high: CGFloat)] = [:]
 
     private func drawNotes(ink: NSColor) {
+        shapes = [:]
         // With two voices, voice 1's stems go up and voice 2's down.
         let two = score.hasSecondVoice
         for v in 0..<ScoreData.voiceCount where !score.line(v).isEmpty {
@@ -1115,6 +1332,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             // The stem runs from the far head to past the near one.
             let lowY = y(position: allPositions.first!, system: p.system), highY = y(position: allPositions.last!, system: p.system)
             stemSpans[p.index] = (lowY, highY)
+            shapes[NoteRef(voice: v, index: p.index)] = (up, lowY, highY)
             // Stem and flags (beamed notes get their stems with the beam).
             if note.duration != .whole, beamed[p.index] == nil {
                 let sx = up ? p.x + w - 0.6 : p.x + 0.6
@@ -1206,7 +1424,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     private func colorFor(_ ref: NoteRef, ink: NSColor) -> NSColor {
         if playing.contains(ref) { return .systemOrange }
-        if !isExport, ref.voice == voice, ref.index == selected || ref.index == lastEntered, ScoreView.active === self { return .controlAccentColor }
+        if !isExport, ref.voice == voice, ref.index == selected || ref.index == lastEntered || selectedRange?.contains(ref.index) == true,
+           ScoreView.active === self { return .controlAccentColor }
         // The voice not being written is drawn a little lighter while editing.
         if !isExport, score.hasSecondVoice, ScoreView.active === self, ref.voice != voice { return NSColor(white: 0.45, alpha: 1) }
         return ink
@@ -1344,6 +1563,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     func select(_ index: Int?) {
         selected = index.flatMap { cur.notes.indices.contains($0) ? $0 : nil }
+        rangeEnd = nil
         lastEntered = nil
         if let selected { cursor = selected + 1 }
         needsDisplay = true
@@ -1624,6 +1844,79 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
+    // MARK: Dynamics, slurs and hairpins
+
+    /// ⇧← ⇧→: selects more notes (from the selected one, or the one before the cursor).
+    func extendSelection(by delta: Int) {
+        guard !cur.notes.isEmpty else { return }
+        if selected == nil { select(max(0, min(cur.notes.count - 1, cursor - (delta < 0 ? 1 : 0)))) ; if delta < 0 { return } }
+        guard let anchor = selected else { return }
+        let end = max(0, min(cur.notes.count - 1, (rangeEnd ?? anchor) + delta))
+        rangeEnd = end == anchor ? nil : end
+        needsDisplay = true
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// The notes a slur or hairpin joins: the selected run, or the note (selected or just typed) and the next.
+    private var spanTarget: (Int, Int)? {
+        if let r = selectedRange, r.count > 1 { return (r.lowerBound, r.upperBound) }
+        guard let i = target else { return nil }
+        if i + 1 < cur.notes.count { return (i, i + 1) }
+        return i > 0 ? (i - 1, i) : nil
+    }
+
+    /// A dynamic (pp … ff, sfz, fp) under the selected note — nil takes it away.
+    func setDynamic(_ dynamic: String?) {
+        guard let i = selected ?? target else { return NSSound.beep() }
+        editVoice(dynamic == nil ? "Remove Dynamic" : "Dynamic") { $0.notes[i].dynamic = dynamic }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    var dynamicHere: String? {
+        guard let i = selected ?? target, cur.notes.indices.contains(i) else { return nil }
+        return cur.notes[i].dynamic
+    }
+
+    /// S: a slur over the selected notes (or to the next note); again takes it off.
+    func toggleSlur() {
+        guard let (a, b) = spanTarget else { return NSSound.beep() }
+        editVoice("Slur") { s in
+            let existing = s.slurs.first { $0.0 == a }
+            if let existing {
+                s.notes[existing.0].slurStart = nil
+                s.notes[existing.1].slurEnd = nil
+                if existing.1 == b { return }
+            }
+            // A slur inside or across this one goes.
+            for (x, y) in s.slurs where (x >= a && x <= b) || (y >= a && y <= b) {
+                s.notes[x].slurStart = nil
+                s.notes[y].slurEnd = nil
+            }
+            s.notes[a].slurStart = true
+            s.notes[b].slurEnd = true
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// < crescendo / > diminuendo over the selected notes (or to the next note); the same again takes it off.
+    func toggleHairpin(_ direction: Int) {
+        guard let (a, b) = spanTarget else { return NSSound.beep() }
+        editVoice(direction > 0 ? "Crescendo" : "Diminuendo") { s in
+            let existing = s.hairpins.first { $0.0 == a }
+            for (x, y, _) in s.hairpins where (x >= a && x <= b) || (y >= a && y <= b) {
+                s.notes[x].hairpin = nil
+                s.notes[y].hairpinEnd = nil
+            }
+            if let existing, existing.1 == b, existing.2 == direction { return }
+            s.notes[a].hairpin = direction
+            s.notes[b].hairpinEnd = true
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    var slurHere: Bool { spanTarget.map { t in cur.slurs.contains { $0.0 == t.0 } } ?? false }
+    var hairpinHere: Int? { spanTarget.flatMap { t in cur.hairpins.first { $0.0 == t.0 }?.2 } }
+
     // MARK: Key changes and repeats
 
     /// The bar commands act on: the selected note's (or the cursor's); after a full last bar, the next one.
@@ -1688,6 +1981,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
         let command = event.modifierFlags.contains(.command)
         switch event.keyCode {
+        case 123 where event.modifierFlags.contains(.shift): return extendSelection(by: -1)
+        case 124 where event.modifierFlags.contains(.shift): return extendSelection(by: 1)
         case 123: return moveCursor(by: -1)
         case 124: return moveCursor(by: 1)
         case 126 where event.modifierFlags.contains(.option): return moveString(by: 1)
@@ -1738,6 +2033,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         case "=": setAccidental(0)
         case "t": toggleTie()
         case "r": toggleRest()
+        case "s": toggleSlur()
+        case "<": toggleHairpin(1)
+        case ">": toggleHairpin(-1)
         default: super.keyDown(with: event)
         }
     }
@@ -1789,6 +2087,13 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             return
         }
         if let ref = note(at: p) {
+            // ⇧-click: from the selected note to this one (for a slur or a hairpin).
+            if event.modifierFlags.contains(.shift), ref.voice == voice, let anchor = selected {
+                rangeEnd = ref.index == anchor ? nil : ref.index
+                needsDisplay = true
+                NotebookStore.shared.editor.scoreInputChanged += 1
+                return
+            }
             if ref.voice != voice { setVoice(ref.voice) }
             let i = ref.index
             select(i)
@@ -1937,6 +2242,22 @@ final class ScoreElementView: ElementView {
         }
         key.submenu = keys
         menu.addItem(key)
+        // Dynamics, slur and hairpins at the note right-clicked (or the selected notes).
+        let dynamic = NSMenuItem(title: "Dynamic", action: nil, keyEquivalent: "")
+        let dynamics = NSMenu()
+        let current = staff.dynamicHere
+        for d in ScoreData.dynamics {
+            dynamics.addItem(ClosureMenuItem(d, state: current == d) { [weak self] in self?.staff.setDynamic(d) })
+        }
+        if current != nil {
+            dynamics.addItem(.separator())
+            dynamics.addItem(ClosureMenuItem("Remove Dynamic") { [weak self] in self?.staff.setDynamic(nil) })
+        }
+        dynamic.submenu = dynamics
+        menu.addItem(dynamic)
+        menu.addItem(ClosureMenuItem("Slur  S", state: staff.slurHere) { [weak self] in self?.staff.toggleSlur() })
+        menu.addItem(ClosureMenuItem("Crescendo  <", state: staff.hairpinHere == 1) { [weak self] in self?.staff.toggleHairpin(1) })
+        menu.addItem(ClosureMenuItem("Diminuendo  >", state: staff.hairpinHere == -1) { [weak self] in self?.staff.toggleHairpin(-1) })
         // At the bar right-clicked (or the cursor's).
         let bar = staff.currentBar
         let change = NSMenuItem(title: bar == 0 ? "Key Change (first bar: the key signature)" : "Key Change from Bar \(bar + 1)", action: nil, keyEquivalent: "")

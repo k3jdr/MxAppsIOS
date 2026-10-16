@@ -121,7 +121,7 @@ enum PageExporter {
         for element in elements {
             switch element.kind {
             case .text:
-                guard let data = element.rtfd, let text = NSAttributedString(rtfd: data, documentAttributes: nil) else { continue }
+                guard let data = element.rtfd, let text = NoteRichText.text(data) else { continue }
                 lines += markdown(text)
             case .table:
                 guard let table = element.table, !table.rows.isEmpty else { continue }
