@@ -37,6 +37,8 @@ final class WorkspaceSession {
     /// Databases on the connected server (for the Database picker); the connected one is `connectedDatabase`.
     var databases: [String] = []
     private(set) var connectedDatabase: String?
+    /// The settings of the live connection (the form's fields may be edited afterwards).
+    private(set) var connectedSettings: ConnectionSettings?
     var tableFilter = ""
     var highlightedTableID: TableSummary.ID?
     var highlightedDescription: TableDescription?
@@ -108,6 +110,7 @@ final class WorkspaceSession {
                 Keychain.setPassword(password, for: settings.keychainAccount)
             }
             connectedDatabase = settings.database
+            connectedSettings = settings
             let list = (try? await service.databases()) ?? []
             databases = list.contains(settings.database) ? list : (list + [settings.database]).sorted()
             await refreshTables()
@@ -122,6 +125,7 @@ final class WorkspaceSession {
         service = nil
         status = .disconnected
         connectedDatabase = nil
+        connectedSettings = nil
         tables = []
         highlightedDescription = nil
         grid = nil

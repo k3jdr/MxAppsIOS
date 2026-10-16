@@ -11,7 +11,6 @@ import SwiftUI
 struct SRMForm: View {
     @Bindable var store: SRMStore
     let session: WorkspaceSession
-    let settings: ConnectionSettings
 
     var body: some View {
         Group {
@@ -22,7 +21,7 @@ struct SRMForm: View {
                 ContentUnavailableView {
                     Label("No Security Master Here", systemImage: "building.columns")
                 } description: {
-                    Text("Database \(settings.database) has no srm schema. Choose the database that has it in the Database drop-down, or create it with SRM/srm.py migrate and load it with SRM/srm.py load all.")
+                    Text("Database \(session.connectedSettings?.database ?? "") has no srm schema. Choose the database that has it in the Database drop-down, or create it with SRM/srm.py migrate and load it with SRM/srm.py load all.")
                 }
             } else if store.available == nil {
                 ProgressView("Opening the security master…")
@@ -53,9 +52,10 @@ struct SRMForm: View {
         }
         // Raises the window minimum while the SRM form is shown: the tabs need room for a list and a detail panel.
         .frame(minWidth: 1180, minHeight: 720)
-        // Reconnect when the workspace switches database or reconnects.
-        .task(id: "\(session.isConnected)|\(settings.keychainAccount)") {
-            if session.isConnected {
+        // Follows the workspace's live connection (not the editable connection fields): reconnects
+        // when the workspace switches database or reconnects.
+        .task(id: session.connectedSettings.map { "\($0.keychainAccount)|\($0.sslMode)" } ?? "") {
+            if let settings = session.connectedSettings {
                 await store.attach(settings: settings, password: session.password)
             } else {
                 await store.detach()

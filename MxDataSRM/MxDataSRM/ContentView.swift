@@ -54,7 +54,7 @@ struct ContentView: View {
                     case .table:
                         TableGridForm(session: session, view: $document.workspace.view)
                     case .srm:
-                        SRMForm(store: session.srm, session: session, settings: document.workspace.connection)
+                        SRMForm(store: session.srm, session: session)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -130,18 +130,19 @@ struct ContentView: View {
     /// password, then show that form (and SRM tab, with a security search).
     private func applyLaunchArguments() async {
         let defaults = UserDefaults.standard
-        if defaults.bool(forKey: "autoConnect"), !session.isConnected, !session.password.isEmpty {
-            await session.connect(document.workspace.connection)
-            await afterConnect()
-        }
-        if let name = defaults.string(forKey: "startForm"), let form = WorkspaceForm(rawValue: name) {
-            session.form = form
-        }
+        // The form is chosen before connecting, so the connection form (and its focused fields)
+        // never appears and is never edited by the switch.
+        let startForm = defaults.string(forKey: "startForm").flatMap(WorkspaceForm.init(rawValue:))
+        if let startForm { session.form = startForm }
         if let name = defaults.string(forKey: "srmSection"), let section = SRMSection(rawValue: name) {
             session.srm.section = section
         }
         if let query = defaults.string(forKey: "srmQuery") {
             session.srm.query = query
+        }
+        if defaults.bool(forKey: "autoConnect"), !session.isConnected, !session.password.isEmpty {
+            await session.connect(document.workspace.connection)
+            if startForm == nil { await afterConnect() }
         }
     }
 

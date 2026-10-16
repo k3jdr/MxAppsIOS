@@ -22,9 +22,9 @@ struct SRMBenchmarksView: View {
             VStack(spacing: 8) {
                 Table(store.benchmarks, selection: $store.selectedBenchmarkID) {
                     TableColumn("Code", value: \.code).width(min: 50, ideal: 56)
-                    TableColumn("Name", value: \.name).width(min: 70, ideal: 110)
+                    TableColumn("Name", value: \.name).width(min: 70, ideal: 100)
                     TableColumn("Members") { Text($0.members.formatted()).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
-                        .width(min: 50, ideal: 60)
+                        .width(min: 46, ideal: 52)
                     TableColumn("As of", value: \.asOf).width(min: 76, ideal: 80)
                 }
                 HStack {
