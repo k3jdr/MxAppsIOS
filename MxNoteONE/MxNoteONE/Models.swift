@@ -405,6 +405,11 @@ struct ColumnFilter: Codable, Hashable {
     var column: Int
     var excluded: [String] = []
     var contains: String?
+    /// Filter by Color: show only rows whose cell has this fill ("none" = no fill) or font colour ("auto" = automatic).
+    var fillColor: String?
+    var fontColor: String?
+
+    var isActive: Bool { !excluded.isEmpty || !(contains ?? "").isEmpty || fillColor != nil || fontColor != nil }
 }
 
 /// A block of merged table cells, starting at its top-left cell.

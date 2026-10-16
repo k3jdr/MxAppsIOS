@@ -166,8 +166,15 @@ struct ScoreData: Codable, Hashable {
     /// The alteration in effect for a note.
     func soundingAlter(_ index: Int) -> Int {
         let note = notes[index]
-        if let alter = note.alter { return alter }
+        if let alter = note.alter, !tiedFrom(index) { return alter }
+        // A note tied over keeps the pitch it's tied from (even across the bar line).
+        if tiedFrom(index) { return soundingAlter(index - 1) }
         return alterBefore(index) ?? keyAlter(note.step)
+    }
+
+    /// Whether the note before is tied to this one (same line or space).
+    func tiedFrom(_ index: Int) -> Bool {
+        index > 0 && notes[index - 1].tie && !notes[index - 1].rest && !notes[index].rest && notes[index - 1].diatonic == notes[index].diatonic
     }
 
     /// An accidental written earlier in the same bar on the same line or space.
@@ -180,7 +187,8 @@ struct ScoreData: Codable, Hashable {
     /// Whether a note shows its accidental (it differs from what the key and the bar already give).
     func showsAccidental(_ index: Int) -> Bool {
         let note = notes[index]
-        guard !note.rest, let alter = note.alter else { return false }
+        // The continuation of a tie doesn't repeat its accidental.
+        guard !note.rest, let alter = note.alter, !tiedFrom(index) else { return false }
         return alter != (alterBefore(index) ?? keyAlter(note.step))
     }
 
@@ -1454,6 +1462,10 @@ final class ScoreElementView: ElementView {
         tempo.submenu = tempos
         menu.addItem(tempo)
         menu.addItem(ClosureMenuItem("Copy Score as Picture") { [weak self] in self?.copyPicture() })
+        menu.addItem(ClosureMenuItem("Export MusicXML…") { [weak self] in
+            guard let self else { return }
+            MusicXML.save(self.score, from: self.window)
+        })
         return menu
     }
 

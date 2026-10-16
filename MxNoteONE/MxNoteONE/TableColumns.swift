@@ -265,8 +265,7 @@ extension TableModel {
     func filter(for column: Int) -> ColumnFilter? { data.filters?.first { $0.column == column } }
 
     func isFiltered(_ column: Int) -> Bool {
-        guard let f = filter(for: column) else { return false }
-        return !f.excluded.isEmpty || !(f.contains ?? "").isEmpty
+        filter(for: column)?.isActive ?? false
     }
 
     /// Filter buttons on the first row (turning them off shows every row again).
@@ -294,7 +293,7 @@ extension TableModel {
 
     func setFilter(_ filter: ColumnFilter) {
         var list = (data.filters ?? []).filter { $0.column != filter.column }
-        if !filter.excluded.isEmpty || !(filter.contains ?? "").isEmpty { list.append(filter) }
+        if filter.isActive { list.append(filter) }
         data.filters = list.isEmpty ? nil : list
         data.autoFilter = true
         applyFilters()
@@ -311,6 +310,58 @@ extension TableModel {
         changed()
     }
 
+    // MARK: Colours (sort and filter by colour)
+
+    /// A cell's fill as shown — conditional formatting, else its shading — as hex ("none" without one).
+    func fillHex(_ cell: CellRef) -> String {
+        let color = conditionalStyle(cell)?.fill ?? data.shading.flatMap { s in
+            s.indices.contains(cell.row) && s[cell.row].indices.contains(cell.column) ? s[cell.row][cell.column]?.nsColor : nil
+        }
+        return color.map(RecentColors.hex) ?? "none"
+    }
+
+    /// A cell's font colour — conditional formatting, else its text's own colour — as hex ("auto" when automatic).
+    func fontHex(_ cell: CellRef) -> String {
+        if let color = conditionalStyle(cell)?.textColor { return RecentColors.hex(color) }
+        let text = storedText(cell)
+        guard text.length > 0, let color = text.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor,
+              !Self.isBlack(color) else { return "auto" }
+        return RecentColors.hex(color)
+    }
+
+    /// The fill (or font) colours used in a column's rows below the header, in the order they appear.
+    func colors(in column: Int, fill: Bool) -> [String] {
+        var seen: [String] = []
+        for r in filterRows {
+            let hex = fill ? fillHex(master(CellRef(row: r, column: column))) : fontHex(master(CellRef(row: r, column: column)))
+            if !seen.contains(hex) { seen.append(hex) }
+        }
+        return seen
+    }
+
+    static func color(hex: String) -> NSColor? {
+        guard hex.count == 6, let v = UInt32(hex, radix: 16) else { return nil }
+        return NSColor(srgbRed: CGFloat((v >> 16) & 0xFF) / 255, green: CGFloat((v >> 8) & 0xFF) / 255, blue: CGFloat(v & 0xFF) / 255, alpha: 1)
+    }
+
+    /// Sort by Color: rows whose cell has the colour go to the top (or bottom), the rest keep their order.
+    func sort(byColor hex: String, column: Int, fill: Bool, onTop: Bool) {
+        guard canSort else { return NSSound.beep() }
+        let skip = firstRowIsHeader && rowCount > 1 ? 1 : 0
+        let all = Array(skip..<rowCount)
+        let pinned = Set(all.filter { r in data.rows[r].contains { Formula.isFormula($0) && $0.contains(":") } })
+        let body = all.filter { !pinned.contains($0) }
+        let matches = { (r: Int) -> Bool in
+            let cell = self.master(CellRef(row: r, column: column))
+            return (fill ? self.fillHex(cell) : self.fontHex(cell)) == hex
+        }
+        let sorted = onTop ? body.filter(matches) + body.filter { !matches($0) } : body.filter { !matches($0) } + body.filter(matches)
+        var rest = sorted.makeIterator()
+        data.reorderRows(Array(0..<skip) + all.map { pinned.contains($0) ? $0 : rest.next()! })
+        applyFilters()
+        changed()
+    }
+
     /// Works out which rows the filters hide.
     func applyFilters() {
         guard let filters = data.filters, !filters.isEmpty else {
@@ -323,6 +374,9 @@ extension TableModel {
                 let value = Self.filterValue(shownString(master(CellRef(row: r, column: f.column))))
                 if f.excluded.contains(value) { return true }
                 if let needle = f.contains, !needle.isEmpty, !value.localizedCaseInsensitiveContains(needle) { return true }
+                let cell = master(CellRef(row: r, column: f.column))
+                if let fill = f.fillColor, fillHex(cell) != fill { return true }
+                if let font = f.fontColor, fontHex(cell) != font { return true }
                 return false
             }
         }
@@ -677,19 +731,27 @@ struct TableFilterView: View {
     let title: String
     let values: [String]
     let filter: ColumnFilter
+    /// The column's cell fill and font colours (hex; "none" / "auto" for none).
+    let fillColors: [String]
+    let fontColors: [String]
     let sort: (Bool) -> Void
+    let sortByColor: (String, Bool) -> Void
     let apply: (ColumnFilter) -> Void
     let close: () -> Void
 
     @State private var search = ""
     @State private var shown: Set<String> = []
 
-    init(title: String, values: [String], filter: ColumnFilter, sort: @escaping (Bool) -> Void,
+    init(title: String, values: [String], filter: ColumnFilter, fillColors: [String] = [], fontColors: [String] = [],
+         sort: @escaping (Bool) -> Void, sortByColor: @escaping (String, Bool) -> Void = { _, _ in },
          apply: @escaping (ColumnFilter) -> Void, close: @escaping () -> Void) {
         self.title = title
         self.values = values
         self.filter = filter
+        self.fillColors = fillColors
+        self.fontColors = fontColors
         self.sort = sort
+        self.sortByColor = sortByColor
         self.apply = apply
         self.close = close
         _shown = State(initialValue: Set(values).subtracting(filter.excluded))
@@ -702,12 +764,60 @@ struct TableFilterView: View {
 
     private func label(_ value: String) -> String { value.isEmpty ? "(Blanks)" : value }
 
+    /// Whether a list of colours is worth offering (more than one, or one real colour).
+    private func useful(_ list: [String]) -> Bool { list.count > 1 || list.first.map { $0 != "none" && $0 != "auto" } == true }
+
+    /// A row of colour swatches; clicking one runs the action.
+    private func swatches(_ list: [String], fill: Bool, selected: String?, _ action: @escaping (String) -> Void) -> some View {
+        HStack(spacing: 5) {
+            Text(fill ? "Cell" : "Font").font(.caption).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+            ForEach(list, id: \.self) { hex in
+                Button { action(hex) } label: {
+                    Group {
+                        if let color = TableModel.color(hex: hex) {
+                            RoundedRectangle(cornerRadius: 3).fill(Color(nsColor: color))
+                        } else {
+                            RoundedRectangle(cornerRadius: 3).strokeBorder(Color.secondary, style: StrokeStyle(lineWidth: 1, dash: [2]))
+                                .overlay(Text(hex == "none" ? "∅" : "A").font(.system(size: 9)))
+                        }
+                    }
+                    .frame(width: 18, height: 18)
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(selected == hex ? Color.accentColor : .clear, lineWidth: 2))
+                }
+                .buttonStyle(.plain)
+                .help(hex == "none" ? "No Fill" : hex == "auto" ? "Automatic" : "#" + hex)
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button { sort(true); close() } label: { Label("Sort A to Z", systemImage: "arrow.up") }
                 .buttonStyle(.borderless)
             Button { sort(false); close() } label: { Label("Sort Z to A", systemImage: "arrow.down") }
                 .buttonStyle(.borderless)
+            if useful(fillColors) || useful(fontColors) {
+                Text("Sort by Color").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                if useful(fillColors) { swatches(fillColors, fill: true, selected: nil) { sortByColor($0, true); close() } }
+                if useful(fontColors) { swatches(fontColors, fill: false, selected: nil) { sortByColor($0, false); close() } }
+                Text("Filter by Color").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                if useful(fillColors) {
+                    swatches(fillColors, fill: true, selected: filter.fillColor) {
+                        var f = ColumnFilter(column: filter.column)
+                        f.fillColor = $0
+                        apply(f)
+                        close()
+                    }
+                }
+                if useful(fontColors) {
+                    swatches(fontColors, fill: false, selected: filter.fontColor) {
+                        var f = ColumnFilter(column: filter.column)
+                        f.fontColor = $0
+                        apply(f)
+                        close()
+                    }
+                }
+            }
             Divider()
             Button {
                 apply(ColumnFilter(column: filter.column))
@@ -716,7 +826,7 @@ struct TableFilterView: View {
                 Label("Clear Filter from “\(title)”", systemImage: "line.3.horizontal.decrease.circle")
             }
             .buttonStyle(.borderless)
-            .disabled(filter.excluded.isEmpty && (filter.contains ?? "").isEmpty)
+            .disabled(!filter.isActive)
             TextField("Search", text: $search)
                 .textFieldStyle(.roundedBorder)
             List {

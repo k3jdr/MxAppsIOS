@@ -350,6 +350,7 @@ struct InsertRibbon: View {
         }
         RibbonGroup("Music") {
             RibbonButton("Score", "music.note.list", large: true) { canvas?.insertScore() }
+            RibbonButton("MusicXML", "square.and.arrow.down", large: true) { canvas?.chooseMusicXML() }
         }
         RibbonGroup("Files") {
             RibbonButton("Picture", "photo", large: true) { canvas?.choosePictures() }
@@ -570,6 +571,9 @@ struct ScoreRibbon: View {
                 }
             }
             RibbonButton("Title", "textformat", large: true) { act { $0.owner?.editTitle() } }
+            RibbonButton("Export MusicXML", "square.and.arrow.up", large: true) {
+                if let owner = staff?.owner { MusicXML.save(owner.score, from: owner.window) }
+            }
         }
     }
 }

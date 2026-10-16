@@ -205,6 +205,7 @@ struct MainCommands: Commands {
             Button("Table…") { store.sheet = .insertTable }
                 .keyboardShortcut("t", modifiers: [.command, .control])
             Button("Music Score") { canvas?.insertScore() }
+            Button("Music Score from MusicXML…") { canvas?.chooseMusicXML() }
             Button("Picture…") { canvas?.choosePictures() }
                 .keyboardShortcut("p", modifiers: [.command, .control])
             Button("File Attachment…") { canvas?.chooseAttachments() }

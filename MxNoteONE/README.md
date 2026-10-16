@@ -67,6 +67,10 @@ Section and New Section Group. Right-click a page for its own menu.
   Select All and Blanks); OK hides the other rows. Filtered columns show a filter icon and "▾" by their letter.
   Like Excel, filters apply when you choose them — rows you edit afterwards stay visible until you filter again.
   Turning Filter off shows every row.
+- **Sort and filter by colour** (a column's filter button, or right-click its letter ▸ Sort by Color / Filter by Color):
+  the cell fill and font colours used in the column — conditional formatting's colours included, plus No Fill /
+  Automatic — as swatches. Sort by Color brings rows with that colour to the top (the rest keep their order); Filter by
+  Color shows only those rows. A colour filter is saved with the table; Clear Filter removes it.
 - **Sorting** sorts numbers in order (2 before 10), ignores case and puts blank cells last. It leaves the first row
   in place as a header. For a table without Header Row, right-click ▸
   **Sort Includes First Row** sorts every row.
@@ -245,6 +249,13 @@ octave lower), chosen automatically — lowest fret, one string per chord note �
 the Score tab and the right-click menu, as is Copy Score as Picture. Playback uses the Mac's General MIDI piano, and the
 note sounding is shown in orange. Every change can be undone. PDF and print show the score; Markdown export and OneNote
 sync write its title, signatures and the notes by name.
+
+**MusicXML** — the format MuseScore, Finale, Sibelius and Dorico exchange scores in. **Insert ▸ Music Score from
+MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
+score: title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
+strings, from the first part's first voice — anything left out (other parts and voices, grace notes, later key changes)
+is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
+A tie carries its note's accidental across the bar line.
 
 ## Microsoft Office fonts
 

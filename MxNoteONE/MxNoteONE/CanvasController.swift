@@ -548,6 +548,39 @@ final class CanvasController: NSObject {
 
     // MARK: - Inserting
 
+    /// Insert ▸ Music Score from MusicXML…: a score from a MuseScore / Finale / Sibelius / Dorico file.
+    func chooseMusicXML() {
+        guard ref != nil else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = MusicXML.fileTypes
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a MusicXML score (.musicxml, .mxl or .xml)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        _ = importMusicXML(url)
+    }
+
+    @discardableResult
+    func importMusicXML(_ url: URL, at point: NSPoint? = nil) -> ScoreElementView? {
+        guard ref != nil else { return nil }
+        do {
+            let imported = try MusicXML.read(url)
+            let p = point ?? nextInsertionPoint()
+            var element = PageElement(kind: .score, x: p.x, y: p.y, width: 620)
+            var score = imported.score
+            if score.title.isEmpty { score.title = url.deletingPathExtension().lastPathComponent }
+            element.score = score
+            guard let view = addElement(element) as? ScoreElementView else { return nil }
+            undoManager?.setActionName("Import MusicXML")
+            if !imported.notes.isEmpty {
+                store.showAlert("Imported “\(score.title)”", imported.notes.joined(separator: "\n"))
+            }
+            return view
+        } catch {
+            store.showAlert("Couldn't import \(url.lastPathComponent)", error.localizedDescription)
+            return nil
+        }
+    }
+
     /// Insert ▸ Music Score: an empty treble staff in 4/4, ready for notes.
     func insertScore() {
         guard ref != nil else { return }
@@ -596,6 +629,11 @@ final class CanvasController: NSObject {
     func insertFiles(_ urls: [URL], at point: NSPoint? = nil) {
         var p = point ?? nextInsertionPoint()
         for url in urls {
+            // MusicXML files come in as scores.
+            if ["musicxml", "mxl"].contains(url.pathExtension.lowercased()), let view = importMusicXML(url, at: p) {
+                p.y = view.frame.maxY + 14
+                continue
+            }
             guard let data = try? Data(contentsOf: url) else { continue }
             let type = UTType(filenameExtension: url.pathExtension)
             if type?.conforms(to: .image) == true, NSImage(data: data) != nil {

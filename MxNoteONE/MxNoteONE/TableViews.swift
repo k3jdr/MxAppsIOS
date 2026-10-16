@@ -1467,7 +1467,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
             title: header.isEmpty ? "Column \(TableData.columnName(column))" : header,
             values: model.values(in: column),
             filter: model.filter(for: column) ?? ColumnFilter(column: column),
+            fillColors: model.colors(in: column, fill: true), fontColors: model.colors(in: column, fill: false),
             sort: { [weak self] ascending in self?.sortColumn(column, ascending: ascending) },
+            sortByColor: { [weak self] hex, fill in self?.sortColumn(column, byColor: hex, fill: fill) },
             apply: { [weak self] filter in self?.applyFilter(filter) },
             close: { [weak popover] in popover?.performClose(nil) })
         popover.contentViewController = NSHostingController(rootView: view)
@@ -1477,7 +1479,48 @@ final class TableGridView: NSView, NSTextViewDelegate {
 
     func applyFilter(_ filter: ColumnFilter) {
         guard model.canSort else { return NSSound.beep() }
-        run(filter.excluded.isEmpty && (filter.contains ?? "").isEmpty ? "Clear Filter" : "Filter") { model.setFilter(filter) }
+        run(filter.isActive ? "Filter" : "Clear Filter") { model.setFilter(filter) }
+    }
+
+    /// Sort by Color: rows with the fill (or font) colour to the top or bottom.
+    func sortColumn(_ column: Int, byColor hex: String, fill: Bool, onTop: Bool = true) {
+        run("Sort by Color") { model.sort(byColor: hex, column: column, fill: fill, onTop: onTop) }
+    }
+
+    /// Menu items to sort or filter a column by its fill and font colours.
+    func colorMenuItems(for column: Int) -> [NSMenuItem] {
+        let fills = model.colors(in: column, fill: true), fonts = model.colors(in: column, fill: false)
+        func swatch(_ hex: String) -> NSImage? { TableModel.color(hex: hex).map { Palette.swatch($0) } }
+        func name(_ hex: String, fill: Bool) -> String { hex == "none" ? "No Fill" : hex == "auto" ? "Automatic" : "#" + hex }
+        func submenu(_ title: String, _ action: @escaping (String, Bool) -> Void) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let menu = NSMenu()
+            for (fill, list) in [(true, fills), (false, fonts)] where list.count > 1 || list.first.map({ $0 != "none" && $0 != "auto" }) == true {
+                let header = NSMenuItem(title: fill ? "Cell Color" : "Font Color", action: nil, keyEquivalent: "")
+                header.isEnabled = false
+                menu.addItem(header)
+                for hex in list {
+                    let entry = ClosureMenuItem(name(hex, fill: fill)) { action(hex, fill) }
+                    entry.image = swatch(hex)
+                    menu.addItem(entry)
+                }
+            }
+            if menu.items.isEmpty {
+                let none = NSMenuItem(title: "No colours in this column", action: nil, keyEquivalent: "")
+                none.isEnabled = false
+                menu.addItem(none)
+            }
+            item.submenu = menu
+            return item
+        }
+        return [
+            submenu("Sort by Color") { [weak self] hex, fill in self?.sortColumn(column, byColor: hex, fill: fill) },
+            submenu("Filter by Color") { [weak self] hex, fill in
+                var f = ColumnFilter(column: column)
+                if fill { f.fillColor = hex } else { f.fontColor = hex }
+                self?.applyFilter(f)
+            },
+        ]
     }
 
     func toggleFilter() {
@@ -1559,6 +1602,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
         menu.addItem(filter)
         if model.isFiltered(column) {
             menu.addItem(ClosureMenuItem("Clear Filter") { [weak self] in self?.applyFilter(ColumnFilter(column: column)) })
+        }
+        for item in colorMenuItems(for: column) {
+            item.isEnabled = sortable && model.rowCount > 1
+            menu.addItem(item)
         }
         menu.addItem(.separator())
         let hide = ClosureMenuItem(n > 1 ? "Hide \(n) Columns" : "Hide Column") { [weak self] in self?.hideColumns() }
