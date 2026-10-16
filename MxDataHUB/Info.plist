@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- mxdatahub://portfolio/CODE, mxdatahub://benchmark/CODE, mxdatahub://data-refresh, mxdatahub://services
+	     (opened by MxJobsWMS; see Shared/AppLinks.swift) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.k3jdr.MxDataHUB</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mxdatahub</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

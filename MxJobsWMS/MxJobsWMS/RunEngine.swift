@@ -460,11 +460,17 @@ final class RunEngine {
                    + "\(report["succeeded"]!) succeeded, \(report["warnings"]!) with warnings, \(report["failed"]!) failed, \(report["skipped"]!) skipped.")
 
         case .decision:
-            // Simulated decision: follow the decisionContext of a Layer 3 outcome (mxjobs.optimization/1).
+            // Simulated decision: follow the decisionContext of a Layer 3 outcome — the first of the step's own
+            // Inputs list that has one (its priority), else the most confident.
+            let priority = node.agent?.inputs ?? []
+            let rank = { (name: String) in priority.firstIndex(of: name) ?? priority.count }
             let contexts = input.compactMap { name, value -> (String, [String: Any])? in
                 guard let dict = value as? [String: Any], let ctx = dict["decisionContext"] as? [String: Any] else { return nil }
                 return (name, ctx)
-            }.sorted { ($0.1["confidence"] as? Double ?? 0) > ($1.1["confidence"] as? Double ?? 0) }
+            }.sorted {
+                rank($0.0) != rank($1.0) ? rank($0.0) < rank($1.0)
+                    : ($0.1["confidence"] as? Double ?? 0) > ($1.1["confidence"] as? Double ?? 0)
+            }
             if let (source, ctx) = contexts.first, let next = ctx["recommendation"] as? String {
                 let confidence = ctx["confidence"] as? Double ?? 0
                 let out: [String: Any] = ["nextStep": next, "confidence": confidence, "source": source,
@@ -517,8 +523,9 @@ final class RunEngine {
                    "Mock data for \(sub.name) \(ApiTester.substitute(node.api?.path ?? "", arguments: node.arguments)) (no network call).")
             return
         }
+        let input = inputs(of: node.id)
         try await attempt(node) {
-            let result = await ApiTester.run(node: node, subscription: sub)
+            let result = await ApiTester.run(node: node, subscription: sub, inputs: input)
             return (result, "HTTP \(result.status ?? 0) in \(Int(result.elapsed * 1000)) ms — \(result.url)")
         }
     }

@@ -2,8 +2,8 @@
 //  ContentView.swift
 //  MxDataSRM
 //
-//  A workspace window: the forms (DB Connection, DB Table Selection, DB Table,
-//  SRM) selected with a segmented control, plus a status bar.
+//  A workspace window: the three forms (DB Connection, DB Table Selection,
+//  DB Table) selected with a segmented control, plus a status bar.
 //
 
 import SwiftUI
@@ -53,8 +53,6 @@ struct ContentView: View {
                         }
                     case .table:
                         TableGridForm(session: session, view: $document.workspace.view)
-                    case .srm:
-                        SRMForm(store: session.srm, session: session)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -64,10 +62,7 @@ struct ContentView: View {
             }
         }
         .focusedSceneValue(\.workspaceSession, session)
-        .task {
-            session.loadSavedPassword(for: document.workspace.connection)
-            await applyLaunchArguments()
-        }
+        .task { session.loadSavedPassword(for: document.workspace.connection) }
         .onDisappear {
             widthSink.save = nil
             let session = session
@@ -123,27 +118,6 @@ struct ContentView: View {
             settings: document.wrappedValue.workspace.connection, password: session.password,
             table: ref, view: document.wrappedValue.workspace.view, widthSink: widthSink))
         openWindow(value: id)
-    }
-
-    /// Launch arguments for testing and demos, e.g.
-    /// `-autoConnect YES -startForm SRM -srmSection Portfolios -srmQuery AAPL`: connect with the Keychain
-    /// password, then show that form (and SRM tab, with a security search).
-    private func applyLaunchArguments() async {
-        let defaults = UserDefaults.standard
-        // The form is chosen before connecting, so the connection form (and its focused fields)
-        // never appears and is never edited by the switch.
-        let startForm = defaults.string(forKey: "startForm").flatMap(WorkspaceForm.init(rawValue:))
-        if let startForm { session.form = startForm }
-        if let name = defaults.string(forKey: "srmSection"), let section = SRMSection(rawValue: name) {
-            session.srm.section = section
-        }
-        if let query = defaults.string(forKey: "srmQuery") {
-            session.srm.query = query
-        }
-        if defaults.bool(forKey: "autoConnect"), !session.isConnected, !session.password.isEmpty {
-            await session.connect(document.workspace.connection)
-            if startForm == nil { await afterConnect() }
-        }
     }
 
     /// After connecting, show the table list with the workspace's saved table highlighted.

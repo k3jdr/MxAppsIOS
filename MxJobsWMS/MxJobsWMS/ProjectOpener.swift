@@ -2,7 +2,7 @@
 //  ProjectOpener.swift
 //  MxJobsWMS
 //
-//  "Open in IDE" for a subscription's source project (e.g. Modules/portfolio-java in IntelliJ IDEA).
+//  "Open in IDE" for a subscription's source project (e.g. Services/portfolio-java in IntelliJ IDEA).
 //  VS Code and IntelliJ IDEA are reached through their URL schemes, which works from the sandbox
 //  without access to the folder. CLion, Xcode and Finder have none: the sandbox can hand them only a
 //  folder the user chose (Choose… / Grant Access…), remembered as a security-scoped bookmark.

@@ -5,15 +5,19 @@
 //  Document-based app: each window is a jobspace (*.jobspace JSON) describing a
 //  three-layer financial data gathering operation. DocumentGroup provides the
 //  File menu (New, Open, Open Recent, Save, Save As, Duplicate, Rename, Revert);
-//  JobspaceCommands adds New Sample Jobspace, Export, and the Diagram menu.
+//  JobspaceCommands adds New from Sample, Export, the Run and Diagram menus, and the Layer 3 Services window.
+//  mxjobswms:// links from MxDataHUB open samples for a portfolio (SampleLibrary.swift).
 //
 
 import SwiftUI
 
 @main
 struct MxJobsWMSApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     var body: some Scene {
-        DocumentGroup(newDocument: JobspaceDocument()) { file in
+        // A new document is empty, or the sample PendingSample hands over (gallery, Services window, links).
+        DocumentGroup(newDocument: JobspaceDocument(space: PendingSample.take())) { file in
             ContentView(document: file.$document)
         }
         .defaultSize(width: 1560, height: 920)
@@ -25,6 +29,27 @@ struct MxJobsWMSApp: App {
             KeysHelpView()
         }
         .defaultSize(width: 820, height: 560)
+
+        Window("Layer 3 Services", id: "services") {
+            ServicesView(serviceActions: { service, endpoint in
+                AnyView(Group {
+                    if let endpoint {
+                        Button("Add Step") { EditorState.lastActive?.addServiceStep(service, endpoint) }
+                            .help("Add a Layer 3 step calling \(endpoint.path) to the front jobspace")
+                            .disabled(EditorState.lastActive == nil)
+                    }
+                })
+            }, openSample: { PendingSample.open($0.id) }, openSampleTitle: "New Jobspace")
+        }
+        .defaultSize(width: 1040, height: 720)
+
+        Window("New from Sample", id: "samples") {
+            SampleGalleryView(open: { PendingSample.open($0.id) }, openTitle: "Create",
+                              note: "Each sample is a complete three-layer workflow. Portfolio samples use DEMO_GROWTH; "
+                                  + "open them from a portfolio in MxDataHUB to use another one.")
+                .frame(minWidth: 720, minHeight: 520)
+        }
+        .defaultSize(width: 860, height: 640)
     }
 }
 
@@ -35,12 +60,24 @@ struct JobspaceCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("New Sample Jobspace") {
-                newDocument(JobspaceDocument(space: .sample()))
+            Button("New from Sample…") { openWindow(id: "samples") }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+            Menu("New Sample") {
+                ForEach(SampleInfo.all) { sample in
+                    Button("\(sample.area): \(sample.title)") {
+                        if let space = Jobspace.fromSample(sample.id) { newDocument(JobspaceDocument(space: space)) }
+                    }
+                }
             }
-            .keyboardShortcut("n", modifiers: [.command, .option])
-            Button("New SRM Daily Refresh Sample") {
-                newDocument(JobspaceDocument(space: .srmDailyRefresh()))
+        }
+        CommandGroup(after: .windowArrangement) {
+            Divider()
+            Button("Layer 3 Services") { openWindow(id: "services") }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+            Button("Open MxDataHUB") {
+                if !AppLink.dataRefresh.open() {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MXcodeIDE/tree/main/MxDataHUB")!)
+                }
             }
         }
         CommandGroup(after: .importExport) {

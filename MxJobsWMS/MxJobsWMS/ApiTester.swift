@@ -23,8 +23,11 @@ struct ApiTestResult {
 }
 
 enum ApiTester {
-    /// Replaces {{name}} with argument values and the built-ins {{today}} / {{yesterday}} (yyyy-MM-dd).
-    static func substitute(_ text: String, arguments: [Argument]) -> String {
+    /// Replaces {{name}} with argument values and the built-ins {{today}} / {{yesterday}} (yyyy-MM-dd), and
+    /// placeholders that read the outputs of the steps linked into this one (their output names):
+    /// {{in:path}} a value (text, number, or compact JSON), {{json:path}} the value as JSON — e.g.
+    /// {"inputsUrl": "{{in:optInputs.inputsUrl}}"} or {"weights": {{json:optimization.weights}}}.
+    static func substitute(_ text: String, arguments: [Argument], inputs: [String: Any] = [:]) -> String {
         var out = text
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
@@ -41,20 +44,63 @@ enum ApiTester {
                 : arg.value
         }
         for (k, v) in values { out = out.replacingOccurrences(of: "{{\(k)}}", with: v) }
-        return out
+        return fillInputs(out, inputs)
     }
 
-    static func buildRequest(node: JobNode, subscription sub: ApiSubscription, key: String?) throws -> URLRequest {
+    /// {{in:path}} / {{json:path}} from the inputs (dotted paths; keys may contain dots).
+    static func fillInputs(_ text: String, _ inputs: [String: Any]) -> String {
+        guard text.contains("{{in:") || text.contains("{{json:") else { return text }
+        var out = ""
+        var rest = Substring(text)
+        while let open = rest.range(of: "{{"), let close = rest.range(of: "}}", range: open.upperBound..<rest.endIndex) {
+            out += rest[..<open.lowerBound]
+            let token = String(rest[open.upperBound..<close.lowerBound])
+            if token.hasPrefix("in:") || token.hasPrefix("json:") {
+                let asJSON = token.hasPrefix("json:")
+                let path = String(token.dropFirst(asJSON ? 5 : 3)).trimmingCharacters(in: .whitespaces)
+                let value = lookup(path, in: inputs)
+                if asJSON {
+                    out += value.map(jsonText) ?? "null"
+                } else if let s = value as? String {
+                    out += s
+                } else if let n = value as? NSNumber {
+                    out += n.stringValue
+                } else {
+                    out += value.map(jsonText) ?? ""
+                }
+            } else {
+                out += rest[open.lowerBound..<close.upperBound]
+            }
+            rest = rest[close.upperBound...]
+        }
+        return out + rest
+    }
+
+    nonisolated private static func jsonText(_ value: Any) -> String {
+        if let s = value as? String, let data = try? JSONSerialization.data(withJSONObject: [s]),
+           let text = String(data: data, encoding: .utf8) {
+            return String(text.dropFirst().dropLast())        // the quoted, escaped string
+        }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes]) {
+            return String(decoding: data, as: UTF8.self)
+        }
+        if let n = value as? NSNumber { return n.stringValue }
+        return "null"
+    }
+
+    static func buildRequest(node: JobNode, subscription sub: ApiSubscription, key: String?,
+                             inputs: [String: Any] = [:]) throws -> URLRequest {
         guard let api = node.api else { throw TestError("Not an API node.") }
         let base = sub.baseURL.hasSuffix("/") ? String(sub.baseURL.dropLast()) : sub.baseURL
-        var path = substitute(api.path, arguments: node.arguments)
+        var path = substitute(api.path, arguments: node.arguments, inputs: inputs)
         if !path.isEmpty, !path.hasPrefix("/") { path = "/" + path }
         guard var comps = URLComponents(string: base + path), comps.host != nil else {
             throw TestError("Invalid URL: \(base + path)")
         }
         var items = comps.queryItems ?? []
         for q in api.query where !q.key.isEmpty {
-            let value = substitute(q.value, arguments: node.arguments)
+            let value = substitute(q.value, arguments: node.arguments, inputs: inputs)
             // An optional argument left empty leaves its parameter out ("max={{maxCalls}}" with no maxCalls).
             if value.isEmpty, q.value.contains("{{") { continue }
             items.append(URLQueryItem(name: q.key, value: value))
@@ -69,7 +115,7 @@ enum ApiTester {
         request.httpMethod = api.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         for h in sub.defaultHeaders + api.headers where !h.key.isEmpty {
-            request.setValue(substitute(h.value, arguments: node.arguments), forHTTPHeaderField: h.key)
+            request.setValue(substitute(h.value, arguments: node.arguments, inputs: inputs), forHTTPHeaderField: h.key)
         }
         switch sub.auth {
         case .header: if let key { request.setValue(key, forHTTPHeaderField: sub.keyName.isEmpty ? "X-API-Key" : sub.keyName) }
@@ -77,18 +123,19 @@ enum ApiTester {
         case .none, .queryParameter: break
         }
         if api.method == .POST, !api.body.isEmpty {
-            request.httpBody = Data(substitute(api.body, arguments: node.arguments).utf8)
+            request.httpBody = Data(substitute(api.body, arguments: node.arguments, inputs: inputs).utf8)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         return request
     }
 
-    static func run(node: JobNode, subscription sub: ApiSubscription) async -> ApiTestResult {
+    /// Sends the step's request once; `inputs` are the outputs of the steps linked into it ({{in:…}}).
+    static func run(node: JobNode, subscription sub: ApiSubscription, inputs: [String: Any] = [:]) async -> ApiTestResult {
         let key = sub.auth == .none ? nil : Keychain.secret(for: sub.keychainAccount)
         let request: URLRequest
         do {
             if sub.auth.requiresKey, key == nil { throw TestError("No API key stored for “\(sub.name)”. Add one under API Subscriptions.") }
-            request = try buildRequest(node: node, subscription: sub, key: key)
+            request = try buildRequest(node: node, subscription: sub, key: key, inputs: inputs)
         } catch {
             return ApiTestResult(url: "", status: nil, elapsed: 0, body: "", checks: [], error: error.localizedDescription)
         }

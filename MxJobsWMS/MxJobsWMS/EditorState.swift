@@ -142,6 +142,48 @@ final class EditorState {
         selectedNodes = [node.id]
     }
 
+    /// Adds a Layer 3 step calling a catalog service's endpoint, creating the service's subscription if needed.
+    func addServiceStep(_ service: ServiceInfo, _ endpoint: ServiceEndpoint?) {
+        guard let document else { return }
+        var space = document.wrappedValue.space
+        let sub: ApiSubscription
+        if let existing = space.subscriptions.first(where: { ServiceAboutSection.service(for: $0)?.id == service.id }) {
+            sub = existing
+        } else {
+            var new = ApiSubscription.localService(port: service.port)
+            new.name = service.name
+            new.provider = "\(service.language) service on this Mac (Services/\(service.folder))"
+            new.projectFolder = service.projectPath
+            new.notes = service.purpose + " Start it with: " + ServiceCatalog.startCommand
+            space.subscriptions.append(new)
+            sub = new
+        }
+        let laneNodes = space.nodes.filter { $0.layer == .data }
+        let p = Metrics.place(CGPoint(x: (laneNodes.map { CGFloat($0.x) }.max() ?? Metrics.gutter) + Metrics.nodeSize.width + 50,
+                                      y: Metrics.laneCenter(.data)), in: .data)
+        let ep = endpoint ?? service.endpoints.first
+        var node = JobNode(kind: .apiRead, title: ep?.summary ?? service.name, x: p.x, y: p.y)
+        node.api?.subscriptionID = sub.id
+        node.api?.method = ep?.method == "POST" ? .POST : .GET
+        // "/quote?symbol=" → path /quote and an empty symbol parameter; "/refresh/{category}" keeps its placeholder.
+        let raw = ep?.path ?? "/"
+        let parts = raw.split(separator: "?", maxSplits: 1).map(String.init)
+        node.api?.path = parts[0].replacingOccurrences(of: "{", with: "{{").replacingOccurrences(of: "}", with: "}}")
+        if parts.count > 1 {
+            node.api?.query = parts[1].split(separator: "&").map { KeyValue(String($0.split(separator: "=").first ?? ""), "") }
+        }
+        if node.api?.method == .POST, node.api?.body.isEmpty ?? true { node.api?.body = "{}" }
+        node.notes = "\(service.name) (\(service.language)): \(ep?.summary ?? "")"
+        node.outcome.successStatus = "200"
+        space.nodes.append(node)
+        document.wrappedValue.space = space
+        selectedLink = nil
+        selectedNodes = [node.id]
+    }
+
+    /// The editor of the jobspace window last in front (for the Services and Samples windows).
+    static weak var lastActive: EditorState?
+
     // MARK: Run
 
     func startRun() {

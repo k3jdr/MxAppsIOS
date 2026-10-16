@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @Binding var document: JobspaceDocument
     @State private var editor = EditorState()
+    @Environment(\.controlActiveState) private var activeState
 
     var body: some View {
         // Re-run the checks when keys change in the subscriptions dialog.
@@ -88,7 +89,11 @@ struct ContentView: View {
             SubscriptionsDialog(space: $document.space, editor: editor)
         }
         .focusedSceneValue(\.editor, editor)
-        .onAppear { editor.document = $document }
+        .onAppear {
+            editor.document = $document
+            EditorState.lastActive = editor
+        }
+        .onChange(of: activeState) { if activeState == .key { EditorState.lastActive = editor } }
         .frame(minWidth: 1000, minHeight: 620)
     }
 }

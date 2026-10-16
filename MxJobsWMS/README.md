@@ -4,8 +4,27 @@ A multi-document macOS app (SwiftUI) for designing the day-to-day **financial ma
 operation** as a three-layer diagram, saved as JSON **jobspace** files (`*.jobspace`).
 
 Open `MxJobsWMS.xcodeproj` in Xcode, then Run. There are no package dependencies.
-**File ▸ New Sample Jobspace** (⌥⌘N) opens a worked example; the same example is in
-`Samples/DailyMarketRefresh.jobspace`.
+**File ▸ New from Sample…** (⌥⌘N) opens the sample workflows — data refresh, active optimization, passive index
+tracking, attribution — also saved in `Samples/`.
+
+## MxJobsWMS, MxDataHUB and the Layer 3 services
+
+- **MxDataHUB** keeps the data: securities, benchmarks, portfolios, and each category of market data (Data Refresh).
+- **MxJobsWMS** runs the processes over that data: repeatable, scheduled, approved workflows.
+- **`../Services/`** holds the Layer 3 tools both use — Python (data, statistics, attribution), Java (active
+  portfolio construction), C++ (index tracking and risk). Start them with
+  `python3 ../Services/mxservices.py start`; see [Services/README.md](../Services/README.md) for what each is for
+  and when to use which language.
+
+From MxDataHUB, **Portfolios ▸ Workflows** (Optimize, Track, Attribution), **Benchmarks ▸ Track…** and **Data Refresh
+▸ Automate in MxJobsWMS…** open the matching sample here, already set to that portfolio or benchmark
+(`mxjobswms://sample/<id>?portfolio=&benchmark=`). **Window ▸ Open MxDataHUB** goes back.
+
+**Window ▸ Layer 3 Services** (⌥⌘L) lists every service — running or not, its language and why, its use cases and
+when to use them, its endpoints, the start command, and the samples built on it — with **Add Step**, which adds the
+service's subscription and a step calling that endpoint to the front jobspace. The palette's **Layer 3 Services**
+section shows the same services with their state (double-click adds a step, right-click picks an endpoint), and the
+inspector of a step calling one of them shows **About This Service**.
 
 ## The three layers
 
@@ -82,10 +101,10 @@ Python automation belongs in **Layer 3 (Data Reads)** when it fetches or compute
 **1. A local Python service (recommended).** Run Python as a small HTTP service on this Mac and call it with
 ordinary API Data Read steps. In API Subscriptions choose **+ ▸ Local Python Service**: base URL
 `http://127.0.0.1:8765`, authentication **Local service (optional token)** — a token is sent as
-`Authorization: Bearer …` only when one is stored. `Samples/python-service/mxjobs_service.py` is a
-standard-library example with `/quote`, `/history` and `/indicators`; start it with
-`python3 Samples/python-service/mxjobs_service.py`. The service runs outside the app's sandbox, so it can use
-any packages, files and credentials you give it.
+`Authorization: Bearer …` only when one is stored. `../Services/market-sample/mxjobs_service.py` is a
+standard-library example with `/quote`, `/history` and `/indicators`, and `../Services/analytics` the full
+analytics service; start them with `python3 ../Services/mxservices.py start`. Services run outside the app's
+sandbox, so they can use any packages, files and credentials you give them.
 
 **2. A Python Script step** (palette ▸ Layer 3 ▸ Python Script) runs code kept in the jobspace:
 
@@ -106,17 +125,23 @@ any packages, files and credentials you give it.
 
 ## Java and C/C++ at Layer 3
 
-Portfolio optimization and risk run as **Layer 3 compute services** (see [Modules/](Modules/)); their outcomes give
-the **Layer 2 decision agent** its context for the next step:
+Portfolio optimization and risk run as **Layer 3 compute services** (see [Services/](../Services/)); their outcomes
+give the **Layer 2 decision agent** its context for the next step:
 
-- `Modules/portfolio-java` — Java optimizer on 127.0.0.1:8766 (`POST /optimize`).
-- `Modules/portfolio-cpp` — C++ optimizer and risk engine on 127.0.0.1:8767 (`POST /optimize`, `POST /risk`).
-- `Modules/contracts` — the versioned JSON Schemas (`mxjobs.optimization/1`, `mxjobs.risk/1`), the shared algorithm
-  and decision rules, and `check_engines.py`, which checks running services against the schemas and each other.
+- `Services/portfolio-java` — Java, 127.0.0.1:8766: `POST /optimize/active` (active, benchmark-relative) and
+  `POST /optimize` (absolute max-Sharpe).
+- `Services/portfolio-cpp` — C++, 127.0.0.1:8767: `POST /optimize/tracking` (index tracking), `POST /risk`
+  (VaR, ES, tracking error, active risk), `POST /optimize`.
+- `Services/analytics` — Python, 127.0.0.1:8772: `POST /inputs` (covariance, alpha) and `POST /attribution`.
+- `Services/contracts` — the versioned contracts and `check_engines.py`.
+
+**Data along links.** An API step's path, parameters, headers and body can use the outputs of the steps linked into
+it: `{{in:name.path}}` inserts a value (`"inputsUrl": "{{in:optInputs.inputsUrl}}"`), `{{json:name.path}}` the value
+as JSON (`"weights": {{json:optimization.weights}}`). Test Call uses the outputs of the last run.
 
 Each outcome carries a `decisionContext` — `recommendation` (rebalance, rebalance_partially, hold, rerun_relaxed,
 escalate), `confidence`, `alternatives`, `reason`. A **Decision** step follows the most confident decisionContext
-among its inputs (`nextStep`), and escalates when there is none. The sample's **Choose next step** calls
+among its inputs — those listed in its Inputs first, in that order — (`nextStep`), and escalates when there is none. The sample's **Choose next step** calls
 **Optimize portfolio (Java)** and **Portfolio risk (C++)** and passes `nextStep` up to Assemble Instructions.
 
 **Value checks.** Expected Outcome takes value checks besides required fields — `path op value` with `==`, `!=`,
@@ -133,14 +158,24 @@ to the button, once — MxJobsWMS keeps a security-scoped bookmark for it.
 
 ## Samples
 
-| File ▸ … | Jobspace | Service |
-| -------- | -------- | ------- |
-| **New Sample Jobspace** (⌥⌘N) | `Samples/DailyMarketRefresh.jobspace` — market data, Python, Java and C++ steps | `Samples/python-service`, `Modules/portfolio-*` |
-| **New SRM Daily Refresh Sample** | `Samples/SRMDailyRefresh.jobspace` — MxDataSRM's daily securities-master refresh | `Samples/srm-service` |
+**File ▸ New from Sample…** (⌥⌘N) shows them with the services each needs and whether they are running; **File ▸ New
+Sample** creates one directly. Portfolio samples use `DEMO_GROWTH` (and its benchmark) unless opened from a
+portfolio in MxDataHUB.
+
+| Sample | File | Layer 3 chain | Decision |
+| ------ | ---- | ------------- | -------- |
+| **SRM Daily Refresh** (data) | `Samples/SRMDailyRefresh.jobspace` | srm-loader: 12 loaders, status / quality | data steward approves report and backfills |
+| **Active Portfolio Optimization** | `Samples/ActivePortfolioOptimization.jobspace` | analytics inputs + momentum alpha (Python) → active optimizer at 3% tracking error, ±3% per name, ±5% per sector (Java) → risk check (C++) | rebalance / rebalance partially / hold → PM approval → orders (dry run) |
+| **Passive Index Tracking** | `Samples/PassiveIndexTracking.jobspace` | analytics covariance (Python) → 100-name stratified tracker and full replication (C++) | rebalance when drift exceeds the 1% budget → index PM approval → trades |
+| **Performance & Risk Attribution** | `Samples/PerformanceAttribution.jobspace` | Brinson-Fachler by sector, monthly, Carino-linked (Python); ex-ante active risk by sector (C++) | commentary → review → publish (dry run) |
+| **Daily Market Data Refresh** (template) | `Samples/DailyMarketRefresh.jobspace` | public APIs, a Python Script step, absolute Java / C++ optimizers | rebalance decision |
+
+Each step's notes say why it runs on its layer and in its language. Portfolio samples open with Layer 3 on **Live**
+(start the services first) — switch to **Mock** to rehearse without them.
 
 ### SRM daily refresh
 
-MxDataSRM's daily automation (`MxDataSRM/SRM/srm.py load all`, then `srm.py status`) as a jobspace:
+MxDataHUB's daily automation (`MxDataHUB/SRM/srm.py load all`, then `srm.py status`) as a jobspace:
 
 - **Layer 3**: the 12 SRM loaders as API Data Read steps (`POST /load/<loader>` on the **SRM loader service**,
   127.0.0.1:8770), left to right in srm.py's dependency order, and **SRM status & data quality** (`GET /status`).
@@ -153,10 +188,10 @@ MxDataSRM's daily automation (`MxDataSRM/SRM/srm.py load all`, then `srm.py stat
 - **Layer 1**: weekday 18:30 New York trigger, the report and follow-ups, **Data steward approval**, **Run approved
   backfills** (long loads such as `fmp-corporate-actions --history`, dry run), and the outcome report.
 
-Start the service with `python3 Samples/srm-service/srm_service.py`. The sample opens with Layer 3 on **Mock**.
+Start the service with `python3 ../Services/mxservices.py start`. The sample opens with Layer 3 on **Mock**.
 On **Live**, the subscription's `X-SRM-Dry-Run: 1` header makes every loader report the `srm.py` command it would
 run while the status step reads the real database; remove the header (API Subscriptions) to run the loads.
-Open in IDE on the subscription opens `MxDataSRM/SRM`.
+Open in IDE on the subscription opens `MxDataHUB/SRM`.
 
 ## Files and keys
 

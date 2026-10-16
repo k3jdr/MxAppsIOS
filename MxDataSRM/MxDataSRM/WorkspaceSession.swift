@@ -14,7 +14,6 @@ enum WorkspaceForm: String, CaseIterable, Identifiable {
     case connection = "DB Connection"
     case tableSelection = "DB Table Selection"
     case table = "DB Table"
-    case srm = "SRM"
     var id: String { rawValue }
 }
 
@@ -28,8 +27,6 @@ enum ConnectionStatus: Equatable {
 @Observable
 final class WorkspaceSession {
     var form: WorkspaceForm = .connection
-    /// The SRM form's state and its own connection (see SRMStore.swift).
-    let srm = SRMStore()
     var password = ""
     var status: ConnectionStatus = .disconnected
 
@@ -37,8 +34,6 @@ final class WorkspaceSession {
     /// Databases on the connected server (for the Database picker); the connected one is `connectedDatabase`.
     var databases: [String] = []
     private(set) var connectedDatabase: String?
-    /// The settings of the live connection (the form's fields may be edited afterwards).
-    private(set) var connectedSettings: ConnectionSettings?
     var tableFilter = ""
     var highlightedTableID: TableSummary.ID?
     var highlightedDescription: TableDescription?
@@ -110,7 +105,6 @@ final class WorkspaceSession {
                 Keychain.setPassword(password, for: settings.keychainAccount)
             }
             connectedDatabase = settings.database
-            connectedSettings = settings
             let list = (try? await service.databases()) ?? []
             databases = list.contains(settings.database) ? list : (list + [settings.database]).sorted()
             await refreshTables()
@@ -120,12 +114,10 @@ final class WorkspaceSession {
     }
 
     func disconnect() async {
-        await srm.detach()
         if let service { await service.close() }
         service = nil
         status = .disconnected
         connectedDatabase = nil
-        connectedSettings = nil
         tables = []
         highlightedDescription = nil
         grid = nil

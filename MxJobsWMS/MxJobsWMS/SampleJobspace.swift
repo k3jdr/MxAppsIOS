@@ -57,15 +57,15 @@ nonisolated extension Jobspace {
 
         let local = ApiSubscription.localService()
 
-        // Java and C++ portfolio services (Modules/portfolio-java, Modules/portfolio-cpp).
+        // Java and C++ portfolio services (Services/portfolio-java, Services/portfolio-cpp).
         var javaService = ApiSubscription.localService(port: 8766)
         javaService.name = "Portfolio optimizer (Java)"
-        javaService.projectFolder = "~/MyCodeGIT/MXcodeIDE/MxJobsWMS/Modules/portfolio-java"
-        javaService.notes = "Start it with: cd Modules/portfolio-java && mvn -q package && java -jar target/portfolio-java.jar"
+        javaService.projectFolder = "~/MyCodeGIT/MXcodeIDE/Services/portfolio-java"
+        javaService.notes = "Start it with: python3 Services/mxservices.py start (builds it first if needed)"
         var cppService = ApiSubscription.localService(port: 8767)
         cppService.name = "Portfolio engine (C++)"
-        cppService.projectFolder = "~/MyCodeGIT/MXcodeIDE/MxJobsWMS/Modules/portfolio-cpp"
-        cppService.notes = "Start it with: cd Modules/portfolio-cpp && make run"
+        cppService.projectFolder = "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp"
+        cppService.notes = "Start it with: python3 Services/mxservices.py start (builds it first if needed)"
 
         space.subscriptions = [alpha, finnhub, frankfurter, edgar, local, javaService, cppService]
 
@@ -156,7 +156,7 @@ nonisolated extension Jobspace {
                                          KeyValue("change", "Global Quote.10. change percent")]
         normalize.outcome.outputName = "quotes"
 
-        // Python at Layer 3: indicators from the local Python service (Samples/python-service),
+        // Python at Layer 3: indicators from the local Python service (Services/market-sample),
         // scored by a Python Script step.
         var indicators = JobNode(kind: .apiRead, title: "Indicators (local Python)", x: 1520, y: y3)
         indicators.api?.subscriptionID = local.id
@@ -167,7 +167,7 @@ nonisolated extension Jobspace {
         indicators.outcome.requiredFields = ["rsi", "sma"]
         indicators.outcome.outputName = "indicators"
         indicators.exceptions.onFailure = .escalateToUser
-        indicators.notes = "Start the service first: python3 Samples/python-service/mxjobs_service.py"
+        indicators.notes = "Start the services first: python3 Services/mxservices.py start"
 
         var score = JobNode(kind: .pythonScript, title: "Score signals (Python)", x: 1760, y: y3)
         score.script?.code = Self.scoreSignalsScript
@@ -241,7 +241,7 @@ nonisolated extension Jobspace {
         return space
     }
 
-    /// The sample universe sent to the optimizer (Modules/contracts/examples/optimize-request.json).
+    /// The sample universe sent to the optimizer (Services/contracts/examples/optimize-request.json).
     static let optimizeBody = """
     {
       "assets": ["AAPL", "MSFT", "NVDA", "TLT"],

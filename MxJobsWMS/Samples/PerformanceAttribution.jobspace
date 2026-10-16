@@ -1,0 +1,620 @@
+{
+  "description" : "Explain DEMO_GROWTH's performance against its benchmark: Brinson-Fachler allocation, selection and interaction by sector, monthly and Carino-linked (Python), next to where the ex-ante active risk sits today (C++). The analysts turn both into commentary for review and publication.",
+  "format" : "mxjobspace",
+  "formatVersion" : 1,
+  "links" : [
+    {
+      "from" : "64E1A85D-9CDC-44AE-9B1E-7A3A47019A37",
+      "id" : "0342C5B8-69BD-46FB-9732-F519FEF21B10",
+      "label" : "",
+      "to" : "C8BB8409-D7E7-4EB8-AA16-F95BCD3ADADB"
+    },
+    {
+      "from" : "C8BB8409-D7E7-4EB8-AA16-F95BCD3ADADB",
+      "id" : "2B1E1A34-9172-4E28-AEF1-D8CC72DD120C",
+      "label" : "",
+      "to" : "9F930D43-872D-47E5-A4CB-12957F106532"
+    },
+    {
+      "from" : "9F930D43-872D-47E5-A4CB-12957F106532",
+      "id" : "F39CECFF-9CD9-4213-B1BF-02091706AE23",
+      "label" : "attribution",
+      "to" : "C8BB8409-D7E7-4EB8-AA16-F95BCD3ADADB"
+    },
+    {
+      "from" : "C8BB8409-D7E7-4EB8-AA16-F95BCD3ADADB",
+      "id" : "26E20ED1-56B0-4731-9739-66D42BC783AE",
+      "label" : "",
+      "to" : "12945AF4-1EDA-4EF1-9618-6958F1965CD1"
+    },
+    {
+      "from" : "12945AF4-1EDA-4EF1-9618-6958F1965CD1",
+      "id" : "D56D17A5-D253-40E2-8754-C424CA495C96",
+      "label" : "",
+      "to" : "F833AF2F-AD98-4BF0-813B-554ADB4D0EBD"
+    },
+    {
+      "from" : "12945AF4-1EDA-4EF1-9618-6958F1965CD1",
+      "id" : "BCC48E10-7D7D-4F34-9FB8-BA7C04480D17",
+      "label" : "",
+      "to" : "51304DC4-F3C7-4E70-A7B6-980C4789B95A"
+    },
+    {
+      "from" : "F833AF2F-AD98-4BF0-813B-554ADB4D0EBD",
+      "id" : "43FE6757-4E46-4E5C-8D31-6A21AFE3FBD2",
+      "label" : "inputsUrl",
+      "to" : "51304DC4-F3C7-4E70-A7B6-980C4789B95A"
+    },
+    {
+      "from" : "51304DC4-F3C7-4E70-A7B6-980C4789B95A",
+      "id" : "CC2C5946-1408-494D-9F61-DEE9667B53D7",
+      "label" : "active risk",
+      "to" : "12945AF4-1EDA-4EF1-9618-6958F1965CD1"
+    },
+    {
+      "from" : "9F930D43-872D-47E5-A4CB-12957F106532",
+      "id" : "98C3BFD0-D9CB-414E-9086-10E16489647A",
+      "label" : "",
+      "to" : "12945AF4-1EDA-4EF1-9618-6958F1965CD1"
+    },
+    {
+      "from" : "12945AF4-1EDA-4EF1-9618-6958F1965CD1",
+      "id" : "659F6F11-C731-409B-BD32-779631951967",
+      "label" : "",
+      "to" : "6D898DD4-BDDC-46AF-84D6-261D14C9A751"
+    },
+    {
+      "from" : "6D898DD4-BDDC-46AF-84D6-261D14C9A751",
+      "id" : "EF422DB0-D80F-4D7A-84D2-23D44555A5FC",
+      "label" : "",
+      "to" : "203E3ED6-2690-485E-88FC-7497DD98379D"
+    },
+    {
+      "from" : "203E3ED6-2690-485E-88FC-7497DD98379D",
+      "id" : "B1849796-EBA9-4E5E-9E7F-E6BEA831120E",
+      "label" : "approved",
+      "to" : "F257AF42-4F07-4A7B-9D9C-1026FD6166D5"
+    },
+    {
+      "from" : "F257AF42-4F07-4A7B-9D9C-1026FD6166D5",
+      "id" : "A4ECBB34-13EF-44EB-9C4F-4849F340E77B",
+      "label" : "",
+      "to" : "59DB3263-80A1-4A82-B3D0-CE90A096C6CC"
+    }
+  ],
+  "name" : "Performance & Risk Attribution — DEMO_GROWTH",
+  "nodes" : [
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "64E1A85D-9CDC-44AE-9B1E-7A3A47019A37",
+      "kind" : "trigger",
+      "notes" : "Run after month-end prices are loaded (MxDataHUB ▸ Data Refresh ▸ Prices).",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "run",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "schedule" : {
+        "intervalMinutes" : 60,
+        "mode" : "manual",
+        "time" : "07:30",
+        "timeZone" : "America/New_York"
+      },
+      "title" : "Month-end attribution",
+      "x" : 300,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Tables by sector (byGroup), monthly effects (periods), contributors, risk and the commentary.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "6D898DD4-BDDC-46AF-84D6-261D14C9A751",
+      "kind" : "instructionSet",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "pack",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Attribution pack",
+      "x" : 1280,
+      "y" : 120
+    },
+    {
+      "approval" : {
+        "approver" : "Head of performance",
+        "channel" : "inApp",
+        "expiresAfterMinutes" : 120,
+        "requireComment" : false,
+        "summaryTemplate" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "203E3ED6-2690-485E-88FC-7497DD98379D",
+      "kind" : "approvalGate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "approved",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Performance team review",
+      "x" : 1520,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "execution" : {
+        "confirmBeforeSend" : true,
+        "mode" : "dryRun",
+        "target" : "Client reporting portal"
+      },
+      "id" : "F257AF42-4F07-4A7B-9D9C-1026FD6166D5",
+      "kind" : "executeRequest",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Publish to client reporting",
+      "x" : 1760,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "59DB3263-80A1-4A82-B3D0-CE90A096C6CC",
+      "kind" : "outcomeReport",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "report" : {
+        "detailed" : false,
+        "includeFailures" : true,
+        "recipients" : "Performance team"
+      },
+      "title" : "Publication report",
+      "x" : 2000,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Check the attribution's assumptions and data gaps (decisionContext.reasons); find the sectors and names behind the active return.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "C8BB8409-D7E7-4EB8-AA16-F95BCD3ADADB",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "analysis",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Performance analyst",
+      "x" : 650,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+          "attribution",
+          "exAnteRisk"
+        ],
+        "instructions" : "Write the period commentary: active return, the largest allocation and selection effects, top and bottom contributors, and how today's active risk (exAnteRisk.sectorActiveRisk) compares.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "12945AF4-1EDA-4EF1-9618-6958F1965CD1",
+      "kind" : "aggregate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "commentary",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Commentary agent",
+      "x" : 1080,
+      "y" : 360
+    },
+    {
+      "api" : {
+        "body" : "{\"portfolio\": \"{{portfolio}}\", \"benchmark\": \"{{benchmark}}\", \"start\": \"{{start}}\", \"end\": \"{{end}}\",\n \"method\": \"{{method}}\"}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/attribution",
+        "query" : [
+
+        ],
+        "subscriptionID" : "CCB3A0F4-7377-4B37-AB54-B3B7372C14FC"
+      },
+      "arguments" : [
+        {
+          "id" : "802010B0-6AB4-4C63-987C-8E79E7130FD9",
+          "name" : "portfolio",
+          "required" : true,
+          "type" : "text",
+          "value" : "DEMO_GROWTH"
+        },
+        {
+          "id" : "FA2217DD-96CD-405F-A029-EBE104BBD3D8",
+          "name" : "benchmark",
+          "required" : false,
+          "type" : "text",
+          "value" : ""
+        },
+        {
+          "id" : "C237E94D-7A65-4AEA-8BFD-FFCDAB7B2D36",
+          "name" : "start",
+          "required" : false,
+          "type" : "date",
+          "value" : ""
+        },
+        {
+          "id" : "CC75774F-413A-4885-9061-EFA356838118",
+          "name" : "end",
+          "required" : false,
+          "type" : "date",
+          "value" : ""
+        },
+        {
+          "id" : "10A62307-886A-41F3-B276-1AFC1E9302CC",
+          "name" : "method",
+          "required" : false,
+          "type" : "text",
+          "value" : "brinson-fachler"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "9F930D43-872D-47E5-A4CB-12957F106532",
+      "kind" : "apiRead",
+      "notes" : "Why Python: grouping holdings and returns by sector and month and linking the effects is data shaping — quick to change when the team wants another grouping or method (brinson-hood-beebower).",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "3CB104C4-9C99-4E27-A40E-CC9BBDA9580D",
+            "op" : "==",
+            "path" : "schema",
+            "value" : "mxjobs.attribution/1"
+          },
+          {
+            "id" : "22ED59A8-32CF-4689-863D-1F52EDBB78D2",
+            "op" : "<=",
+            "path" : "effects.residual",
+            "value" : "0.000001"
+          }
+        ],
+        "description" : "Effects add up to the active return; start/end empty = the last 12 months",
+        "outputName" : "attribution",
+        "requiredFields" : [
+          "effects.allocation",
+          "effects.selection",
+          "byGroup",
+          "periods"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Sector attribution (Python)",
+      "x" : 520,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\"mode\": \"risk\", \"portfolio\": \"{{portfolio}}\", \"benchmark\": \"{{benchmark}}\", \"alpha\": \"none\"}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/inputs",
+        "query" : [
+
+        ],
+        "subscriptionID" : "CCB3A0F4-7377-4B37-AB54-B3B7372C14FC"
+      },
+      "arguments" : [
+        {
+          "id" : "9324991A-8834-47EB-938F-64D6CC066A9F",
+          "name" : "portfolio",
+          "required" : true,
+          "type" : "text",
+          "value" : "DEMO_GROWTH"
+        },
+        {
+          "id" : "241C5EC4-798F-41F3-BC82-A24DB9DEE62C",
+          "name" : "benchmark",
+          "required" : false,
+          "type" : "text",
+          "value" : ""
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "F833AF2F-AD98-4BF0-813B-554ADB4D0EBD",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "riskInputs",
+        "requiredFields" : [
+          "inputsUrl"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Risk inputs (Python)",
+      "x" : 800,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\"inputsUrl\": \"{{in:riskInputs.inputsUrl}}\", \"confidence\": 0.99, \"horizonDays\": 10, \"portfolioValue\": {{portfolioValue}}}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/risk",
+        "query" : [
+
+        ],
+        "subscriptionID" : "8F61A26D-0198-4FFA-BA95-34C47F43E145"
+      },
+      "arguments" : [
+        {
+          "id" : "2FB72EB2-56EE-413B-B79E-BDC43D82ED48",
+          "name" : "portfolioValue",
+          "required" : false,
+          "type" : "number",
+          "value" : "10000000"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "51304DC4-F3C7-4E70-A7B6-980C4789B95A",
+      "kind" : "apiRead",
+      "notes" : "Why C++: decomposing active risk over the full benchmark covariance, per position and sector.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "ED1CFEEF-DF7D-4E1A-8080-56B8F423358B",
+            "op" : "==",
+            "path" : "status",
+            "value" : "ok"
+          }
+        ],
+        "description" : "",
+        "outputName" : "exAnteRisk",
+        "requiredFields" : [
+          "trackingError",
+          "sectorActiveRisk",
+          "activeRiskContributions"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Ex-ante active risk (C++)",
+      "x" : 1080,
+      "y" : 600
+    }
+  ],
+  "run" : {
+    "agents" : "run",
+    "breakpointsEnabled" : true,
+    "data" : "live",
+    "operations" : "interactive",
+    "stepDelay" : 0.3,
+    "stopOnError" : true
+  },
+  "subscriptions" : [
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8772",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "CCB3A0F4-7377-4B37-AB54-B3B7372C14FC",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Portfolio analytics",
+      "notes" : "Data and statistics for portfolio work: builds optimization inputs from the security master (universe, sectors, benchmark and current weights, Ledoit-Wolf covariance, momentum alpha) and runs performance attribution (Brinson-Fachler by sector, monthly, Carino-linked). — Start it with: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/analytics",
+      "provider" : "Python service on this Mac (Services/analytics)",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8767",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "8F61A26D-0198-4FFA-BA95-34C47F43E145",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Index tracking & risk",
+      "notes" : "Passive index tracking — the long-only portfolio of at most N names with the smallest ex-ante tracking error against a benchmark (full replication or sampling by largest weights or sector strata) — and portfolio risk: VaR, expected shortfall, risk contributions, and tracking error, beta and active-risk contributions against a benchmark. — Start it with: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp",
+      "provider" : "C++ service on this Mac (Services/portfolio-cpp)",
+      "rateLimitPerMinute" : 0
+    }
+  ]
+}

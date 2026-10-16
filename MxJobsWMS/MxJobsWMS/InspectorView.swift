@@ -361,6 +361,9 @@ private struct ApiSection: View {
 
     var body: some View {
         let api = Binding($node.api, default: ApiCallSpec())
+        if let service = ServiceAboutSection.service(for: space.subscription(node.api?.subscriptionID)) {
+            ServiceAboutSection(service: service, path: node.api?.path ?? "")
+        }
         Section {
             Picker("Subscription", selection: api.subscriptionID) {
                 Text("None").tag(UUID?.none)
@@ -432,10 +435,52 @@ private struct ApiSection: View {
         testing = true
         result = nil
         let snapshot = node
+        // The outputs of the steps linked into this one from the last run ({{in:…}} placeholders).
+        var inputs: [String: Any] = [:]
+        for link in space.links where link.to == node.id {
+            guard let from = space.node(link.from), let value = editor.run.output(of: from.id) else { continue }
+            inputs[from.outcome.outputName.isEmpty ? from.title : from.outcome.outputName] = value
+        }
         Task {
-            result = await ApiTester.run(node: snapshot, subscription: sub)
+            result = await ApiTester.run(node: snapshot, subscription: sub, inputs: inputs)
             testing = false
         }
+    }
+}
+
+/// What the Layer 3 service behind a step is for, from the shared catalog (Services/).
+struct ServiceAboutSection: View {
+    var service: ServiceInfo
+    var path: String
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Section {
+            HStack(alignment: .firstTextBaseline) {
+                LanguageBadge(language: service.language)
+                Text(service.name).font(.callout.weight(.semibold))
+            }
+            Text(service.purpose).font(.callout)
+            if let endpoint = service.endpoints.first(where: { path.hasPrefix($0.path.components(separatedBy: "{").first ?? $0.path)
+                                                                 && !$0.path.isEmpty && $0.path != "/" }) {
+                LabeledContent("This call") {
+                    Text(endpoint.summary + (endpoint.contract.map { " · \($0)" } ?? "")).foregroundStyle(.secondary)
+                }
+            }
+            LabeledContent("Use it for") {
+                Text(service.cases.map(\.title).joined(separator: ", ")).foregroundStyle(.secondary)
+            }
+            Button("Layer 3 Services…") { openWindow(id: "services") }
+        } header: {
+            Text("About This Service")
+        }
+    }
+
+    /// The catalog service a subscription points at (by local port).
+    static func service(for sub: ApiSubscription?) -> ServiceInfo? {
+        guard let sub, let url = URL(string: sub.baseURL), let host = url.host(),
+              host == "127.0.0.1" || host == "localhost", let port = url.port else { return nil }
+        return ServiceCatalog.all.first { $0.port == port }
     }
 }
 

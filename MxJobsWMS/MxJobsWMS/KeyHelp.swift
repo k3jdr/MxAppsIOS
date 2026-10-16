@@ -87,7 +87,7 @@ struct ProviderGuide: Identifiable {
                 "If you do, save the same token here; it is sent as “Authorization: Bearer …”.",
             ],
             limits: "Whatever the service allows.",
-            notes: ["Samples: Samples/python-service (8765), Modules/portfolio-java (8766), Modules/portfolio-cpp (8767)."]),
+            notes: ["Services (MXcodeIDE/Services, start them with python3 Services/mxservices.py start): market-sample (8765), portfolio-java (8766), portfolio-cpp (8767), srm-loader (8770), analytics (8772)."]),
     ]
 
     /// Steps for any other provider.

@@ -585,7 +585,7 @@ nonisolated enum AuthStyle: String, Codable, CaseIterable, Identifiable, Sendabl
 nonisolated extension ApiSubscription {
     static let localServicePort = 8765
 
-    /// A Python (or any) service on this Mac, e.g. Samples/python-service/mxjobs_service.py.
+    /// A Python (or any) service on this Mac, e.g. Services/market-sample/mxjobs_service.py.
     static func localService(port: Int = localServicePort) -> ApiSubscription {
         var sub = ApiSubscription()
         sub.name = "Local Python service"
@@ -593,7 +593,7 @@ nonisolated extension ApiSubscription {
         sub.baseURL = "http://127.0.0.1:\(port)"
         sub.auth = .localService
         sub.keyName = ""
-        sub.notes = "Start it with: python3 Samples/python-service/mxjobs_service.py --port \(port). "
+        sub.notes = "Start it with: python3 Services/mxservices.py start (or python3 Services/market-sample/mxjobs_service.py --port \(port)). "
             + "Store a token here only if the service is started with --token."
         return sub
     }
@@ -613,7 +613,7 @@ nonisolated struct ApiSubscription: Codable, Identifiable, Equatable, Sendable {
     /// Headers sent with every call (e.g. the User-Agent SEC EDGAR asks for).
     var defaultHeaders: [KeyValue] = []
     var notes = ""
-    /// Source project of a local service (e.g. Modules/portfolio-java), opened with "Open in IDE".
+    /// Source project of a local service (e.g. Services/portfolio-java), opened with "Open in IDE".
     var projectFolder = ""
     var ide = IDEChoice.vscode
 

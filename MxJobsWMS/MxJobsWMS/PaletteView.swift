@@ -10,6 +10,8 @@ import SwiftUI
 
 struct PaletteView: View {
     var editor: EditorState
+    @Environment(\.openWindow) private var openWindow
+    @State private var running: [String: Bool] = [:]
 
     var body: some View {
         List {
@@ -32,8 +34,43 @@ struct PaletteView: View {
                         .foregroundStyle(layer.color)
                 }
             }
+
+            // The shared Layer 3 services (Services/): what each is for, and a step for it on double-click.
+            Section {
+                ForEach(ServiceCatalog.all) { service in
+                    HStack(alignment: .top, spacing: 8) {
+                        Circle()
+                            .fill(running[service.id] == true ? Color.green : Color.secondary.opacity(0.4))
+                            .frame(width: 7, height: 7)
+                            .padding(.top, 5)
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 4) {
+                                Text(service.name)
+                                Text(service.language).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                            }
+                            Text(service.cases.map(\.title).joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { editor.addServiceStep(service, nil) }
+                    .contextMenu {
+                        ForEach(service.endpoints, id: \.self) { endpoint in
+                            Button("Add Step: \(endpoint.method) \(endpoint.path)") { editor.addServiceStep(service, endpoint) }
+                        }
+                        Divider()
+                        Button("About \(service.name)…") { openWindow(id: "services") }
+                    }
+                    .help(service.purpose + "\n\nDouble-click to add a step; right-click for each endpoint.")
+                }
+                Button("Layer 3 Services…") { openWindow(id: "services") }
+                Button("New from Sample…") { openWindow(id: "samples") }
+            } header: {
+                Text("Layer 3 Services").foregroundStyle(Layer.data.color)
+            }
         }
         .listStyle(.sidebar)
+        .task { running = await ServiceCatalog.probeAll() }
     }
 }
 

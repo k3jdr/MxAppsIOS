@@ -1,217 +1,217 @@
 {
-  "description" : "MxDataSRM's daily automation: refresh the reference data and the listed universe, benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions (srm.py load all); check data quality, and ask the data steward to approve the report and any backfills.",
+  "description" : "MxDataHUB's daily automation: refresh the reference data and the listed universe, benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions (srm.py load all); check data quality, and ask the data steward to approve the report and any backfills.",
   "format" : "mxjobspace",
   "formatVersion" : 1,
   "links" : [
     {
-      "from" : "83C19D27-B0BC-46B1-A1FF-8F3C306304B4",
-      "id" : "59E2F8D3-6DFB-4559-88F7-A13B04AAEA36",
+      "from" : "5AB7EED7-F8C2-4454-A1A9-A2AA6F0E1C22",
+      "id" : "F7464CB1-E346-4D9D-A169-B365115BBF2E",
       "label" : "",
-      "to" : "2633083C-2FC3-4931-90FA-8F034BB9186A"
+      "to" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC"
     },
     {
-      "from" : "2633083C-2FC3-4931-90FA-8F034BB9186A",
-      "id" : "A61CF9A4-9EF5-4D51-86A3-19FD1D36BF15",
+      "from" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC",
+      "id" : "0D3801AB-C9AD-435A-B4F2-E195BCCE37F4",
       "label" : "",
-      "to" : "CBFB5FD5-64DB-4DCC-A14D-9A102DC1C70E"
+      "to" : "4DFFCB0B-168D-4565-96EE-69F5FE4F23C5"
     },
     {
-      "from" : "CBFB5FD5-64DB-4DCC-A14D-9A102DC1C70E",
-      "id" : "38853F2D-8754-4522-AB9A-073AD04E982C",
+      "from" : "4DFFCB0B-168D-4565-96EE-69F5FE4F23C5",
+      "id" : "5B22CAF0-14B7-490C-A0A5-2A921446C226",
       "label" : "",
-      "to" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2"
+      "to" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E"
     },
     {
-      "from" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2",
-      "id" : "1379AFDF-1420-4D48-8D63-518BB1751F6E",
+      "from" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E",
+      "id" : "747E4F09-AC21-4662-93D8-FEE70DAD29E8",
       "label" : "",
-      "to" : "A31642BE-7A99-40B1-92F4-782327D38BBA"
+      "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
     },
     {
-      "from" : "A31642BE-7A99-40B1-92F4-782327D38BBA",
-      "id" : "256CC453-6331-4A5E-8401-8C3DA0710C2F",
+      "from" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
+      "id" : "DD28B4A8-8347-4148-9FAA-D68DB8734E87",
       "label" : "",
-      "to" : "C5A28EA0-24B6-4F34-B85B-39EBD72F52E6"
+      "to" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511"
     },
     {
-      "from" : "C5A28EA0-24B6-4F34-B85B-39EBD72F52E6",
-      "id" : "94450C8F-48EE-42BE-BAEB-F9FB9617E64E",
+      "from" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511",
+      "id" : "7AF2D596-31CD-4DBE-9DC2-AED394ED6CBA",
       "label" : "",
-      "to" : "6B369F89-7DB8-4FB6-831D-45E31645635E"
+      "to" : "24A6CE82-7B13-4317-8AF9-7F564172659D"
     },
     {
-      "from" : "6B369F89-7DB8-4FB6-831D-45E31645635E",
-      "id" : "BF776BC5-1A13-4F0F-9B69-D78B14D74731",
+      "from" : "24A6CE82-7B13-4317-8AF9-7F564172659D",
+      "id" : "3AFCABFC-5707-43FB-A76B-636B9C85E174",
       "label" : "quality",
-      "to" : "C5A28EA0-24B6-4F34-B85B-39EBD72F52E6"
+      "to" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511"
     },
     {
-      "from" : "C5A28EA0-24B6-4F34-B85B-39EBD72F52E6",
-      "id" : "4CC29A18-7F36-4054-9208-C75317483328",
+      "from" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511",
+      "id" : "D66FD969-78F5-46FC-8A5B-EDA71AA1D34D",
       "label" : "report",
-      "to" : "A39E3288-E605-4F5C-925D-7043FBDC6D7E"
+      "to" : "BBA016B1-4C4D-4F31-9188-1E8EE46AC48A"
     },
     {
-      "from" : "A39E3288-E605-4F5C-925D-7043FBDC6D7E",
-      "id" : "8052AD1B-1B22-4265-B029-C4A579941B01",
+      "from" : "BBA016B1-4C4D-4F31-9188-1E8EE46AC48A",
+      "id" : "E793273D-24BD-4769-9C1B-C17B7DCD02A4",
       "label" : "",
-      "to" : "51F3F7FD-1650-49AC-97FA-39E92F1804B5"
+      "to" : "3A812BA7-0415-4FDE-9E90-64C35B0BD50A"
     },
     {
-      "from" : "51F3F7FD-1650-49AC-97FA-39E92F1804B5",
-      "id" : "A628CEC7-7A71-434F-868D-38A260105C11",
+      "from" : "3A812BA7-0415-4FDE-9E90-64C35B0BD50A",
+      "id" : "4B56BD51-AA97-42AD-BB01-B77D19B28D3F",
       "label" : "approved",
-      "to" : "C2B48602-D367-4040-8685-99C37AE1722E"
+      "to" : "8130B640-311C-44E2-9ED8-85D4866214A7"
     },
     {
-      "from" : "C2B48602-D367-4040-8685-99C37AE1722E",
-      "id" : "E78DF245-0EF7-438B-9F01-077052F13487",
+      "from" : "8130B640-311C-44E2-9ED8-85D4866214A7",
+      "id" : "23A1541A-D9C5-4509-8B75-3ACB693D9F2F",
       "label" : "",
-      "to" : "632D7B46-0494-4D3A-9612-F87BE8B4514B"
+      "to" : "7E9E6B74-071B-4B03-BA85-D8B9E7F30410"
     },
     {
-      "from" : "2633083C-2FC3-4931-90FA-8F034BB9186A",
-      "id" : "38442838-D4A4-4131-9D5E-5879B8EB73DE",
+      "from" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC",
+      "id" : "41C0A4E8-0BC9-4ED9-BA42-18E73553FEFE",
       "label" : "",
-      "to" : "3298C15D-EF3D-4B5C-A7DE-F20C9A94D972"
+      "to" : "12AB1E52-3A9A-4369-B8B7-B8C3C8E6C2C2"
     },
     {
-      "from" : "3298C15D-EF3D-4B5C-A7DE-F20C9A94D972",
-      "id" : "63C93EFA-F4AA-499D-8ED3-7E947E35A8DF",
+      "from" : "12AB1E52-3A9A-4369-B8B7-B8C3C8E6C2C2",
+      "id" : "A9441A5F-FF48-4E2B-9F21-9C0A0C858EEE",
       "label" : "",
-      "to" : "2633083C-2FC3-4931-90FA-8F034BB9186A"
+      "to" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC"
     },
     {
-      "from" : "2633083C-2FC3-4931-90FA-8F034BB9186A",
-      "id" : "3EF4E9F4-A810-45E0-A5B2-14356D4AF477",
+      "from" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC",
+      "id" : "17B9B731-1099-4677-846C-F6FC3D30BB65",
       "label" : "",
-      "to" : "51F5B49B-5E08-4178-8F4F-FB2D18856D2E"
+      "to" : "5B30CDF5-E4F4-438C-95CC-3EE3E5E70F48"
     },
     {
-      "from" : "51F5B49B-5E08-4178-8F4F-FB2D18856D2E",
-      "id" : "6E83708A-D09D-494A-8C55-9C827D7FCD69",
+      "from" : "5B30CDF5-E4F4-438C-95CC-3EE3E5E70F48",
+      "id" : "170D563A-AB0D-416C-AB42-FA17D2491E3A",
       "label" : "",
-      "to" : "2633083C-2FC3-4931-90FA-8F034BB9186A"
+      "to" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC"
     },
     {
-      "from" : "2633083C-2FC3-4931-90FA-8F034BB9186A",
-      "id" : "E65ACF36-C9F5-4B6F-B267-23C90AA1C506",
+      "from" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC",
+      "id" : "649A364A-7002-4740-9558-7656CF72785A",
       "label" : "",
-      "to" : "F064CD14-828B-4227-85EE-932AF5798B27"
+      "to" : "80EE64BC-773F-45B8-8DB7-0AC6C1872FB9"
     },
     {
-      "from" : "F064CD14-828B-4227-85EE-932AF5798B27",
-      "id" : "1D0D7434-9EE5-4D0B-AC27-FD5ACF938AED",
+      "from" : "80EE64BC-773F-45B8-8DB7-0AC6C1872FB9",
+      "id" : "568ACDD1-1481-45C2-90F4-EFD5CDB1D70D",
       "label" : "",
-      "to" : "2633083C-2FC3-4931-90FA-8F034BB9186A"
+      "to" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC"
     },
     {
-      "from" : "CBFB5FD5-64DB-4DCC-A14D-9A102DC1C70E",
-      "id" : "E55DACB2-058D-41D5-9503-2D1AE411DE21",
+      "from" : "4DFFCB0B-168D-4565-96EE-69F5FE4F23C5",
+      "id" : "7A779000-228A-4DE8-9BBA-50575599263F",
       "label" : "",
-      "to" : "A1A7C302-57E1-4D80-A8DA-A3565D424846"
+      "to" : "FFA62FD0-13DE-4BDB-9B90-43F82725BB44"
     },
     {
-      "from" : "A1A7C302-57E1-4D80-A8DA-A3565D424846",
-      "id" : "4FA33D0A-558D-43A9-915C-61477E1F42E0",
+      "from" : "FFA62FD0-13DE-4BDB-9B90-43F82725BB44",
+      "id" : "1E7DE53D-B04D-424B-BF2E-6627FB0DEDFB",
       "label" : "",
-      "to" : "CBFB5FD5-64DB-4DCC-A14D-9A102DC1C70E"
+      "to" : "4DFFCB0B-168D-4565-96EE-69F5FE4F23C5"
     },
     {
-      "from" : "CBFB5FD5-64DB-4DCC-A14D-9A102DC1C70E",
-      "id" : "C9E017D7-5EAC-4C12-A547-B01C2A63DFF7",
+      "from" : "4DFFCB0B-168D-4565-96EE-69F5FE4F23C5",
+      "id" : "5D5D9D2B-96CF-4EF5-B412-AB3CA8419FD5",
       "label" : "",
-      "to" : "024DF3B9-EE9F-4A0F-A048-628AF38E45CE"
+      "to" : "DDEFD225-9EC5-48C5-AB45-B221426BF100"
     },
     {
-      "from" : "024DF3B9-EE9F-4A0F-A048-628AF38E45CE",
-      "id" : "2E08001B-E3B4-4089-AB27-AA873DFBCE85",
+      "from" : "DDEFD225-9EC5-48C5-AB45-B221426BF100",
+      "id" : "C686836E-E557-449A-9A56-931C0A0E1C11",
       "label" : "",
-      "to" : "CBFB5FD5-64DB-4DCC-A14D-9A102DC1C70E"
+      "to" : "4DFFCB0B-168D-4565-96EE-69F5FE4F23C5"
     },
     {
-      "from" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2",
-      "id" : "BA13FC9A-5538-482A-82CF-D228C10CADF6",
+      "from" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E",
+      "id" : "FFF32938-B1F9-4091-9B05-9A90C669E5EA",
       "label" : "",
-      "to" : "9CDF3CB1-5D3E-448B-A741-CE1A86AA9009"
+      "to" : "C7F229C0-F55B-429B-9D78-F71070DC1B97"
     },
     {
-      "from" : "9CDF3CB1-5D3E-448B-A741-CE1A86AA9009",
-      "id" : "E4BBF186-687D-49D5-B40E-36616C2BFF8A",
+      "from" : "C7F229C0-F55B-429B-9D78-F71070DC1B97",
+      "id" : "2F5B0CD2-8462-4595-B1F5-390AF24AAD2A",
       "label" : "",
-      "to" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2"
+      "to" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E"
     },
     {
-      "from" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2",
-      "id" : "4BB72AE0-8A49-46D3-8861-883A0F181A08",
+      "from" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E",
+      "id" : "E5F995CD-213C-44B0-858D-EF0B3E8E6EB0",
       "label" : "",
-      "to" : "DB9A1F63-08A2-45A7-94DA-9CFA66653A45"
+      "to" : "2DFA7EAB-BBB2-4C3B-A05D-82C0888C576C"
     },
     {
-      "from" : "DB9A1F63-08A2-45A7-94DA-9CFA66653A45",
-      "id" : "38A5AA2E-52D6-4F2B-A2CC-65EEFE6F2AF7",
+      "from" : "2DFA7EAB-BBB2-4C3B-A05D-82C0888C576C",
+      "id" : "75BC8A32-1ECD-4A09-9EDA-6866168DF997",
       "label" : "",
-      "to" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2"
+      "to" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E"
     },
     {
-      "from" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2",
-      "id" : "D7BE9DD2-9050-4260-840C-159415A22EF0",
+      "from" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E",
+      "id" : "03A4D840-9587-4FC0-B6AF-CAC472971F75",
       "label" : "",
-      "to" : "C2DFAFCF-ECF6-4E79-9ABE-0246379F7874"
+      "to" : "6AADA348-00FA-4ED6-AE11-33FA51EEFB31"
     },
     {
-      "from" : "C2DFAFCF-ECF6-4E79-9ABE-0246379F7874",
-      "id" : "58EC4182-A5A5-436B-9563-4BB51C1DA6E7",
+      "from" : "6AADA348-00FA-4ED6-AE11-33FA51EEFB31",
+      "id" : "EEEB3B58-C72F-48BD-A8D0-3ED16B63AB66",
       "label" : "",
-      "to" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2"
+      "to" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E"
     },
     {
-      "from" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2",
-      "id" : "A76ED4ED-83BF-4051-B8B5-4D8DC6160D65",
+      "from" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E",
+      "id" : "19034FE1-51C6-4DB4-A516-E8395DC4F51A",
       "label" : "",
-      "to" : "7EDFB807-4878-47D0-9B6E-FFFA3B8CEA72"
+      "to" : "B940A58D-295C-4FE6-B128-C0A1D1D7EDE0"
     },
     {
-      "from" : "7EDFB807-4878-47D0-9B6E-FFFA3B8CEA72",
-      "id" : "70137BCF-68A9-4CBE-A482-994E6503501F",
+      "from" : "B940A58D-295C-4FE6-B128-C0A1D1D7EDE0",
+      "id" : "1A7A4F3E-B2B0-45C0-9E1D-3CDA88B1D041",
       "label" : "",
-      "to" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2"
+      "to" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E"
     },
     {
-      "from" : "A31642BE-7A99-40B1-92F4-782327D38BBA",
-      "id" : "E16D67E0-34A8-43A4-9C2E-37CEC925FBF0",
+      "from" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
+      "id" : "92CC9625-8AFB-4E83-B5EE-CC79C7375E32",
       "label" : "",
-      "to" : "256CA216-D6FF-4330-ADD3-B4F721FAC1A9"
+      "to" : "5C5690D6-94C6-4EDC-B393-7A1527A32F8F"
     },
     {
-      "from" : "256CA216-D6FF-4330-ADD3-B4F721FAC1A9",
-      "id" : "3EF5CEC7-A997-4750-B21C-2568FAEC5A17",
+      "from" : "5C5690D6-94C6-4EDC-B393-7A1527A32F8F",
+      "id" : "47762C4B-3AB3-4130-8BBD-AC463477DC23",
       "label" : "",
-      "to" : "A31642BE-7A99-40B1-92F4-782327D38BBA"
+      "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
     },
     {
-      "from" : "A31642BE-7A99-40B1-92F4-782327D38BBA",
-      "id" : "48414400-CAA8-49A1-BB09-4EF7DB3687E4",
+      "from" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
+      "id" : "F15C1C1E-1B36-4872-91FC-390CC84C648F",
       "label" : "",
-      "to" : "936BD7C1-486A-40BE-89F1-A84B793A5209"
+      "to" : "7F2AFA8A-9693-483D-963B-0738FC1A6202"
     },
     {
-      "from" : "936BD7C1-486A-40BE-89F1-A84B793A5209",
-      "id" : "4A5191FD-449A-4729-AFAB-B9B6F0E13949",
+      "from" : "7F2AFA8A-9693-483D-963B-0738FC1A6202",
+      "id" : "67351ED0-6AD1-4970-91DF-A884547BA47C",
       "label" : "",
-      "to" : "A31642BE-7A99-40B1-92F4-782327D38BBA"
+      "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
     },
     {
-      "from" : "A31642BE-7A99-40B1-92F4-782327D38BBA",
-      "id" : "86B5C6B0-1B1E-4F0C-98C3-D366F19EF783",
+      "from" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
+      "id" : "692F068E-3C77-4876-9741-E327068BB917",
       "label" : "",
-      "to" : "074DA003-5594-414A-8613-19885FEAF602"
+      "to" : "26B7F39E-1560-4C98-863F-DD37B15B97DA"
     },
     {
-      "from" : "074DA003-5594-414A-8613-19885FEAF602",
-      "id" : "63379D09-2C77-4FDC-9D1B-8640EFDAF498",
+      "from" : "26B7F39E-1560-4C98-863F-DD37B15B97DA",
+      "id" : "B2C2773F-C103-424E-8B33-9FC6C3BE421C",
       "label" : "",
-      "to" : "A31642BE-7A99-40B1-92F4-782327D38BBA"
+      "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
     }
   ],
   "name" : "SRM Daily Securities Master Refresh",
@@ -231,7 +231,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "83C19D27-B0BC-46B1-A1FF-8F3C306304B4",
+      "id" : "5AB7EED7-F8C2-4454-A1A9-A2AA6F0E1C22",
       "kind" : "trigger",
       "notes" : "After the close, once the SPDR holdings files and end-of-day prices are published.",
       "outcome" : {
@@ -278,7 +278,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "A39E3288-E605-4F5C-925D-7043FBDC6D7E",
+      "id" : "BBA016B1-4C4D-4F31-9188-1E8EE46AC48A",
       "kind" : "instructionSet",
       "notes" : "",
       "outcome" : {
@@ -318,7 +318,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "51F3F7FD-1650-49AC-97FA-39E92F1804B5",
+      "id" : "3A812BA7-0415-4FDE-9E90-64C35B0BD50A",
       "kind" : "approvalGate",
       "notes" : "",
       "outcome" : {
@@ -354,9 +354,9 @@
       "execution" : {
         "confirmBeforeSend" : true,
         "mode" : "dryRun",
-        "target" : "srm.py (MxDataSRM/SRM)"
+        "target" : "srm.py (MxDataHUB/SRM)"
       },
-      "id" : "C2B48602-D367-4040-8685-99C37AE1722E",
+      "id" : "8130B640-311C-44E2-9ED8-85D4866214A7",
       "kind" : "executeRequest",
       "notes" : "Long, API-hungry loads only run after approval: e.g. fmp-corporate-actions --history (2 calls per symbol) or fmp-profiles --all-securities (~13,000 calls, about an hour).",
       "outcome" : {
@@ -389,7 +389,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "632D7B46-0494-4D3A-9612-F87BE8B4514B",
+      "id" : "7E9E6B74-071B-4B03-BA85-D8B9E7F30410",
       "kind" : "outcomeReport",
       "notes" : "",
       "outcome" : {
@@ -435,7 +435,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "2633083C-2FC3-4931-90FA-8F034BB9186A",
+      "id" : "6ECF0DD1-0999-4DB6-8B5E-F7CFE27AB9AC",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -476,7 +476,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "CBFB5FD5-64DB-4DCC-A14D-9A102DC1C70E",
+      "id" : "4DFFCB0B-168D-4565-96EE-69F5FE4F23C5",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -517,7 +517,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "CA0CAB84-07A4-475F-BA64-565DAC2693F2",
+      "id" : "0AC4D5DE-A228-43E1-9C79-7C6FECD5829E",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -558,7 +558,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "A31642BE-7A99-40B1-92F4-782327D38BBA",
+      "id" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -599,7 +599,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "C5A28EA0-24B6-4F34-B85B-39EBD72F52E6",
+      "id" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511",
       "kind" : "aggregate",
       "notes" : "",
       "outcome" : {
@@ -628,7 +628,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -644,13 +644,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 300
       },
-      "id" : "3298C15D-EF3D-4B5C-A7DE-F20C9A94D972",
+      "id" : "12AB1E52-3A9A-4369-B8B7-B8C3C8E6C2C2",
       "kind" : "apiRead",
       "notes" : "ISO 10383 market identifier codes and ISO 4217 currencies.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "36C66661-56C9-4EAD-96DF-DD873A08D502",
+            "id" : "0A8C2704-690F-4504-8C71-051869BAB192",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -679,7 +679,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -695,13 +695,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 600
       },
-      "id" : "51F5B49B-5E08-4178-8F4F-FB2D18856D2E",
+      "id" : "5B30CDF5-E4F4-438C-95CC-3EE3E5E70F48",
       "kind" : "apiRead",
       "notes" : "US listed securities, listings and tickers; closes listings that left the files.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "C3342B1E-AE42-4661-A914-3B317EE2DC1D",
+            "id" : "BF67D6CE-C63F-4502-B390-899CEE013ED1",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -730,7 +730,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -746,13 +746,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 600
       },
-      "id" : "F064CD14-828B-4227-85EE-932AF5798B27",
+      "id" : "80EE64BC-773F-45B8-8DB7-0AC6C1872FB9",
       "kind" : "apiRead",
       "notes" : "CIKs → issuers, linked to the listed securities.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "4BC83EAB-2A69-4971-8EF3-8A978D711982",
+            "id" : "6CBAF4C8-D599-4362-B9B2-C27D0E96BA9C",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -780,16 +780,16 @@
         "path" : "/load/ssga",
         "query" : [
           {
-            "id" : "26D9F4B3-B25F-4B83-BE5F-AA66539A79F0",
+            "id" : "2C4AF0B7-E288-4507-83AC-1B892E847DD4",
             "key" : "benchmarks",
             "value" : "{{benchmarks}}"
           }
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
         {
-          "id" : "B15C60CB-96AF-4A74-BE6D-F895A0B4D23F",
+          "id" : "44162299-E7A7-425A-83FD-CD930841EEA0",
           "name" : "benchmarks",
           "required" : false,
           "type" : "text",
@@ -807,13 +807,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 600
       },
-      "id" : "A1A7C302-57E1-4D80-A8DA-A3565D424846",
+      "id" : "FFA62FD0-13DE-4BDB-9B90-43F82725BB44",
       "kind" : "apiRead",
       "notes" : "SPY, DIA, MDY and SPSM daily holdings: members, weights, shares, CUSIP, SEDOL.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "D89281E6-34C3-497F-8701-4FFEAC2FA7A1",
+            "id" : "16AC1A2C-3976-4564-A711-7B1D8D756ECC",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -842,7 +842,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -858,13 +858,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 300
       },
-      "id" : "024DF3B9-EE9F-4A0F-A048-628AF38E45CE",
+      "id" : "DDEFD225-9EC5-48C5-AB45-B221426BF100",
       "kind" : "apiRead",
       "notes" : "Nasdaq.com list with market caps (plain cap weights).",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "C4756BA5-2E3D-4021-A99E-C25AFF8EE935",
+            "id" : "4D8B711E-0A5B-4F80-9747-F80E726920E5",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -893,7 +893,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -909,13 +909,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 1800
       },
-      "id" : "9CDF3CB1-5D3E-448B-A741-CE1A86AA9009",
+      "id" : "C7F229C0-F55B-429B-9D78-F71070DC1B97",
       "kind" : "apiRead",
       "notes" : "Composite, share-class and exchange FIGIs by CUSIP, else ticker; 250 requests/min.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "C4DB77F4-5B83-4648-A747-BBFED7D77082",
+            "id" : "1DD1A9DA-505A-4009-B6CA-FD3951AA890D",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -943,16 +943,16 @@
         "path" : "/load/fmp-profiles",
         "query" : [
           {
-            "id" : "7983F8E8-5F5B-43AF-A419-8504BDCA9050",
+            "id" : "0DDD2691-D0AB-475A-87CC-E31AE9312A9E",
             "key" : "max",
             "value" : "{{maxCalls}}"
           }
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
         {
-          "id" : "CB402054-786F-4C99-A506-4B5362B2A815",
+          "id" : "7F13D75D-E67F-4528-96DD-730CA11741E4",
           "name" : "maxCalls",
           "required" : false,
           "type" : "text",
@@ -970,13 +970,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 1800
       },
-      "id" : "DB9A1F63-08A2-45A7-94DA-9CFA66653A45",
+      "id" : "2DFA7EAB-BBB2-4C3B-A05D-82C0888C576C",
       "kind" : "apiRead",
       "notes" : "ISIN, CUSIP, CIK, sector / industry, market cap for benchmark and portfolio members.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "B9559A36-C1DE-4E53-833A-845A156BABD9",
+            "id" : "BA47022E-4723-4DB7-925B-B6A83DA0D5EA",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -1005,7 +1005,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -1021,13 +1021,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 1800
       },
-      "id" : "C2DFAFCF-ECF6-4E79-9ABE-0246379F7874",
+      "id" : "6AADA348-00FA-4ED6-AE11-33FA51EEFB31",
       "kind" : "apiRead",
       "notes" : "SIC, state of incorporation, EIN, fiscal year end, former names.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "8D6ACA43-91AC-4C58-B222-0027D878387E",
+            "id" : "5F0D89EF-B689-4737-95E7-92242292C7A0",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -1056,7 +1056,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -1072,13 +1072,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 1800
       },
-      "id" : "7EDFB807-4878-47D0-9B6E-FFFA3B8CEA72",
+      "id" : "B940A58D-295C-4FE6-B128-C0A1D1D7EDE0",
       "kind" : "apiRead",
       "notes" : "ISIN → LEI file and LEI records: legal form, entity status, countries.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "738D4FD9-4285-4883-A19E-FD382EA5AD43",
+            "id" : "DE506088-6253-4397-9BF3-0D5CECE6D6B1",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -1106,16 +1106,16 @@
         "path" : "/load/fmp-prices",
         "query" : [
           {
-            "id" : "86623128-FC69-44F4-BC5B-CA8F55A80F9B",
+            "id" : "3D54BDE3-B489-40E2-89E0-58BA7CD277B7",
             "key" : "since",
             "value" : "{{since}}"
           }
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
         {
-          "id" : "ECB2D93E-E2E3-4C26-97B5-B4F2F8BECA1F",
+          "id" : "0EDA6490-5510-4765-8276-ED641C9A4BA6",
           "name" : "since",
           "required" : false,
           "type" : "date",
@@ -1133,13 +1133,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 3600
       },
-      "id" : "256CA216-D6FF-4330-ADD3-B4F721FAC1A9",
+      "id" : "5C5690D6-94C6-4EDC-B393-7A1527A32F8F",
       "kind" : "apiRead",
       "notes" : "EOD prices, incremental after the first 2 years.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "8D230702-00FA-4F73-B1F9-88933D88952E",
+            "id" : "886CD6EF-6FF9-4436-9022-1D7C4F003F56",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -1168,7 +1168,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -1184,13 +1184,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 600
       },
-      "id" : "936BD7C1-486A-40BE-89F1-A84B793A5209",
+      "id" : "7F2AFA8A-9693-483D-963B-0738FC1A6202",
       "kind" : "apiRead",
       "notes" : "^GSPC and ^DJI levels on the current plan.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "B7881CD5-A6DF-4FDC-80F3-97F340F1F54B",
+            "id" : "8540FAE8-4500-4177-97EE-F5E8B6BF4036",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -1218,16 +1218,16 @@
         "path" : "/load/fmp-corporate-actions",
         "query" : [
           {
-            "id" : "11150F08-9A76-4A86-8D66-02BDAAF300C6",
+            "id" : "81E1B4D7-4E54-4D19-966A-D81C1360D45C",
             "key" : "months",
             "value" : "{{months}}"
           }
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
         {
-          "id" : "D7567E2C-3E0C-41B4-943C-61A96CCEC9FE",
+          "id" : "0D4D38EC-78F8-4D14-A251-8C92C9BE00D7",
           "name" : "months",
           "required" : false,
           "type" : "number",
@@ -1245,13 +1245,13 @@
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 3600
       },
-      "id" : "074DA003-5594-414A-8613-19885FEAF602",
+      "id" : "26B7F39E-1560-4C98-863F-DD37B15B97DA",
       "kind" : "apiRead",
       "notes" : "Dividends, splits, symbol changes and delistings from the FMP calendars.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "44256A43-683E-4F91-AEA2-8B11F9A0C540",
+            "id" : "E1924FD1-4A7F-4A73-9E7A-ED8216E02BB3",
             "op" : "!=",
             "path" : "status",
             "value" : "failed"
@@ -1280,7 +1280,7 @@
         "query" : [
 
         ],
-        "subscriptionID" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF"
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
       },
       "arguments" : [
 
@@ -1296,13 +1296,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 120
       },
-      "id" : "6B369F89-7DB8-4FB6-831D-45E31645635E",
+      "id" : "24A6CE82-7B13-4317-8AF9-7F564172659D",
       "kind" : "apiRead",
       "notes" : "Read-only: migrations, row counts, identifier coverage, benchmarks, price freshness, recent loads.",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "7AE0BB7C-FC15-41CE-A948-D4D7F5B6395F",
+            "id" : "405CF003-2E06-4C30-BA10-55C84175D141",
             "op" : "==",
             "path" : "summary.failed",
             "value" : "0"
@@ -1337,20 +1337,20 @@
       "baseURL" : "http://127.0.0.1:8770",
       "defaultHeaders" : [
         {
-          "id" : "75613E37-A783-4C19-972B-075181935F00",
+          "id" : "05F6018A-606F-4776-94B5-3C31498C384B",
           "key" : "X-SRM-Dry-Run",
           "value" : "1"
         }
       ],
       "docsURL" : "",
-      "id" : "3C1D15D1-5A46-47AD-ACD0-B3BA94B75ACF",
+      "id" : "EBE303AA-8970-4104-BC9E-3F1B49130E52",
       "ide" : "vscode",
       "keyName" : "",
       "name" : "SRM loader service",
-      "notes" : "Start it with: python3 Samples/srm-service/srm_service.py (needs psycopg2, like srm.py). X-SRM-Dry-Run: 1 makes every load report its srm.py command without running it — remove the header to load for real. Database and API keys come from srm.py's own configuration.",
+      "notes" : "Start it with: python3 Services/mxservices.py start (needs psycopg2, like srm.py). X-SRM-Dry-Run: 1 makes every load report its srm.py command without running it — remove the header to load for real. Database and API keys come from srm.py's own configuration.",
       "plan" : "",
-      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxDataSRM/SRM",
-      "provider" : "MxDataSRM/SRM (srm.py) on this Mac",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxDataHUB/SRM",
+      "provider" : "MxDataHUB/SRM (srm.py) on this Mac",
       "rateLimitPerMinute" : 0
     }
   ]

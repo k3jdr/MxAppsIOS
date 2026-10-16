@@ -1,0 +1,681 @@
+{
+  "description" : "An active mandate: beat the portfolio's benchmark within a tracking-error budget. Python builds the inputs from the security master and a momentum alpha; Java turns alpha into active weights under the risk budget, name and sector limits; C++ checks the result's risk; the decision agent picks rebalance / rebalance partially / hold, and the portfolio manager approves the trade list.",
+  "format" : "mxjobspace",
+  "formatVersion" : 1,
+  "links" : [
+    {
+      "from" : "58B0171F-6525-476E-BF63-9A4E2D62D28E",
+      "id" : "CD440FE6-B12D-4F6E-ADD6-8C19A0470B74",
+      "label" : "",
+      "to" : "B1809ECC-3E74-47A3-BCF6-D8B2A516961B"
+    },
+    {
+      "from" : "B1809ECC-3E74-47A3-BCF6-D8B2A516961B",
+      "id" : "8B97D9AD-79FB-4417-BDA4-87AC2F1C18B6",
+      "label" : "",
+      "to" : "F4347EB5-AED6-4959-A65F-188D8AFCF0CD"
+    },
+    {
+      "from" : "F4347EB5-AED6-4959-A65F-188D8AFCF0CD",
+      "id" : "2C5FBD25-0A6D-425C-92F2-45DBAED54AB0",
+      "label" : "",
+      "to" : "B1809ECC-3E74-47A3-BCF6-D8B2A516961B"
+    },
+    {
+      "from" : "B1809ECC-3E74-47A3-BCF6-D8B2A516961B",
+      "id" : "FE7F18F9-5848-471E-BE9B-33B1FCDD500B",
+      "label" : "",
+      "to" : "E235A26B-6E1C-4B6C-88BA-5490B2AE0A3C"
+    },
+    {
+      "from" : "E235A26B-6E1C-4B6C-88BA-5490B2AE0A3C",
+      "id" : "17EB82FB-4477-42F0-83BC-D551BADB28ED",
+      "label" : "",
+      "to" : "4F566FE8-4794-4789-8D1D-5720C2C02184"
+    },
+    {
+      "from" : "E235A26B-6E1C-4B6C-88BA-5490B2AE0A3C",
+      "id" : "035DF4DA-6372-4384-BF0F-BCA628805E34",
+      "label" : "",
+      "to" : "F4EBD512-5CAA-46F5-BCE1-E5F8EC20BAF2"
+    },
+    {
+      "from" : "F4347EB5-AED6-4959-A65F-188D8AFCF0CD",
+      "id" : "D9138AC3-D992-4FD1-B725-AFFD033F88E5",
+      "label" : "inputsUrl",
+      "to" : "4F566FE8-4794-4789-8D1D-5720C2C02184"
+    },
+    {
+      "from" : "4F566FE8-4794-4789-8D1D-5720C2C02184",
+      "id" : "1468C71D-4AC7-4BBC-911E-30D93149B0E2",
+      "label" : "weights",
+      "to" : "F4EBD512-5CAA-46F5-BCE1-E5F8EC20BAF2"
+    },
+    {
+      "from" : "F4347EB5-AED6-4959-A65F-188D8AFCF0CD",
+      "id" : "D9FB6AE9-5134-4241-8F8B-8B3BFAF84B37",
+      "label" : "",
+      "to" : "F4EBD512-5CAA-46F5-BCE1-E5F8EC20BAF2"
+    },
+    {
+      "from" : "4F566FE8-4794-4789-8D1D-5720C2C02184",
+      "id" : "9E728231-1FC4-4290-8F5E-DF22813D995E",
+      "label" : "decisionContext",
+      "to" : "E235A26B-6E1C-4B6C-88BA-5490B2AE0A3C"
+    },
+    {
+      "from" : "F4EBD512-5CAA-46F5-BCE1-E5F8EC20BAF2",
+      "id" : "FEA8CC06-2DFC-4EFF-A218-A26455115C61",
+      "label" : "risk",
+      "to" : "E235A26B-6E1C-4B6C-88BA-5490B2AE0A3C"
+    },
+    {
+      "from" : "E235A26B-6E1C-4B6C-88BA-5490B2AE0A3C",
+      "id" : "EB0E54EA-2457-4C6F-B39C-76837AA2F155",
+      "label" : "",
+      "to" : "DAEE5C93-F2E7-4B6F-B8A3-C0759BBF3F46"
+    },
+    {
+      "from" : "DAEE5C93-F2E7-4B6F-B8A3-C0759BBF3F46",
+      "id" : "4983C0B1-29E7-4CD4-A4B8-9651347606D5",
+      "label" : "",
+      "to" : "A7AE47A4-A383-4B35-9D62-ECA37FE4DFB9"
+    },
+    {
+      "from" : "A7AE47A4-A383-4B35-9D62-ECA37FE4DFB9",
+      "id" : "C6FA5BA5-2DEA-4D45-948E-5D59E837FB3A",
+      "label" : "approved",
+      "to" : "2A1B0168-1FFC-4725-85C4-DA2F820BB421"
+    },
+    {
+      "from" : "2A1B0168-1FFC-4725-85C4-DA2F820BB421",
+      "id" : "33F842EB-596F-4BAC-A69C-643E3D8191B7",
+      "label" : "",
+      "to" : "A79267DE-9676-410E-9F34-9B197F90005E"
+    }
+  ],
+  "name" : "Active Portfolio Optimization — DEMO_GROWTH",
+  "nodes" : [
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "58B0171F-6525-476E-BF63-9A4E2D62D28E",
+      "kind" : "trigger",
+      "notes" : "Run on the first business day of the month, or when the alpha or the benchmark changes.",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "run",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "schedule" : {
+        "intervalMinutes" : 60,
+        "mode" : "manual",
+        "time" : "07:30",
+        "timeZone" : "America/New_York"
+      },
+      "title" : "Monthly rebalance review",
+      "x" : 300,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Turn the decision into a trade list (optimization.trades) with the reason, the ex-ante tracking error, information ratio and turnover, for the portfolio manager.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "DAEE5C93-F2E7-4B6F-B8A3-C0759BBF3F46",
+      "kind" : "instructionSet",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "proposal",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Trade proposal",
+      "x" : 1280,
+      "y" : 120
+    },
+    {
+      "approval" : {
+        "approver" : "Portfolio manager",
+        "channel" : "inApp",
+        "expiresAfterMinutes" : 120,
+        "requireComment" : false,
+        "summaryTemplate" : "Rebalance DEMO_GROWTH as proposed?"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "A7AE47A4-A383-4B35-9D62-ECA37FE4DFB9",
+      "kind" : "approvalGate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "approved",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Portfolio manager approval",
+      "x" : 1520,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "execution" : {
+        "confirmBeforeSend" : true,
+        "mode" : "dryRun",
+        "target" : "Order management system"
+      },
+      "id" : "2A1B0168-1FFC-4725-85C4-DA2F820BB421",
+      "kind" : "executeRequest",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Send orders to OMS",
+      "x" : 1760,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "A79267DE-9676-410E-9F34-9B197F90005E",
+      "kind" : "outcomeReport",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "report" : {
+        "detailed" : false,
+        "includeFailures" : true,
+        "recipients" : "Portfolio manager, risk"
+      },
+      "title" : "Rebalance report",
+      "x" : 2000,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Review the alpha: which names the momentum signal favours and avoids, and whether any should be excluded (corporate events, liquidity, restrictions).",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "B1809ECC-3E74-47A3-BCF6-D8B2A516961B",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "research",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Research agent",
+      "x" : 520,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+          "optimization",
+          "risk"
+        ],
+        "instructions" : "Follow optimization.decisionContext (rebalance, rebalance_partially, hold, rerun_relaxed, escalate). Escalate when risk.withinTrackingErrorLimit is false or one sector carries most of the active risk.",
+        "model" : "",
+        "outputFormat" : "{nextStep, confidence, reason, trades}"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "E235A26B-6E1C-4B6C-88BA-5490B2AE0A3C",
+      "kind" : "decision",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "decision",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Construction decision",
+      "x" : 1090,
+      "y" : 360
+    },
+    {
+      "api" : {
+        "body" : "{\"mode\": \"active\", \"portfolio\": \"{{portfolio}}\", \"benchmark\": \"{{benchmark}}\",\n \"alpha\": \"momentum_12_1\", \"ic\": {{ic}}, \"lookbackDays\": 504}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/inputs",
+        "query" : [
+
+        ],
+        "subscriptionID" : "6F00A0B3-63A1-41B5-9C4E-DF4E1ED8FAC9"
+      },
+      "arguments" : [
+        {
+          "id" : "0D6BDA35-B30C-4407-BA5E-6B5C723C05F8",
+          "name" : "portfolio",
+          "required" : true,
+          "type" : "text",
+          "value" : "DEMO_GROWTH"
+        },
+        {
+          "id" : "5E49502A-5AA9-4070-A61D-A101958D1EE8",
+          "name" : "benchmark",
+          "required" : false,
+          "type" : "text",
+          "value" : ""
+        },
+        {
+          "id" : "D5BC6F72-CFB7-4B94-A5BE-EC6B8334BCE4",
+          "name" : "ic",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.05"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "F4347EB5-AED6-4959-A65F-188D8AFCF0CD",
+      "kind" : "apiRead",
+      "notes" : "Why Python: querying the security master, aligning two years of prices and estimating covariance and alpha is data and statistics work. The matrices stay in the service; the step passes on an inputsUrl.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "8F6F853E-72A7-49B1-8E51-068C8947E26F",
+            "op" : ">",
+            "path" : "assets",
+            "value" : "50"
+          }
+        ],
+        "description" : "Universe = benchmark + holdings, Ledoit-Wolf covariance, α = IC × σ × z(12-1 momentum)",
+        "outputName" : "optInputs",
+        "requiredFields" : [
+          "inputsUrl",
+          "assets",
+          "alpha.top"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Inputs + momentum alpha (Python)",
+      "x" : 520,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\"inputsUrl\": \"{{in:optInputs.inputsUrl}}\", \"maxWeight\": {{maxWeight}}, \"maxActiveWeight\": {{maxActiveWeight}},\n \"maxSectorActive\": {{maxSectorActive}}, \"trackingErrorTarget\": {{teTarget}}, \"maxTurnover\": {{maxTurnover}}}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/optimize/active",
+        "query" : [
+
+        ],
+        "subscriptionID" : "7CBE4DD2-4F97-4E31-9A59-048FC7B373E3"
+      },
+      "arguments" : [
+        {
+          "id" : "318D1DE1-4FD7-4ED3-A545-A4633D7F7346",
+          "name" : "maxWeight",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.08"
+        },
+        {
+          "id" : "F01F6F53-733F-4496-B24E-8CD5B6C7D62A",
+          "name" : "maxActiveWeight",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.03"
+        },
+        {
+          "id" : "AD9C1F8A-3442-472E-AC37-E116B6AD2228",
+          "name" : "maxSectorActive",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.05"
+        },
+        {
+          "id" : "B95DDC05-B7FA-4459-8437-EC388A3E313A",
+          "name" : "teTarget",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.03"
+        },
+        {
+          "id" : "0C5F3A90-943F-4BE5-BB07-B5FB083CB022",
+          "name" : "maxTurnover",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.30"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 120
+      },
+      "id" : "4F566FE8-4794-4789-8D1D-5720C2C02184",
+      "kind" : "apiRead",
+      "notes" : "Why Java: the construction rules — name, active-weight, sector and turnover limits, the trade list — are business logic that must stay readable, unit-tested and stable in a long-running service.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "EB879CD3-8B72-4206-9BA7-CBCC1883060A",
+            "op" : "==",
+            "path" : "solverStatus",
+            "value" : "optimal"
+          },
+          {
+            "id" : "D4F5B1BD-2488-4DD4-A133-010FCE94F35B",
+            "op" : "<=",
+            "path" : "trackingError",
+            "value" : "0.0305"
+          },
+          {
+            "id" : "BB741F8B-68A0-4309-B7C3-76F932A27E9E",
+            "op" : ">",
+            "path" : "informationRatio",
+            "value" : "0"
+          }
+        ],
+        "description" : "Max α − λ/2·active variance at a 3% tracking error, ±3% per name, ±5% per sector",
+        "outputName" : "optimization",
+        "requiredFields" : [
+          "weights",
+          "trades",
+          "decisionContext.recommendation"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Optimize active portfolio (Java)",
+      "x" : 900,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\"inputsUrl\": \"{{in:optInputs.inputsUrl}}\", \"weights\": {{json:optimization.weights}},\n \"confidence\": 0.99, \"horizonDays\": 10, \"portfolioValue\": {{portfolioValue}}, \"maxTrackingError\": {{maxTE}}}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/risk",
+        "query" : [
+
+        ],
+        "subscriptionID" : "DE2DB2D4-B237-4122-8D77-FF074ADD28F5"
+      },
+      "arguments" : [
+        {
+          "id" : "11FD9425-DA52-4588-950A-90B8A11E0D47",
+          "name" : "portfolioValue",
+          "required" : false,
+          "type" : "number",
+          "value" : "10000000"
+        },
+        {
+          "id" : "2E2084BA-63E1-4C74-87B9-39DA27D4C3CB",
+          "name" : "maxTE",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.035"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "F4EBD512-5CAA-46F5-BCE1-E5F8EC20BAF2",
+      "kind" : "apiRead",
+      "notes" : "Why C++: risk on a 500 × 500 covariance is recomputed for every proposal and scenario in milliseconds.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "F71BE432-8CC0-4147-A3A6-792D9D4572EC",
+            "op" : "==",
+            "path" : "status",
+            "value" : "ok"
+          },
+          {
+            "id" : "4FD088E7-3B34-41A8-8BF1-C2D9ECA2E4F6",
+            "op" : "==",
+            "path" : "withinTrackingErrorLimit",
+            "value" : "true"
+          }
+        ],
+        "description" : "10-day 99% VaR, tracking error within the limit, beta, where active risk comes from",
+        "outputName" : "risk",
+        "requiredFields" : [
+          "trackingError",
+          "beta",
+          "activeRiskContributions"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Risk check (C++)",
+      "x" : 1280,
+      "y" : 600
+    }
+  ],
+  "run" : {
+    "agents" : "run",
+    "breakpointsEnabled" : true,
+    "data" : "live",
+    "operations" : "interactive",
+    "stepDelay" : 0.3,
+    "stopOnError" : true
+  },
+  "subscriptions" : [
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8772",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "6F00A0B3-63A1-41B5-9C4E-DF4E1ED8FAC9",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Portfolio analytics",
+      "notes" : "Data and statistics for portfolio work: builds optimization inputs from the security master (universe, sectors, benchmark and current weights, Ledoit-Wolf covariance, momentum alpha) and runs performance attribution (Brinson-Fachler by sector, monthly, Carino-linked). — Start it with: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/analytics",
+      "provider" : "Python service on this Mac (Services/analytics)",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8766",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "7CBE4DD2-4F97-4E31-9A59-048FC7B373E3",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Active portfolio construction",
+      "notes" : "Builds active (benchmark-relative) portfolios: maximise alpha for a tracking-error budget, long-only, with per-name, active-weight and sector-band limits, and a trade list against the current holdings. Also absolute max-Sharpe / mean-variance optimization. — Start it with: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-java",
+      "provider" : "Java service on this Mac (Services/portfolio-java)",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8767",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "DE2DB2D4-B237-4122-8D77-FF074ADD28F5",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Index tracking & risk",
+      "notes" : "Passive index tracking — the long-only portfolio of at most N names with the smallest ex-ante tracking error against a benchmark (full replication or sampling by largest weights or sector strata) — and portfolio risk: VaR, expected shortfall, risk contributions, and tracking error, beta and active-risk contributions against a benchmark. — Start it with: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp",
+      "provider" : "C++ service on this Mac (Services/portfolio-cpp)",
+      "rateLimitPerMinute" : 0
+    }
+  ]
+}

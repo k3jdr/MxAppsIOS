@@ -1,0 +1,630 @@
+{
+  "description" : "A passive mandate: hold SP500 with as few names as the tracking-error budget allows. Python builds the covariance from the security master; C++ finds the stratified sample with the smallest tracking error and, for comparison, full replication; the decision agent rebalances only when the current portfolio has drifted beyond the budget. Use it after benchmark constituents change (MxDataHUB ▸ Data Refresh).",
+  "format" : "mxjobspace",
+  "formatVersion" : 1,
+  "links" : [
+    {
+      "from" : "2DF85725-CA43-41C6-B689-2C58A9B278E8",
+      "id" : "8F051F74-DBC8-4AEB-9336-19B35E0D46BA",
+      "label" : "",
+      "to" : "64D1B385-4A8B-44CB-88A3-466C1F322365"
+    },
+    {
+      "from" : "64D1B385-4A8B-44CB-88A3-466C1F322365",
+      "id" : "B68FCD2A-CC7E-40C0-9D1D-7B1C55E92079",
+      "label" : "",
+      "to" : "64A95579-C39E-4D5F-95B2-B1B5D33BDF79"
+    },
+    {
+      "from" : "64A95579-C39E-4D5F-95B2-B1B5D33BDF79",
+      "id" : "316FC795-1F9D-420E-90BD-4008E505D61C",
+      "label" : "",
+      "to" : "64D1B385-4A8B-44CB-88A3-466C1F322365"
+    },
+    {
+      "from" : "64D1B385-4A8B-44CB-88A3-466C1F322365",
+      "id" : "CD6415B2-0CBA-4F01-A525-764DE14D7259",
+      "label" : "",
+      "to" : "76FF0997-A5FA-4F77-8995-D53530AA7AB0"
+    },
+    {
+      "from" : "76FF0997-A5FA-4F77-8995-D53530AA7AB0",
+      "id" : "FAD82982-BD4F-4A38-B67E-D9C3B2E3F562",
+      "label" : "",
+      "to" : "C5B559E4-9ADC-459C-A5D2-FD2C0AB891E7"
+    },
+    {
+      "from" : "76FF0997-A5FA-4F77-8995-D53530AA7AB0",
+      "id" : "5963C5A8-62E6-48B9-8417-2151186F0704",
+      "label" : "",
+      "to" : "BA7B0B6C-9C59-4732-B617-8E48176DA5BC"
+    },
+    {
+      "from" : "64A95579-C39E-4D5F-95B2-B1B5D33BDF79",
+      "id" : "C52DB2CA-E66D-4210-B816-27C664D7A2ED",
+      "label" : "",
+      "to" : "C5B559E4-9ADC-459C-A5D2-FD2C0AB891E7"
+    },
+    {
+      "from" : "64A95579-C39E-4D5F-95B2-B1B5D33BDF79",
+      "id" : "A9513492-CD9D-4292-943F-89E66D86B632",
+      "label" : "",
+      "to" : "BA7B0B6C-9C59-4732-B617-8E48176DA5BC"
+    },
+    {
+      "from" : "C5B559E4-9ADC-459C-A5D2-FD2C0AB891E7",
+      "id" : "CDAB4A63-5C2D-46C5-9A4E-EA369DACE517",
+      "label" : "tracker",
+      "to" : "76FF0997-A5FA-4F77-8995-D53530AA7AB0"
+    },
+    {
+      "from" : "BA7B0B6C-9C59-4732-B617-8E48176DA5BC",
+      "id" : "86D21497-97D1-40B4-AA0F-24EB07433DEC",
+      "label" : "full",
+      "to" : "76FF0997-A5FA-4F77-8995-D53530AA7AB0"
+    },
+    {
+      "from" : "76FF0997-A5FA-4F77-8995-D53530AA7AB0",
+      "id" : "D082BD3E-6061-42DC-A031-8EC767BF0B6E",
+      "label" : "",
+      "to" : "39B61B8A-4917-42B7-87EC-69C494F05F2E"
+    },
+    {
+      "from" : "39B61B8A-4917-42B7-87EC-69C494F05F2E",
+      "id" : "0EC15794-A442-4F82-B763-464B85DF7313",
+      "label" : "",
+      "to" : "0B4E982D-FA87-4E54-AFE5-E89EC7EC82F3"
+    },
+    {
+      "from" : "0B4E982D-FA87-4E54-AFE5-E89EC7EC82F3",
+      "id" : "B8C4836A-EE09-4969-9994-AF19B3A3A2E9",
+      "label" : "approved",
+      "to" : "B488BC84-1EF9-4722-B01F-40414076FEB4"
+    },
+    {
+      "from" : "B488BC84-1EF9-4722-B01F-40414076FEB4",
+      "id" : "09269768-8E74-4358-AC65-F3295E0A4F54",
+      "label" : "",
+      "to" : "F5E80682-0344-431C-8EED-154BFCAF64E5"
+    }
+  ],
+  "name" : "Passive Index Tracking — SP500",
+  "nodes" : [
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "2DF85725-CA43-41C6-B689-2C58A9B278E8",
+      "kind" : "trigger",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "run",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "schedule" : {
+        "intervalMinutes" : 60,
+        "mode" : "weekdays",
+        "time" : "16:30",
+        "timeZone" : "America/New_York"
+      },
+      "title" : "Daily drift check",
+      "x" : 300,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "List the trades (tracker.trades), names held, ex-ante tracking error and turnover.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "39B61B8A-4917-42B7-87EC-69C494F05F2E",
+      "kind" : "instructionSet",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "proposal",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Index rebalance proposal",
+      "x" : 1280,
+      "y" : 120
+    },
+    {
+      "approval" : {
+        "approver" : "Index portfolio manager",
+        "channel" : "inApp",
+        "expiresAfterMinutes" : 120,
+        "requireComment" : false,
+        "summaryTemplate" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "0B4E982D-FA87-4E54-AFE5-E89EC7EC82F3",
+      "kind" : "approvalGate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "approved",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Index PM approval",
+      "x" : 1520,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "execution" : {
+        "confirmBeforeSend" : true,
+        "mode" : "dryRun",
+        "target" : "Order management system"
+      },
+      "id" : "B488BC84-1EF9-4722-B01F-40414076FEB4",
+      "kind" : "executeRequest",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Send index trades",
+      "x" : 1760,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "F5E80682-0344-431C-8EED-154BFCAF64E5",
+      "kind" : "outcomeReport",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "report" : {
+        "detailed" : false,
+        "includeFailures" : true,
+        "recipients" : "Index team"
+      },
+      "title" : "Tracking report",
+      "x" : 2000,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Confirm the benchmark snapshot is current (MxDataHUB ▸ Data Refresh ▸ Benchmark constituents) and note members excluded for missing prices.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "64D1B385-4A8B-44CB-88A3-466C1F322365",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "indexData",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Index data agent",
+      "x" : 520,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+          "tracker",
+          "fullReplication"
+        ],
+        "instructions" : "Compare the sampled tracker with full replication: names held, tracking error, turnover. Follow tracker.decisionContext — hold while the current tracking error is within budget.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "76FF0997-A5FA-4F77-8995-D53530AA7AB0",
+      "kind" : "decision",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "decision",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Rebalance decision",
+      "x" : 1030,
+      "y" : 360
+    },
+    {
+      "api" : {
+        "body" : "{\"mode\": \"tracking\", \"benchmark\": \"{{benchmark}}\", \"portfolio\": \"{{portfolio}}\", \"alpha\": \"none\", \"lookbackDays\": 504}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/inputs",
+        "query" : [
+
+        ],
+        "subscriptionID" : "929C6E40-C0D0-414B-A279-6BA46D5A721B"
+      },
+      "arguments" : [
+        {
+          "id" : "83EB3FC9-5149-49B8-8002-F4BB8FB385F0",
+          "name" : "benchmark",
+          "required" : true,
+          "type" : "text",
+          "value" : "SP500"
+        },
+        {
+          "id" : "11926F48-036B-4915-82CF-E6B2DBB40831",
+          "name" : "portfolio",
+          "required" : false,
+          "type" : "text",
+          "value" : ""
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "64A95579-C39E-4D5F-95B2-B1B5D33BDF79",
+      "kind" : "apiRead",
+      "notes" : "Why Python: assembling the benchmark's members, weights and two years of returns from PostgreSQL and shrinking the covariance is data and statistics work.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "844163A9-A93C-46D4-AFAB-0EEC15A1B2DF",
+            "op" : ">",
+            "path" : "assets",
+            "value" : "20"
+          }
+        ],
+        "description" : "",
+        "outputName" : "trackInputs",
+        "requiredFields" : [
+          "inputsUrl",
+          "assets"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Benchmark covariance (Python)",
+      "x" : 520,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\"inputsUrl\": \"{{in:trackInputs.inputsUrl}}\", \"maxNames\": {{maxNames}}, \"selection\": \"{{selection}}\",\n \"maxWeight\": {{maxWeight}}, \"trackingErrorBudget\": {{teBudget}}, \"maxTurnover\": {{maxTurnover}}}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/optimize/tracking",
+        "query" : [
+
+        ],
+        "subscriptionID" : "D52DC942-6531-4173-A1ED-D0451E01EF09"
+      },
+      "arguments" : [
+        {
+          "id" : "9D18AE75-9A2E-401D-9AE8-4F5602D8A851",
+          "name" : "maxNames",
+          "required" : false,
+          "type" : "number",
+          "value" : "100"
+        },
+        {
+          "id" : "D64D72DE-5DF7-40A8-92A6-A8BB851D6D72",
+          "name" : "selection",
+          "required" : false,
+          "type" : "text",
+          "value" : "stratified"
+        },
+        {
+          "id" : "850727B5-0A40-4ACA-8B7E-BE9AC64F20CA",
+          "name" : "maxWeight",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.10"
+        },
+        {
+          "id" : "8696804F-E29C-435A-B261-F549EE716B54",
+          "name" : "teBudget",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.01"
+        },
+        {
+          "id" : "68B19FDE-0BA1-4618-A76B-83D96AE1C700",
+          "name" : "maxTurnover",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.10"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "C5B559E4-9ADC-459C-A5D2-FD2C0AB891E7",
+      "kind" : "apiRead",
+      "notes" : "Why C++: thousands of iterations over the full covariance per solve — fast enough to re-check the tracker every day, for every candidate number of names.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "269D3683-87AC-4803-BF9A-B29E4483C610",
+            "op" : "==",
+            "path" : "solverStatus",
+            "value" : "optimal"
+          },
+          {
+            "id" : "5017F3D5-625A-4030-9584-1409D1389393",
+            "op" : "<=",
+            "path" : "trackingError",
+            "value" : "{{teBudget}}"
+          }
+        ],
+        "description" : "At most 100 names, one or more per sector, ex-ante tracking error within 1%",
+        "outputName" : "tracker",
+        "requiredFields" : [
+          "weights",
+          "trackingError",
+          "decisionContext.recommendation"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Sampled tracker (C++)",
+      "x" : 900,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\"inputsUrl\": \"{{in:trackInputs.inputsUrl}}\", \"maxNames\": 0, \"trackingErrorBudget\": {{teBudget}}}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/optimize/tracking",
+        "query" : [
+
+        ],
+        "subscriptionID" : "D52DC942-6531-4173-A1ED-D0451E01EF09"
+      },
+      "arguments" : [
+        {
+          "id" : "A5FBD12E-A7C8-4EF4-BDD1-E064B1BE7712",
+          "name" : "teBudget",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.01"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "BA7B0B6C-9C59-4732-B617-8E48176DA5BC",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "6445B631-59A4-4812-ABBC-049B664A962B",
+            "op" : "==",
+            "path" : "method",
+            "value" : "full_replication"
+          }
+        ],
+        "description" : "Every member at its benchmark weight: no tracking error, the most names and trades",
+        "outputName" : "fullReplication",
+        "requiredFields" : [
+          "names",
+          "trackingError"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Full replication (C++)",
+      "x" : 1160,
+      "y" : 600
+    }
+  ],
+  "run" : {
+    "agents" : "run",
+    "breakpointsEnabled" : true,
+    "data" : "live",
+    "operations" : "interactive",
+    "stepDelay" : 0.3,
+    "stopOnError" : true
+  },
+  "subscriptions" : [
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8772",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "929C6E40-C0D0-414B-A279-6BA46D5A721B",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Portfolio analytics",
+      "notes" : "Data and statistics for portfolio work: builds optimization inputs from the security master (universe, sectors, benchmark and current weights, Ledoit-Wolf covariance, momentum alpha) and runs performance attribution (Brinson-Fachler by sector, monthly, Carino-linked). — Start it with: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/analytics",
+      "provider" : "Python service on this Mac (Services/analytics)",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8767",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "D52DC942-6531-4173-A1ED-D0451E01EF09",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Index tracking & risk",
+      "notes" : "Passive index tracking — the long-only portfolio of at most N names with the smallest ex-ante tracking error against a benchmark (full replication or sampling by largest weights or sector strata) — and portfolio risk: VaR, expected shortfall, risk contributions, and tracking error, beta and active-risk contributions against a benchmark. — Start it with: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp",
+      "provider" : "C++ service on this Mac (Services/portfolio-cpp)",
+      "rateLimitPerMinute" : 0
+    }
+  ]
+}

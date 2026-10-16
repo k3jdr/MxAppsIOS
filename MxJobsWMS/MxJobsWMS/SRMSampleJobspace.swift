@@ -2,11 +2,11 @@
 //  SRMSampleJobspace.swift
 //  MxJobsWMS
 //
-//  File ▸ New SRM Daily Refresh Sample: MxDataSRM's daily securities-master (SRM) automation
-//  (MxDataSRM/SRM/srm.py load all) as a three-layer jobspace.
+//  File ▸ New SRM Daily Refresh Sample: MxDataHUB's daily securities-master (SRM) automation
+//  (MxDataHUB/SRM/srm.py load all) as a three-layer jobspace.
 //
 //  Layer 3  the 12 SRM loaders and a read-only status / data-quality read, called through the SRM loader
-//           service (Samples/srm-service/srm_service.py, 127.0.0.1:8770), which runs srm.py
+//           service (Services/srm-loader/srm_service.py, 127.0.0.1:8770), which runs srm.py
 //  Layer 2  one agent per loader stage, in srm.py's dependency order — universe, benchmark constituents,
 //           identifier enrichment, market data — and a data-quality analyst
 //  Layer 1  the weekday evening refresh, the daily report and follow-up list, the data steward's approval,
@@ -22,7 +22,7 @@ nonisolated extension Jobspace {
     static func srmDailyRefresh() -> Jobspace {
         var space = Jobspace()
         space.name = "SRM Daily Securities Master Refresh"
-        space.description = "MxDataSRM's daily automation: refresh the reference data and the listed universe, "
+        space.description = "MxDataHUB's daily automation: refresh the reference data and the listed universe, "
             + "benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions "
             + "(srm.py load all); check data quality, and ask the data steward to approve the report and any backfills."
         space.run.data = .mock
@@ -30,10 +30,10 @@ nonisolated extension Jobspace {
 
         var srm = ApiSubscription.localService(port: 8770)
         srm.name = "SRM loader service"
-        srm.provider = "MxDataSRM/SRM (srm.py) on this Mac"
-        srm.projectFolder = "~/MyCodeGIT/MXcodeIDE/MxDataSRM/SRM"
+        srm.provider = "MxDataHUB/SRM (srm.py) on this Mac"
+        srm.projectFolder = "~/MyCodeGIT/MXcodeIDE/MxDataHUB/SRM"
         srm.defaultHeaders = [KeyValue("X-SRM-Dry-Run", "1")]
-        srm.notes = "Start it with: python3 Samples/srm-service/srm_service.py (needs psycopg2, like srm.py). "
+        srm.notes = "Start it with: python3 Services/mxservices.py start (needs psycopg2, like srm.py). "
             + "X-SRM-Dry-Run: 1 makes every load report its srm.py command without running it — "
             + "remove the header to load for real. Database and API keys come from srm.py's own configuration."
         space.subscriptions = [srm]
@@ -171,7 +171,7 @@ nonisolated extension Jobspace {
         approve.outcome.outputName = "approved"
 
         var backfill = JobNode(kind: .executeRequest, title: "Run approved backfills", x: 3180, y: y1)
-        backfill.execution?.target = "srm.py (MxDataSRM/SRM)"
+        backfill.execution?.target = "srm.py (MxDataHUB/SRM)"
         backfill.execution?.mode = .dryRun
         backfill.execution?.confirmBeforeSend = true
         backfill.notes = "Long, API-hungry loads only run after approval: e.g. fmp-corporate-actions --history "

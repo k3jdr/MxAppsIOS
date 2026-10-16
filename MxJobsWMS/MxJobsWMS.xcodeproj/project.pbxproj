@@ -17,6 +17,12 @@
 			path = MxJobsWMS;
 			sourceTree = "<group>";
 		};
+		9E5D7B2A30A1B2C5004D5E6F /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = Shared;
+			path = ../Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +39,7 @@
 			children = (
 				9E5D7B0830A1B2C3004D5E6F /* README.md */,
 				9E5D7B1630A1B2C3004D5E6F /* MxJobsWMS */,
+				9E5D7B2A30A1B2C5004D5E6F /* Shared */,
 				9E5D7B1530A1B2C3004D5E6F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,6 +67,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				9E5D7B1630A1B2C3004D5E6F /* MxJobsWMS */,
+				9E5D7B2A30A1B2C5004D5E6F /* Shared */,
 			);
 			name = MxJobsWMS;
 			productName = MxJobsWMS;

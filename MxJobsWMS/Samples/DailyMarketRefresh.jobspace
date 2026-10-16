@@ -4,142 +4,142 @@
   "formatVersion" : 1,
   "links" : [
     {
-      "from" : "9C99E867-9253-44E5-B999-707B340E84C1",
-      "id" : "D28726A9-FA74-42F5-BF5D-C9A54BF74C7F",
+      "from" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
+      "id" : "55B401F8-8117-427F-BFE6-9A2DE2D546F7",
       "label" : "",
-      "to" : "A5CB95D9-E412-45FB-9889-460BE6AA702F"
+      "to" : "6E9212BF-AA72-41D4-80BF-E810A91532F7"
     },
     {
-      "from" : "9C99E867-9253-44E5-B999-707B340E84C1",
-      "id" : "C2341F23-0A62-4A7F-9FA1-3C1BB94791C3",
+      "from" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
+      "id" : "D5B60BFB-20A2-4325-A114-EDC29B1FD4B4",
       "label" : "",
-      "to" : "18737C08-ADB7-4C18-BF81-E637CBB6A082"
+      "to" : "323C2670-F3FF-40E4-B984-FF78523DB55D"
     },
     {
-      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
-      "id" : "E62EE12B-4C99-45FB-BBCE-464D32F55972",
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "3B1EFAF7-54FE-47A0-A0D2-0C0AB550E8A5",
       "label" : "",
-      "to" : "036ECD6B-5E60-47B0-BE57-9C875C93E0CA"
+      "to" : "3C695CBC-D647-4A18-810F-B7EFB9FD18CF"
     },
     {
-      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
-      "id" : "3D539461-3CFD-481C-9039-23B1E9F9CC4D",
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "748D181B-1764-486B-AFA1-D336C7F27F68",
       "label" : "",
-      "to" : "503870B2-5350-4D0B-B5E9-C3EBD23F972E"
+      "to" : "AA26FB47-4512-43A6-B138-A7530FA39C2B"
     },
     {
-      "from" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
-      "id" : "E8670B72-95A5-4F1C-9955-5A4CEA7C2B9E",
+      "from" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
+      "id" : "A22EE789-D187-4F61-BA2B-8C8E4DD84936",
       "label" : "",
-      "to" : "E4970F59-C729-4B31-855C-53FBF8B12CD0"
+      "to" : "53E4C323-E4C4-4275-AB47-EC237AE79508"
     },
     {
-      "from" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
-      "id" : "9172DA2C-B298-4654-A62E-781CD4CB5751",
+      "from" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
+      "id" : "63453AEB-B2B3-41EE-AA47-EB4BEE93BA87",
       "label" : "",
-      "to" : "AD6C5041-C5DA-4AE4-A85D-B7D49CB29E8A"
+      "to" : "86890E5A-7AB4-47B2-B54F-D1117A454F39"
     },
     {
-      "from" : "036ECD6B-5E60-47B0-BE57-9C875C93E0CA",
-      "id" : "4E5DF1A8-DC4E-4B98-A67F-A7785B1E80DF",
+      "from" : "3C695CBC-D647-4A18-810F-B7EFB9FD18CF",
+      "id" : "CA382BAF-0504-49E9-8F14-D7B82D5E1A11",
       "label" : "",
-      "to" : "A3BB4418-1CB1-43B6-951A-62E567250DA7"
+      "to" : "096FCD4C-37A6-4F4B-A293-5E0283CC3C63"
     },
     {
-      "from" : "A3BB4418-1CB1-43B6-951A-62E567250DA7",
-      "id" : "A1F5A881-1AEE-4412-93BA-9215C9D0A9D1",
+      "from" : "096FCD4C-37A6-4F4B-A293-5E0283CC3C63",
+      "id" : "46581D3B-7188-4932-A031-1156B9FC3AAB",
       "label" : "quotes",
-      "to" : "A5CB95D9-E412-45FB-9889-460BE6AA702F"
+      "to" : "6E9212BF-AA72-41D4-80BF-E810A91532F7"
     },
     {
-      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
-      "id" : "B5ACD540-8538-4360-B439-264D154F1AC9",
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "5CF65D49-CA98-496A-BB00-61BF59DEF718",
       "label" : "",
-      "to" : "44094E7F-150D-47CE-AEFE-2F29E1A8DF52"
+      "to" : "56059FB3-C4A5-4A4E-90C7-0EC459417BD6"
     },
     {
-      "from" : "44094E7F-150D-47CE-AEFE-2F29E1A8DF52",
-      "id" : "16E39CC0-BC1B-4517-B337-B1ABF57C555B",
+      "from" : "56059FB3-C4A5-4A4E-90C7-0EC459417BD6",
+      "id" : "86615024-F615-4791-AB65-AB1918A2434D",
       "label" : "",
-      "to" : "4BE7A455-6C31-4253-A694-599A3D6B513B"
+      "to" : "31F44F4C-FD5A-4584-9154-72A6517A3464"
     },
     {
-      "from" : "4BE7A455-6C31-4253-A694-599A3D6B513B",
-      "id" : "AE699609-6705-4C04-95B1-7E9D8059A227",
+      "from" : "31F44F4C-FD5A-4584-9154-72A6517A3464",
+      "id" : "4FF4DE29-C2F3-4691-B1C7-8E507AB6855A",
       "label" : "signals",
-      "to" : "A5CB95D9-E412-45FB-9889-460BE6AA702F"
+      "to" : "6E9212BF-AA72-41D4-80BF-E810A91532F7"
     },
     {
-      "from" : "9C99E867-9253-44E5-B999-707B340E84C1",
-      "id" : "1659322A-AEE3-4948-B76B-216BD144321D",
+      "from" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
+      "id" : "42F30529-AE65-4C35-BDFF-574E8781BE8A",
       "label" : "",
-      "to" : "A631C21B-904B-4DF8-8328-484DC35ED649"
+      "to" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303"
     },
     {
-      "from" : "A631C21B-904B-4DF8-8328-484DC35ED649",
-      "id" : "DFCA692C-754B-465A-B2EA-1A8C3DE6EEA0",
+      "from" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
+      "id" : "410AB631-72E6-4DAC-9247-97E1B976C543",
       "label" : "",
-      "to" : "0B321C6B-476D-4EEE-87D6-118C97BDC1BB"
+      "to" : "5C742E71-8471-48EC-84E1-5AD533FAE2B8"
     },
     {
-      "from" : "A631C21B-904B-4DF8-8328-484DC35ED649",
-      "id" : "B6C90178-0CC3-48A4-809B-8811F4AF4198",
+      "from" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
+      "id" : "6FD2FB7A-D1B5-4918-B70E-93E8D14EE82C",
       "label" : "",
-      "to" : "909EDEAA-872E-4F38-BF35-B656EAC0264D"
+      "to" : "460803BC-A6B3-4371-AB52-BB57EA30D566"
     },
     {
-      "from" : "0B321C6B-476D-4EEE-87D6-118C97BDC1BB",
-      "id" : "BFE61389-816C-43BE-BC01-847F2144D641",
+      "from" : "5C742E71-8471-48EC-84E1-5AD533FAE2B8",
+      "id" : "E5F414B3-E37C-4B7D-A9EF-575095F81627",
       "label" : "decisionContext",
-      "to" : "A631C21B-904B-4DF8-8328-484DC35ED649"
+      "to" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303"
     },
     {
-      "from" : "909EDEAA-872E-4F38-BF35-B656EAC0264D",
-      "id" : "DC73DC32-B101-4A0F-B6E2-4C0502E8B188",
+      "from" : "460803BC-A6B3-4371-AB52-BB57EA30D566",
+      "id" : "53095DFC-24F3-4103-B825-23535CA2413D",
       "label" : "VaR",
-      "to" : "A631C21B-904B-4DF8-8328-484DC35ED649"
+      "to" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303"
     },
     {
-      "from" : "A631C21B-904B-4DF8-8328-484DC35ED649",
-      "id" : "80FE33DB-00D9-4823-8280-68C2DB031C8E",
+      "from" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
+      "id" : "D9FE7EC1-F63B-40CD-9453-7F24A6D834F5",
       "label" : "nextStep",
-      "to" : "581D93B4-0E58-4453-A8E5-53A8433725DD"
+      "to" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03"
     },
     {
-      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
-      "id" : "07DD635F-AA74-4EF0-A78A-679546CB36EF",
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "13C0B757-6526-498E-A0BE-399C26013D80",
       "label" : "",
-      "to" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF"
+      "to" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E"
     },
     {
-      "from" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
-      "id" : "BEC89541-2F90-468F-A0D7-39A7D3C32777",
+      "from" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
+      "id" : "16116612-5F9D-4F2F-9F40-7CBC8A366D85",
       "label" : "",
-      "to" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF"
+      "to" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E"
     },
     {
-      "from" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF",
-      "id" : "70C0778B-A243-4E80-8938-3E83757E108B",
+      "from" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E",
+      "id" : "227CBA93-AF20-41AD-8D95-8259336787C8",
       "label" : "",
-      "to" : "581D93B4-0E58-4453-A8E5-53A8433725DD"
+      "to" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03"
     },
     {
-      "from" : "581D93B4-0E58-4453-A8E5-53A8433725DD",
-      "id" : "AAB392E8-5E4C-448B-B1B9-29E1D492E2A0",
+      "from" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03",
+      "id" : "D236ED05-14D3-4E09-B7FD-C1AECE3B7963",
       "label" : "",
-      "to" : "A483368F-1128-451E-9C69-FC5D427A2C8C"
+      "to" : "ED8F57A1-F073-4A84-9329-13E9ED3F3DA1"
     },
     {
-      "from" : "A483368F-1128-451E-9C69-FC5D427A2C8C",
-      "id" : "EEF5E3E6-8DD5-4B5F-BA90-AEC25088221E",
+      "from" : "ED8F57A1-F073-4A84-9329-13E9ED3F3DA1",
+      "id" : "1FEA0C6F-218A-4642-9170-D18978165BF3",
       "label" : "approved",
-      "to" : "4C0CE860-C7E8-4269-A1E8-40F1929104F1"
+      "to" : "82B44E46-1981-445F-B25D-FE58B1319A7F"
     },
     {
-      "from" : "4C0CE860-C7E8-4269-A1E8-40F1929104F1",
-      "id" : "27537BFF-CEFA-4FCE-9CCB-8E96AD47B201",
+      "from" : "82B44E46-1981-445F-B25D-FE58B1319A7F",
+      "id" : "7449259C-FFDE-4B4F-AC8E-9FD537A590D4",
       "label" : "",
-      "to" : "9241C902-137B-4A69-96ED-BC77542BCD38"
+      "to" : "9F3B6D7F-D1FE-43C1-BAD9-9098C2077EA6"
     }
   ],
   "name" : "Daily Market Data Refresh",
@@ -147,7 +147,7 @@
     {
       "arguments" : [
         {
-          "id" : "2E57429B-6E27-4A52-BA93-F65A8D0C3B13",
+          "id" : "4DD97BB9-065E-414F-989C-38021D899CEE",
           "name" : "watchlist",
           "required" : true,
           "type" : "symbols",
@@ -165,7 +165,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "9C99E867-9253-44E5-B999-707B340E84C1",
+      "id" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
       "kind" : "trigger",
       "notes" : "",
       "outcome" : {
@@ -212,7 +212,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "581D93B4-0E58-4453-A8E5-53A8433725DD",
+      "id" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03",
       "kind" : "instructionSet",
       "notes" : "",
       "outcome" : {
@@ -252,7 +252,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "A483368F-1128-451E-9C69-FC5D427A2C8C",
+      "id" : "ED8F57A1-F073-4A84-9329-13E9ED3F3DA1",
       "kind" : "approvalGate",
       "notes" : "",
       "outcome" : {
@@ -290,7 +290,7 @@
         "mode" : "paper",
         "target" : "Broker API (paper)"
       },
-      "id" : "4C0CE860-C7E8-4269-A1E8-40F1929104F1",
+      "id" : "82B44E46-1981-445F-B25D-FE58B1319A7F",
       "kind" : "executeRequest",
       "notes" : "",
       "outcome" : {
@@ -323,7 +323,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "9241C902-137B-4A69-96ED-BC77542BCD38",
+      "id" : "9F3B6D7F-D1FE-43C1-BAD9-9098C2077EA6",
       "kind" : "outcomeReport",
       "notes" : "",
       "outcome" : {
@@ -369,7 +369,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
+      "id" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -410,7 +410,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
+      "id" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
@@ -452,7 +452,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF",
+      "id" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E",
       "kind" : "aggregate",
       "notes" : "",
       "outcome" : {
@@ -494,7 +494,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "A631C21B-904B-4DF8-8328-484DC35ED649",
+      "id" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
       "kind" : "decision",
       "notes" : "",
       "outcome" : {
@@ -522,21 +522,21 @@
         "path" : "/query",
         "query" : [
           {
-            "id" : "13C780E5-22CD-4596-BC28-74F34693EC85",
+            "id" : "E3161001-539A-449B-83B3-F5B08964013B",
             "key" : "function",
             "value" : "GLOBAL_QUOTE"
           },
           {
-            "id" : "B3323AE6-EB62-44EF-BA7D-757233FD306A",
+            "id" : "CE198672-CA6F-430F-9C7B-4CCDBFB73825",
             "key" : "symbol",
             "value" : "{{symbol}}"
           }
         ],
-        "subscriptionID" : "B367209F-A605-433F-818D-0EC4CC76361D"
+        "subscriptionID" : "7F632ECC-9EB3-4A27-95BE-7CD29D8C4FD5"
       },
       "arguments" : [
         {
-          "id" : "B09D0DA2-7884-4BB9-95D3-6052E085DACA",
+          "id" : "1DC9F4A6-1A40-4495-BFA2-ADF99B423F92",
           "name" : "symbol",
           "required" : true,
           "type" : "symbols",
@@ -554,7 +554,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "036ECD6B-5E60-47B0-BE57-9C875C93E0CA",
+      "id" : "3C695CBC-D647-4A18-810F-B7EFB9FD18CF",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -582,17 +582,17 @@
         "path" : "/latest",
         "query" : [
           {
-            "id" : "58C5BC99-DE32-4F45-BFC1-C4E532491706",
+            "id" : "4F664D94-1D19-48F0-83A4-A8DDEDB05043",
             "key" : "base",
             "value" : "USD"
           },
           {
-            "id" : "1BCF75B8-836A-4218-9360-0B9D1652E5CF",
+            "id" : "F0B5A965-07C8-4ACF-8BC7-A850271C6E6E",
             "key" : "symbols",
             "value" : "EUR,GBP,JPY"
           }
         ],
-        "subscriptionID" : "A3D80D9C-F228-4BDD-8F2C-1A724C3B3822"
+        "subscriptionID" : "6557894A-C256-49D2-88FC-70B6D9CAB035"
       },
       "arguments" : [
 
@@ -608,7 +608,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "503870B2-5350-4D0B-B5E9-C3EBD23F972E",
+      "id" : "AA26FB47-4512-43A6-B138-A7530FA39C2B",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -636,26 +636,26 @@
         "path" : "/company-news",
         "query" : [
           {
-            "id" : "5940DE21-4263-4BF7-8E0E-A876F7C5E6F6",
+            "id" : "9CB13CB0-8A7B-4DAA-ACBF-44AE663E9023",
             "key" : "symbol",
             "value" : "{{symbol}}"
           },
           {
-            "id" : "82847C6B-9799-42A6-B5EB-428E295F284B",
+            "id" : "7128C7CA-8DB2-4CDD-975C-3604BE4AA00C",
             "key" : "from",
             "value" : "{{yesterday}}"
           },
           {
-            "id" : "4A41A212-87EF-4324-A68F-88C1476B212E",
+            "id" : "F74FE493-C132-4BA5-8D6F-D282513AEDC1",
             "key" : "to",
             "value" : "{{today}}"
           }
         ],
-        "subscriptionID" : "E9F6DA8B-BC4E-4034-B2B5-284EF614E548"
+        "subscriptionID" : "164DC432-30E5-45FB-96DD-4A157EC0B510"
       },
       "arguments" : [
         {
-          "id" : "5701A90F-45A5-4996-B804-ED3C242E356D",
+          "id" : "3558519E-168D-481C-8065-6BDB8BC60F74",
           "name" : "symbol",
           "required" : true,
           "type" : "symbols",
@@ -673,7 +673,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "E4970F59-C729-4B31-855C-53FBF8B12CD0",
+      "id" : "53E4C323-E4C4-4275-AB47-EC237AE79508",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -702,11 +702,11 @@
         "query" : [
 
         ],
-        "subscriptionID" : "D31D6E38-A15C-4A80-9E53-D74E493C3B33"
+        "subscriptionID" : "41FB934D-A25D-4A6F-9CE2-38626D1BA29D"
       },
       "arguments" : [
         {
-          "id" : "6572C4CC-16C5-4A70-AF36-6D8CBE162AC8",
+          "id" : "F4336114-9D4D-4F6A-A0DC-A99D45655F4F",
           "name" : "cik",
           "required" : true,
           "type" : "text",
@@ -724,7 +724,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "AD6C5041-C5DA-4AE4-A85D-B7D49CB29E8A",
+      "id" : "86890E5A-7AB4-47B2-B54F-D1117A454F39",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
@@ -757,7 +757,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "A3BB4418-1CB1-43B6-951A-62E567250DA7",
+      "id" : "096FCD4C-37A6-4F4B-A293-5E0283CC3C63",
       "kind" : "dataNormalize",
       "notes" : "",
       "outcome" : {
@@ -775,12 +775,12 @@
       "transform" : {
         "mappings" : [
           {
-            "id" : "2E8FEDD5-47B8-4E50-953A-46A1CCF44F17",
+            "id" : "FE8356AD-D4F0-491E-B546-848170CD81D1",
             "key" : "price",
             "value" : "Global Quote.05. price"
           },
           {
-            "id" : "9C37EEBE-0351-4D12-9F0C-C3FC86F282BB",
+            "id" : "CB1F1A29-D35E-4B09-BFE0-8A7500E9A230",
             "key" : "change",
             "value" : "Global Quote.10. change percent"
           }
@@ -799,28 +799,28 @@
         "path" : "/indicators",
         "query" : [
           {
-            "id" : "769FBB72-D295-4E68-AD6E-F56863F45744",
+            "id" : "E4170082-E46C-4822-978C-0C8314557F73",
             "key" : "symbol",
             "value" : "{{symbol}}"
           },
           {
-            "id" : "DACB9A78-5262-4C14-9CAF-6F10389C1AB9",
+            "id" : "60C0AA93-340D-4B87-8D58-6D99BCD080AC",
             "key" : "window",
             "value" : "{{window}}"
           }
         ],
-        "subscriptionID" : "46BFA054-F98D-4509-BAAA-47E3CC357B68"
+        "subscriptionID" : "4D04D1FF-3ED4-44C0-9DE8-058ED8B59770"
       },
       "arguments" : [
         {
-          "id" : "F7A24FA6-9E97-4461-BA4D-57DA587270BE",
+          "id" : "F5AB2A5E-C2F5-41BB-9668-EE07A415E388",
           "name" : "symbol",
           "required" : true,
           "type" : "symbols",
           "value" : "AAPL"
         },
         {
-          "id" : "675FE76E-AA14-4678-9DD3-FECBB80D996E",
+          "id" : "2C7C7997-E73A-4178-B91B-1F97FF12D1CF",
           "name" : "window",
           "required" : false,
           "type" : "number",
@@ -838,9 +838,9 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "44094E7F-150D-47CE-AEFE-2F29E1A8DF52",
+      "id" : "56059FB3-C4A5-4A4E-90C7-0EC459417BD6",
       "kind" : "apiRead",
-      "notes" : "Start the service first: python3 Samples/python-service/mxjobs_service.py",
+      "notes" : "Start the services first: python3 Services/mxservices.py start",
       "outcome" : {
         "assertions" : [
 
@@ -860,14 +860,14 @@
     {
       "arguments" : [
         {
-          "id" : "894AAB67-3C24-4B6A-8E3D-7C71282A5606",
+          "id" : "A4C5F503-A543-40E7-B50C-52F384C8FAA2",
           "name" : "oversold",
           "required" : false,
           "type" : "number",
           "value" : "30"
         },
         {
-          "id" : "9138E387-4278-4B2B-98C3-6737F9F20BF6",
+          "id" : "583090FD-4180-49C0-B1EF-6C1DF0B18251",
           "name" : "overbought",
           "required" : false,
           "type" : "number",
@@ -885,7 +885,7 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "4BE7A455-6C31-4253-A694-599A3D6B513B",
+      "id" : "31F44F4C-FD5A-4584-9154-72A6517A3464",
       "kind" : "pythonScript",
       "notes" : "",
       "outcome" : {
@@ -918,25 +918,25 @@
         "query" : [
 
         ],
-        "subscriptionID" : "BF8786D1-5785-4525-B532-52C67CD53A75"
+        "subscriptionID" : "574F9FA0-CE44-4184-9190-A72C0A399374"
       },
       "arguments" : [
         {
-          "id" : "AFBC5AF6-46B2-470B-B9E0-47DFD795C91D",
+          "id" : "C6BECF48-DD85-48A1-90BD-D2AE9F347929",
           "name" : "maxWeight",
           "required" : true,
           "type" : "number",
           "value" : "0.4"
         },
         {
-          "id" : "36D006E6-71A9-4641-8EF4-F45B73344DED",
+          "id" : "F7C7BCA7-6706-49A9-BC74-5D030E59D284",
           "name" : "riskFreeRate",
           "required" : false,
           "type" : "number",
           "value" : "0.02"
         },
         {
-          "id" : "9F577459-2641-48D4-8369-30D28BCB9C04",
+          "id" : "32F8A82B-D201-478F-BFA8-BA2C4C37108E",
           "name" : "maxTurnover",
           "required" : false,
           "type" : "number",
@@ -954,19 +954,19 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "0B321C6B-476D-4EEE-87D6-118C97BDC1BB",
+      "id" : "5C742E71-8471-48EC-84E1-5AD533FAE2B8",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "0DCF4F20-541B-4133-9127-6FE21A5BAE36",
+            "id" : "18491019-BFF7-4BC9-8B61-8E090FFB59A5",
             "op" : "==",
             "path" : "solverStatus",
             "value" : "optimal"
           },
           {
-            "id" : "32522CB0-BD11-46EB-84CE-AC44887FC63F",
+            "id" : "9856A3B1-E6E2-4EF7-91C6-A5FF766DAE98",
             "op" : "==",
             "path" : "schema",
             "value" : "mxjobs.optimization/1"
@@ -995,18 +995,18 @@
         "query" : [
 
         ],
-        "subscriptionID" : "57F512BA-60CA-48FD-B5ED-77AB55C54077"
+        "subscriptionID" : "301F0E37-0B79-4D68-8B90-BECAC0CDCD94"
       },
       "arguments" : [
         {
-          "id" : "26F65ED0-FAD9-4347-8E0C-BCE3B509C8AB",
+          "id" : "6FDEF1E2-251B-46C6-BAC0-2E2894A4AA85",
           "name" : "portfolioValue",
           "required" : true,
           "type" : "number",
           "value" : "1000000"
         },
         {
-          "id" : "2F7A3FF5-FC2E-410E-AF55-FE77D2247EB4",
+          "id" : "DF3C49D0-C75E-4FC6-A62A-BC4C182BA1E0",
           "name" : "maxVaR",
           "required" : false,
           "type" : "number",
@@ -1024,19 +1024,19 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "909EDEAA-872E-4F38-BF35-B656EAC0264D",
+      "id" : "460803BC-A6B3-4371-AB52-BB57EA30D566",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
         "assertions" : [
           {
-            "id" : "8EB6BC71-01AA-4CD1-9855-BBA534CC4B40",
+            "id" : "A46F879F-DB17-45C0-9217-877E6435B2E5",
             "op" : "==",
             "path" : "status",
             "value" : "ok"
           },
           {
-            "id" : "CAC3DAF9-B0F3-4F08-8992-8E164BF2C155",
+            "id" : "10A948AE-B2A7-43AA-A13C-97DD940B0529",
             "op" : "<",
             "path" : "valueAtRisk",
             "value" : "{{maxVaR}}"
@@ -1071,12 +1071,12 @@
 
       ],
       "docsURL" : "https://www.alphavantage.co/documentation/",
-      "id" : "B367209F-A605-433F-818D-0EC4CC76361D",
+      "id" : "7F632ECC-9EB3-4A27-95BE-7CD29D8C4FD5",
       "ide" : "vscode",
       "keyName" : "apikey",
       "name" : "Alpha Vantage",
       "notes" : "",
-      "plan" : "Free",
+      "plan" : "Free (25 requests a day)",
       "projectFolder" : "",
       "provider" : "Alpha Vantage Inc.",
       "rateLimitPerMinute" : 5
@@ -1088,7 +1088,7 @@
 
       ],
       "docsURL" : "https://finnhub.io/docs/api",
-      "id" : "E9F6DA8B-BC4E-4034-B2B5-284EF614E548",
+      "id" : "164DC432-30E5-45FB-96DD-4A157EC0B510",
       "ide" : "vscode",
       "keyName" : "X-Finnhub-Token",
       "name" : "Finnhub",
@@ -1105,7 +1105,7 @@
 
       ],
       "docsURL" : "https://frankfurter.dev",
-      "id" : "A3D80D9C-F228-4BDD-8F2C-1A724C3B3822",
+      "id" : "6557894A-C256-49D2-88FC-70B6D9CAB035",
       "ide" : "vscode",
       "keyName" : "",
       "name" : "Frankfurter FX",
@@ -1120,13 +1120,13 @@
       "baseURL" : "https://data.sec.gov",
       "defaultHeaders" : [
         {
-          "id" : "B2B331C5-B6E2-4371-B5BC-779E784CDA13",
+          "id" : "90ED2281-54D7-4D5F-A944-6C90350D73B7",
           "key" : "User-Agent",
           "value" : "MxJobsWMS your-name@example.com"
         }
       ],
       "docsURL" : "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
-      "id" : "D31D6E38-A15C-4A80-9E53-D74E493C3B33",
+      "id" : "41FB934D-A25D-4A6F-9CE2-38626D1BA29D",
       "ide" : "vscode",
       "keyName" : "",
       "name" : "SEC EDGAR",
@@ -1143,11 +1143,11 @@
 
       ],
       "docsURL" : "",
-      "id" : "46BFA054-F98D-4509-BAAA-47E3CC357B68",
+      "id" : "4D04D1FF-3ED4-44C0-9DE8-058ED8B59770",
       "ide" : "vscode",
       "keyName" : "",
       "name" : "Local Python service",
-      "notes" : "Start it with: python3 Samples/python-service/mxjobs_service.py --port 8765. Store a token here only if the service is started with --token.",
+      "notes" : "Start it with: python3 Services/mxservices.py start (or python3 Services/market-sample/mxjobs_service.py --port 8765). Store a token here only if the service is started with --token.",
       "plan" : "",
       "projectFolder" : "",
       "provider" : "This Mac",
@@ -1160,13 +1160,13 @@
 
       ],
       "docsURL" : "",
-      "id" : "BF8786D1-5785-4525-B532-52C67CD53A75",
+      "id" : "574F9FA0-CE44-4184-9190-A72C0A399374",
       "ide" : "vscode",
       "keyName" : "",
       "name" : "Portfolio optimizer (Java)",
-      "notes" : "Start it with: cd Modules/portfolio-java && mvn -q package && java -jar target/portfolio-java.jar",
+      "notes" : "Start it with: python3 Services/mxservices.py start (builds it first if needed)",
       "plan" : "",
-      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxJobsWMS/Modules/portfolio-java",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-java",
       "provider" : "This Mac",
       "rateLimitPerMinute" : 0
     },
@@ -1177,13 +1177,13 @@
 
       ],
       "docsURL" : "",
-      "id" : "57F512BA-60CA-48FD-B5ED-77AB55C54077",
+      "id" : "301F0E37-0B79-4D68-8B90-BECAC0CDCD94",
       "ide" : "vscode",
       "keyName" : "",
       "name" : "Portfolio engine (C++)",
-      "notes" : "Start it with: cd Modules/portfolio-cpp && make run",
+      "notes" : "Start it with: python3 Services/mxservices.py start (builds it first if needed)",
       "plan" : "",
-      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxJobsWMS/Modules/portfolio-cpp",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp",
       "provider" : "This Mac",
       "rateLimitPerMinute" : 0
     }

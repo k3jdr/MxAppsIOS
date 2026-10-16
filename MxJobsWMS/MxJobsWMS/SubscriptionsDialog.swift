@@ -272,7 +272,7 @@ private struct SubscriptionForm: View {
             } header: {
                 Text("Source Project")
             } footer: {
-                Text("For services you develop, such as Modules/portfolio-java or portfolio-cpp: steps using this subscription get an “Open Project” button.")
+                Text("For services you develop, such as Services/portfolio-java or Services/portfolio-cpp: steps using this subscription get an “Open Project” button.")
             }
 
             Section("Notes") {
