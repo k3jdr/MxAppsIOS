@@ -54,7 +54,10 @@ enum ApiTester {
         }
         var items = comps.queryItems ?? []
         for q in api.query where !q.key.isEmpty {
-            items.append(URLQueryItem(name: q.key, value: substitute(q.value, arguments: node.arguments)))
+            let value = substitute(q.value, arguments: node.arguments)
+            // An optional argument left empty leaves its parameter out ("max={{maxCalls}}" with no maxCalls).
+            if value.isEmpty, q.value.contains("{{") { continue }
+            items.append(URLQueryItem(name: q.key, value: value))
         }
         if sub.auth == .queryParameter, let key {
             items.append(URLQueryItem(name: sub.keyName.isEmpty ? "apikey" : sub.keyName, value: key))

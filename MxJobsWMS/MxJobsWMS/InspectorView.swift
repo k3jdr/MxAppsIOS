@@ -631,7 +631,8 @@ private struct ExceptionSection: View {
             if policy.onFailure == .useFallback {
                 TextField("Fallback value", text: $policy.fallbackValue)
             }
-            Stepper("Timeout: \(policy.timeoutSeconds) s", value: $policy.timeoutSeconds, in: 1...600)
+            Stepper("Timeout: \(policy.timeoutSeconds) s", value: $policy.timeoutSeconds, in: 1...7200,
+                    step: policy.timeoutSeconds >= 120 ? 60 : 5)
             Toggle("Notify the user on failure", isOn: $policy.notifyUser)
         }
     }

@@ -131,6 +131,33 @@ their URL schemes, which works from the sandbox for any folder. CLion, Xcode and
 sandbox can hand them only a folder you chose: pick it with **Choose…** in the subscription, or **Grant Access…** next
 to the button, once — MxJobsWMS keeps a security-scoped bookmark for it.
 
+## Samples
+
+| File ▸ … | Jobspace | Service |
+| -------- | -------- | ------- |
+| **New Sample Jobspace** (⌥⌘N) | `Samples/DailyMarketRefresh.jobspace` — market data, Python, Java and C++ steps | `Samples/python-service`, `Modules/portfolio-*` |
+| **New SRM Daily Refresh Sample** | `Samples/SRMDailyRefresh.jobspace` — MxDataSRM's daily securities-master refresh | `Samples/srm-service` |
+
+### SRM daily refresh
+
+MxDataSRM's daily automation (`MxDataSRM/SRM/srm.py load all`, then `srm.py status`) as a jobspace:
+
+- **Layer 3**: the 12 SRM loaders as API Data Read steps (`POST /load/<loader>` on the **SRM loader service**,
+  127.0.0.1:8770), left to right in srm.py's dependency order, and **SRM status & data quality** (`GET /status`).
+  Each loader expects `status != failed`; its exception handling follows the source (retries for the free reference
+  files, skip for optional enrichment, ask the user for constituents and prices). The status step expects
+  `summary.failed == 0` and asks the data steward otherwise.
+- **Layer 2**: Universe → Benchmark constituents → Identifier enrichment → Market data agents, chained so each stage
+  waits for the one before, each calling its loaders; the **Data quality analyst** combines their results with the
+  status checks into the daily report and follow-up list.
+- **Layer 1**: weekday 18:30 New York trigger, the report and follow-ups, **Data steward approval**, **Run approved
+  backfills** (long loads such as `fmp-corporate-actions --history`, dry run), and the outcome report.
+
+Start the service with `python3 Samples/srm-service/srm_service.py`. The sample opens with Layer 3 on **Mock**.
+On **Live**, the subscription's `X-SRM-Dry-Run: 1` header makes every loader report the `srm.py` command it would
+run while the status step reads the real database; remove the header (API Subscriptions) to run the loads.
+Open in IDE on the subscription opens `MxDataSRM/SRM`.
+
 ## Files and keys
 
 - A jobspace is pretty-printed JSON (`format: "mxjobspace"`, `formatVersion: 1`) with `subscriptions`,

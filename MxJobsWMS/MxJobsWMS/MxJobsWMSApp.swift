@@ -39,6 +39,9 @@ struct JobspaceCommands: Commands {
                 newDocument(JobspaceDocument(space: .sample()))
             }
             .keyboardShortcut("n", modifiers: [.command, .option])
+            Button("New SRM Daily Refresh Sample") {
+                newDocument(JobspaceDocument(space: .srmDailyRefresh()))
+            }
         }
         CommandGroup(after: .importExport) {
             Button("Export Diagram as PNG…") {
