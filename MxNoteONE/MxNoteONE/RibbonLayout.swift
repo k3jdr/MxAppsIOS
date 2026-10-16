@@ -38,7 +38,7 @@ final class RibbonLayout {
     static let sections: [(RibbonTab, [String])] = [
         (.home, ["Font", "Format", "Paragraph", "Styles", "Tags"]),
         (.insert, ["Tables", "Music", "Files", "Recording", "Links", "Time Stamp", "Pages"]),
-        (.draw, ["Tools", "Shapes", "Pen Color", "Thickness", "Highlighter", "Ink"]),
+        (.draw, ["Diagram", "Selected Diagram", "Editor", "Ink"]),
         (.view, ["Page Setup", "Zoom", "Views"]),
         (.table, ["Automation", "Insert", "Merge", "Delete", "Shading", "Cell Text", "Table"]),
         (.score, ["Notes", "Expression", "Articulation", "Staves", "Bars", "Voice", "Add", "Selected Note", "Chords & Lyrics", "Score"]),

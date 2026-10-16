@@ -86,6 +86,8 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     /// A grace note ("acciaccatura", slashed and quick, or "appoggiatura", taking time from the next note): small,
     /// before the note it leads to, and no time of its own in the bar.
     var grace: String?
+    /// On a percussion staff: the drum (DrumKit id) — its place, notehead and sound.
+    var drum: String?
     /// A dynamic marking under the note (pp … ff, sfz, fp).
     var dynamic: String?
     /// A slur starts here / ends here.
@@ -120,6 +122,8 @@ struct ChordTone: Codable, Hashable {
     var step: Int
     var octave: Int
     var alter: Int?
+    /// A drum played with the note (hi-hat with a kick).
+    var drum: String?
     var diatonic: Int { octave * 7 + step }
 }
 
@@ -150,11 +154,11 @@ struct ScoreBarMark: Codable, Hashable {
 
 struct ScoreData: Codable, Hashable {
     enum Clef: String, Codable, CaseIterable, Identifiable {
-        case treble, bass
+        case treble, bass, percussion
         var id: String { rawValue }
         var title: String { rawValue.capitalized }
-        /// The bottom line's note, in steps from C0 (treble: E4, bass: G2).
-        var bottomLine: Int { self == .treble ? 4 * 7 + 2 : 2 * 7 + 4 }
+        /// The bottom line's note, in steps from C0 (treble: E4, bass: G2; a drum staff is placed as treble).
+        var bottomLine: Int { self == .bass ? 2 * 7 + 4 : 4 * 7 + 2 }
     }
 
     var title = ""
@@ -472,6 +476,8 @@ struct ScoreData: Codable, Hashable {
     func midi(_ index: Int) -> Int? {
         let note = notes[index]
         guard !note.rest else { return nil }
+        // A drum's General MIDI sound.
+        if let drum = DrumKit.instrument(note.drum) { return drum.midi }
         return Self.midi(step: note.step, octave: note.octave, alter: soundingAlter(index))
     }
 
@@ -504,14 +510,16 @@ struct ScoreData: Codable, Hashable {
     func showsAccidental(_ index: Int) -> Bool {
         let note = notes[index]
         // The continuation of a tie doesn't repeat its accidental.
-        guard !note.rest, let alter = note.alter, !tiedFrom(index) else { return false }
+        guard !note.rest, let alter = note.alter, !tiedFrom(index), clef != .percussion else { return false }
         return alter != (alterBefore(index) ?? keyAlter(note.step, at: index))
     }
 
     /// Every pitch a note sounds (the note and its chord tones), as MIDI numbers.
     func midis(_ index: Int) -> [Int] {
         guard let main = midi(index) else { return [] }
-        let tones = (notes[index].chord ?? []).map { Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step, at: index)) }
+        let tones = (notes[index].chord ?? []).map {
+            DrumKit.instrument($0.drum)?.midi ?? Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step, at: index))
+        }
         return [main] + tones
     }
 
@@ -684,6 +692,10 @@ struct ScoreData: Codable, Hashable {
         let length = ["", "w", "h", "", "q", "", "", "", "8", "", "", "", "", "", "", "", "16"][n.duration.rawValue] + (n.dotted ? "." : "")
             + (n.tupletActual.map(Self.superscript) ?? "") + (n.grace != nil ? " grace" : "")
         if n.rest { return "r" + length + marks(n) }
+        if let drum = DrumKit.instrument(n.drum) {
+            let others = (n.chord ?? []).compactMap { DrumKit.instrument($0.drum)?.name }
+            return ([drum.name] + others).joined(separator: "+") + " \(length)" + marks(n)
+        }
         let alter = soundingAlter(i)
         let name = ["C", "D", "E", "F", "G", "A", "B"][n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "")
         let tones = (n.chord ?? []).map { t in
@@ -705,6 +717,9 @@ final class ScorePlayer {
 
     private let engine = AVAudioEngine()
     private let sampler = AVAudioUnitSampler()
+    /// General MIDI drums, for percussion staves.
+    private let drums = AVAudioUnitSampler()
+    private var soundingDrums: Set<UInt8> = []
     private var started = false
     private var work: [DispatchWorkItem] = []
     private var sounding: Set<UInt8> = []
@@ -716,9 +731,12 @@ final class ScorePlayer {
         guard !started else { return }
         engine.attach(sampler)
         engine.connect(sampler, to: engine.mainMixerNode, format: nil)
+        engine.attach(drums)
+        engine.connect(drums, to: engine.mainMixerNode, format: nil)
         let bank = URL(fileURLWithPath: "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls")
         if FileManager.default.fileExists(atPath: bank.path) {
             try? sampler.loadSoundBankInstrument(at: bank, program: 0, bankMSB: UInt8(kAUSampler_DefaultMelodicBankMSB), bankLSB: 0)
+            try? drums.loadSoundBankInstrument(at: bank, program: 0, bankMSB: UInt8(kAUSampler_DefaultPercussionBankMSB), bankLSB: 0)
         }
         #if DEBUG
         if Self.muted { engine.mainMixerNode.outputVolume = 0 }
@@ -734,6 +752,16 @@ final class ScorePlayer {
 
     /// A single note or chord (heard while entering notes).
     func preview(_ midi: Int) { preview([midi]) }
+
+    /// Drum sounds (heard while entering drum notes).
+    func previewDrums(_ midis: [Int]) {
+        start()
+        let keys = midis.map { UInt8(max(0, min(127, $0))) }
+        for key in keys { drums.startNote(key, withVelocity: 90, onChannel: 9) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            for key in keys { self?.drums.stopNote(key, onChannel: 9) }
+        }
+    }
 
     func preview(_ midis: [Int]) {
         start()
@@ -888,17 +916,29 @@ final class ScorePlayer {
             #if DEBUG
             Self.plan.append((ref, start, span, parts.map { ($0.keys, $0.at, $0.length) }))
             #endif
+            // A percussion staff plays the General MIDI drums.
+            let isDrum = line.clef == .percussion
             for part in parts {
                 let down = DispatchWorkItem { [weak self] in
                     for key in part.keys {
-                        self?.sampler.startNote(key, withVelocity: vel, onChannel: 0)
-                        self?.sounding.insert(key)
+                        if isDrum {
+                            self?.drums.startNote(key, withVelocity: vel, onChannel: 9)
+                            self?.soundingDrums.insert(key)
+                        } else {
+                            self?.sampler.startNote(key, withVelocity: vel, onChannel: 0)
+                            self?.sounding.insert(key)
+                        }
                     }
                 }
                 let up = DispatchWorkItem { [weak self] in
                     for key in part.keys {
-                        self?.sampler.stopNote(key, onChannel: 0)
-                        self?.sounding.remove(key)
+                        if isDrum {
+                            self?.drums.stopNote(key, onChannel: 9)
+                            self?.soundingDrums.remove(key)
+                        } else {
+                            self?.sampler.stopNote(key, onChannel: 0)
+                            self?.sounding.remove(key)
+                        }
                     }
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + start + part.at, execute: down)
@@ -923,6 +963,8 @@ final class ScorePlayer {
         work.forEach { $0.cancel() }
         work = []
         for key in sounding { sampler.stopNote(key, onChannel: 0) }
+        for key in soundingDrums { drums.stopNote(key, onChannel: 9) }
+        soundingDrums = []
         sounding = []
         view?.playing = []
         view = nil
@@ -1340,7 +1382,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 NSRect(x: r.x + space * 0.55, y: top, width: 1, height: space * 4).fill()
                 repeatDots(x: r.x + space * 0.95, system: r.system)
             }
-            for change in keyChanges {
+            for change in keyChanges where score.clef != .percussion {
                 drawKeySignature(change.to, cancelling: change.from, x: change.x + space * 0.5, system: change.system, ink: ink)
             }
             drawNotes(ink: ink)
@@ -1850,14 +1892,21 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             NSRect(x: staffLeft, y: top + CGFloat(line) * space - 0.5, width: bounds.width - space - staffLeft, height: 1).fill()
         }
         // Clef.
-        let symbols = NSFont(name: "Apple Symbols", size: space * (score.clef == .treble ? 7.2 : 4.2)) ?? .systemFont(ofSize: space * 5)
-        let clef = score.clef == .treble ? "\u{1D11E}" : "\u{1D122}"
-        let clefAttrs: [NSAttributedString.Key: Any] = [.font: symbols, .foregroundColor: ink]
-        let clefSize = (clef as NSString).size(withAttributes: clefAttrs)
-        let clefY = score.clef == .treble ? top + space * 2 - clefSize.height * 0.56 : top - clefSize.height * 0.19
-        (clef as NSString).draw(at: NSPoint(x: staffLeft + space * 0.4, y: clefY), withAttributes: clefAttrs)
-        // Key signature (the key of the line's first bar).
-        let fifths = score.fifths(inBar: systemFirstBars.indices.contains(system) ? systemFirstBars[system] : 0)
+        if score.clef == .percussion {
+            // The percussion clef: two thick bars across the middle of the staff.
+            ink.setFill()
+            NSRect(x: staffLeft + space * 1.2, y: top + space, width: space * 0.45, height: space * 2).fill()
+            NSRect(x: staffLeft + space * 2.0, y: top + space, width: space * 0.45, height: space * 2).fill()
+        } else {
+            let symbols = NSFont(name: "Apple Symbols", size: space * (score.clef == .treble ? 7.2 : 4.2)) ?? .systemFont(ofSize: space * 5)
+            let clef = score.clef == .treble ? "\u{1D11E}" : "\u{1D122}"
+            let clefAttrs: [NSAttributedString.Key: Any] = [.font: symbols, .foregroundColor: ink]
+            let clefSize = (clef as NSString).size(withAttributes: clefAttrs)
+            let clefY = score.clef == .treble ? top + space * 2 - clefSize.height * 0.56 : top - clefSize.height * 0.19
+            (clef as NSString).draw(at: NSPoint(x: staffLeft + space * 0.4, y: clefY), withAttributes: clefAttrs)
+        }
+        // Key signature (the key of the line's first bar) — none on a drum staff.
+        let fifths = score.clef == .percussion ? 0 : score.fifths(inBar: systemFirstBars.indices.contains(system) ? systemFirstBars[system] : 0)
         let x = drawKeySignature(fifths, x: staffLeft + space * 4.2, system: system, ink: ink)
         // Time signature (first line only).
         if system == 0 {
@@ -1962,7 +2011,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             if note.duration != .whole { transform.rotate(byDegrees: -20) }
             head.transform(using: transform)
             color.set()
-            if note.duration.rawValue >= 4 {
+            if let drum = DrumKit.instrument(note.drum), drum.head != .normal {
+                // Cymbals and hi-hats: an x (the open hi-hat with a circle over it); the ride bell: a diamond.
+                DrumKit.drawHead(drum.head, x: p.x, y: cy, width: w, height: h, color: color, filled: note.duration.rawValue >= 4)
+            } else if note.duration.rawValue >= 4 {
                 head.fill()
             } else {
                 head.lineWidth = note.duration == .whole ? 1.6 : 1.4
@@ -1992,7 +2044,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                     if note.duration != .whole { t.rotate(byDegrees: -20) }
                     extra.transform(using: t)
                     color.set()
-                    if note.duration.rawValue >= 4 { extra.fill() } else { extra.lineWidth = 1.4; extra.stroke() }
+                    if let drum = DrumKit.instrument(tone.drum), drum.head != .normal {
+                        DrumKit.drawHead(drum.head, x: tx, y: ty, width: w, height: h, color: color, filled: note.duration.rawValue >= 4)
+                    } else if note.duration.rawValue >= 4 { extra.fill() } else { extra.lineWidth = 1.4; extra.stroke() }
                 }
                 if shifted.contains(pos) {
                     // The note itself moved beside its neighbour: redraw it there.
@@ -2425,18 +2479,23 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         lastEntered = at
         cursor = at + 1
         needsDisplay = true
-        if let midi = cur.midi(at) { ScorePlayer.shared.preview(midi) }
+        hear(at)
     }
 
     private func changeSelected(_ name: String, _ change: (inout ScoreNote) -> Void) {
         guard let i = target else { return NSSound.beep() }
         editVoice(name) { change(&$0.notes[i]) }
-        if let midi = cur.midi(i) { ScorePlayer.shared.preview(midi) }
+        hear(i)
     }
 
     func moveSelected(steps: Int) {
         changeSelected("Move Note") { n in
             guard !n.rest else { return }
+            // A drum note moves to the instrument above or below.
+            if let id = n.drum {
+                if let next = DrumKit.neighbor(of: id, steps) { n.drum = next.id; n.step = next.step; n.octave = next.octave }
+                return
+            }
             let d = max(0, min(9 * 7, n.diatonic + steps))
             n.octave = d / 7
             n.step = d % 7
@@ -2480,8 +2539,45 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         var octave = top / 7
         if octave * 7 + step <= top { octave += 1 }
         editVoice("Add Chord Note") { $0.notes[i].chord = ($0.notes[i].chord ?? []) + [ChordTone(step: step, octave: octave)] }
-        ScorePlayer.shared.preview(cur.midis(i))
+        hear(i)
     }
+
+    /// Plays a note as it's entered (drums on a percussion staff).
+    private func hear(_ i: Int) {
+        guard cur.notes.indices.contains(i) else { return }
+        let keys = cur.midis(i)
+        guard !keys.isEmpty else { return }
+        if cur.clef == .percussion { ScorePlayer.shared.previewDrums(keys) } else { ScorePlayer.shared.preview(keys) }
+    }
+
+    // MARK: Drums
+
+    /// Adds a drum note after the cursor (on a percussion staff: K kick, S snare, H hi-hat…).
+    func insertDrum(_ drum: DrumInstrument) {
+        var note = ScoreNote(duration: Self.inputDuration, dotted: Self.inputDotted, rest: false)
+        note.drum = drum.id
+        note.step = drum.step
+        note.octave = drum.octave
+        if let ratio = Self.inputTuplet { note.tuplet = true; note.tupletRatio = ratio == [3, 2] ? nil : ratio }
+        let at = min(cursor, cur.notes.count)
+        editVoice(drum.name) { $0.notes.insert(note, at: at) }
+        selected = nil
+        lastEntered = at
+        cursor = at + 1
+        needsDisplay = true
+        hear(at)
+    }
+
+    /// ⇧ + a drum's key: the drum played with the note (hi-hat with a kick).
+    func addDrumToChord(_ drum: DrumInstrument) {
+        guard let i = target, !cur.notes[i].rest else { return NSSound.beep() }
+        guard cur.notes[i].drum != drum.id, !(cur.notes[i].chord ?? []).contains(where: { $0.drum == drum.id }) else { return }
+        editVoice("Add \(drum.name)") { $0.notes[i].chord = ($0.notes[i].chord ?? []) + [ChordTone(step: drum.step, octave: drum.octave, drum: drum.id)] }
+        hear(i)
+    }
+
+    /// The staff being written is a drum staff.
+    var isPercussion: Bool { cur.clef == .percussion }
 
     func clearChordTones() {
         changeSelected("Remove Chord Notes") { $0.chord = nil }
@@ -2723,7 +2819,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         editVoice(kind == "appoggiatura" ? "Appoggiatura" : "Acciaccatura") { $0.notes.insert(grace, at: at) }
         select(at)
-        if let midi = cur.midi(at) { ScorePlayer.shared.preview(midi) }
+        hear(at)
     }
 
     /// Changes the selected grace note's kind, or makes the selected note a grace note (or a normal one again).
@@ -3060,6 +3156,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             }
         }
         guard !command else { return super.keyDown(with: event) }
+        // On a drum staff the letters are drums (⇧ adds the drum to the note).
+        if cur.clef == .percussion, let letter = chars.first, letter.isLetter, !command {
+            guard let drum = DrumKit.instrument(key: letter) else { NSSound.beep(); return }
+            return event.modifierFlags.contains(.shift) ? addDrumToChord(drum) : insertDrum(drum)
+        }
         // ⇧S staccato, ⇧N tenuto, ⇧V accent, ⇧O marcato, ⇧H fermata (as in MuseScore).
         if event.modifierFlags.contains(.shift) {
             switch chars {
@@ -3184,7 +3285,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             if ref.voice != voice { setVoice(ref.voice) }
             let i = ref.index
             select(i)
-            if let midi = cur.midi(i) { ScorePlayer.shared.preview(midi) }
+            hear(i)
             // Drag up or down to change the pitch.
             guard !cur.notes[i].rest, let window else { return }
             let startY = p.y
@@ -3343,6 +3444,7 @@ final class ScoreElementView: ElementView {
         }
         staffMenu.addItem(ClosureMenuItem("Add Treble Staff") { [weak self] in self?.staff.addStaff(.treble) })
         staffMenu.addItem(ClosureMenuItem("Add Bass Staff") { [weak self] in self?.staff.addStaff(.bass) })
+        staffMenu.addItem(ClosureMenuItem("Add Percussion Staff (Drums)") { [weak self] in self?.staff.addStaff(.percussion) })
         staffMenu.addItem(ClosureMenuItem(score.staffCount == 1 ? "Make Piano Grand Staff" : "Piano Brace (Grand Staff)", state: score.grandStaff == true) { [weak self] in
             self?.staff.makeGrandStaff()
         })

@@ -13,7 +13,7 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Sidebar**   | Open notebooks, each with its**sections** (coloured tabs) and **section groups** (folders, can nest). Right-click a notebook, section or group to rename, recolour, move up/down or into a group, password protect, export or delete it. **+** adds a section, section group or notebook; the tag and trash buttons open the Tag Summary and Recycle Bin. The search field searches every open notebook.                                                                                                                                                             |
 | **Page list** | Pages of the selected section with date and first line. Subpages are indented (two levels) and can be collapsed; drag to reorder (subpages move with their page). Right-click for New Page / Subpage, Make Subpage, Promote, Move or Copy…, Duplicate, Copy Link to Page, Export as PDF / Markdown, Print, Delete. While the search field has text, this column shows the search results instead.                                                                                                                                                                   |
-| **Ribbon**    | **Home**: font and size boxes showing the selected text's font and size ("Mixed" / "–" when the selection mixes several; with table cells selected, the cells' font), bold / italic / underline / strikethrough buttons lit when the selection has them, then font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: type, pen, highlighter, eraser, line, arrow, rectangle, ellipse, pen colours and thickness. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
+| **Ribbon**    | **Home**: font and size boxes showing the selected text's font and size ("Mixed" / "–" when the selection mixes several; with table cells selected, the cells' font), bold / italic / underline / strikethrough buttons lit when the selection has them, then font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: draw.io diagrams — new, from a template, insert or link a .drawio.svg file, edit, export, the editor (online / offline) and its theme; old ink can be turned into a diagram. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
 | **Page**      | A title, and under it the date and time the page was created │ **Updated** and when it was last changed (hover for both in words), then a free-form canvas: click anywhere to start a text container there. Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper.                                                                                 |
 
 ## Pages
@@ -189,15 +189,22 @@ Section and New Section Group. Right-click a page for its own menu.
   and shapes line up on the page grid when you place, drag, resize or nudge them (arrow keys move one grid step). The
   grid is the page's rule lines or grid when it has them, otherwise 12 points (shown as dots while you drag). Hold ⌥
   to place something freely.
-- **Ink**: pen and highlighter strokes, lines, arrows, rectangles and ellipses (hold Shift for 45° lines, squares, circles).
-- **Lasso Select** (Draw tab): draw a loop around ink and containers to select them — selected ink is highlighted and
-  a dashed frame surrounds the selection. Drag inside it to move everything together (it snaps when Snap to Grid is
-  on), use the arrow keys to nudge, Delete to remove, Escape to deselect. Moving and deleting undo in one step.
-  **⌘C / ⌘X / ⌘V** copy, cut and paste the whole selection — ink and containers with their pictures and files — keeping
-  its layout: repeated pastes on the same page step 20 points down and right, on another page they land in the same
-  place (or in view). Pasted items arrive selected, ready to drag; one undo removes a paste. The copy also carries the
-  text and a picture of the selection, for pasting into other apps.
-  The eraser removes whole strokes. Press Escape to go back to typing.
+- **Diagrams (draw.io)** — the Draw tab. **New Diagram** (⌃⌘D) or **From Template** puts a draw.io diagram on the page
+  and opens it in **draw.io's own editor** — the one VS Code's draw.io extension uses: every shape library
+  (flowchart, UML, BPMN, network, AWS / Azure / GCP, electrical, mockups…), connectors, waypoints, layers, styles,
+  text, images, pages, layouts, undo — in a window of its own. Every change is saved straight back (and Save & Exit
+  closes it); double-click a diagram (or Edit Diagram, or right-click) to open it again.
+  - Each diagram is kept as a **.drawio.svg** — an ordinary SVG picture with the diagram inside it — so it exports
+    exactly as VS Code keeps them: **Export .drawio.svg** (opens in draw.io, VS Code, any browser), **Export PNG**,
+    Copy Picture; Markdown export writes the .drawio.svg beside the page.
+  - **Insert File** puts a .drawio.svg or .drawio file on the page (a copy). **Link File** keeps the page and the file
+    the same, as in VS Code: editing the diagram here saves the file (in a code repository, say), and changes made to
+    the file elsewhere show on the page within seconds. Dragging a .drawio.svg onto a page inserts it (⌥ to link it).
+  - Search finds diagrams by their name and their shapes' labels; OneNote sync sends them as pictures.
+  - The editor is draw.io online (embed.diagrams.net); **Editor ▸ Download for Offline Use** (about 50 MB, once —
+    draw.io's web app from github.com/jgraph/drawio) works without the internet. **Theme** picks its look.
+  - Ink from before diagrams still shows; **Convert Ink to Diagram** turns a page's pen strokes and shapes into a
+    draw.io diagram (freehand lines, lines, arrows, rectangles, ellipses as draw.io shapes); Clear Ink removes it.
 - **Copy links**: right-click a page, section, section group or notebook ▸ **Copy Link to this Page / Section /
   Section Group / Notebook**; right-click text in a text box or a table cell ▸ **Copy Link to this Paragraph**. The
   clipboard gets just the link's address, so its words are yours to choose where it goes: select words and paste to
@@ -264,6 +271,7 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Chord symbols above the staff (C, Am7, G/B) | **⌃K**, then Space for the next note, Return to finish | Score tab, right-click |
 | Lyrics under the notes | **⌃L**, then Space / Tab for the next note, **-** for the next syllable | Score tab, right-click |
 | Move the note to another guitar string | **⌥↑ / ⌥↓** | Score tab |
+| On a drum staff: kick, snare, hi-hat, open / pedal hi-hat, crash, ride, ride bell, high / mid / floor tom, side stick (⇧: played with the note) | **K S H O P C R B T M F X** | Score tab ▸ Add ▸ Drum |
 | Guitar chord diagrams over the chord symbols | | Score tab ▸ Chord Diagrams, right-click |
 | Capo (fret 1–9) | | Score tab ▸ Capo, right-click ▸ Capo |
 
@@ -310,6 +318,14 @@ bars, key, time, tempo, repeats and title; notes that sound together line up acr
 together (a staff without its own dynamics follows the top one). Click a staff, or press ⌥⌘↑ / ⌥⌘↓, to write on it;
 each staff has its own clef, two voices, slurs, dynamics, lyrics and the rest. The others show a little lighter while
 you write. Staves can be moved up and down, named (the name goes into MusicXML) and removed.
+
+**Drum notation** — **Insert ▸ Drum Score** (or the Insert tab's Drums button, or Staves ▸ Add Percussion Staff, or
+Clef ▸ Percussion) gives a percussion staff: the two-bar percussion clef, no key signature, each instrument on its
+line or space (kick F4, snare C5, toms, hi-hat G5, ride F5, crash A5…) with its notehead — x for cymbals and hi-hats, a
+circle over the open hi-hat, a diamond for the ride bell. Letters add drums (K kick, S snare, H hi-hat…); ⇧ with a
+letter plays that drum with the note (hi-hat with kick); ↑ ↓ move a note to the instrument above or below. Beats,
+voices (hands up, feet down with ⌥⌘2), dynamics, articulations, tuplets and repeats work as on any staff. It plays the
+General MIDI drum kit, and MusicXML keeps it (unpitched notes, noteheads, the kit's instruments).
 
 **Chord diagrams and capo** — **Chord Diagrams** draws a guitar diagram under each chord symbol: the usual open
 chord where there is one (C, G7, Am7, Dsus4, Gmaj7…), else a barre shape on the 6th or 5th string, whichever sits lower

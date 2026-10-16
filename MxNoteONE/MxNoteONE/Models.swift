@@ -432,7 +432,7 @@ struct CellSpan: Codable, Hashable {
 
 /// A container placed anywhere on the page.
 struct PageElement: Codable, Identifiable {
-    enum Kind: String, Codable { case text, image, file, audio, table, chart, score }
+    enum Kind: String, Codable { case text, image, file, audio, table, chart, score, diagram }
 
     var id = UUID()
     var kind: Kind
@@ -451,6 +451,11 @@ struct PageElement: Codable, Identifiable {
     var chart: ChartSpec?
     /// A music score.
     var score: ScoreData?
+    /// A draw.io diagram: `asset` is its .drawio.svg; `preview` a PNG of it; `linkedPath` an outside .drawio.svg
+    /// file it's kept in step with; `diagramText` its labels (for search).
+    var preview: String?
+    var linkedPath: String?
+    var diagramText: String?
 
     var frame: CGRect { CGRect(x: x, y: y, width: width, height: height) }
 }

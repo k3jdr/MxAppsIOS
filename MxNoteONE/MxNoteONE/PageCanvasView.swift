@@ -245,6 +245,9 @@ final class PageCanvasView: NSView {
             view = ChartElementView(element: element)
         case .score:
             view = ScoreElementView(element: element)
+        case .diagram:
+            let data = (element.preview ?? element.asset).flatMap { controller?.assetData($0) }
+            view = DiagramElementView(element: element, image: data.flatMap(NSImage.init(data:)))
         }
         view.canvas = self
         if isExport { view.prepareForExport() }

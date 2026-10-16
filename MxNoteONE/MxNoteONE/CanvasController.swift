@@ -586,11 +586,17 @@ final class CanvasController: NSObject {
     }
 
     /// Insert ▸ Music Score: an empty treble staff in 4/4, ready for notes.
-    func insertScore(piano: Bool = false) {
+    func insertScore(piano: Bool = false, drums: Bool = false) {
         guard ref != nil else { return }
         let p = nextInsertionPoint()
         var element = PageElement(kind: .score, x: p.x, y: p.y, width: 560)
         var score = ScoreData()
+        if drums {
+            // A drum score: a percussion staff, eighth notes ready.
+            score.clef = .percussion
+            score.title = "Drums"
+            ScoreView.inputDuration = .eighth
+        }
         if piano {
             // A piano score: treble and bass staves joined by a brace.
             var bass = ScoreData()
@@ -643,6 +649,13 @@ final class CanvasController: NSObject {
         for url in urls {
             // MusicXML files come in as scores.
             if ["musicxml", "mxl"].contains(url.pathExtension.lowercased()), let view = importMusicXML(url, at: p) {
+                p.y = view.frame.maxY + 14
+                continue
+            }
+            // draw.io diagrams (.drawio.svg, .drawio) come in as diagrams; ⌥ while dropping links the file instead.
+            let lower = url.lastPathComponent.lowercased()
+            if lower.hasSuffix(".drawio.svg") || lower.hasSuffix(".drawio"),
+               let view = insertDiagram(from: url, link: NSEvent.modifierFlags.contains(.option), at: p) {
                 p.y = view.frame.maxY + 14
                 continue
             }
@@ -731,6 +744,9 @@ final class CanvasController: NSObject {
             if let tiff = (view as? ChartElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
         case .score:
             if let tiff = (view as? ScoreElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
+        case .diagram:
+            if let tiff = (view as? DiagramElementView)?.picture.image?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
+            if let data = clip.assetData { item.setData(data, forType: NSPasteboard.PasteboardType("public.svg-image")) }
         }
         let pb = NSPasteboard.general
         pb.clearContents()

@@ -49,14 +49,29 @@ enum MusicXML {
             if group.count == 2 { return score.staffName ?? "Piano" }
             let st = staffScores[group[0]]
             if let name = st.staffName, !name.isEmpty { return name }
+            if st.clef == .percussion { return "Drums" }
             return count == 1 ? (score.showTab == true ? "Guitar" : "Music") : "Staff \(group[0] + 1)"
         }
         out += "  <identification><encoding><software>MxNoteONE</software></encoding></identification>\n  <part-list>"
-        for (p, group) in groups.enumerated() { out += "<score-part id=\"P\(p + 1)\"><part-name>\(escape(partName(group)))</part-name></score-part>" }
+        for (p, group) in groups.enumerated() {
+            out += "<score-part id=\"P\(p + 1)\"><part-name>\(escape(partName(group)))</part-name>"
+            // A drum staff: its instruments and their General MIDI drum sounds (channel 10).
+            if group.count == 1, staffScores[group[0]].clef == .percussion {
+                for drum in DrumKit.instruments { out += "<score-instrument id=\"P\(p + 1)-I\(drum.midi)\"><instrument-name>\(drum.name)</instrument-name></score-instrument>" }
+                for drum in DrumKit.instruments {
+                    out += "<midi-instrument id=\"P\(p + 1)-I\(drum.midi)\"><midi-channel>10</midi-channel><midi-unpitched>\(drum.midi + 1)</midi-unpitched></midi-instrument>"
+                }
+            }
+            out += "</score-part>"
+        }
         out += "</part-list>\n"
         func clefXML(_ clef: ScoreData.Clef, number: Int?) -> String {
             let n = number.map { " number=\"\($0)\"" } ?? ""
-            return clef == .treble ? "<clef\(n)><sign>G</sign><line>2</line></clef>" : "<clef\(n)><sign>F</sign><line>4</line></clef>"
+            switch clef {
+            case .treble: return "<clef\(n)><sign>G</sign><line>2</line></clef>"
+            case .bass: return "<clef\(n)><sign>F</sign><line>4</line></clef>"
+            case .percussion: return "<clef\(n)><sign>percussion</sign></clef>"
+            }
         }
         for (p, group) in groups.enumerated() {
             out += "  <part id=\"P\(p + 1)\">\n"
@@ -94,7 +109,7 @@ enum MusicXML {
                         let number = k * 4 + v + 1
                         var chunk = "", length = 0
                         if bars.indices.contains(m) {
-                            chunk = notesXML(line, bars[m], voice: number, staff: staffNumber)
+                            chunk = notesXML(line, bars[m], voice: number, staff: staffNumber, part: p + 1)
                             length = bars[m].reduce(0) { $0 + duration(line.notes[$1]) }
                         } else if v == 0 {
                             // A bar this staff has no notes in: a whole-bar rest.
@@ -140,7 +155,7 @@ enum MusicXML {
     }
 
     /// One voice's notes in a bar (voice 2 after a <backup>).
-    private static func notesXML(_ score: ScoreData, _ bar: Range<Int>, voice: Int, staff: Int? = nil) -> String {
+    private static func notesXML(_ score: ScoreData, _ bar: Range<Int>, voice: Int, staff: Int? = nil, part: Int = 1) -> String {
         let steps = ["C", "D", "E", "F", "G", "A", "B"]
         var out = ""
         // In a part with two staves, each note and direction says which staff.
@@ -166,18 +181,23 @@ enum MusicXML {
             }
             let tiedFrom = i > 0 && score.notes[i - 1].tie && !note.rest
             let tab = score.showTab == true ? score.tab(i) : []
-            func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?) -> String {
+            func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?,
+                         drum: DrumInstrument? = nil) -> String {
                 var x = "      <note>"
                 if let grace = note.grace { x += grace == "acciaccatura" ? "<grace slash=\"yes\"/>" : "<grace/>" }
                 if chord { x += "<chord/>" }
                 if note.rest {
                     x += "<rest/>"
+                } else if drum != nil {
+                    // A drum: where it's written, not a pitch.
+                    x += "<unpitched><display-step>\(steps[step])</display-step><display-octave>\(octave)</display-octave></unpitched>"
                 } else {
                     x += "<pitch><step>\(steps[step])</step>" + (alter != 0 ? "<alter>\(alter)</alter>" : "") + "<octave>\(octave)</octave></pitch>"
                 }
                 if note.grace == nil { x += "<duration>\(duration(note))</duration>" }
                 if main, tiedFrom { x += "<tie type=\"stop\"/>" }
                 if main, note.tie, !note.rest { x += "<tie type=\"start\"/>" }
+                if let drum, !note.rest { x += "<instrument id=\"P\(part)-I\(drum.midi)\"/>" }
                 x += "<voice>\(voice)</voice><type>\(types[note.duration]!)</type>"
                 if note.dotted { x += "<dot/>" }
                 if let accidental { x += "<accidental>\(accidental > 0 ? "sharp" : accidental < 0 ? "flat" : "natural")</accidental>" }
@@ -185,6 +205,9 @@ enum MusicXML {
                     x += "<time-modification><actual-notes>\(actual)</actual-notes><normal-notes>\(note.tupletNormal)</normal-notes></time-modification>"
                 }
                 if stemDown { x += "<stem>down</stem>" }
+                if let drum, !note.rest, drum.head != .normal {
+                    x += "<notehead>\(drum.head == .x ? "x" : drum.head == .circleX ? "circle-x" : "diamond")</notehead>"
+                }
                 x += staffTag
                 var notations = ""
                 if main, note.tupletActual != nil, starts.contains(i) { notations += "<tuplet type=\"start\" bracket=\"\(note.duration.rawValue >= 8 ? "no" : "yes")\"/>" }
@@ -208,12 +231,14 @@ enum MusicXML {
             func spot(_ midi: Int) -> (string: Int, fret: Int)? { tab.first { ScoreData.tuning[$0.string] + $0.fret == midi - shift } }
             let mainMidi = score.midi(i)
             out += noteXML(chord: false, step: note.step, octave: note.octave, alter: note.rest ? 0 : score.soundingAlter(i),
-                           accidental: score.showsAccidental(i) ? note.alter : nil, main: true, tabSpot: mainMidi.flatMap(spot))
+                           accidental: score.showsAccidental(i) ? note.alter : nil, main: true,
+                           tabSpot: score.clef == .percussion ? nil : mainMidi.flatMap(spot), drum: DrumKit.instrument(note.drum))
             for tone in note.chord ?? [] where !note.rest {
                 let alter = tone.alter ?? score.keyAlter(tone.step, at: i)
                 let midi = ScoreData.midi(step: tone.step, octave: tone.octave, alter: alter)
                 out += noteXML(chord: true, step: tone.step, octave: tone.octave, alter: alter,
-                               accidental: tone.alter != nil && tone.alter != score.keyAlter(tone.step, at: i) ? tone.alter : nil, main: false, tabSpot: spot(midi))
+                               accidental: tone.alter != nil && tone.alter != score.keyAlter(tone.step, at: i) ? tone.alter : nil, main: false,
+                               tabSpot: score.clef == .percussion ? nil : spot(midi), drum: DrumKit.instrument(tone.drum))
             }
             if note.hairpinEnd == true {
                 out += "      <direction placement=\"below\"><direction-type><wedge type=\"stop\"/></direction-type><voice>\(voice)</voice>\(staffTag)</direction>\n"
@@ -387,7 +412,7 @@ enum MusicXML {
                         if !seenClef, let clef = e.elements(forName: "clef").first(where: {
                             ($0.attribute(forName: "number")?.stringValue ?? "1") == mine
                         }), let sign = text(clef, "sign") {
-                            score.clef = sign == "F" ? .bass : .treble
+                            score.clef = sign == "F" ? .bass : sign == "percussion" ? .percussion : .treble
                             seenClef = true
                         }
                         seenAttributes = true
@@ -478,14 +503,29 @@ enum MusicXML {
                             continue
                         }
                         let pitch = e.elements(forName: "pitch").first
+                        // A drum: its written place, and which instrument (by its MIDI sound, else by place and notehead).
+                        let unpitched = e.elements(forName: "unpitched").first
                         let step = text(pitch, "step").flatMap { stepNames.firstIndex(of: $0) }
-                        let octave = text(pitch, "octave").flatMap(Int.init) ?? 4
+                            ?? text(unpitched, "display-step").flatMap { stepNames.firstIndex(of: $0) }
+                        let octave = text(pitch, "octave").flatMap(Int.init) ?? text(unpitched, "display-octave").flatMap(Int.init) ?? 4
+                        var drumID: String?
+                        if unpitched != nil, let step {
+                            let head: DrumHead = switch text(e, "notehead") {
+                            case "x", "cross": .x
+                            case "circle-x", "circled": .circleX
+                            case "diamond": .diamond
+                            default: .normal
+                            }
+                            let byMidi = e.elements(forName: "instrument").first?.attribute(forName: "id")?.stringValue
+                                .flatMap { drumNotes[$0] }.flatMap { DrumKit.instrument(midi: $0) }
+                            drumID = (byMidi ?? DrumKit.instrument(diatonic: octave * 7 + step, head: head))?.id
+                        }
                         let alter = Int((text(pitch, "alter").flatMap(Double.init) ?? 0).rounded())
                         let hasAccidental = e.elements(forName: "accidental").first != nil
                         if isChord {
                             guard let step else { continue }
                             let written: Int? = hasAccidental || alter != ScoreData.keyAlter(step, fifths: key) ? alter : nil
-                            let tone = ChordTone(step: step, octave: octave, alter: written)
+                            let tone = ChordTone(step: step, octave: octave, alter: drumID == nil ? written : nil, drum: drumID)
                             if inSecond {
                                 if var last = v2.popLast() { last.chord = (last.chord ?? []) + [tone]; v2.append(last) }
                             } else if var last = score.notes.popLast() {
@@ -511,6 +551,7 @@ enum MusicXML {
                         if let step, !note.rest {
                             note.step = step
                             note.octave = octave
+                            note.drum = drumID
                             note.alter = hasAccidental || alter != ScoreData.keyAlter(step, fifths: key) ? alter : nil
                         }
                         note.tie = e.elements(forName: "tie").contains { $0.attribute(forName: "type")?.stringValue == "start" }
@@ -585,6 +626,13 @@ enum MusicXML {
             return score
         }
         // Every part's staves: a part with two staves (piano) gives two; the first part's become a grand staff.
+        // Drum instruments: id → General MIDI drum note.
+        var drumNotes: [String: Int] = [:]
+        for node in (try? rootElement.nodes(forXPath: "part-list/score-part/midi-instrument")) ?? [] {
+            guard let el = node as? XMLElement, let id = el.attribute(forName: "id")?.stringValue,
+                  let n = text(el, "midi-unpitched").flatMap(Int.init) else { continue }
+            drumNotes[id] = n - 1
+        }
         let partNames: [String: String] = Dictionary(uniqueKeysWithValues: ((try? rootElement.nodes(forXPath: "part-list/score-part")) ?? [])
             .compactMap { $0 as? XMLElement }.compactMap { el in el.attribute(forName: "id")?.stringValue.map { ($0, text(el, "part-name") ?? "") } })
         var staves: [ScoreData] = []

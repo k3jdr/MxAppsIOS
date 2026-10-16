@@ -447,6 +447,7 @@ struct InsertRibbon: View {
         RibbonGroup("Music") {
             RibbonButton("Score", "music.note.list", large: true) { canvas?.insertScore() }
             RibbonButton("Piano", "pianokeys", large: true) { canvas?.insertScore(piano: true) }
+            RibbonButton("Drums", "circle.grid.cross", large: true) { canvas?.insertScore(drums: true) }
             RibbonButton("MusicXML", "square.and.arrow.down", large: true) { canvas?.chooseMusicXML() }
         }
         RibbonGroup("Files") {
@@ -482,62 +483,57 @@ struct InsertRibbon: View {
 
 // MARK: - Draw
 
+/// The Draw tab: draw.io diagrams (the editor VS Code's draw.io extension uses), saved as .drawio.svg.
 struct DrawRibbon: View {
     @Bindable private var editor = NotebookStore.shared.editor
-    private static let widths: [Double] = [1, 2, 3, 5, 8, 12]
+    @Bindable private var download = DrawioDownload.shared
+    @AppStorage(DrawioSource.themeKey) private var theme = "kennedy"
+    @AppStorage(DrawioSource.modeKey) private var offline = false
+    private var canvas: CanvasController? { NotebookStore.shared.canvas }
 
     var body: some View {
-        RibbonGroup("Tools") {
-            ForEach([CanvasTool.lasso, .type, .pen, .highlighter, .eraser]) { tool in
-                RibbonButton(tool.title, tool.symbol, large: true, active: editor.tool == tool) { editor.tool = tool }
-            }
+        let _ = editor.scoreInputChanged
+        RibbonGroup("Diagram") {
+            RibbonButton("New Diagram", "square.on.square.dashed", large: true) { canvas?.newDiagram() }
+            RibbonButton("From Template", "rectangle.3.group", large: true) { canvas?.newDiagram(template: true) }
+            RibbonButton("Insert File", "doc.badge.plus", large: true) { canvas?.chooseDiagramFile(link: false) }
+            RibbonButton("Link File", "link.badge.plus", large: true) { canvas?.chooseDiagramFile(link: true) }
         }
-        RibbonGroup("Shapes") {
-            ForEach([CanvasTool.line, .arrow, .rectangle, .ellipse]) { tool in
-                RibbonButton(tool.title + " (⇧ to constrain)", tool.symbol, active: editor.tool == tool) { editor.tool = tool }
+        RibbonGroup("Selected Diagram") {
+            RibbonButton("Edit Diagram", "pencil.and.outline", large: true) {
+                if let d = canvas?.selectedDiagram { d.edit() } else { NSSound.beep() }
             }
+            RibbonButton("Export .drawio.svg", "square.and.arrow.up") { canvas?.selectedDiagram?.export(png: false) }
+            RibbonButton("Export PNG", "photo") { canvas?.selectedDiagram?.export(png: true) }
         }
-        RibbonGroup("Pen Color") {
-            ForEach(Palette.pen, id: \.0) { name, color in
-                colorDot(color, selected: editor.penColor == RGBA(color), help: name) {
-                    editor.penColor = RGBA(color)
-                    if editor.tool == .type || editor.tool == .eraser || editor.tool == .highlighter { editor.tool = .pen }
+        RibbonGroup("Editor") {
+            RibbonMenu(DrawioSource.offlineInstalled && offline ? "Offline" : "Online", DrawioSource.offlineInstalled && offline ? "internaldrive" : "globe") {
+                Button("Online (embed.diagrams.net)") { offline = false }
+                if DrawioSource.offlineInstalled {
+                    Button("Offline (the copy on this Mac)") { offline = true }
+                    Divider()
+                    Button("Remove the Offline Copy") { download.remove() }
+                } else {
+                    Button("Download for Offline Use (about 50 MB)…") { download.start() }
                 }
             }
-        }
-        RibbonGroup("Thickness") {
-            RibbonMenu("\(editor.penWidth.formatted()) pt", "lineweight") {
-                ForEach(Self.widths, id: \.self) { width in
-                    Button("\(width.formatted()) pt") { editor.penWidth = width }
+            .tip("Editor", "Where the draw.io editor comes from: online, or a copy downloaded once for working without the internet (as VS Code's draw.io extension).")
+            RibbonMenu("Theme", "paintbrush") {
+                ForEach(DrawioSource.themes, id: \.0) { id, name in
+                    Button(name) { theme = id }
                 }
             }
-        }
-        RibbonGroup("Highlighter") {
-            ForEach(Palette.highlight.prefix(6), id: \.0) { name, color in
-                let rgba = RGBA(color.withAlphaComponent(0.45))
-                colorDot(color, selected: editor.highlighterColor == rgba, help: name) {
-                    editor.highlighterColor = rgba
-                    editor.tool = .highlighter
-                }
+            .tip("Theme", "The draw.io editor's look: Standard, Minimal, Atlas, Sketch, Simple or Dark.")
+            if let progress = download.progress {
+                ProgressView(value: progress).frame(width: 60).help(download.message)
             }
         }
-        RibbonGroup("Ink") {
-            RibbonButton("Clear All Ink", "trash", large: true) { NotebookStore.shared.canvas?.clearInk() }
+        if !(canvas?.canvas.inkView.strokes.isEmpty ?? true) {
+            RibbonGroup("Ink") {
+                RibbonButton("Convert Ink to Diagram", "scribble.variable", large: true) { canvas?.convertInkToDiagram() }
+                RibbonButton("Clear Ink", "trash") { canvas?.clearInk() }
+            }
         }
-    }
-
-    private func colorDot(_ color: NSColor, selected: Bool, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Circle()
-                .fill(Color(nsColor: color))
-                .frame(width: 16, height: 16)
-                .overlay(Circle().stroke(Color.primary.opacity(0.25), lineWidth: 0.5))
-                .padding(3)
-                .overlay(Circle().stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .tip(help)
     }
 }
 
@@ -667,6 +663,7 @@ struct ScoreRibbon: View {
             RibbonMenu("Add Staff", "plus.rectangle") {
                 Button("Treble Staff") { act { $0.addStaff(.treble) } }
                 Button("Bass Staff") { act { $0.addStaff(.bass) } }
+                Button("Percussion Staff (Drums)") { act { $0.addStaff(.percussion) } }
                 Divider()
                 Button(count == 1 ? "Make Piano Grand Staff" : "Piano Brace On / Off") { act { $0.makeGrandStaff() } }
                 if count > 1 {
@@ -700,11 +697,37 @@ struct ScoreRibbon: View {
             RibbonButton("Voice 2 (⌥⌘2)", "2.circle", active: staff?.currentVoice == 1) { act { $0.setVoice(1) } }
         }
         RibbonGroup("Add") {
-            ForEach(Array(["C", "D", "E", "F", "G", "A", "B"].enumerated()), id: \.offset) { step, name in
-                Button(name) { act { $0.insert(step: step) } }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tip("Add \(name) (\(name.lowercased()))", "Adds a \(name) of the current length after the cursor, in the octave nearest the note before. ⇧\(name) adds it to the chord instead.")
+            if staff?.isPercussion == true {
+                // A drum staff: the kit's instruments.
+                Menu {
+                    ForEach(DrumKit.instruments) { drum in
+                        Button("\(drum.name)  \(String(drum.key).uppercased())") { act { $0.insertDrum(drum) } }
+                    }
+                    Divider()
+                    ForEach(DrumKit.instruments) { drum in
+                        Button("With \(drum.name)  ⇧\(String(drum.key).uppercased())") { act { $0.addDrumToChord(drum) } }
+                    }
+                } label: {
+                    Label("Drum", systemImage: "circle.grid.cross")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .tip("Drum", "Adds a drum: K kick, S snare, H hi-hat, O open hi-hat, P pedal hi-hat, C crash, R ride, B ride bell, T M F toms, X side stick. ⇧ with the key plays it with the note.")
+                ForEach(["kick", "snare", "hihat", "crash", "ride"], id: \.self) { id in
+                    if let drum = DrumKit.instrument(id) {
+                        Button(String(drum.key).uppercased()) { act { $0.insertDrum(drum) } }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .tip("\(drum.name) (\(drum.key))", "Adds a \(drum.name.lowercased()) of the current length after the cursor; ⇧\(String(drum.key).uppercased()) plays it with the note.")
+                    }
+                }
+            } else {
+                ForEach(Array(["C", "D", "E", "F", "G", "A", "B"].enumerated()), id: \.offset) { step, name in
+                    Button(name) { act { $0.insert(step: step) } }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tip("Add \(name) (\(name.lowercased()))", "Adds a \(name) of the current length after the cursor, in the octave nearest the note before. ⇧\(name) adds it to the chord instead.")
+                }
             }
             RibbonButton("Rest (0)", "pause", large: true) { act { $0.insert(step: nil) } }
         }

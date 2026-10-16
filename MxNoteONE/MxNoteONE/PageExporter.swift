@@ -114,6 +114,11 @@ enum PageExporter {
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         panel.nameFieldStringValue = safeName(title) + ".md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        writeMarkdown(content, title: title, ref: ref, to: url)
+    }
+
+    /// Writes a page as Markdown, its pictures, files and diagrams in a folder beside it.
+    static func writeMarkdown(_ content: PageContent, title: String, ref: PageRef, to url: URL) {
         let assetsName = url.deletingPathExtension().lastPathComponent + " files"
         let assetsFolder = url.deletingLastPathComponent().appending(path: assetsName)
         var lines: [String] = ["# " + title, ""]
@@ -141,6 +146,14 @@ enum PageExporter {
                 try? data.write(to: assetsFolder.appending(path: fileName))
                 let link = (assetsName + "/" + fileName).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? fileName
                 lines.append(element.kind == .image ? "![](\(link))" : "[\(fileName)](\(link))")
+            case .diagram:
+                // A diagram as a .drawio.svg beside the Markdown: a picture there, and still a draw.io diagram (VS Code).
+                guard let asset = element.asset, let data = store.assetData(asset, for: ref) else { continue }
+                let fileName = (element.fileName ?? "Diagram") + "-" + String(element.id.uuidString.prefix(4)) + ".drawio.svg"
+                try? FileManager.default.createDirectory(at: assetsFolder, withIntermediateDirectories: true)
+                try? data.write(to: assetsFolder.appending(path: fileName))
+                let link = (assetsName + "/" + fileName).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? fileName
+                lines.append("![\(element.fileName ?? "Diagram")](\(link))")
             case .score:
                 // A score as its title, signatures and notes in letter names.
                 guard let score = element.score else { continue }

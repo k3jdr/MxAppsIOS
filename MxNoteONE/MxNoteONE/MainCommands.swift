@@ -208,6 +208,13 @@ struct MainCommands: Commands {
                 .keyboardShortcut("t", modifiers: [.command, .control])
             Button("Music Score") { canvas?.insertScore() }
             Button("Piano Score (Grand Staff)") { canvas?.insertScore(piano: true) }
+            Button("Drum Score (Percussion Staff)") { canvas?.insertScore(drums: true) }
+            Divider()
+            Button("Diagram (draw.io)") { canvas?.newDiagram() }
+                .keyboardShortcut("d", modifiers: [.command, .control])
+            Button("Diagram from Template…") { canvas?.newDiagram(template: true) }
+            Button("Diagram File (.drawio.svg)…") { canvas?.chooseDiagramFile(link: false) }
+            Button("Link Diagram File…") { canvas?.chooseDiagramFile(link: true) }
             Button("Music Score from MusicXML…") { canvas?.chooseMusicXML() }
             Button("Picture…") { canvas?.choosePictures() }
                 .keyboardShortcut("p", modifiers: [.command, .control])
@@ -278,11 +285,6 @@ struct MainCommands: Commands {
             }
             Button(editor.snapToGrid ? "Turn Off Snap to Grid" : "Snap to Grid") { editor.snapToGrid.toggle() }
                 .keyboardShortcut("g", modifiers: [.command, .control])
-            Menu("Drawing Tool") {
-                ForEach(CanvasTool.allCases) { tool in
-                    Button(tool.title) { editor.tool = tool }
-                }
-            }
             Divider()
             Button("Recycle Bin") {
                 store.recycleBinNotebookID = store.currentNotebook?.id

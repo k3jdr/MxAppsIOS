@@ -92,6 +92,14 @@ enum OneNoteHTML {
                 parts.append(GraphClient.Part(name: name, contentType: type, data: imageData))
                 let height = Int(max(element.height - grip, 10).rounded())
                 body += "<img style=\"position:absolute;left:\(x)px;top:\(y)px\" width=\"\(w)\" height=\"\(height)\" src=\"name:\(name)\" />\n"
+            case .diagram:
+                // A diagram goes to OneNote as its picture.
+                guard let asset = element.preview ?? element.asset, let data = assetData(asset),
+                      let (imageData, type) = webImage(data, ext: (asset as NSString).pathExtension) else { continue }
+                let name = "img\(parts.count)"
+                parts.append(GraphClient.Part(name: name, contentType: type, data: imageData))
+                let height = Int(max(element.height - grip, 10).rounded())
+                body += "<img style=\"position:absolute;left:\(x)px;top:\(y)px\" width=\"\(w)\" height=\"\(height)\" src=\"name:\(name)\" />\n"
             case .file, .audio:
                 guard let asset = element.asset, let data = assetData(asset) else { continue }
                 let fileName = element.fileName ?? asset

@@ -18,6 +18,9 @@ struct SettingsView: View {
     @State private var useOfficeFonts = OfficeFonts.enabled
     @AppStorage(WebBrowser.key) private var browserID = ""
     @AppStorage(PythonLocator.key) private var pythonPath = ""
+    @AppStorage(DrawioSource.modeKey) private var drawioOffline = false
+    @AppStorage(DrawioSource.themeKey) private var drawioTheme = "kennedy"
+    @Bindable private var drawioDownload = DrawioDownload.shared
     @State private var browsers = WebBrowser.installed()
 
     private var officeFontsStatus: String {
@@ -84,6 +87,32 @@ struct SettingsView: View {
                 Text(browserID.isEmpty
                      ? "Links in your notes open in the browser the Mac uses for everything."
                      : "Links in your notes (text, tables, the link card) open in \(browsers.first { $0.id == browserID }?.name ?? "the chosen browser") — other apps still use the Mac's default. Email and page links open as usual.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Section("Diagrams (draw.io)") {
+                Picker("Editor:", selection: $drawioOffline) {
+                    Text("Online (embed.diagrams.net)").tag(false)
+                    Text(DrawioSource.offlineInstalled ? "Offline (the copy on this Mac)" : "Offline (download first)").tag(true)
+                        .disabled(!DrawioSource.offlineInstalled)
+                }
+                Picker("Theme:", selection: $drawioTheme) {
+                    ForEach(DrawioSource.themes, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                HStack {
+                    if DrawioSource.offlineInstalled {
+                        Button("Remove Offline Copy") { drawioDownload.remove() }
+                    } else {
+                        Button("Download for Offline Use (about 50 MB)") { drawioDownload.start() }
+                            .disabled(drawioDownload.progress != nil)
+                    }
+                    if drawioDownload.progress != nil { ProgressView().controlSize(.small) }
+                    Spacer()
+                }
+                Text(drawioDownload.message.isEmpty
+                     ? "Diagrams are draw.io's own editor — the one VS Code's draw.io extension uses — saved as .drawio.svg. Online needs the internet while editing; the offline copy (draw.io's web app from github.com/jgraph/drawio) doesn't."
+                     : drawioDownload.message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -243,12 +243,10 @@ extension QuickHelp {
         "Insert/Links": "A link to a web page, an email address or a page in your notebooks.",
         "Insert/Time Stamp": "Today's date, the time, or both, where the caret is.",
         "Insert/Pages": "New pages from templates.",
-        "Draw/Tools": "Select, type, pen, highlighter and eraser for drawing on the page.",
-        "Draw/Shapes": "Lines, arrows, rectangles and ellipses.",
-        "Draw/Pen Color": "The pen's colour.",
-        "Draw/Thickness": "The pen's line width.",
-        "Draw/Highlighter": "The highlighter's colour.",
-        "Draw/Ink": "Clear or arrange the drawing on the page.",
+        "Draw/Diagram": "draw.io diagrams — flowcharts, UML, network, org charts, mind maps, anything — saved as .drawio.svg (a picture with the diagram inside, as VS Code's draw.io extension saves them).",
+        "Draw/Selected Diagram": "Edit the selected diagram in draw.io (or double-click it), export it as .drawio.svg or PNG.",
+        "Draw/Editor": "draw.io online, or a copy on this Mac for working offline; the editor's theme.",
+        "Draw/Ink": "Pen strokes from before diagrams: turn them into a draw.io diagram, or clear them.",
         "View/Page Setup": "The page's colour and rule lines (lines or grid).",
         "View/Zoom": "Zoom the page in or out, to actual size or to the window's width.",
         "View/Views": "Full Page View, the Recycle Bin, snapping to the grid, the Tag Summary.",
@@ -262,7 +260,7 @@ extension QuickHelp {
         "Score/Notes": "The length of the next notes (or the selected one), dots, tuplets and grace notes.",
         "Score/Expression": "Dynamics (pp … ff), slurs, crescendo and diminuendo hairpins.",
         "Score/Articulation": "Staccato, tenuto, accent, marcato, fermata and ornaments on the selected notes.",
-        "Score/Staves": "Several staves: add a treble or bass staff, make a piano grand staff, move between staves (⌥⌘↑ ⌥⌘↓), rename or remove one.",
+        "Score/Staves": "Several staves: add a treble, bass or percussion (drum) staff, make a piano grand staff, move between staves (⌥⌘↑ ⌥⌘↓), rename or remove one.",
         "Score/Bars": "Key changes and repeat signs at the selected note's bar.",
         "Score/Voice": "Which voice you're writing: voice 1 (stems up) or voice 2 (stems down).",
         "Score/Add": "Add notes A–G or a rest after the cursor.",
@@ -314,12 +312,15 @@ extension QuickHelp {
         "Date & Time": "Types today's date and the time.",
         "Page Templates": "A new page laid out from a template.",
         // Draw
-        "Lasso": "Select drawings and boxes by drawing round them.",
-        "Type": "Click on the page to type.",
-        "Pen": "Draw on the page.",
-        "Highlighter": "Draw see-through highlighter strokes.",
-        "Eraser": "Erase drawn strokes.",
-        "Clear All Ink": "Removes every drawing from the page.",
+        "New Diagram": "A new draw.io diagram on the page, opened in the draw.io editor. Every change is saved back to the page.",
+        "From Template": "A new diagram from one of draw.io's templates (flowcharts, UML, networks, business, tables…).",
+        "Insert File": "Puts a .drawio.svg or .drawio file on the page (a copy, kept in the notebook).",
+        "Link File": "Links a .drawio.svg file (in a code repository, say): editing it here saves the file, and changes made to it elsewhere (VS Code) show here.",
+        "Edit Diagram": "Opens the selected diagram in draw.io (double-clicking it does too).",
+        "Export .drawio.svg": "Saves the diagram as .drawio.svg — a picture any browser shows, that draw.io and VS Code open as a diagram.",
+        "Export PNG": "Saves the diagram's picture as PNG.",
+        "Convert Ink to Diagram": "Turns the page's pen strokes and shapes into a draw.io diagram you can edit.",
+        "Clear Ink": "Removes the pen strokes from the page.",
         // View
         "Page Color": "The page's background colour.",
         "Rule Lines": "Lines or a grid on the page, to write and line things up on.",
@@ -398,7 +399,9 @@ extension QuickHelp {
         "Staff Down": "Write on the staff below.",
         "Add Staff": "Adds a treble or bass staff under the others; they share the bars, key, time and tempo, and play together.",
         "Piano Staff": "Treble and bass staves joined by a brace, bar lines running through both — for piano, harp or organ.",
-        "Piano": "Inserts a piano score: treble and bass staves joined by a brace.",
+        "Drums": "Inserts a drum score (a percussion staff): K kick, S snare, H hi-hat, C crash, R ride, T M F toms… ⇧ with the key plays it with the note.",
+        "Drum": "Adds a drum on a percussion staff: K kick, S snare, H hi-hat, O open hi-hat, P pedal hi-hat, C crash, R ride, B ride bell, T M F toms, X side stick.",
+                "Piano": "Inserts a piano score: treble and bass staves joined by a brace.",
         "Key Change": "A new key from the selected note's bar: a double bar, cancelling naturals, the new key.",
         "Start Repeat |:": "The repeated passage starts at the selected note's bar.",
         "End Repeat :|": "At the end of the selected note's bar, go back to the start repeat (once).",
@@ -473,6 +476,10 @@ extension ScoreView {
             let alter = line.soundingAlter(ref.index)
             let pitch = names[n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "") + "\(n.octave)"
             title = n.grace != nil ? "Grace note \(pitch) (\(n.grace!))" : "\(pitch) — \(length)"
+            if let drum = DrumKit.instrument(n.drum) {
+                let with = (n.chord ?? []).compactMap { DrumKit.instrument($0.drum)?.name }
+                title = ([drum.name] + with).joined(separator: " + ") + " — \(length)"
+            }
         }
         var facts: [String] = ["Bar \(line.bar(of: ref.index) + 1)" + (fullScore.staffCount > 1 ? ", \(fullScore.staffTitle(ref.staff))" : "")
                                + (fullScore.forStaff(ref.staff).hasSecondVoice ? ", voice \(ref.voice + 1)" : "")]

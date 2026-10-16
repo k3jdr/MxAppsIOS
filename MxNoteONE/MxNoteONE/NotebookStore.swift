@@ -1264,6 +1264,16 @@ final class NotebookStore {
         }
     }
 
+    /// Writes new contents to an existing asset (a diagram saved again keeps its file).
+    func overwriteAsset(_ name: String, data: Data, for ref: PageRef) {
+        guard let nb = notebook(ref.notebookID) else { return }
+        do {
+            try write(data, to: nb.assetURL(name), key: nb.keys[ref.sectionID])
+        } catch {
+            report("Couldn't save the diagram in the notebook.", error)
+        }
+    }
+
     func assetData(_ name: String, for ref: PageRef) -> Data? {
         guard let nb = notebook(ref.notebookID) else { return nil }
         return try? read(nb.assetURL(name), key: nb.keys[ref.sectionID])
@@ -1505,6 +1515,9 @@ enum PageIndexer {
                 texts.append(element.table?.rows.map { $0.joined(separator: " ") }.joined(separator: "\n") ?? "")
             case .file, .audio, .image:
                 if let name = element.fileName { texts.append(name) }
+            case .diagram:
+                // A diagram's name and its shapes' labels.
+                texts.append([element.fileName, element.diagramText].compactMap { $0 }.joined(separator: " "))
             case .chart:
                 if let title = element.chart?.title, !title.isEmpty { texts.append(title) }
             case .score:
