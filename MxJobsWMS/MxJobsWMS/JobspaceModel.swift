@@ -55,7 +55,7 @@ nonisolated enum NodeKind: String, Codable, CaseIterable, Identifiable, Sendable
     // Layer 2
     case agentTask, aggregate, decision
     // Layer 3
-    case apiRead, dataNormalize
+    case apiRead, pythonScript, dataNormalize
 
     var id: String { rawValue }
 
@@ -63,7 +63,7 @@ nonisolated enum NodeKind: String, Codable, CaseIterable, Identifiable, Sendable
         switch self {
         case .trigger, .instructionSet, .approvalGate, .executeRequest, .outcomeReport: .operations
         case .agentTask, .aggregate, .decision: .agents
-        case .apiRead, .dataNormalize: .data
+        case .apiRead, .pythonScript, .dataNormalize: .data
         }
     }
 
@@ -78,6 +78,7 @@ nonisolated enum NodeKind: String, Codable, CaseIterable, Identifiable, Sendable
         case .aggregate: "Aggregate Results"
         case .decision: "Decision"
         case .apiRead: "API Data Read"
+        case .pythonScript: "Python Script"
         case .dataNormalize: "Normalize Data"
         }
     }
@@ -93,6 +94,7 @@ nonisolated enum NodeKind: String, Codable, CaseIterable, Identifiable, Sendable
         case .aggregate: "Combines the results of several agents"
         case .decision: "Routes the flow on a condition"
         case .apiRead: "Calls an API endpoint of a subscription"
+        case .pythonScript: "Runs Python: arguments in as JSON, JSON out"
         case .dataNormalize: "Maps raw response fields to named data points"
         }
     }
@@ -108,6 +110,7 @@ nonisolated enum NodeKind: String, Codable, CaseIterable, Identifiable, Sendable
         case .aggregate: "arrow.triangle.merge"
         case .decision: "arrow.triangle.branch"
         case .apiRead: "network"
+        case .pythonScript: "terminal"
         case .dataNormalize: "tablecells"
         }
     }
@@ -175,6 +178,8 @@ nonisolated struct ExpectedOutcome: Codable, Equatable, Sendable {
     var requiredFields: [String] = []
     /// Name under which the result is published to downstream nodes.
     var outputName = ""
+    /// Checks on values in the result, e.g. solverStatus == optimal, turnover < {{maxTurnover}}.
+    var assertions: [ValueAssertion] = []
 
     init() {}
 
@@ -184,7 +189,38 @@ nonisolated struct ExpectedOutcome: Codable, Equatable, Sendable {
         successStatus = c.value(.successStatus, "200-299")
         requiredFields = c.value(.requiredFields, [])
         outputName = c.value(.outputName, "")
+        assertions = c.value(.assertions, [])
     }
+}
+
+nonisolated enum AssertionOp: String, Codable, CaseIterable, Identifiable, Sendable {
+    case equals = "==", notEquals = "!=", less = "<", lessOrEqual = "<=", greater = ">", greaterOrEqual = ">="
+    case contains, exists
+    var id: String { rawValue }
+}
+
+/// A check on one value of a step's result: `path op value`. The value may use {{argument}} placeholders.
+nonisolated struct ValueAssertion: Codable, Identifiable, Equatable, Sendable {
+    var id = UUID()
+    var path = ""
+    var op = AssertionOp.equals
+    var value = ""
+
+    init(_ path: String = "", _ op: AssertionOp = .equals, _ value: String = "") {
+        self.path = path
+        self.op = op
+        self.value = value
+    }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.value(.id, UUID())
+        path = c.value(.path, "")
+        op = c.value(.op, .equals)
+        value = c.value(.value, "")
+    }
+
+    var label: String { op == .exists ? "\(path) exists" : "\(path) \(op.rawValue) \(value)" }
 }
 
 nonisolated enum FailureAction: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -387,6 +423,40 @@ nonisolated struct ApiCallSpec: Codable, Equatable, Sendable {
     }
 }
 
+/// Layer 3 Python script. It gets {"arguments": {...}, "inputs": {...}, "step": title} as JSON on
+/// stdin and prints its result as JSON on stdout. The optional subscription's key and base URL are
+/// passed as MXJOBS_API_KEY / MXJOBS_BASE_URL (and under the subscription's key name when that is
+/// an environment-variable name such as FINNHUB_TOKEN).
+nonisolated struct ScriptSpec: Codable, Equatable, Sendable {
+    static let template = """
+    import json, os, sys
+
+    request = json.load(sys.stdin)        # {"arguments": {...}, "inputs": {...}, "step": "..."}
+    args = request["arguments"]
+    inputs = request["inputs"]            # outputs of the steps linked into this one
+    api_key = os.environ.get("MXJOBS_API_KEY")  # from the step's subscription, if any
+
+    result = {"arguments": args, "inputCount": len(inputs)}
+
+    json.dump(result, sys.stdout)         # the step's output (must be JSON)
+
+    """
+
+    var code = ScriptSpec.template
+    /// Path of python3; empty = the first one found (Homebrew, python.org, Apple's).
+    var interpreter = ""
+    var subscriptionID: UUID?
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = c.value(.code, "")
+        interpreter = c.value(.interpreter, "")
+        subscriptionID = c.value(.subscriptionID, nil)
+    }
+}
+
 /// Layer 3 normalisation: output field ← JSON path in the input.
 nonisolated struct TransformSpec: Codable, Equatable, Sendable {
     var mappings: [KeyValue] = []
@@ -423,6 +493,7 @@ nonisolated struct JobNode: Codable, Identifiable, Equatable, Sendable {
     var report: ReportSpec?
     var api: ApiCallSpec?
     var transform: TransformSpec?
+    var script: ScriptSpec?
 
     var layer: Layer { kind.layer }
 
@@ -439,6 +510,7 @@ nonisolated struct JobNode: Codable, Identifiable, Equatable, Sendable {
         case .outcomeReport: report = ReportSpec()
         case .apiRead: api = ApiCallSpec()
         case .dataNormalize: transform = TransformSpec()
+        case .pythonScript: script = ScriptSpec()
         }
         if kind == .executeRequest || kind == .approvalGate {
             exceptions.onFailure = .escalateToUser
@@ -466,6 +538,7 @@ nonisolated struct JobNode: Codable, Identifiable, Equatable, Sendable {
         report = c.value(.report, nil)
         api = c.value(.api, nil)
         transform = c.value(.transform, nil)
+        script = c.value(.script, nil)
     }
 }
 
@@ -493,7 +566,7 @@ nonisolated struct JobLink: Codable, Identifiable, Equatable, Sendable {
 // MARK: - API subscriptions (Layer 3 configuration)
 
 nonisolated enum AuthStyle: String, Codable, CaseIterable, Identifiable, Sendable {
-    case none, queryParameter, header, bearer
+    case none, queryParameter, header, bearer, localService
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -501,7 +574,28 @@ nonisolated enum AuthStyle: String, Codable, CaseIterable, Identifiable, Sendabl
         case .queryParameter: "Key as query parameter"
         case .header: "Key in header"
         case .bearer: "Bearer token"
+        case .localService: "Local service (optional token)"
         }
+    }
+
+    /// Calls fail without a stored key. A local service sends its token only when one is stored.
+    var requiresKey: Bool { self == .queryParameter || self == .header || self == .bearer }
+}
+
+nonisolated extension ApiSubscription {
+    static let localServicePort = 8765
+
+    /// A Python (or any) service on this Mac, e.g. Samples/python-service/mxjobs_service.py.
+    static func localService(port: Int = localServicePort) -> ApiSubscription {
+        var sub = ApiSubscription()
+        sub.name = "Local Python service"
+        sub.provider = "This Mac"
+        sub.baseURL = "http://127.0.0.1:\(port)"
+        sub.auth = .localService
+        sub.keyName = ""
+        sub.notes = "Start it with: python3 Samples/python-service/mxjobs_service.py --port \(port). "
+            + "Store a token here only if the service is started with --token."
+        return sub
     }
 }
 
@@ -519,6 +613,9 @@ nonisolated struct ApiSubscription: Codable, Identifiable, Equatable, Sendable {
     /// Headers sent with every call (e.g. the User-Agent SEC EDGAR asks for).
     var defaultHeaders: [KeyValue] = []
     var notes = ""
+    /// Source project of a local service (e.g. Modules/portfolio-java), opened with "Open in IDE".
+    var projectFolder = ""
+    var ide = IDEChoice.vscode
 
     /// Keychain account under which this subscription's API key is stored.
     var keychainAccount: String { "subscription-\(id.uuidString)" }
@@ -539,6 +636,22 @@ nonisolated struct ApiSubscription: Codable, Identifiable, Equatable, Sendable {
         docsURL = c.value(.docsURL, "")
         defaultHeaders = c.value(.defaultHeaders, [])
         notes = c.value(.notes, "")
+        projectFolder = c.value(.projectFolder, "")
+        ide = c.value(.ide, .vscode)
+    }
+}
+
+nonisolated enum IDEChoice: String, Codable, CaseIterable, Identifiable, Sendable {
+    case vscode, intellij, clion, xcode, finder
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .vscode: "Visual Studio Code"
+        case .intellij: "IntelliJ IDEA"
+        case .clion: "CLion"
+        case .xcode: "Xcode"
+        case .finder: "Finder"
+        }
     }
 }
 

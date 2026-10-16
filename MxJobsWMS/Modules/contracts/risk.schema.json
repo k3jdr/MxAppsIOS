@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://k3jdr.com/mxjobs/schemas/mxjobs.risk/1",
+  "title": "MxJobsWMS portfolio risk report",
+  "description": "Returned by POST /risk of portfolio-cpp. Request: {assets, weights (asset → weight), covariance, expectedReturns?, confidence? (default 0.95), horizonDays? (default 1), portfolioValue? (default 1)}.",
+  "type": "object",
+  "required": ["schema", "status", "volatility", "valueAtRisk", "expectedShortfall", "riskContributions",
+               "diversificationRatio", "diagnostics"],
+  "properties": {
+    "schema": { "const": "mxjobs.risk/1" },
+    "status": { "enum": ["ok", "invalid_input"] },
+    "volatility": { "type": ["number", "null"], "description": "Annualised." },
+    "valueAtRisk": { "type": ["number", "null"], "description": "Parametric (normal) VaR over horizonDays at confidence, in portfolioValue units (positive = loss)." },
+    "expectedShortfall": { "type": ["number", "null"], "description": "Parametric CVaR, same units." },
+    "riskContributions": { "type": "object", "additionalProperties": { "type": "number" },
+                           "description": "Asset → share of portfolio variance (sums to 1)." },
+    "diversificationRatio": { "type": ["number", "null"], "description": "Σ wᵢσᵢ / σₚ (≥ 1; higher = more diversified)." },
+    "concentration": { "type": ["number", "null"], "description": "Herfindahl index of the weights, Σ wᵢ²." },
+    "diagnostics": { "type": "object", "required": ["engine", "ms"] }
+  }
+}

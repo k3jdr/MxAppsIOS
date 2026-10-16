@@ -62,7 +62,7 @@ enum Validator {
             case .apiRead:
                 guard let api = node.api else { break }
                 if let sub = space.subscription(api.subscriptionID) {
-                    if sub.auth != .none, !Keychain.hasSecret(for: sub.keychainAccount) {
+                    if sub.auth.requiresKey, !Keychain.hasSecret(for: sub.keychainAccount) {
                         issues.append(.init(severity: .warning, message: "“\(node.title)”: no API key stored for “\(sub.name)”.", nodeID: node.id, subscriptionID: sub.id))
                     }
                 } else {
@@ -70,6 +70,18 @@ enum Validator {
                 }
                 if api.path.isEmpty {
                     issues.append(.init(severity: .warning, message: "“\(node.title)” has no endpoint path.", nodeID: node.id))
+                }
+            case .pythonScript:
+                let spec = node.script ?? ScriptSpec()
+                if spec.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    issues.append(.init(severity: .error, message: "“\(node.title)” has no Python code.", nodeID: node.id))
+                }
+                if PythonRunner.locate(spec.interpreter) == nil {
+                    issues.append(.init(severity: .warning, message: "“\(node.title)”: no Python interpreter found.", nodeID: node.id))
+                }
+                if let sub = space.subscription(spec.subscriptionID), sub.auth.requiresKey,
+                   !Keychain.hasSecret(for: sub.keychainAccount) {
+                    issues.append(.init(severity: .warning, message: "“\(node.title)”: no API key stored for “\(sub.name)”.", nodeID: node.id, subscriptionID: sub.id))
                 }
             case .approvalGate:
                 if node.approval?.approver.isEmpty ?? true {

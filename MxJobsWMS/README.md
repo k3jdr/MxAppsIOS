@@ -13,7 +13,7 @@ Open `MxJobsWMS.xcodeproj` in Xcode, then Run. There are no package dependencies
 | ----- | ---- | ---------- |
 | **1 · Business Operations** — the user-facing refresh that assembles instructions for approval and triggers execution | top (indigo) | Refresh Trigger, Assemble Instructions, User Approval, Execution Request, Outcome Report |
 | **2 · Agentic Operations** — agents that call the Layer 3 services and prepare the data points for Layer 1 | middle (orange) | Agent Task, Aggregate Results, Decision |
-| **3 · Data Reads** — API calls against configured subscriptions, with keys when needed | bottom (teal) | API Data Read, Normalize Data |
+| **3 · Data Reads** — API calls against configured subscriptions, with keys when needed, and Python | bottom (teal) | API Data Read, Python Script, Normalize Data |
 
 Each node stays in its own lane. Links pointing down the layers are calls; links pointing up (dashed) carry
 results back.
@@ -24,9 +24,16 @@ results back.
 | ---- | ------------ |
 | **Palette** (left) | Node kinds grouped by layer. Drag one onto the canvas, or double-click it to add it at the end of its lane. |
 | **Canvas** | Drag nodes to move them (10-point grid). Drag a node's ● handle onto another node to link them. Click to select, ⇧-click to add, drag on empty space to rubber-band select. Click a link to select it. Delete removes the selection, arrow keys nudge (⇧ = 100 pt), ⌘D duplicates, Escape deselects. Pinch, ⌘+ / ⌘− / ⌘0 or the toolbar zoom. |
-| **Inspector** (right, ⌥⌘I) | Properties of the selection. **Node**: title, notes, enabled; the kind's own settings (schedule, agent / assembly instructions and inputs, approver and expiry, execution target and mode, report recipients, API call, field mappings); **Arguments** (usable as `{{name}}`, plus `{{today}}` / `{{yesterday}}`); **Expected Outcome** (output name, success HTTP status, required JSON fields); **Exception Handling** (retry / skip / fallback / ask the user / abort, retries, backoff, timeout, notify). **Link**: its label. **Nothing selected**: the jobspace name, description, layer counts, subscriptions and checks. |
-| **API Subscriptions** (⌥⌘K) | Layer 3 configuration dialog: name, provider, base URL, plan, rate limit, docs link, how the key is sent (query parameter, header, bearer, none), headers sent with every call, notes, and the **API key**. |
+| **Inspector** (right, ⌥⌘I) | Properties of the selection. **Node**: title, notes, enabled; the kind's own settings (schedule, agent / assembly instructions and inputs, approver and expiry, execution target and mode, report recipients, API call, field mappings); **Arguments** (usable as `{{name}}`, plus `{{today}}` / `{{yesterday}}`); **Expected Outcome** (output name, success HTTP status, required JSON fields, value checks); **Exception Handling** (retry / skip / fallback / ask the user / abort, retries, backoff, timeout, notify). **Link**: its label. **Nothing selected**: the jobspace name, description, layer counts, subscriptions and checks. |
+| **API Subscriptions** (⌥⌘K) | Layer 3 configuration dialog: name, provider, base URL, plan, rate limit, docs link, how the key is sent (query parameter, header, bearer, local service with optional token, none), headers sent with every call, notes, the **API key**, and an optional **Source Project** folder and IDE for **Open Project**. **+** adds a subscription or a **Local Python Service** preset. |
 | **Problems** (⇧⌘K) | Checks: an execution without a User Approval upstream, API reads without a subscription, path or stored key, required arguments without a value, unlinked nodes, links that skip the agent layer, invalid base URLs. Click a problem to jump to it. |
+
+**Adding a key:** in API Subscriptions select the subscription, paste the key under **API Key**, press **Save Key** —
+MxJobsWMS then runs **Test Key** (one call to the provider). **?** next to API Key shows that provider's steps (Alpha
+Vantage, Finnhub, SEC EDGAR, Frankfurter, local services, others), **Get a Key…** opens its sign-up page, and
+**Help ▸ Adding API Keys** has the whole guide. A key belongs to the subscription of the jobspace it was saved in
+(Save As keeps it). Alpha Vantage does not reject unknown keys, so for it Test Key confirms that calls work rather
+than that the key is yours; it does report its rate-limit notices.
 
 **Test Call** (inspector of an API Data Read) sends the request once with the stored key and shows the status,
 time, the checks of the expected outcome, and the response (the key is masked in the URL shown).
@@ -66,6 +73,63 @@ The **Outcome Report** sums up the run.
 
 The **run console** shows the log (filter by level, click a line to select its step) and the output of the selected
 step as JSON; the inspector's **Last Run** section shows a step's result.
+
+## Python at Layer 3
+
+Python automation belongs in **Layer 3 (Data Reads)** when it fetches or computes data the same way every time
+(quotes, files, indicators, risk numbers); Python that decides belongs to a Layer 2 agent. Two ways in:
+
+**1. A local Python service (recommended).** Run Python as a small HTTP service on this Mac and call it with
+ordinary API Data Read steps. In API Subscriptions choose **+ ▸ Local Python Service**: base URL
+`http://127.0.0.1:8765`, authentication **Local service (optional token)** — a token is sent as
+`Authorization: Bearer …` only when one is stored. `Samples/python-service/mxjobs_service.py` is a
+standard-library example with `/quote`, `/history` and `/indicators`; start it with
+`python3 Samples/python-service/mxjobs_service.py`. The service runs outside the app's sandbox, so it can use
+any packages, files and credentials you give it.
+
+**2. A Python Script step** (palette ▸ Layer 3 ▸ Python Script) runs code kept in the jobspace:
+
+- **stdin**: `{"arguments": {name: value}, "inputs": {output name: value}, "step": title}` — the step's arguments
+  and the outputs of the steps linked into it.
+- **stdout**: the step's output, as JSON. The expected outcome then applies (exit code 0, JSON output, required
+  fields), and so does the step's exception handling (retry, skip, fallback, ask, abort) and timeout.
+- **env**: `MXJOBS_API_KEY` and `MXJOBS_BASE_URL` from the step's optional subscription (the key also under the
+  subscription's key name when that is an environment-variable name such as `FINNHUB_TOKEN`).
+- **Interpreter**: the step's own path, else the first of Homebrew, python.org and Apple's (developer tools).
+  `/usr/bin/python3` is mapped to the developer tools' real binary — its `xcrun` shim can't run in a sandbox.
+- **Run Script** in the inspector runs it once with the inputs of the last run.
+- Layer 3 **Mock** returns mock data without running Python; **Live** runs it. A run asks once
+  **Run Python scripts?** (showing the code) before the first script, because a jobspace file can carry code.
+- Scripts run **inside the app's sandbox**: network (local service and internet) and the app's own container
+  only — not your files, `/tmp`, or interpreters and `pip --user` packages under your home folder. Install
+  packages into the interpreter itself (e.g. Homebrew's `pip3 install`), or use a local service.
+
+## Java and C/C++ at Layer 3
+
+Portfolio optimization and risk run as **Layer 3 compute services** (see [Modules/](Modules/)); their outcomes give
+the **Layer 2 decision agent** its context for the next step:
+
+- `Modules/portfolio-java` — Java optimizer on 127.0.0.1:8766 (`POST /optimize`).
+- `Modules/portfolio-cpp` — C++ optimizer and risk engine on 127.0.0.1:8767 (`POST /optimize`, `POST /risk`).
+- `Modules/contracts` — the versioned JSON Schemas (`mxjobs.optimization/1`, `mxjobs.risk/1`), the shared algorithm
+  and decision rules, and `check_engines.py`, which checks running services against the schemas and each other.
+
+Each outcome carries a `decisionContext` — `recommendation` (rebalance, rebalance_partially, hold, rerun_relaxed,
+escalate), `confidence`, `alternatives`, `reason`. A **Decision** step follows the most confident decisionContext
+among its inputs (`nextStep`), and escalates when there is none. The sample's **Choose next step** calls
+**Optimize portfolio (Java)** and **Portfolio risk (C++)** and passes `nextStep` up to Assemble Instructions.
+
+**Value checks.** Expected Outcome takes value checks besides required fields — `path op value` with `==`, `!=`,
+`<`, `<=`, `>`, `>=`, `contains`, `exists`, compared as numbers when both sides are numbers; values may use
+`{{argument}}` (e.g. `valueAtRisk < {{maxVaR}}`). They apply to live runs, Test Call and Python steps; a failed check
+reads e.g. “solverStatus == optimal (got infeasible)” and the step's exception handling takes over. Mock runs
+generate values that pass them.
+
+**Source projects.** A subscription can name the folder of the service's source and an IDE (VS Code, IntelliJ
+IDEA, CLion, Xcode, Finder); its steps then show **Open Project in …**. VS Code and IntelliJ IDEA are opened through
+their URL schemes, which works from the sandbox for any folder. CLion, Xcode and Finder have no such scheme, so the
+sandbox can hand them only a folder you chose: pick it with **Choose…** in the subscription, or **Grant Access…** next
+to the button, once — MxJobsWMS keeps a security-scoped bookmark for it.
 
 ## Files and keys
 

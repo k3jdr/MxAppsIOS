@@ -127,6 +127,8 @@ final class RunEngine {
     @ObservationIgnored private var active: Set<UUID> = []
     /// Steps whose failure or rejection stops what depends on them.
     @ObservationIgnored private var blocked: Set<UUID> = []
+    /// Whether the user allowed this run's Python scripts (asked once, at the first one).
+    @ObservationIgnored private var scriptsAllowed: Bool?
 
     var isActive: Bool { phase.isActive }
     var canContinue: Bool { phase == .paused }
@@ -144,7 +146,7 @@ final class RunEngine {
         self.space = space
         settings = space.run
         self.stepping = stepping
-        done = []; active = []; blocked = []
+        done = []; active = []; blocked = []; scriptsAllowed = nil
         outputs = [:]; outputsRevision += 1
         states = Dictionary(uniqueKeysWithValues: space.nodes.map { ($0.id, .pending) })
         log = []
@@ -457,7 +459,28 @@ final class RunEngine {
                    "Report for \(node.report?.recipients.isEmpty == false ? node.report!.recipients : "the user"): "
                    + "\(report["succeeded"]!) succeeded, \(report["warnings"]!) with warnings, \(report["failed"]!) failed, \(report["skipped"]!) skipped.")
 
-        case .agentTask, .aggregate, .decision:
+        case .decision:
+            // Simulated decision: follow the decisionContext of a Layer 3 outcome (mxjobs.optimization/1).
+            let contexts = input.compactMap { name, value -> (String, [String: Any])? in
+                guard let dict = value as? [String: Any], let ctx = dict["decisionContext"] as? [String: Any] else { return nil }
+                return (name, ctx)
+            }.sorted { ($0.1["confidence"] as? Double ?? 0) > ($1.1["confidence"] as? Double ?? 0) }
+            if let (source, ctx) = contexts.first, let next = ctx["recommendation"] as? String {
+                let confidence = ctx["confidence"] as? Double ?? 0
+                let out: [String: Any] = ["nextStep": next, "confidence": confidence, "source": source,
+                                          "alternatives": ctx["alternatives"] ?? [], "reason": ctx["reason"] ?? "",
+                                          "inputs": input]
+                finish(node, .succeeded, output: out,
+                       "Decision: \(next) (confidence \(String(format: "%.2f", confidence)), from “\(source)”).")
+            } else {
+                // No context to decide on (e.g. the optimizer was skipped): hand it to the user.
+                let out: [String: Any] = ["nextStep": "escalate", "confidence": 0.0, "source": "",
+                                          "reason": "No decisionContext among the inputs.", "inputs": input]
+                finish(node, .warning, output: out,
+                       "Decision: escalate — no decisionContext among \(input.count) input\(input.count == 1 ? "" : "s").")
+            }
+
+        case .agentTask, .aggregate:
             let model = node.agent?.model ?? ""
             finish(node, .succeeded, output: input,
                    "Agent simulated\(model.isEmpty ? "" : " (\(model) not connected yet)") — passed on \(input.count) input\(input.count == 1 ? "" : "s").")
@@ -477,6 +500,9 @@ final class RunEngine {
 
         case .apiRead:
             try await performAPIRead(node)
+
+        case .pythonScript:
+            try await performScript(node)
         }
     }
 
@@ -487,24 +513,86 @@ final class RunEngine {
             return try fail(node, "No API subscription set.")
         }
         if settings.data == .mock {
-            var mock: [String: Any] = ["mock": true]
-            // The required fields, plus whatever the Normalize steps it feeds read.
-            let mapped = space.links.filter { $0.from == node.id }.compactMap { space.node($0.to)?.transform?.mappings }
-                .flatMap { $0 }.map(\.value)
-            for field in node.outcome.requiredFields + mapped where !field.isEmpty { Self.insert("mock", at: field, into: &mock) }
-            finish(node, .succeeded, output: mock, "Mock data for \(sub.name) \(ApiTester.substitute(node.api?.path ?? "", arguments: node.arguments)) (no network call).")
+            finish(node, .succeeded, output: mockOutput(for: node),
+                   "Mock data for \(sub.name) \(ApiTester.substitute(node.api?.path ?? "", arguments: node.arguments)) (no network call).")
             return
         }
+        try await attempt(node) {
+            let result = await ApiTester.run(node: node, subscription: sub)
+            return (result, "HTTP \(result.status ?? 0) in \(Int(result.elapsed * 1000)) ms — \(result.url)")
+        }
+    }
 
+    private func performScript(_ node: JobNode) async throws {
+        let spec = node.script ?? ScriptSpec()
+        let sub = space.subscription(spec.subscriptionID)
+        if settings.data == .mock {
+            finish(node, .succeeded, output: mockOutput(for: node), "Mock data instead of running the Python script.")
+            return
+        }
+        // A jobspace can carry code: ask once per run before any of its scripts runs.
+        if scriptsAllowed == nil {
+            let count = space.nodes.filter { $0.kind == .pythonScript && $0.enabled }.count
+            let reply = try await ask(node, title: "Run Python scripts?",
+                                      message: "This jobspace runs \(count) Python script\(count == 1 ? "" : "s") on this Mac "
+                                        + "(inside MxJobsWMS's sandbox: network and the app's own folder only). "
+                                        + "Review the code below before allowing.",
+                                      detail: spec.code,
+                                      options: [.init(label: "Run Scripts", isDefault: true), .init(label: "Skip Scripts"),
+                                                .init(label: "Stop", isDestructive: true)])
+            switch reply {
+            case "Run Scripts": scriptsAllowed = true
+            case "Skip Scripts": scriptsAllowed = false
+            default: throw CancellationError()
+            }
+        }
+        guard scriptsAllowed == true else {
+            finish(node, .skipped, output: inputs(of: node.id), "Skipped — Python scripts not allowed in this run.", level: .warning)
+            return
+        }
+        let input = inputs(of: node.id)
+        try await attempt(node) {
+            let result = await PythonRunner.run(node: node, subscription: sub, inputs: input)
+            return (result, "Python exited \(result.status ?? -1) in \(Int(result.elapsed * 1000)) ms — \(result.url)")
+        }
+    }
+
+    /// Mock output: the required fields, plus whatever the Normalize steps it feeds read.
+    private func mockOutput(for node: JobNode) -> [String: Any] {
+        var mock: [String: Any] = ["mock": true]
+        let mapped = space.links.filter { $0.from == node.id }.compactMap { space.node($0.to)?.transform?.mappings }
+            .flatMap { $0 }.map(\.value)
+        for field in node.outcome.requiredFields + mapped where !field.isEmpty { Self.insert("mock", at: field, into: &mock) }
+        // A value that passes each assertion.
+        for assertion in node.outcome.assertions where !assertion.path.isEmpty {
+            let expected = ApiTester.substitute(assertion.value, arguments: node.arguments)
+            let number = Double(expected.trimmingCharacters(in: .whitespaces))
+            let value: Any
+            switch assertion.op {
+            case .equals: value = number.map { $0 as Any } ?? expected
+            case .notEquals: value = number.map { ($0 + 1) as Any } ?? "not \(expected)"
+            case .less: value = number.map { ($0 > 0 ? $0 / 2 : $0 - 1) as Any } ?? 0
+            case .lessOrEqual, .greaterOrEqual: value = number.map { $0 as Any } ?? expected
+            case .greater: value = number.map { ($0 > 0 ? $0 * 2 : $0 + 1) as Any } ?? 1
+            case .contains: value = [expected]
+            case .exists: value = "mock"
+            }
+            Self.insert(value, at: assertion.path, into: &mock)
+        }
+        return mock
+    }
+
+    /// Runs a live call or script with the step's exception handling: retries with backoff,
+    /// asking the user, fallback, skip or abort.
+    private func attempt(_ node: JobNode, _ body: () async -> (ApiTestResult, String)) async throws {
         let policy = node.exceptions
         var attempt = 0
         while true {
             try Task.checkCancellation()
-            let result = await ApiTester.run(node: node, subscription: sub)
+            let (result, summary) = await body()
             try Task.checkCancellation()
             if result.passed {
-                finish(node, .succeeded, output: result.json ?? result.body,
-                       "HTTP \(result.status ?? 0) in \(Int(result.elapsed * 1000)) ms — \(result.url)")
+                finish(node, .succeeded, output: result.json ?? result.body, summary)
                 return
             }
             let reason = result.error
@@ -593,7 +681,7 @@ final class RunEngine {
         }
     }
 
-    static func pretty(_ value: Any) -> String {
+    nonisolated static func pretty(_ value: Any) -> String {
         if let s = value as? String { return s }
         if JSONSerialization.isValidJSONObject(value),
            let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]) {

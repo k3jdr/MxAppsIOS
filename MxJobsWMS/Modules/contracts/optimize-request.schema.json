@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://k3jdr.com/mxjobs/schemas/mxjobs.optimize-request/1",
+  "title": "POST /optimize request",
+  "type": "object",
+  "required": ["assets"],
+  "properties": {
+    "assets": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "expectedReturns": { "type": "array", "items": { "type": "number" }, "description": "Annualised, one per asset. With covariance; or send prices instead." },
+    "covariance": { "type": "array", "items": { "type": "array", "items": { "type": "number" } }, "description": "Annualised, assets × assets, symmetric." },
+    "prices": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "number" } },
+                "description": "Asset → daily closes (oldest first, equal lengths ≥ 3). Returns and covariance are estimated from them (× 252)." },
+    "objective": { "enum": ["max_sharpe", "min_variance", "mean_variance"], "default": "max_sharpe" },
+    "riskAversion": { "type": "number", "exclusiveMinimum": 0, "default": 3, "description": "λ for mean_variance: maximise μᵀw − λ/2 wᵀΣw." },
+    "riskFreeRate": { "type": "number", "default": 0 },
+    "maxWeight": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 1 },
+    "currentWeights": { "type": "object", "additionalProperties": { "type": "number" }, "description": "Holdings now, for turnover and the recommendation." },
+    "maxTurnover": { "type": "number", "minimum": 0, "description": "Turnover above this recommends rebalance_partially." }
+  }
+}

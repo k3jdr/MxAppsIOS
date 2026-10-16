@@ -31,11 +31,15 @@ struct SubscriptionsDialog: View {
                     }
                     Divider()
                     HStack(spacing: 0) {
-                        Button {
-                            let sub = ApiSubscription()
-                            space.subscriptions.append(sub)
-                            selection = sub.id
+                        Menu {
+                            Button("New Subscription") { add(ApiSubscription()) }
+                            Button("Local Python Service (127.0.0.1:\(ApiSubscription.localServicePort))") {
+                                add(.localService())
+                            }
                         } label: { Image(systemName: "plus").frame(width: 24, height: 20) }
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Add a subscription")
                         Button {
                             confirmDelete = true
                         } label: { Image(systemName: "minus").frame(width: 24, height: 20) }
@@ -83,16 +87,22 @@ struct SubscriptionsDialog: View {
         }
     }
 
+    private func add(_ sub: ApiSubscription) {
+        space.subscriptions.append(sub)
+        selection = sub.id
+    }
+
     private func usage(of id: UUID) -> Int {
-        space.nodes.filter { $0.api?.subscriptionID == id }.count
+        space.nodes.filter { $0.api?.subscriptionID == id || $0.script?.subscriptionID == id }.count
     }
 
     private func deleteSelected() {
         guard let id = selection, let sub = space.subscription(id) else { return }
         Keychain.deleteSecret(for: sub.keychainAccount)
         space.subscriptions.removeAll { $0.id == id }
-        for i in space.nodes.indices where space.nodes[i].api?.subscriptionID == id {
-            space.nodes[i].api?.subscriptionID = nil
+        for i in space.nodes.indices {
+            if space.nodes[i].api?.subscriptionID == id { space.nodes[i].api?.subscriptionID = nil }
+            if space.nodes[i].script?.subscriptionID == id { space.nodes[i].script?.subscriptionID = nil }
         }
         selection = space.subscriptions.first?.id
     }
@@ -105,6 +115,9 @@ private struct SubscriptionForm: View {
     @State private var newKey = ""
     @State private var hasKey = false
     @State private var keyMessage: String?
+    @State private var showHelp = false
+    @State private var testing = false
+    @State private var testResult: KeyTestResult?
 
     var body: some View {
         Form {
@@ -125,7 +138,7 @@ private struct SubscriptionForm: View {
                     }
                 }
                 if usage > 0 {
-                    LabeledContent("Used by", value: "\(usage) API read\(usage == 1 ? "" : "s")")
+                    LabeledContent("Used by", value: "\(usage) step\(usage == 1 ? "" : "s")")
                 }
             }
 
@@ -139,8 +152,14 @@ private struct SubscriptionForm: View {
                               prompt: Text(subscription.auth == .header ? "X-API-Key" : "apikey"))
                 }
                 if subscription.auth != .none {
+                    if subscription.auth == .localService {
+                        Text("Optional: store a token only if the service requires one (sent as “Authorization: Bearer …”).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     HStack {
-                        SecureField(hasKey ? "Replace stored key" : "API key", text: $newKey)
+                        SecureField(hasKey ? "Replace stored key" : subscription.auth == .localService ? "Token (optional)" : "API key",
+                                    text: $newKey)
                         Button("Save Key") { saveKey() }
                             .disabled(newKey.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
@@ -148,6 +167,12 @@ private struct SubscriptionForm: View {
                         if hasKey {
                             Label("Key stored in Keychain", systemImage: "key.fill").foregroundStyle(.green)
                             Spacer()
+                            Button {
+                                runKeyTest()
+                            } label: {
+                                Label("Test Key", systemImage: "checkmark.shield")
+                            }
+                            .disabled(testing)
                             Button("Remove Key", role: .destructive) {
                                 Keychain.deleteSecret(for: subscription.keychainAccount)
                                 refresh()
@@ -160,9 +185,51 @@ private struct SubscriptionForm: View {
                     if let keyMessage {
                         Text(keyMessage).font(.caption).foregroundStyle(.secondary)
                     }
+                    if testing {
+                        HStack { ProgressView().controlSize(.small); Text("Testing the key…").font(.caption) }
+                    } else if let testResult {
+                        Label(testResult.message, systemImage: testResult.symbol)
+                            .font(.caption)
+                            .foregroundStyle(testResult.color)
+                            .textSelection(.enabled)
+                    }
+                }
+                let guide = ProviderGuide.matching(subscription)
+                if guide.id != "generic", guide.auth != subscription.auth, guide.needsKey || subscription.auth.requiresKey {
+                    HStack {
+                        Label("\(guide.name) expects: \(guide.auth.title)\(guide.keyName.isEmpty ? "" : " (\(guide.keyName))")",
+                              systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Button("Use It") {
+                            subscription.auth = guide.auth
+                            subscription.keyName = guide.keyName
+                        }
+                        .controlSize(.small)
+                    }
                 }
             } header: {
-                Text("API Key")
+                HStack {
+                    Text("API Key")
+                    Spacer()
+                    if let url = ProviderGuide.matching(subscription).signupURL {
+                        Link("Get a Key…", destination: url).font(.caption)
+                    }
+                    Button {
+                        showHelp.toggle()
+                    } label: {
+                        Image(systemName: "questionmark.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("How to get and add a key for \(ProviderGuide.matching(subscription).name)")
+                    .popover(isPresented: $showHelp, arrowEdge: .trailing) {
+                        ScrollView {
+                            KeyGuideView(guide: ProviderGuide.matching(subscription))
+                                .padding(16)
+                        }
+                        .frame(width: 400, height: 380)
+                    }
+                }
             }
 
             Section {
@@ -170,6 +237,26 @@ private struct SubscriptionForm: View {
                                addTitle: "Add Header")
             } header: {
                 Text("Headers Sent With Every Call")
+            }
+
+            Section {
+                HStack {
+                    TextField("Project folder", text: $subscription.projectFolder, prompt: Text("~/path/to/service"))
+                        .font(.body.monospaced())
+                    Button("Choose…") { chooseFolder() }
+                }
+                Picker("Open with", selection: $subscription.ide) {
+                    ForEach(IDEChoice.allCases) { ide in
+                        Text(ProjectOpener.isInstalled(ide) ? ide.title : "\(ide.title) (not installed)").tag(ide)
+                    }
+                }
+                if !subscription.projectFolder.isEmpty {
+                    OpenProjectButton(subscription: subscription)
+                }
+            } header: {
+                Text("Source Project")
+            } footer: {
+                Text("For services you develop, such as Modules/portfolio-java or portfolio-cpp: steps using this subscription get an “Open Project” button.")
             }
 
             Section("Notes") {
@@ -186,10 +273,33 @@ private struct SubscriptionForm: View {
         hasKey = Keychain.hasSecret(for: subscription.keychainAccount)
     }
 
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        ProjectOpener.remember(url)  // lets CLion / Xcode / Finder be handed the folder later
+        let home = ProjectOpener.realHome
+        subscription.projectFolder = url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
+    }
+
+    private func runKeyTest() {
+        testing = true
+        testResult = nil
+        let sub = subscription
+        Task {
+            testResult = await KeyTester.test(sub)
+            testing = false
+        }
+    }
+
     private func saveKey() {
         let key = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if Keychain.setSecret(key, for: subscription.keychainAccount, label: subscription.name) {
             keyMessage = "Key saved to your Keychain."
+            runKeyTest()
             newKey = ""
         } else {
             keyMessage = "The key could not be saved to the Keychain."

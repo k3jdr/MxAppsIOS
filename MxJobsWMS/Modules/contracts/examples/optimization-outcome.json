@@ -1,0 +1,32 @@
+{
+  "schema": "mxjobs.optimization/1",
+  "solverStatus": "optimal",
+  "objective": "max_sharpe",
+  "weights": {
+    "AAPL": 0.216819,
+    "MSFT": 0.245093,
+    "NVDA": 0.138088,
+    "TLT": 0.4
+  },
+  "expectedReturn": 0.08645348476282612,
+  "volatility": 0.13707195594781293,
+  "sharpe": 0.48480729922703364,
+  "bindingConstraints": [
+    "max_weight"
+  ],
+  "turnover": 0.15,
+  "diagnostics": {
+    "engine": "portfolio-java/1",
+    "iterations": 11868,
+    "ms": 0
+  },
+  "decisionContext": {
+    "recommendation": "rebalance",
+    "confidence": 0.68,
+    "alternatives": [
+      "rebalance_partially",
+      "hold"
+    ],
+    "reason": "Turnover 0.1500 is within limits."
+  }
+}

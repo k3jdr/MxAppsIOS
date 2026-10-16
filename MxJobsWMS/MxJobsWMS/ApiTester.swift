@@ -70,7 +70,7 @@ enum ApiTester {
         }
         switch sub.auth {
         case .header: if let key { request.setValue(key, forHTTPHeaderField: sub.keyName.isEmpty ? "X-API-Key" : sub.keyName) }
-        case .bearer: if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        case .bearer, .localService: if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
         case .none, .queryParameter: break
         }
         if api.method == .POST, !api.body.isEmpty {
@@ -84,7 +84,7 @@ enum ApiTester {
         let key = sub.auth == .none ? nil : Keychain.secret(for: sub.keychainAccount)
         let request: URLRequest
         do {
-            if sub.auth != .none, key == nil { throw TestError("No API key stored for “\(sub.name)”. Add one under API Subscriptions.") }
+            if sub.auth.requiresKey, key == nil { throw TestError("No API key stored for “\(sub.name)”. Add one under API Subscriptions.") }
             request = try buildRequest(node: node, subscription: sub, key: key)
         } catch {
             return ApiTestResult(url: "", status: nil, elapsed: 0, body: "", checks: [], error: error.localizedDescription)
@@ -98,15 +98,77 @@ enum ApiTester {
             let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
             var checks = [(label: "HTTP \(status) in \(node.outcome.successStatus)",
                            passed: statusMatches(status, node.outcome.successStatus))]
-            for field in node.outcome.requiredFields where !field.isEmpty {
-                checks.append((label: "Field “\(field)” present", passed: json.map { lookup(field, in: $0) != nil } ?? false))
-            }
+            checks += outcomeChecks(node, json: json)
+            // Providers like Alpha Vantage report a bad key or a reached limit in a 200 response.
+            let notice = checks.allSatisfy(\.passed) ? nil
+                : KeyTester.providerMessage(json as? [String: Any]).map { "\(sub.name): \($0)" }
             return ApiTestResult(url: shownURL, status: status, elapsed: elapsed,
-                                 body: pretty(data, json: json), checks: checks, error: nil, json: json)
+                                 body: pretty(data, json: json), checks: checks, error: notice, json: json)
         } catch {
             return ApiTestResult(url: shownURL, status: nil, elapsed: Date().timeIntervalSince(started),
                                  body: "", checks: [], error: error.localizedDescription)
         }
+    }
+
+    /// Required fields and value assertions of a step's expected outcome, against its JSON result.
+    static func outcomeChecks(_ node: JobNode, json: Any?) -> [(label: String, passed: Bool)] {
+        var checks: [(label: String, passed: Bool)] = []
+        for field in node.outcome.requiredFields where !field.isEmpty {
+            checks.append((label: "Field “\(field)” present", passed: json.map { lookup(field, in: $0) != nil } ?? false))
+        }
+        for assertion in node.outcome.assertions where !assertion.path.isEmpty {
+            let expected = substitute(assertion.value, arguments: node.arguments)
+            let actual = json.flatMap { lookup(assertion.path, in: $0) }
+            let passed = evaluate(actual, assertion.op, expected)
+            let shown = assertion.op == .exists ? "\(assertion.path) exists" : "\(assertion.path) \(assertion.op.rawValue) \(expected)"
+            checks.append((label: passed ? shown : "\(shown) (got \(describe(actual)))", passed: passed))
+        }
+        return checks
+    }
+
+    /// Compares numerically when both sides are numbers, else as text.
+    static func evaluate(_ actual: Any?, _ op: AssertionOp, _ expected: String) -> Bool {
+        let present = actual != nil && !(actual is NSNull)
+        if op == .exists { return present }
+        guard present, let actual else { return false }
+        let actualNumber = (actual as? NSNumber).flatMap { CFGetTypeID($0) == CFBooleanGetTypeID() ? nil : $0.doubleValue }
+        let expectedNumber = Double(expected.trimmingCharacters(in: .whitespaces))
+        if let a = actualNumber, let e = expectedNumber {
+            switch op {
+            case .equals: return abs(a - e) <= 1e-9 * max(1, abs(e))
+            case .notEquals: return abs(a - e) > 1e-9 * max(1, abs(e))
+            case .less: return a < e
+            case .lessOrEqual: return a <= e
+            case .greater: return a > e
+            case .greaterOrEqual: return a >= e
+            case .contains, .exists: break
+            }
+        }
+        let text = describe(actual)
+        switch op {
+        case .equals: return text == expected
+        case .notEquals: return text != expected
+        case .contains:
+            if let array = actual as? [Any] { return array.contains { describe($0) == expected } }
+            if let dict = actual as? [String: Any] { return dict[expected] != nil }
+            return text.contains(expected)
+        default: return false  // ordering needs numbers
+        }
+    }
+
+    static func describe(_ value: Any?) -> String {
+        guard let value, !(value is NSNull) else { return "null" }
+        if let s = value as? String { return s }
+        if let n = value as? NSNumber {
+            if CFGetTypeID(n) == CFBooleanGetTypeID() { return n.boolValue ? "true" : "false" }
+            return n.stringValue
+        }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) {
+            let s = String(decoding: data, as: UTF8.self)
+            return s.count > 60 ? String(s.prefix(60)) + "…" : s
+        }
+        return String(describing: value)
     }
 
     /// "200-299", "200,304", "2xx".

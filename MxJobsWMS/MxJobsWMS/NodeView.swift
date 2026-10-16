@@ -122,6 +122,11 @@ enum NodeSummary {
             guard let api = node.api else { return "" }
             let sub = space.subscription(api.subscriptionID)?.name ?? "No subscription"
             return "\(api.method.rawValue) \(api.path.isEmpty ? "/" : api.path) · \(sub)"
+        case .pythonScript:
+            let spec = node.script ?? ScriptSpec()
+            let lines = spec.code.split(separator: "\n", omittingEmptySubsequences: true).count
+            let sub = space.subscription(spec.subscriptionID).map { " · \($0.name)" } ?? ""
+            return "python3 · \(lines) line\(lines == 1 ? "" : "s")\(sub)"
         case .approvalGate:
             let who = node.approval?.approver ?? ""
             return who.isEmpty ? "Approver not set" : "By \(who)"

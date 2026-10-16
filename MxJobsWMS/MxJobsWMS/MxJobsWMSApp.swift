@@ -20,11 +20,17 @@ struct MxJobsWMSApp: App {
         .commands {
             JobspaceCommands()
         }
+
+        Window("Adding API Keys", id: "keys-help") {
+            KeysHelpView()
+        }
+        .defaultSize(width: 820, height: 560)
     }
 }
 
 struct JobspaceCommands: Commands {
     @FocusedValue(\.editor) private var editor
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.newDocument) private var newDocument
 
     var body: some Commands {
@@ -54,6 +60,12 @@ struct JobspaceCommands: Commands {
             Button("Select All Nodes") { editor?.selectAll() }
                 .keyboardShortcut("a", modifiers: [.command, .option])
                 .disabled(editor == nil)
+        }
+        CommandGroup(replacing: .help) {
+            Button("Adding API Keys") { openWindow(id: "keys-help") }
+            Button("MxJobsWMS on GitHub") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MXcodeIDE/tree/main/MxJobsWMS")!)
+            }
         }
         CommandMenu("Run") {
             let run = editor?.run

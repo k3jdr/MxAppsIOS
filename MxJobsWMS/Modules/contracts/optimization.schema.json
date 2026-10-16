@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://k3jdr.com/mxjobs/schemas/mxjobs.optimization/1",
+  "title": "MxJobsWMS portfolio optimization outcome",
+  "description": "Returned by POST /optimize of the Layer 3 optimization services (portfolio-java, portfolio-cpp). Layer 2 decision agents read decisionContext to pick the next step.",
+  "type": "object",
+  "required": ["schema", "solverStatus", "objective", "weights", "expectedReturn", "volatility", "sharpe",
+               "bindingConstraints", "turnover", "diagnostics", "decisionContext"],
+  "properties": {
+    "schema": { "const": "mxjobs.optimization/1" },
+    "solverStatus": {
+      "enum": ["optimal", "max_iterations", "infeasible", "invalid_input"],
+      "description": "optimal: converged; max_iterations: best point found, not converged; infeasible: constraints cannot be met (e.g. maxWeight * assets < 1); invalid_input: request rejected (see diagnostics.message)."
+    },
+    "objective": { "enum": ["max_sharpe", "min_variance", "mean_variance"] },
+    "weights": {
+      "type": "object",
+      "description": "Asset → weight. Long-only, summing to 1, each at most maxWeight. Empty unless solverStatus is optimal or max_iterations.",
+      "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+    },
+    "expectedReturn": { "type": ["number", "null"], "description": "Annualised, as a fraction (0.08 = 8%)." },
+    "volatility": { "type": ["number", "null"], "description": "Annualised standard deviation, as a fraction." },
+    "sharpe": { "type": ["number", "null"], "description": "(expectedReturn − riskFreeRate) / volatility." },
+    "bindingConstraints": {
+      "type": "array",
+      "items": { "enum": ["max_weight", "long_only", "max_turnover"] },
+      "description": "Constraints active at the solution: max_weight when an asset sits at the cap, long_only when an asset is at 0, max_turnover when turnover exceeds the requested maximum."
+    },
+    "turnover": {
+      "type": ["number", "null"],
+      "description": "One-way turnover from currentWeights: ½ Σ |w − w₀|. Null when no currentWeights were sent."
+    },
+    "diagnostics": {
+      "type": "object",
+      "required": ["engine", "iterations", "ms"],
+      "properties": {
+        "engine": { "type": "string", "description": "e.g. portfolio-java/1, portfolio-cpp/1" },
+        "iterations": { "type": "integer", "minimum": 0 },
+        "ms": { "type": "number", "minimum": 0 },
+        "message": { "type": "string" }
+      }
+    },
+    "decisionContext": {
+      "type": "object",
+      "required": ["recommendation", "confidence", "alternatives", "reason"],
+      "properties": {
+        "recommendation": { "enum": ["rebalance", "rebalance_partially", "hold", "rerun_relaxed", "escalate"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "alternatives": { "type": "array", "items": { "enum": ["rebalance", "rebalance_partially", "hold", "rerun_relaxed", "escalate"] } },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}

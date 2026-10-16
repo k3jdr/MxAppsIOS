@@ -94,6 +94,9 @@ struct KeyStatus: View {
     var body: some View {
         if subscription.auth == .none {
             Text("No key needed").font(.caption).foregroundStyle(.secondary)
+        } else if subscription.auth == .localService {
+            Text(Keychain.hasSecret(for: subscription.keychainAccount) ? "Local · token stored" : "Local · no token")
+                .font(.caption).foregroundStyle(.secondary)
         } else if Keychain.hasSecret(for: subscription.keychainAccount) {
             Label("Key stored", systemImage: "key.fill").font(.caption).foregroundStyle(.green)
         } else {
@@ -231,6 +234,8 @@ private struct NodeInspector: View {
             ReportSection(spec: Binding($node.report, default: ReportSpec()))
         case .apiRead:
             ApiSection(node: $node, space: space, editor: editor)
+        case .pythonScript:
+            ScriptSection(node: $node, space: space, editor: editor)
         case .dataNormalize:
             Section {
                 KeyValueEditor(items: Binding($node.transform, default: TransformSpec()).mappings,
@@ -360,6 +365,9 @@ private struct ApiSection: View {
                 Text("None").tag(UUID?.none)
                 ForEach(space.subscriptions) { Text($0.name).tag(Optional($0.id)) }
             }
+            if let sub = space.subscription(node.api?.subscriptionID), !sub.projectFolder.isEmpty {
+                OpenProjectButton(subscription: sub)
+            }
             if let sub = space.subscription(node.api?.subscriptionID) {
                 LabeledContent("Base URL") {
                     Text(sub.baseURL).textSelection(.enabled).lineLimit(1)
@@ -430,6 +438,96 @@ private struct ApiSection: View {
     }
 }
 
+private struct ScriptSection: View {
+    @Binding var node: JobNode
+    var space: Jobspace
+    var editor: EditorState
+    @State private var testing = false
+    @State private var result: ApiTestResult?
+
+    var body: some View {
+        let spec = Binding($node.script, default: ScriptSpec())
+        let found = PythonRunner.locate(node.script?.interpreter ?? "")
+        Section {
+            TextField("Interpreter", text: spec.interpreter,
+                      prompt: Text(PythonRunner.locate("") ?? "python3 path (none found)"))
+                .font(.body.monospaced())
+            if found == nil {
+                Label(node.script?.interpreter.isEmpty ?? true
+                      ? "No python3 found — install Python (brew install python) or enter its path."
+                      : "Not found or not executable.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            Picker("Subscription", selection: spec.subscriptionID) {
+                Text("None").tag(UUID?.none)
+                ForEach(space.subscriptions) { Text($0.name).tag(Optional($0.id)) }
+            }
+            if let sub = space.subscription(node.script?.subscriptionID) {
+                LabeledContent("API key") { KeyStatus(subscription: sub) }
+            }
+        } header: {
+            Text("Python Script")
+        } footer: {
+            Text("The script reads {\"arguments\", \"inputs\", \"step\"} as JSON on stdin and prints its output as JSON. "
+                 + "The subscription's key and base URL arrive as MXJOBS_API_KEY and MXJOBS_BASE_URL.")
+        }
+
+        Section {
+            TextEditor(text: spec.code)
+                .font(.system(.callout, design: .monospaced))
+                .autocorrectionDisabled()
+                .frame(minHeight: 220)
+            if node.script?.code != ScriptSpec.template {
+                Button("Reset to Template") { node.script?.code = ScriptSpec.template }
+                    .font(.caption)
+            }
+        } header: {
+            Text("Code")
+        }
+
+        Section {
+            HStack {
+                Button {
+                    runTest()
+                } label: {
+                    Label("Run Script", systemImage: "play")
+                }
+                .disabled(testing || found == nil)
+                if testing { ProgressView().controlSize(.small) }
+                Spacer()
+                if let result, result.error == nil {
+                    Text("exit \(result.status ?? -1) · \(Int(result.elapsed * 1000)) ms")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(result.passed ? .green : .orange)
+                }
+            }
+            if let result { TestResultView(result: result) }
+        } header: {
+            Text("Try It")
+        } footer: {
+            Text("Runs the script once with the arguments above and the inputs from the last run, then checks the expected outcome.")
+        }
+    }
+
+    private func runTest() {
+        testing = true
+        result = nil
+        let snapshot = node
+        let sub = space.subscription(node.script?.subscriptionID)
+        var inputs: [String: Any] = [:]
+        for link in space.links where link.to == node.id {
+            guard let from = space.node(link.from), let value = editor.run.output(of: from.id) else { continue }
+            inputs[from.outcome.outputName.isEmpty ? from.title : from.outcome.outputName] = value
+        }
+        Task {
+            result = await PythonRunner.run(node: snapshot, subscription: sub, inputs: inputs)
+            testing = false
+        }
+    }
+}
+
 private struct TestResultView: View {
     var result: ApiTestResult
     var body: some View {
@@ -475,11 +573,45 @@ private struct OutcomeSection: View {
                 TextField("Success HTTP status", text: $outcome.successStatus, prompt: Text("200-299"))
             }
             StringListEditor(items: $outcome.requiredFields, prompt: "dotted.json.path", addTitle: "Add Required Field")
+            AssertionsEditor(assertions: $outcome.assertions)
         } header: {
             Text("Expected Outcome")
         } footer: {
-            Text("The step fails when the status or a required field is missing; the exception handling below then applies.")
+            Text("The step fails when the status, a required field or a value check fails; the exception handling below then applies. "
+                 + "Values may use {{argument}}.")
         }
+    }
+}
+
+private struct AssertionsEditor: View {
+    @Binding var assertions: [ValueAssertion]
+
+    var body: some View {
+        ForEach($assertions) { $a in
+            HStack(spacing: 6) {
+                TextField("path", text: $a.path, prompt: Text("solverStatus"))
+                    .labelsHidden()
+                    .font(.callout.monospaced())
+                Picker("Check", selection: $a.op) {
+                    ForEach(AssertionOp.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .labelsHidden()
+                .frame(width: 84)
+                if a.op != .exists {
+                    TextField("value", text: $a.value, prompt: Text("optimal"))
+                        .labelsHidden()
+                        .font(.callout.monospaced())
+                }
+                Button {
+                    assertions.removeAll { $0.id == a.id }
+                } label: {
+                    Image(systemName: "minus.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Remove")
+            }
+        }
+        Button("Add Value Check", systemImage: "plus") { assertions.append(ValueAssertion()) }
     }
 }
 
@@ -590,5 +722,40 @@ private struct RemoveButton: View {
         }
         .buttonStyle(.borderless)
         .help("Remove")
+    }
+}
+
+/// "Open in IDE" for a subscription's source project.
+struct OpenProjectButton: View {
+    var subscription: ApiSubscription
+    @State private var message: String?
+    @State private var refresh = 0
+
+    var body: some View {
+        let _ = refresh
+        let needsAccess = ProjectOpener.needsAccess(subscription.projectFolder, for: subscription.ide)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Button {
+                    message = nil
+                    ProjectOpener.open(subscription.projectFolder, in: subscription.ide) { message = $0 }
+                } label: {
+                    Label("Open Project in \(subscription.ide.title)", systemImage: "hammer")
+                }
+                .help(ProjectOpener.expand(subscription.projectFolder))
+                if needsAccess && ProjectOpener.isInstalled(subscription.ide) {
+                    Button("Grant Access…") {
+                        if ProjectOpener.grantAccess(startingAt: subscription.projectFolder) != nil {
+                            message = nil
+                            refresh += 1
+                        }
+                    }
+                    .help("\(subscription.ide.title) has no URL scheme: choose the folder once so MxJobsWMS may hand it over.")
+                }
+            }
+            if let message {
+                Text(message).font(.caption).foregroundStyle(.orange)
+            }
+        }
     }
 }

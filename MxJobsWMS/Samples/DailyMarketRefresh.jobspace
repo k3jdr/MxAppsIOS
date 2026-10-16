@@ -4,88 +4,142 @@
   "formatVersion" : 1,
   "links" : [
     {
-      "from" : "54093868-359E-4084-8AE8-B8B715227F2E",
-      "id" : "33A8A789-B953-4DBC-8CA4-3F9EEB90C45C",
+      "from" : "9C99E867-9253-44E5-B999-707B340E84C1",
+      "id" : "D28726A9-FA74-42F5-BF5D-C9A54BF74C7F",
       "label" : "",
-      "to" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10"
+      "to" : "A5CB95D9-E412-45FB-9889-460BE6AA702F"
     },
     {
-      "from" : "54093868-359E-4084-8AE8-B8B715227F2E",
-      "id" : "9D09094C-2DFF-43AA-AD9F-5FE3D6873A72",
+      "from" : "9C99E867-9253-44E5-B999-707B340E84C1",
+      "id" : "C2341F23-0A62-4A7F-9FA1-3C1BB94791C3",
       "label" : "",
-      "to" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD"
+      "to" : "18737C08-ADB7-4C18-BF81-E637CBB6A082"
     },
     {
-      "from" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
-      "id" : "48E6A73C-8CB3-427A-BAFD-E95DD95AC3F7",
+      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
+      "id" : "E62EE12B-4C99-45FB-BBCE-464D32F55972",
       "label" : "",
-      "to" : "946E4C3F-C61A-4FBE-9BCB-247361F45E6B"
+      "to" : "036ECD6B-5E60-47B0-BE57-9C875C93E0CA"
     },
     {
-      "from" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
-      "id" : "EDDC5474-A7EA-44B6-AA02-1FBD3B671189",
+      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
+      "id" : "3D539461-3CFD-481C-9039-23B1E9F9CC4D",
       "label" : "",
-      "to" : "870C116B-E895-488C-84F4-175BE2122DC7"
+      "to" : "503870B2-5350-4D0B-B5E9-C3EBD23F972E"
     },
     {
-      "from" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
-      "id" : "AF3376A5-58A2-4258-9493-9B4621F4BEF4",
+      "from" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
+      "id" : "E8670B72-95A5-4F1C-9955-5A4CEA7C2B9E",
       "label" : "",
-      "to" : "B32D3A81-851D-4DC2-9E59-FE0E3FAADE35"
+      "to" : "E4970F59-C729-4B31-855C-53FBF8B12CD0"
     },
     {
-      "from" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
-      "id" : "A903EB08-E2B9-41D7-9850-EE24FAF4F1FF",
+      "from" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
+      "id" : "9172DA2C-B298-4654-A62E-781CD4CB5751",
       "label" : "",
-      "to" : "9F6F3E2D-DC8B-4F16-BDCE-6C8ADABF2D24"
+      "to" : "AD6C5041-C5DA-4AE4-A85D-B7D49CB29E8A"
     },
     {
-      "from" : "946E4C3F-C61A-4FBE-9BCB-247361F45E6B",
-      "id" : "CB801E41-6C83-42C7-8CCC-BCA5E91F4FD3",
+      "from" : "036ECD6B-5E60-47B0-BE57-9C875C93E0CA",
+      "id" : "4E5DF1A8-DC4E-4B98-A67F-A7785B1E80DF",
       "label" : "",
-      "to" : "0148D65B-2CB5-4C2C-A70C-41786A987801"
+      "to" : "A3BB4418-1CB1-43B6-951A-62E567250DA7"
     },
     {
-      "from" : "0148D65B-2CB5-4C2C-A70C-41786A987801",
-      "id" : "551E294B-7664-4FC9-BC43-E165A326475A",
+      "from" : "A3BB4418-1CB1-43B6-951A-62E567250DA7",
+      "id" : "A1F5A881-1AEE-4412-93BA-9215C9D0A9D1",
       "label" : "quotes",
-      "to" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10"
+      "to" : "A5CB95D9-E412-45FB-9889-460BE6AA702F"
     },
     {
-      "from" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
-      "id" : "275E1E4E-90EA-46C7-805F-0F884663453F",
+      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
+      "id" : "B5ACD540-8538-4360-B439-264D154F1AC9",
       "label" : "",
-      "to" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14"
+      "to" : "44094E7F-150D-47CE-AEFE-2F29E1A8DF52"
     },
     {
-      "from" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
-      "id" : "D6A42289-FF9C-430C-AAF0-628E8356CA37",
+      "from" : "44094E7F-150D-47CE-AEFE-2F29E1A8DF52",
+      "id" : "16E39CC0-BC1B-4517-B337-B1ABF57C555B",
       "label" : "",
-      "to" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14"
+      "to" : "4BE7A455-6C31-4253-A694-599A3D6B513B"
     },
     {
-      "from" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14",
-      "id" : "3ED8437E-F817-44C4-8849-38350EA9091B",
+      "from" : "4BE7A455-6C31-4253-A694-599A3D6B513B",
+      "id" : "AE699609-6705-4C04-95B1-7E9D8059A227",
+      "label" : "signals",
+      "to" : "A5CB95D9-E412-45FB-9889-460BE6AA702F"
+    },
+    {
+      "from" : "9C99E867-9253-44E5-B999-707B340E84C1",
+      "id" : "1659322A-AEE3-4948-B76B-216BD144321D",
       "label" : "",
-      "to" : "57575965-96FD-44AD-9EA5-3E78CEFB658D"
+      "to" : "A631C21B-904B-4DF8-8328-484DC35ED649"
     },
     {
-      "from" : "57575965-96FD-44AD-9EA5-3E78CEFB658D",
-      "id" : "E1133136-AB51-4816-BC38-BA7B5028AB7A",
+      "from" : "A631C21B-904B-4DF8-8328-484DC35ED649",
+      "id" : "DFCA692C-754B-465A-B2EA-1A8C3DE6EEA0",
       "label" : "",
-      "to" : "AC10A678-00EE-4508-9C88-367579CDF6AB"
+      "to" : "0B321C6B-476D-4EEE-87D6-118C97BDC1BB"
     },
     {
-      "from" : "AC10A678-00EE-4508-9C88-367579CDF6AB",
-      "id" : "22F478F0-9993-48C9-8528-A21B7C4DCB83",
+      "from" : "A631C21B-904B-4DF8-8328-484DC35ED649",
+      "id" : "B6C90178-0CC3-48A4-809B-8811F4AF4198",
+      "label" : "",
+      "to" : "909EDEAA-872E-4F38-BF35-B656EAC0264D"
+    },
+    {
+      "from" : "0B321C6B-476D-4EEE-87D6-118C97BDC1BB",
+      "id" : "BFE61389-816C-43BE-BC01-847F2144D641",
+      "label" : "decisionContext",
+      "to" : "A631C21B-904B-4DF8-8328-484DC35ED649"
+    },
+    {
+      "from" : "909EDEAA-872E-4F38-BF35-B656EAC0264D",
+      "id" : "DC73DC32-B101-4A0F-B6E2-4C0502E8B188",
+      "label" : "VaR",
+      "to" : "A631C21B-904B-4DF8-8328-484DC35ED649"
+    },
+    {
+      "from" : "A631C21B-904B-4DF8-8328-484DC35ED649",
+      "id" : "80FE33DB-00D9-4823-8280-68C2DB031C8E",
+      "label" : "nextStep",
+      "to" : "581D93B4-0E58-4453-A8E5-53A8433725DD"
+    },
+    {
+      "from" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
+      "id" : "07DD635F-AA74-4EF0-A78A-679546CB36EF",
+      "label" : "",
+      "to" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF"
+    },
+    {
+      "from" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
+      "id" : "BEC89541-2F90-468F-A0D7-39A7D3C32777",
+      "label" : "",
+      "to" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF"
+    },
+    {
+      "from" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF",
+      "id" : "70C0778B-A243-4E80-8938-3E83757E108B",
+      "label" : "",
+      "to" : "581D93B4-0E58-4453-A8E5-53A8433725DD"
+    },
+    {
+      "from" : "581D93B4-0E58-4453-A8E5-53A8433725DD",
+      "id" : "AAB392E8-5E4C-448B-B1B9-29E1D492E2A0",
+      "label" : "",
+      "to" : "A483368F-1128-451E-9C69-FC5D427A2C8C"
+    },
+    {
+      "from" : "A483368F-1128-451E-9C69-FC5D427A2C8C",
+      "id" : "EEF5E3E6-8DD5-4B5F-BA90-AEC25088221E",
       "label" : "approved",
-      "to" : "15A2DB57-D50B-481B-9961-B886E023AB8B"
+      "to" : "4C0CE860-C7E8-4269-A1E8-40F1929104F1"
     },
     {
-      "from" : "15A2DB57-D50B-481B-9961-B886E023AB8B",
-      "id" : "3A2A0505-9F51-45F4-927C-514D793907BC",
+      "from" : "4C0CE860-C7E8-4269-A1E8-40F1929104F1",
+      "id" : "27537BFF-CEFA-4FCE-9CCB-8E96AD47B201",
       "label" : "",
-      "to" : "EEE13CA8-A69C-40B1-9CA7-79BA9AEFC192"
+      "to" : "9241C902-137B-4A69-96ED-BC77542BCD38"
     }
   ],
   "name" : "Daily Market Data Refresh",
@@ -93,13 +147,14 @@
     {
       "arguments" : [
         {
-          "id" : "EEE9A725-0EFF-4C6F-99E9-BDF2BBBF8AE1",
+          "id" : "2E57429B-6E27-4A52-BA93-F65A8D0C3B13",
           "name" : "watchlist",
           "required" : true,
           "type" : "symbols",
           "value" : "AAPL,MSFT,NVDA"
         }
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -110,10 +165,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "54093868-359E-4084-8AE8-B8B715227F2E",
+      "id" : "9C99E867-9253-44E5-B999-707B340E84C1",
       "kind" : "trigger",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "Refresh run started for the watchlist",
         "outputName" : "run",
         "requiredFields" : [
@@ -143,6 +201,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -153,10 +212,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "57575965-96FD-44AD-9EA5-3E78CEFB658D",
+      "id" : "581D93B4-0E58-4453-A8E5-53A8433725DD",
       "kind" : "instructionSet",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "At least one instruction, or an explicit 'no action' note",
         "outputName" : "instructions",
         "requiredFields" : [
@@ -179,6 +241,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -189,10 +252,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "AC10A678-00EE-4508-9C88-367579CDF6AB",
+      "id" : "A483368F-1128-451E-9C69-FC5D427A2C8C",
       "kind" : "approvalGate",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "approved",
         "requiredFields" : [
@@ -208,6 +274,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -223,10 +290,13 @@
         "mode" : "paper",
         "target" : "Broker API (paper)"
       },
-      "id" : "15A2DB57-D50B-481B-9961-B886E023AB8B",
+      "id" : "4C0CE860-C7E8-4269-A1E8-40F1929104F1",
       "kind" : "executeRequest",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "executions",
         "requiredFields" : [
@@ -242,6 +312,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -252,10 +323,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "EEE13CA8-A69C-40B1-9CA7-79BA9AEFC192",
+      "id" : "9241C902-137B-4A69-96ED-BC77542BCD38",
       "kind" : "outcomeReport",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "Report delivered with fills, rejects and data gaps",
         "outputName" : "",
         "requiredFields" : [
@@ -284,6 +358,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -294,10 +369,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "49DE5FD9-DC6E-47B1-BA1C-6F9C64180A10",
+      "id" : "A5CB95D9-E412-45FB-9889-460BE6AA702F",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "prices",
         "requiredFields" : [
@@ -321,6 +399,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -331,10 +410,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "3C544B8A-AA74-4DC5-AAF4-84E35C610BCD",
+      "id" : "18737C08-ADB7-4C18-BF81-E637CBB6A082",
       "kind" : "agentTask",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "events",
         "requiredFields" : [
@@ -359,6 +441,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -369,10 +452,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "7CF2D653-DBD0-40D0-8C0F-191DEBA43A14",
+      "id" : "C9ABDCFF-4D50-46F4-9987-73394537C3BF",
       "kind" : "aggregate",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "analysis",
         "requiredFields" : [
@@ -385,6 +471,48 @@
       "y" : 360
     },
     {
+      "agent" : {
+        "inputs" : [
+          "optimization",
+          "risk"
+        ],
+        "instructions" : "Follow optimization.decisionContext (rebalance, rebalance_partially, hold, rerun_relaxed, escalate), and escalate when the risk step reports VaR above the limit.",
+        "model" : "",
+        "outputFormat" : "{nextStep, confidence, reason}"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "A631C21B-904B-4DF8-8328-484DC35ED649",
+      "kind" : "decision",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "nextStep",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Choose next step",
+      "x" : 2120,
+      "y" : 360
+    },
+    {
       "api" : {
         "body" : "",
         "headers" : [
@@ -394,27 +522,28 @@
         "path" : "/query",
         "query" : [
           {
-            "id" : "1D0916F8-0DF2-42B7-A498-81D1C405E058",
+            "id" : "13C780E5-22CD-4596-BC28-74F34693EC85",
             "key" : "function",
             "value" : "GLOBAL_QUOTE"
           },
           {
-            "id" : "FC92FC00-3403-4930-AEC8-8ECC8D344744",
+            "id" : "B3323AE6-EB62-44EF-BA7D-757233FD306A",
             "key" : "symbol",
             "value" : "{{symbol}}"
           }
         ],
-        "subscriptionID" : "AC2261BD-4BE2-48B9-BA83-EFF3DEB8F4D0"
+        "subscriptionID" : "B367209F-A605-433F-818D-0EC4CC76361D"
       },
       "arguments" : [
         {
-          "id" : "E187CA64-D936-4C7E-BC00-746D80AA5BE7",
+          "id" : "B09D0DA2-7884-4BB9-95D3-6052E085DACA",
           "name" : "symbol",
           "required" : true,
           "type" : "symbols",
           "value" : "IBM"
         }
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -425,10 +554,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "946E4C3F-C61A-4FBE-9BCB-247361F45E6B",
+      "id" : "036ECD6B-5E60-47B0-BE57-9C875C93E0CA",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "quote",
         "requiredFields" : [
@@ -450,21 +582,22 @@
         "path" : "/latest",
         "query" : [
           {
-            "id" : "AE0C3C2A-BFA1-430C-B2B7-D63ECF973B2D",
+            "id" : "58C5BC99-DE32-4F45-BFC1-C4E532491706",
             "key" : "base",
             "value" : "USD"
           },
           {
-            "id" : "AD393DFD-1DFE-4D47-9D2F-6E7A7385A4B1",
+            "id" : "1BCF75B8-836A-4218-9360-0B9D1652E5CF",
             "key" : "symbols",
             "value" : "EUR,GBP,JPY"
           }
         ],
-        "subscriptionID" : "325D839D-6B5E-4493-A584-09A4A8E9D254"
+        "subscriptionID" : "A3D80D9C-F228-4BDD-8F2C-1A724C3B3822"
       },
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -475,10 +608,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "870C116B-E895-488C-84F4-175BE2122DC7",
+      "id" : "503870B2-5350-4D0B-B5E9-C3EBD23F972E",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "fx",
         "requiredFields" : [
@@ -500,32 +636,33 @@
         "path" : "/company-news",
         "query" : [
           {
-            "id" : "C8AD4383-F377-4963-ACF9-E4F0A7C782A4",
+            "id" : "5940DE21-4263-4BF7-8E0E-A876F7C5E6F6",
             "key" : "symbol",
             "value" : "{{symbol}}"
           },
           {
-            "id" : "57AF531B-BBAD-4485-A11A-3ABA22B36348",
+            "id" : "82847C6B-9799-42A6-B5EB-428E295F284B",
             "key" : "from",
             "value" : "{{yesterday}}"
           },
           {
-            "id" : "A6797550-A136-464D-802E-4792ABB81822",
+            "id" : "4A41A212-87EF-4324-A68F-88C1476B212E",
             "key" : "to",
             "value" : "{{today}}"
           }
         ],
-        "subscriptionID" : "D6D11B05-7F7B-4845-AA84-E0EE3993090B"
+        "subscriptionID" : "E9F6DA8B-BC4E-4034-B2B5-284EF614E548"
       },
       "arguments" : [
         {
-          "id" : "AF4292BD-E01C-48C0-B14F-6EE50EE2C47A",
+          "id" : "5701A90F-45A5-4996-B804-ED3C242E356D",
           "name" : "symbol",
           "required" : true,
           "type" : "symbols",
           "value" : "AAPL"
         }
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -536,10 +673,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "B32D3A81-851D-4DC2-9E59-FE0E3FAADE35",
+      "id" : "E4970F59-C729-4B31-855C-53FBF8B12CD0",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "news",
         "requiredFields" : [
@@ -562,17 +702,18 @@
         "query" : [
 
         ],
-        "subscriptionID" : "E9CB5D41-82B9-47C6-B3C8-28A9A2B38D71"
+        "subscriptionID" : "D31D6E38-A15C-4A80-9E53-D74E493C3B33"
       },
       "arguments" : [
         {
-          "id" : "3FA81D08-5BA6-4991-AC42-375637E5978D",
+          "id" : "6572C4CC-16C5-4A70-AF36-6D8CBE162AC8",
           "name" : "cik",
           "required" : true,
           "type" : "text",
           "value" : "0000320193"
         }
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -583,10 +724,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "9F6F3E2D-DC8B-4F16-BDCE-6C8ADABF2D24",
+      "id" : "AD6C5041-C5DA-4AE4-A85D-B7D49CB29E8A",
       "kind" : "apiRead",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "filings",
         "requiredFields" : [
@@ -602,6 +746,7 @@
       "arguments" : [
 
       ],
+      "breakpoint" : false,
       "enabled" : true,
       "exceptions" : {
         "exponentialBackoff" : true,
@@ -612,10 +757,13 @@
         "retryDelaySeconds" : 5,
         "timeoutSeconds" : 30
       },
-      "id" : "0148D65B-2CB5-4C2C-A70C-41786A987801",
+      "id" : "A3BB4418-1CB1-43B6-951A-62E567250DA7",
       "kind" : "dataNormalize",
       "notes" : "",
       "outcome" : {
+        "assertions" : [
+
+        ],
         "description" : "",
         "outputName" : "quotes",
         "requiredFields" : [
@@ -627,12 +775,12 @@
       "transform" : {
         "mappings" : [
           {
-            "id" : "CFAFD340-8B4F-48C6-B80B-C8F9D77D1862",
+            "id" : "2E8FEDD5-47B8-4E50-953A-46A1CCF44F17",
             "key" : "price",
             "value" : "Global Quote.05. price"
           },
           {
-            "id" : "C6AB1DB7-69D9-437C-83ED-3253B6C43C21",
+            "id" : "9C37EEBE-0351-4D12-9F0C-C3FC86F282BB",
             "key" : "change",
             "value" : "Global Quote.10. change percent"
           }
@@ -640,8 +788,281 @@
       },
       "x" : 560,
       "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "GET",
+        "path" : "/indicators",
+        "query" : [
+          {
+            "id" : "769FBB72-D295-4E68-AD6E-F56863F45744",
+            "key" : "symbol",
+            "value" : "{{symbol}}"
+          },
+          {
+            "id" : "DACB9A78-5262-4C14-9CAF-6F10389C1AB9",
+            "key" : "window",
+            "value" : "{{window}}"
+          }
+        ],
+        "subscriptionID" : "46BFA054-F98D-4509-BAAA-47E3CC357B68"
+      },
+      "arguments" : [
+        {
+          "id" : "F7A24FA6-9E97-4461-BA4D-57DA587270BE",
+          "name" : "symbol",
+          "required" : true,
+          "type" : "symbols",
+          "value" : "AAPL"
+        },
+        {
+          "id" : "675FE76E-AA14-4678-9DD3-FECBB80D996E",
+          "name" : "window",
+          "required" : false,
+          "type" : "number",
+          "value" : "14"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "44094E7F-150D-47CE-AEFE-2F29E1A8DF52",
+      "kind" : "apiRead",
+      "notes" : "Start the service first: python3 Samples/python-service/mxjobs_service.py",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "indicators",
+        "requiredFields" : [
+          "rsi",
+          "sma"
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Indicators (local Python)",
+      "x" : 1520,
+      "y" : 600
+    },
+    {
+      "arguments" : [
+        {
+          "id" : "894AAB67-3C24-4B6A-8E3D-7C71282A5606",
+          "name" : "oversold",
+          "required" : false,
+          "type" : "number",
+          "value" : "30"
+        },
+        {
+          "id" : "9138E387-4278-4B2B-98C3-6737F9F20BF6",
+          "name" : "overbought",
+          "required" : false,
+          "type" : "number",
+          "value" : "70"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "4BE7A455-6C31-4253-A694-599A3D6B513B",
+      "kind" : "pythonScript",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "buy / hold / sell from the RSI and the trend against the moving average",
+        "outputName" : "signals",
+        "requiredFields" : [
+          "signal"
+        ],
+        "successStatus" : "200-299"
+      },
+      "script" : {
+        "code" : "import json, sys\n\nrequest = json.load(sys.stdin)\nargs = request[\"arguments\"]\nind = request[\"inputs\"].get(\"indicators\", {})   # output of \"Indicators (local Python)\"\n\nrsi = ind.get(\"rsi\")\noversold = float(args.get(\"oversold\", 30))\noverbought = float(args.get(\"overbought\", 70))\n\nif rsi is None:\n    signal = \"unknown\"\nelif rsi <= oversold:\n    signal = \"buy\"\nelif rsi >= overbought:\n    signal = \"sell\"\nelse:\n    signal = \"hold\"\n\ntrend = \"up\" if (ind.get(\"last\") or 0) > (ind.get(\"sma\") or 0) else \"down\"\njson.dump({\"symbol\": ind.get(\"symbol\"), \"rsi\": rsi, \"trend\": trend, \"signal\": signal}, sys.stdout)\n",
+        "interpreter" : ""
+      },
+      "title" : "Score signals (Python)",
+      "x" : 1760,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\n  \"assets\": [\"AAPL\", \"MSFT\", \"NVDA\", \"TLT\"],\n  \"expectedReturns\": [0.11, 0.10, 0.16, 0.04],\n  \"covariance\": [[0.0625, 0.0300, 0.0450, -0.0040], [0.0300, 0.0484, 0.0400, -0.0030],\n                 [0.0450, 0.0400, 0.1600, -0.0050], [-0.0040, -0.0030, -0.0050, 0.0196]],\n  \"objective\": \"max_sharpe\",\n  \"riskFreeRate\": {{riskFreeRate}},\n  \"maxWeight\": {{maxWeight}},\n  \"currentWeights\": {\"AAPL\": 0.25, \"MSFT\": 0.25, \"NVDA\": 0.25, \"TLT\": 0.25},\n  \"maxTurnover\": {{maxTurnover}}\n}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/optimize",
+        "query" : [
+
+        ],
+        "subscriptionID" : "BF8786D1-5785-4525-B532-52C67CD53A75"
+      },
+      "arguments" : [
+        {
+          "id" : "AFBC5AF6-46B2-470B-B9E0-47DFD795C91D",
+          "name" : "maxWeight",
+          "required" : true,
+          "type" : "number",
+          "value" : "0.4"
+        },
+        {
+          "id" : "36D006E6-71A9-4641-8EF4-F45B73344DED",
+          "name" : "riskFreeRate",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.02"
+        },
+        {
+          "id" : "9F577459-2641-48D4-8369-30D28BCB9C04",
+          "name" : "maxTurnover",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.2"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "0B321C6B-476D-4EEE-87D6-118C97BDC1BB",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "0DCF4F20-541B-4133-9127-6FE21A5BAE36",
+            "op" : "==",
+            "path" : "solverStatus",
+            "value" : "optimal"
+          },
+          {
+            "id" : "32522CB0-BD11-46EB-84CE-AC44887FC63F",
+            "op" : "==",
+            "path" : "schema",
+            "value" : "mxjobs.optimization/1"
+          }
+        ],
+        "description" : "Max-Sharpe weights under the cap, with a decisionContext for the agent",
+        "outputName" : "optimization",
+        "requiredFields" : [
+          "weights",
+          "decisionContext.recommendation"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Optimize portfolio (Java)",
+      "x" : 2000,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "{\n  \"assets\": [\"AAPL\", \"MSFT\", \"NVDA\", \"TLT\"],\n  \"weights\": {\"AAPL\": 0.25, \"MSFT\": 0.25, \"NVDA\": 0.25, \"TLT\": 0.25},\n  \"expectedReturns\": [0.11, 0.10, 0.16, 0.04],\n  \"covariance\": [[0.0625, 0.0300, 0.0450, -0.0040], [0.0300, 0.0484, 0.0400, -0.0030],\n                 [0.0450, 0.0400, 0.1600, -0.0050], [-0.0040, -0.0030, -0.0050, 0.0196]],\n  \"confidence\": 0.99,\n  \"horizonDays\": 10,\n  \"portfolioValue\": {{portfolioValue}}\n}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/risk",
+        "query" : [
+
+        ],
+        "subscriptionID" : "57F512BA-60CA-48FD-B5ED-77AB55C54077"
+      },
+      "arguments" : [
+        {
+          "id" : "26F65ED0-FAD9-4347-8E0C-BCE3B509C8AB",
+          "name" : "portfolioValue",
+          "required" : true,
+          "type" : "number",
+          "value" : "1000000"
+        },
+        {
+          "id" : "2F7A3FF5-FC2E-410E-AF55-FE77D2247EB4",
+          "name" : "maxVaR",
+          "required" : false,
+          "type" : "number",
+          "value" : "80000"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "909EDEAA-872E-4F38-BF35-B656EAC0264D",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "8EB6BC71-01AA-4CD1-9855-BBA534CC4B40",
+            "op" : "==",
+            "path" : "status",
+            "value" : "ok"
+          },
+          {
+            "id" : "CAC3DAF9-B0F3-4F08-8992-8E164BF2C155",
+            "op" : "<",
+            "path" : "valueAtRisk",
+            "value" : "{{maxVaR}}"
+          }
+        ],
+        "description" : "10-day 99% VaR of the current holdings within the limit",
+        "outputName" : "risk",
+        "requiredFields" : [
+          "valueAtRisk",
+          "riskContributions"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Portfolio risk (C++)",
+      "x" : 2240,
+      "y" : 600
     }
   ],
+  "run" : {
+    "agents" : "run",
+    "breakpointsEnabled" : true,
+    "data" : "mock",
+    "operations" : "interactive",
+    "stepDelay" : 0.4,
+    "stopOnError" : true
+  },
   "subscriptions" : [
     {
       "auth" : "queryParameter",
@@ -650,11 +1071,13 @@
 
       ],
       "docsURL" : "https://www.alphavantage.co/documentation/",
-      "id" : "AC2261BD-4BE2-48B9-BA83-EFF3DEB8F4D0",
+      "id" : "B367209F-A605-433F-818D-0EC4CC76361D",
+      "ide" : "vscode",
       "keyName" : "apikey",
       "name" : "Alpha Vantage",
       "notes" : "",
       "plan" : "Free",
+      "projectFolder" : "",
       "provider" : "Alpha Vantage Inc.",
       "rateLimitPerMinute" : 5
     },
@@ -665,11 +1088,13 @@
 
       ],
       "docsURL" : "https://finnhub.io/docs/api",
-      "id" : "D6D11B05-7F7B-4845-AA84-E0EE3993090B",
+      "id" : "E9F6DA8B-BC4E-4034-B2B5-284EF614E548",
+      "ide" : "vscode",
       "keyName" : "X-Finnhub-Token",
       "name" : "Finnhub",
       "notes" : "",
       "plan" : "Free",
+      "projectFolder" : "",
       "provider" : "Finnhub.io",
       "rateLimitPerMinute" : 60
     },
@@ -680,11 +1105,13 @@
 
       ],
       "docsURL" : "https://frankfurter.dev",
-      "id" : "325D839D-6B5E-4493-A584-09A4A8E9D254",
+      "id" : "A3D80D9C-F228-4BDD-8F2C-1A724C3B3822",
+      "ide" : "vscode",
       "keyName" : "",
       "name" : "Frankfurter FX",
       "notes" : "",
       "plan" : "",
+      "projectFolder" : "",
       "provider" : "ECB reference rates",
       "rateLimitPerMinute" : 0
     },
@@ -693,19 +1120,72 @@
       "baseURL" : "https://data.sec.gov",
       "defaultHeaders" : [
         {
-          "id" : "6E316747-6F30-4A15-B661-511711605478",
+          "id" : "B2B331C5-B6E2-4371-B5BC-779E784CDA13",
           "key" : "User-Agent",
           "value" : "MxJobsWMS your-name@example.com"
         }
       ],
       "docsURL" : "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
-      "id" : "E9CB5D41-82B9-47C6-B3C8-28A9A2B38D71",
+      "id" : "D31D6E38-A15C-4A80-9E53-D74E493C3B33",
+      "ide" : "vscode",
       "keyName" : "",
       "name" : "SEC EDGAR",
       "notes" : "SEC asks every client to send a User-Agent naming the requester.",
       "plan" : "",
+      "projectFolder" : "",
       "provider" : "U.S. SEC",
       "rateLimitPerMinute" : 600
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8765",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "46BFA054-F98D-4509-BAAA-47E3CC357B68",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Local Python service",
+      "notes" : "Start it with: python3 Samples/python-service/mxjobs_service.py --port 8765. Store a token here only if the service is started with --token.",
+      "plan" : "",
+      "projectFolder" : "",
+      "provider" : "This Mac",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8766",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "BF8786D1-5785-4525-B532-52C67CD53A75",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Portfolio optimizer (Java)",
+      "notes" : "Start it with: cd Modules/portfolio-java && mvn -q package && java -jar target/portfolio-java.jar",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxJobsWMS/Modules/portfolio-java",
+      "provider" : "This Mac",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8767",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "57F512BA-60CA-48FD-B5ED-77AB55C54077",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Portfolio engine (C++)",
+      "notes" : "Start it with: cd Modules/portfolio-cpp && make run",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxJobsWMS/Modules/portfolio-cpp",
+      "provider" : "This Mac",
+      "rateLimitPerMinute" : 0
     }
   ]
 }
