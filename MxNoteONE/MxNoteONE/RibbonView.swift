@@ -12,6 +12,16 @@ import SwiftUI
 
 struct RibbonView: View {
     @Bindable private var editor = NotebookStore.shared.editor
+    @Bindable private var layout = RibbonLayout.shared
+    private static var restored = false
+
+    /// The tab shown (Table and Score only while a table or score is being worked on).
+    private var shownTab: RibbonTab {
+        switch editor.ribbonTab {
+        case .table where !editor.tableActive, .score where !editor.scoreActive: .home
+        default: editor.ribbonTab
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,29 +54,48 @@ struct RibbonView: View {
                     .buttonStyle(.borderless)
                     .focusable(false)
                 }
+                // Arranging the toolbar: wrap, compact, and where each section goes.
+                Menu {
+                    RibbonOptionsMenu(tab: shownTab)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .focusable(false)
+                .help("Toolbar options: wrap, compact, and show, collapse, float or hide each section")
             }
             .padding(.horizontal, 8)
             .padding(.top, 6)
             .padding(.bottom, 2)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 6) {
-                    switch editor.ribbonTab {
-                    case .home: HomeRibbon()
-                    case .insert: InsertRibbon()
-                    case .draw: DrawRibbon()
-                    case .view: ViewRibbon()
-                    case .table:
-                        if editor.tableActive { TableRibbon() } else { HomeRibbon() }
-                    case .score:
-                        if editor.scoreActive { ScoreRibbon() } else { HomeRibbon() }
+            Group {
+                if layout.wrap {
+                    // Sections wrap onto more rows: everything fits the window.
+                    RibbonFlow(spacing: 6, rowSpacing: layout.compact ? 2 : 4) {
+                        RibbonTabContent(tab: shownTab)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        HStack(alignment: .top, spacing: 6) {
+                            RibbonTabContent(tab: shownTab)
+                        }
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
             }
+            .environment(\.ribbonTab, shownTab)
+            .padding(.horizontal, 10)
+            .padding(.vertical, layout.compact ? 2 : 5)
         }
         .background(.bar)
+        .onAppear {
+            // Palettes left floating last time open again.
+            guard !Self.restored else { return }
+            Self.restored = true
+            DispatchQueue.main.async { RibbonLayout.shared.restorePalettes() }
+        }
     }
 }
 
@@ -90,7 +119,7 @@ struct RibbonButton: View {
     var body: some View {
         Button(action: action) {
             Group {
-                if large {
+                if large && !RibbonLayout.shared.compact {
                     VStack(spacing: 2) {
                         Image(systemName: symbol)
                             .font(.system(size: 17))
@@ -119,23 +148,89 @@ struct RibbonButton: View {
 struct RibbonGroup<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
+    @Environment(\.ribbonTab) private var tab
+    @Environment(\.ribbonPaletteKey) private var paletteKey
+    @Bindable private var layout = RibbonLayout.shared
+    @State private var showingPopover = false
 
     init(_ title: String, @ViewBuilder content: () -> Content) {
         self.title = title
         self.content = content()
     }
 
+    private var key: String { RibbonLayout.key(tab ?? .home, title) }
+
     var body: some View {
+        if let paletteKey {
+            // A floating palette shows only its own section.
+            if paletteKey == key {
+                HStack(spacing: 2) { content }
+                    .frame(minHeight: 30)
+            }
+        } else {
+            switch layout.state(key) {
+            case .docked:
+                docked
+            case .collapsed:
+                collapsed
+            case .floating, .hidden:
+                EmptyView()
+            }
+        }
+    }
+
+    private var docked: some View {
         HStack(spacing: 6) {
             VStack(spacing: 3) {
                 HStack(spacing: 2) { content }
-                    .frame(minHeight: 40)
-                Text(title)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
+                    .frame(minHeight: layout.compact ? 26 : 40)
+                if !layout.compact {
+                    Text(title)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
             }
-            Divider().frame(height: 46)
+            Divider().frame(height: layout.compact ? 26 : 46)
         }
+        .contentShape(Rectangle())
+        .contextMenu { sectionMenu }
+        .help(layout.compact ? title : "")
+    }
+
+    /// One button for the whole section; its tools open under it.
+    private var collapsed: some View {
+        HStack(spacing: 6) {
+            Button {
+                showingPopover.toggle()
+            } label: {
+                VStack(spacing: 2) {
+                    HStack(spacing: 2) {
+                        Text(title).font(.system(size: 11))
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(showingPopover ? 0.12 : 0.05), in: RoundedRectangle(cornerRadius: 5))
+                }
+                .frame(minHeight: layout.compact ? 26 : 40)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help("\(title) — click for its tools")
+            .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
+                HStack(spacing: 2) { content }
+                    .padding(8)
+            }
+            Divider().frame(height: layout.compact ? 26 : 46)
+        }
+        .contextMenu { sectionMenu }
+    }
+
+    @ViewBuilder private var sectionMenu: some View {
+        RibbonSectionMenu(key: key, title: "\(title) Section")
+        Divider()
+        Button("Show All Sections") { layout.showAll(in: tab) }
     }
 }
 
@@ -508,7 +603,7 @@ struct ScoreRibbon: View {
             ForEach(ScoreNote.Duration.allCases) { d in
                 RibbonButton("\(d.title) (\(d.key))", d == .whole ? "circle" : d == .half ? "music.note" : "music.note",
                              active: ScoreView.inputDuration == d) { act { $0.setDuration(d) } }
-                    .overlay(alignment: .bottom) { Text(d.glyph).font(.system(size: 9)).offset(y: 8) }
+                    .overlay(alignment: .bottom) { Text(d.key).font(.system(size: 8, weight: .medium)).foregroundStyle(.secondary).offset(y: 8) }
             }
             RibbonButton("Dot (.)", "circle.fill", active: ScoreView.inputDotted) { act { $0.toggleDot() } }
             RibbonButton("Triplet (⌃3)", "3.square", active: ScoreView.inputTriplet) { act { $0.toggleTriplet() } }
@@ -622,10 +717,25 @@ struct ScoreRibbon: View {
                 }
             }
             RibbonMenu("Tempo", "speedometer") {
-                ForEach([60, 72, 80, 90, 100, 112, 120, 132, 144, 160], id: \.self) { t in
-                    Button("♩ = \(t)") { act { s in s.owner?.update({ $0.tempo = t }, actionName: "Tempo") } }
+                let bar = staff?.currentBar ?? 0
+                Section(bar == 0 ? "Tempo at the start" : "Tempo from bar \(bar + 1)") {
+                    ForEach(ScoreData.tempoTerms, id: \.0) { term, bpm in
+                        Button("\(term)  (♩ = \(bpm))") { act { $0.setTempoTerm(term, bpm) } }
+                    }
                 }
+                Divider()
+                ForEach([60, 72, 80, 90, 100, 112, 120, 132, 144, 160], id: \.self) { t in
+                    Button("♩ = \(t)") { act { $0.setTempo(t) } }
+                }
+                Divider()
+                Button("rit. (gradually slower)") { act { $0.toggleGradual(-1) } }
+                Button("accel. (gradually faster)") { act { $0.toggleGradual(1) } }
+                if bar > 0 { Button("a tempo") { act { $0.aTempo() } } }
+                Divider()
+                Button("Metronome Mark…") { staff?.editMetronomeMark() }
+                if bar > 0 { Button("Remove Tempo Change") { act { $0.removeTempoChange() } } }
             }
+            .help("Tempo and metronome mark at the selected note's bar")
             RibbonButton("Title", "textformat", large: true) { act { $0.owner?.editTitle() } }
             RibbonButton("Export MusicXML", "square.and.arrow.up", large: true) {
                 if let owner = staff?.owner { MusicXML.save(owner.score, from: owner.window) }

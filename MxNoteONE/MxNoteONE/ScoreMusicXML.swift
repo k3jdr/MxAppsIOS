@@ -62,8 +62,12 @@ enum MusicXML {
                 out += "<time><beats>\(score.beats)</beats><beat-type>\(score.beatUnit)</beat-type></time>"
                 out += score.clef == .treble ? "<clef><sign>G</sign><line>2</line></clef>" : "<clef><sign>F</sign><line>4</line></clef>"
                 out += "</attributes>\n"
-                out += "      <direction placement=\"above\"><direction-type><metronome><beat-unit>quarter</beat-unit>"
-                out += "<per-minute>\(score.tempo)</per-minute></metronome></direction-type><sound tempo=\"\(score.tempo)\"/></direction>\n"
+                out += tempoXML(score, bar: 0)
+            } else if mark.tempo != nil || !(mark.tempoText ?? "").isEmpty {
+                out += tempoXML(score, bar: m)
+            }
+            if let g = mark.gradual {
+                out += "      <direction placement=\"above\"><direction-type><words font-style=\"italic\">\(g < 0 ? "rit." : "accel.")</words></direction-type></direction>\n"
             }
             out += notesXML(score, bar, voice: 1)
             // Voice 2 in the same bar: back to the bar line, then its notes.
@@ -81,6 +85,23 @@ enum MusicXML {
         }
         out += "  </part>\n</score-partwise>\n"
         return out
+    }
+
+    /// A tempo mark: its word, the metronome mark in its note, and the speed for playback.
+    private static func tempoXML(_ score: ScoreData, bar: Int) -> String {
+        let mark = score.mark(bar)
+        let quarters = bar == 0 ? score.tempo : (mark.tempo ?? score.tempo(inBar: bar))
+        let unit = ScoreData.tempoUnits.first { $0.0 == (mark.tempoUnit ?? "quarter") } ?? ScoreData.tempoUnits[0]
+        var x = "      <direction placement=\"above\">"
+        if let word = mark.tempoText, !word.isEmpty {
+            x += "<direction-type><words font-weight=\"bold\">\(escape(word))</words></direction-type>"
+        }
+        if bar == 0 || mark.tempo != nil {
+            let beatUnit = unit.0 == "dotted" ? "quarter</beat-unit><beat-unit-dot/>" : unit.0 + "</beat-unit>"
+            x += "<direction-type><metronome><beat-unit>\(beatUnit)<per-minute>\(Int((Double(quarters) / unit.1).rounded()))</per-minute></metronome></direction-type>"
+            x += "<sound tempo=\"\(quarters)\"/>"
+        }
+        return x + "</direction>\n"
     }
 
     /// One voice's notes in a bar (voice 2 after a <backup>).
@@ -326,9 +347,35 @@ enum MusicXML {
                         default: break
                         }
                     }
-                    if let tempo = (e.elements(forName: "sound").first?.attribute(forName: "tempo")?.stringValue).flatMap(Double.init)
-                        ?? text(e, "direction-type/metronome/per-minute").flatMap(Double.init) {
-                        score.tempo = max(20, min(300, Int(tempo.rounded())))
+                    // Tempo: the speed (from <sound>, else the metronome mark in its note), a word, rit. / accel.
+                    let metronome = e.elements(forName: "direction-type").compactMap { $0.elements(forName: "metronome").first }.first
+                    var unitID = "quarter"
+                    if let metronome, let unit = text(metronome, "beat-unit") {
+                        let dotted = !metronome.elements(forName: "beat-unit-dot").isEmpty
+                        unitID = dotted && unit == "quarter" ? "dotted" : ["half", "eighth"].contains(unit) ? unit : "quarter"
+                    }
+                    let factor = ScoreData.tempoUnits.first { $0.0 == unitID }?.1 ?? 1
+                    let speed = (e.elements(forName: "sound").first?.attribute(forName: "tempo")?.stringValue).flatMap(Double.init)
+                        ?? metronome.flatMap { text($0, "per-minute") }.flatMap(Double.init).map { $0 * factor }
+                    let words = e.elements(forName: "direction-type").compactMap { text($0, "words") }.joined(separator: " ")
+                        .trimmingCharacters(in: .whitespaces)
+                    let lower = words.lowercased()
+                    let gradual: Int? = ["rit", "ritard", "ritenuto", "rall", "rallentando"].contains(where: { lower.hasPrefix($0) }) ? -1
+                        : ["accel", "accelerando", "stringendo"].contains(where: { lower.hasPrefix($0) }) ? 1 : nil
+                    let bar = max(0, barIndex)
+                    if let speed {
+                        let q = max(20, min(400, Int(speed.rounded())))
+                        if bar == 0 { score.tempo = q } else { score.setMark(bar) { $0.tempo = q } }
+                        if unitID != "quarter" { score.setMark(bar) { $0.tempoUnit = unitID } }
+                    }
+                    if let gradual {
+                        score.setMark(bar) { $0.gradual = gradual }
+                    } else if !words.isEmpty, speed != nil || ScoreData.tempoTerms.contains(where: { lower.hasPrefix($0.0.lowercased()) }) || lower.hasPrefix("a tempo") || lower.hasPrefix("tempo") {
+                        score.setMark(bar) { $0.tempoText = words }
+                        // A tempo word alone: its usual speed.
+                        if speed == nil, let term = ScoreData.tempoTerms.first(where: { lower.hasPrefix($0.0.lowercased()) }) {
+                            if bar == 0 { score.tempo = term.1 } else { score.setMark(bar) { $0.tempo = term.1 } }
+                        }
                     }
                 case "barline":
                     switch e.elements(forName: "repeat").first?.attribute(forName: "direction")?.stringValue {

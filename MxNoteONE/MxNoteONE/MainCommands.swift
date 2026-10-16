@@ -232,6 +232,26 @@ struct MainCommands: Commands {
         CommandGroup(before: .sidebar) {
             Button(editor.showRibbon ? "Hide Ribbon" : "Show Ribbon") { editor.showRibbon.toggle() }
                 .keyboardShortcut("r", modifiers: [.command, .option])
+            Menu("Toolbar") {
+                Toggle("Wrap Sections onto More Rows", isOn: Binding(get: { RibbonLayout.shared.wrap }, set: { RibbonLayout.shared.wrap = $0 }))
+                Toggle("Compact Toolbar", isOn: Binding(get: { RibbonLayout.shared.compact }, set: { RibbonLayout.shared.compact = $0 }))
+                    .keyboardShortcut("r", modifiers: [.command, .option, .shift])
+                Divider()
+                // Each tab's sections: in the toolbar, collapsed to a button, a floating palette, or hidden.
+                ForEach(RibbonLayout.sections, id: \.0) { tab, titles in
+                    Menu("\(tab.rawValue) Sections") {
+                        ForEach(titles, id: \.self) { title in
+                            Menu(title) { RibbonSectionMenu(key: RibbonLayout.key(tab, title), title: title) }
+                        }
+                        Divider()
+                        Button("Collapse All \(tab.rawValue) Sections") { RibbonLayout.shared.collapseAll(in: tab) }
+                        Button("Show All \(tab.rawValue) Sections") { RibbonLayout.shared.showAll(in: tab) }
+                    }
+                }
+                Divider()
+                Button("Show All Sections") { RibbonLayout.shared.showAll() }
+                Button("Dock All Palettes") { RibbonLayout.shared.dockAllPalettes() }
+            }
             Button(store.showFullPage ? "Exit Full Page View" : "Full Page View") { store.showFullPage.toggle() }
                 .keyboardShortcut("f", modifiers: [.command, .option])
             Divider()

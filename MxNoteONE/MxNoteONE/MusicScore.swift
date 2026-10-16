@@ -117,7 +117,16 @@ struct ScoreBarMark: Codable, Hashable {
     var keyFifths: Int?
     var repeatStart: Bool?
     var repeatEnd: Bool?
-    var isEmpty: Bool { keyFifths == nil && repeatStart != true && repeatEnd != true }
+    /// A new tempo from this bar (quarter notes a minute), with a word for it (Allegro, a tempo…) and the note the
+    /// metronome mark counts in ("quarter", "dotted", "half", "eighth").
+    var tempo: Int?
+    var tempoText: String?
+    var tempoUnit: String?
+    /// Gradually slower (-1, rit.) or faster (1, accel.) from this bar to the next tempo change.
+    var gradual: Int?
+    var isEmpty: Bool {
+        keyFifths == nil && repeatStart != true && repeatEnd != true && tempo == nil && (tempoText ?? "").isEmpty && tempoUnit == nil && gradual == nil
+    }
 }
 
 struct ScoreData: Codable, Hashable {
@@ -172,6 +181,53 @@ struct ScoreData: Codable, Hashable {
             if filled >= measureLength - 1e-9 { bar += 1; filled = 0 }
         }
         return bar
+    }
+
+    // MARK: Tempo
+
+    /// Tempo words with their usual speeds.
+    static let tempoTerms: [(String, Int)] = [
+        ("Largo", 50), ("Adagio", 66), ("Andante", 76), ("Moderato", 100), ("Allegretto", 112), ("Allegro", 132), ("Vivace", 160), ("Presto", 184),
+    ]
+    /// The notes a metronome mark can count in: (id, quarter notes in one, glyph).
+    static let tempoUnits: [(String, Double, String)] = [("quarter", 1, "\u{2669}"), ("dotted", 1.5, "\u{2669}."), ("half", 2, "\u{1D15E}"), ("eighth", 0.5, "\u{266A}")]
+
+    /// The tempo in a bar before any rit. / accel. (quarter notes a minute): the last change at or before it.
+    func tempo(inBar bar: Int) -> Int {
+        guard let barMarks else { return tempo }
+        return barMarks.filter { $0.key <= bar && $0.key > 0 && $0.value.tempo != nil }.max { $0.key < $1.key }?.value.tempo ?? tempo
+    }
+
+    /// The bars with a tempo change or a rit. / accel. (the first bar counts, for its metronome mark).
+    var tempoBars: [Int] {
+        let marked = (barMarks ?? [:]).filter { $0.value.tempo != nil || $0.value.gradual != nil || !($0.value.tempoText ?? "").isEmpty }.map(\.key)
+        return Array(Set(marked + [0])).sorted()
+    }
+
+    /// The tempo at a point in a bar (`x` quarter notes in), rit. and accel. included.
+    func tempo(atBar bar: Int, offset x: Double) -> Double {
+        let base = Double(tempo(inBar: bar))
+        // The last rit./accel. at or before this bar, if no tempo change has come since.
+        guard let barMarks, let (g, mark) = barMarks.filter({ $0.key <= bar && $0.value.gradual != nil }).max(by: { $0.key < $1.key }),
+              let direction = mark.gradual,
+              !barMarks.contains(where: { $0.key > g && $0.key <= bar && $0.value.tempo != nil && $0.key != g }) else { return base }
+        // It runs to the next tempo change (reaching that tempo), else over two bars by about a third.
+        let from = Double(tempo(inBar: g))
+        let next = barMarks.filter { $0.key > g && $0.value.tempo != nil }.min { $0.key < $1.key }
+        let endBar = next?.key ?? g + 2
+        let to = next.flatMap { $0.value.tempo.map(Double.init) } ?? from * (direction < 0 ? 0.7 : 1.3)
+        let done = min(1, (Double(bar - g) * measureLength + x) / (Double(endBar - g) * measureLength))
+        return from + (to - from) * done
+    }
+
+    /// How a tempo is written: [word] ♩ = n (in the mark's note).
+    func tempoLabel(bar: Int) -> String {
+        let m = mark(bar)
+        let unit = Self.tempoUnits.first { $0.0 == (m.tempoUnit ?? "quarter") } ?? Self.tempoUnits[0]
+        let bpm = Int((Double(bar == 0 ? tempo : (m.tempo ?? tempo(inBar: bar))) / unit.1).rounded())
+        let word = (m.tempoText ?? "").trimmingCharacters(in: .whitespaces)
+        let number = bar == 0 || m.tempo != nil ? "\(unit.2) = \(bpm)" : ""
+        return [word, number].filter { !$0.isEmpty }.joined(separator: " ")
     }
 
     /// Bars in the order they play: at an end repeat, back to the last start repeat (or the beginning), once.
@@ -503,6 +559,8 @@ struct ScoreData: Codable, Hashable {
             var text = text
             let m = mark(b)
             if i == bars[b].lowerBound {
+                if m.gradual != nil { text = (m.gradual! < 0 ? "rit. " : "accel. ") + text }
+                if b > 0, m.tempo != nil || !(m.tempoText ?? "").isEmpty { text = "{\(tempoLabel(bar: b))} " + text }
                 if b > 0, let k = m.keyFifths { text = "[key: \(Self.keyNames.first { $0.0 == k }?.1 ?? "\(k)")] " + text }
                 if m.repeatStart == true { text = "|: " + text }
             }
@@ -638,18 +696,36 @@ final class ScorePlayer {
                 j = last + 1
             }
         }
-        // 2. Fermatas hold their note about twice as long; everything after waits.
+        // 2. Beats to seconds through the tempo changes (rit. and accel. change it gradually).
+        let barLength = score.measureLength, step = 1.0 / 24
+        let total = Double(order.count) * barLength
+        var clock: [Double] = [0]
+        var beat = 0.0
+        while beat < total {
+            let u = beat + step / 2 + offset
+            let k = max(0, min(order.count - 1, Int(u / barLength)))
+            let bpm = order.isEmpty ? Double(score.tempo) : score.tempo(atBar: order[k], offset: u - Double(k) * barLength)
+            clock.append(clock[clock.count - 1] + step * 60 / max(10, bpm))
+            beat += step
+        }
+        func seconds(_ t: Double) -> Double {
+            let i = t / step, lo = Int(i)
+            guard lo + 1 < clock.count else { return clock[clock.count - 1] + (t - Double(clock.count - 1) * step) * secondsPerBeat }
+            return clock[lo] + (clock[lo + 1] - clock[lo]) * (i - Double(lo))
+        }
+        // 3. Fermatas hold their note about twice as long; everything after waits.
         let holds = sounds.filter { lines[$0.voice].notes[$0.index].fermata == true }.map { ($0.time, $0.length) }
-        func delay(_ t: Double) -> Double { holds.reduce(0) { $0 + ($1.0 + $1.1 <= t + 1e-6 ? $1.1 : 0) } }
-        // 3. Schedule: articulations shape length and loudness; ornaments play their notes.
+        func delay(_ t: Double) -> Double {
+            holds.reduce(0) { $0 + ($1.0 + $1.1 <= t + 1e-6 ? seconds($1.0 + $1.1) - seconds($1.0) : 0) }
+        }
+        // 4. Schedule: articulations shape length and loudness; ornaments play their notes.
         var end = 0.0
         for sound in sounds {
             let line = lines[sound.voice]
             let note = line.notes[sound.index]
             let ref = NoteRef(voice: sound.voice, index: sound.index)
-            let held = note.fermata == true ? sound.length * 2 : sound.length
-            let start = (sound.time + delay(sound.time)) * secondsPerBeat
-            let span = held * secondsPerBeat
+            let start = seconds(sound.time) + delay(sound.time)
+            let span = (seconds(sound.time + sound.length) - seconds(sound.time)) * (note.fermata == true ? 2 : 1)
             let marks = Set(note.articulations ?? [])
             let inSlur = line.slurs.contains { $0.0 <= sound.index && sound.index < $0.1 }
             let sounding = marks.contains("staccatissimo") ? 0.3 : marks.contains("staccato") ? 0.5
@@ -801,7 +877,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private var markBandBelow: CGFloat {
         score.hasSecondVoice && score.line(1).contains { $0.fermata == true || $0.ornament != nil || $0.articulations != nil } ? space * 3.4 : 0
     }
-    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand + dynamicBand + markBandAbove + markBandBelow }
+    /// Metronome marks, tempo words and rit. / accel. over everything else.
+    private var tempoBand: CGFloat { space * 2.6 }
+    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand + dynamicBand + markBandAbove + markBandBelow + tempoBand }
     /// TAB lines' spacing.
     private var tabGap: CGFloat { space * 1.3 }
 
@@ -827,6 +905,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// Key changes within a line (x, system, from, to) and start-repeat signs (x, system).
     private var keyChanges: [(x: CGFloat, system: Int, from: Int, to: Int)] = []
     private var repeatStarts: [(x: CGFloat, system: Int)] = []
+    /// Where each bar starts (x, system).
+    private var barStarts: [Int: (x: CGFloat, system: Int)] = [:]
 
     enum BarStyle { case single, double, final, endRepeat }
 
@@ -941,6 +1021,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         systemFirstBars = systems.map { $0.first ?? 0 }
         keyChanges = []
         repeatStarts = []
+        barStarts = [:]
         var spots: [(Double, CGFloat, Int)] = []   // the current voice: (onset key, x, system) per note
         for (s, bars) in systems.enumerated() {
             let header = headerWidth(system: s)
@@ -952,6 +1033,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let stretch = s < systems.count - 1 && natural > 0 ? max(1, (usable - header - fixedRoom) / natural) : 1
             var x = start
             for (k, m) in bars.enumerated() {
+                barStarts[m] = (k == 0 && m > 0 ? x - space * 0.4 : x, s)
                 // A key change inside a line (at a line's start it's the line's key signature).
                 if k > 0, keyRoom[m] > 0, let to = score.mark(m).keyFifths {
                     keyChanges.append((x, s, score.fifths(inBar: m - 1), to))
@@ -1000,7 +1082,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// The top of a system's staff.
     private func staffTop(_ system: Int) -> CGFloat {
-        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5 + chordBand + markBandAbove
+        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5 + chordBand + markBandAbove + tempoBand
     }
 
     private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 + dynamicBand + markBandBelow }
@@ -1061,9 +1143,81 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         drawSlurs(ink: ink)
         drawMarks(ink: ink)
         drawDynamics(ink: ink)
+        drawTempos(ink: ink)
         drawWords(ink: ink)
         if score.showTab == true { drawTab(ink: ink) }
         drawCaret()
+    }
+
+    // MARK: Tempo marks
+
+    static let tempoWordFont = NSFont(name: "Georgia-Bold", size: 13) ?? .boldSystemFont(ofSize: 13)
+    static let tempoItalicFont = NSFont(name: "Georgia-Italic", size: 13) ?? .systemFont(ofSize: 13)
+
+    /// The tempo band's text line in a system.
+    private func tempoY(_ system: Int) -> CGFloat { staffTop(system) - space * 4.5 - chordBand - markBandAbove - tempoBand + space * 0.9 }
+
+    /// Metronome marks (♩ = 120, with a tempo word) where the tempo is set or changes; rit. / accel. with a dashed
+    /// line to where the change ends.
+    private func drawTempos(ink: NSColor) {
+        let bars = score.tempoBars
+        let barCount = barLines.count
+        for b in bars where b < max(1, barCount) {
+            let at = b == 0 ? (x: space * 1.2, system: 0) : (barStarts[b] ?? (x: space * 1.2, system: 0))
+            var x = at.x
+            let y = tempoY(at.system)
+            let label = score.tempoLabel(bar: b)
+            let mark = score.mark(b)
+            if !label.isEmpty {
+                let text = NSMutableAttributedString()
+                let word = (mark.tempoText ?? "").trimmingCharacters(in: .whitespaces)
+                if !word.isEmpty {
+                    text.append(NSAttributedString(string: word + (label.count > word.count ? " " : ""), attributes: [.font: Self.tempoWordFont, .foregroundColor: ink]))
+                }
+                let number = word.isEmpty ? label : String(label.dropFirst(word.count)).trimmingCharacters(in: .whitespaces)
+                if !number.isEmpty {
+                    // The note glyph a little larger.
+                    let glyphEnd = number.firstIndex(of: "=") ?? number.startIndex
+                    let glyph = String(number[..<glyphEnd]), rest = String(number[glyphEnd...])
+                    text.append(NSAttributedString(string: "(" , attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: ink]))
+                    text.append(NSAttributedString(string: glyph, attributes: [.font: NSFont(name: "Apple Symbols", size: 17) ?? .systemFont(ofSize: 15), .foregroundColor: ink,
+                                                                               .baselineOffset: -1]))
+                    text.append(NSAttributedString(string: rest + ")", attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: ink]))
+                    if word.isEmpty {
+                        // A bare metronome mark goes without brackets.
+                        text.deleteCharacters(in: NSRange(location: text.length - 1, length: 1))
+                        let open = (text.string as NSString).range(of: "(")
+                        if open.location != NSNotFound { text.deleteCharacters(in: open) }
+                    }
+                }
+                let size = text.size()
+                text.draw(at: NSPoint(x: x, y: y - size.height / 2))
+                x += size.width + space * 0.8
+            }
+            if let direction = mark.gradual {
+                let attrs: [NSAttributedString.Key: Any] = [.font: Self.tempoItalicFont, .foregroundColor: ink]
+                let word = direction < 0 ? "rit." : "accel."
+                let size = (word as NSString).size(withAttributes: attrs)
+                (word as NSString).draw(at: NSPoint(x: x, y: y - size.height / 2), withAttributes: attrs)
+                // Dashes to the next tempo change (or two bars on).
+                let next = bars.first { $0 > b && score.mark($0).tempo != nil } ?? min(b + 2, barCount)
+                let endAt: (x: CGFloat, system: Int) = barStarts[next].map { ($0.x - space * 0.6, $0.system) }
+                    ?? (barLines.last.map { ($0.x - space, $0.system) } ?? (lineEnd, at.system))
+                let startX = x + size.width + space * 0.5
+                for s in at.system...max(at.system, endAt.system) {
+                    let from = s == at.system ? startX : (systemStarts.indices.contains(s) ? systemStarts[s] : space * 6)
+                    let to = s == endAt.system ? endAt.x : lineEnd
+                    guard to - from > space else { continue }
+                    let path = NSBezierPath()
+                    path.move(to: NSPoint(x: from, y: tempoY(s) + 1))
+                    path.line(to: NSPoint(x: to, y: tempoY(s) + 1))
+                    path.setLineDash([4, 4], count: 2, phase: 0)
+                    path.lineWidth = 1
+                    ink.setStroke()
+                    path.stroke()
+                }
+            }
+        }
     }
 
     // MARK: Articulations, ornaments, fermatas
@@ -2201,6 +2355,87 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         return (note.articulations ?? []).contains(mark) || note.ornament == mark || (mark == "fermata" && note.fermata == true)
     }
 
+    // MARK: Tempo changes
+
+    /// A tempo from the current bar on: a speed (quarter notes a minute), a word, and the note the mark counts in.
+    /// In the first bar it's the score's tempo.
+    func setTempo(_ bpm: Int?, text: String? = nil, unit: String? = nil, name: String = "Tempo") {
+        let bar = currentBar
+        edit(name) { s in
+            if bar == 0, let bpm { s.tempo = max(20, min(400, bpm)) }
+            s.setMark(bar) { m in
+                if bar > 0 { m.tempo = bpm.map { max(20, min(400, $0)) } }
+                if let text { m.tempoText = text.isEmpty ? nil : text }
+                if let unit { m.tempoUnit = unit == "quarter" ? nil : unit }
+            }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// A tempo word with its usual speed (Allegro: 132).
+    func setTempoTerm(_ term: String, _ bpm: Int) { setTempo(bpm, text: term) }
+
+    /// rit. (-1) or accel. (1) from the current bar to the next tempo change; the same again takes it off.
+    func toggleGradual(_ direction: Int) {
+        let bar = currentBar
+        edit(direction < 0 ? "Ritardando" : "Accelerando") { s in
+            s.setMark(bar) { $0.gradual = $0.gradual == direction ? nil : direction }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// a tempo: back to the speed before the last rit. or accel.
+    func aTempo() {
+        let bar = currentBar
+        let before = (score.barMarks ?? [:]).filter { $0.key < bar && $0.value.gradual != nil }.max { $0.key < $1.key }
+            .map { score.tempo(inBar: $0.key) } ?? score.tempo(inBar: max(0, bar - 1))
+        setTempo(before, text: "a tempo", name: "A Tempo")
+    }
+
+    /// Takes the tempo change (and rit. / accel.) off the current bar.
+    func removeTempoChange() {
+        let bar = currentBar
+        edit("Remove Tempo Change") { s in
+            s.setMark(bar) { $0.tempo = nil; $0.tempoText = nil; $0.tempoUnit = nil; $0.gradual = nil }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    var tempoHere: ScoreBarMark { score.mark(currentBar) }
+    var tempoNumberHere: Int { currentBar == 0 ? score.tempo : (score.mark(currentBar).tempo ?? score.tempo(inBar: currentBar)) }
+
+    /// Metronome Mark…: the speed, the note it counts in, and a word, for the current bar.
+    func editMetronomeMark() {
+        let bar = currentBar
+        let mark = score.mark(bar)
+        let alert = NSAlert()
+        alert.messageText = bar == 0 ? "Metronome Mark" : "Tempo from Bar \(bar + 1)"
+        alert.informativeText = "The speed, the note the metronome counts in, and a word for the tempo (optional)."
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        let unitPopup = NSPopUpButton(frame: NSRect(x: 0, y: 58, width: 120, height: 26))
+        for u in ScoreData.tempoUnits { unitPopup.addItem(withTitle: u.2 + "  " + (u.0 == "dotted" ? "dotted quarter" : u.0)) }
+        let unitIndex = ScoreData.tempoUnits.firstIndex { $0.0 == (mark.tempoUnit ?? "quarter") } ?? 0
+        unitPopup.selectItem(at: unitIndex)
+        let equals = NSTextField(labelWithString: "=")
+        equals.frame = NSRect(x: 126, y: 62, width: 14, height: 18)
+        let number = NSTextField(frame: NSRect(x: 144, y: 60, width: 70, height: 22))
+        number.integerValue = Int((Double(tempoNumberHere) / ScoreData.tempoUnits[unitIndex].1).rounded())
+        let wordLabel = NSTextField(labelWithString: "Word:")
+        wordLabel.frame = NSRect(x: 0, y: 24, width: 50, height: 18)
+        let word = NSComboBox(frame: NSRect(x: 52, y: 20, width: 200, height: 26))
+        word.addItems(withObjectValues: ScoreData.tempoTerms.map(\.0) + ["a tempo", "Tempo I", "Grave", "Lento", "Allegro moderato", "Allegro ma non troppo"])
+        word.stringValue = mark.tempoText ?? ""
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 88))
+        [unitPopup, equals, number, wordLabel, word].forEach { box.addSubview($0) }
+        alert.accessoryView = box
+        alert.window.initialFirstResponder = number
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let unit = ScoreData.tempoUnits[max(0, unitPopup.indexOfSelectedItem)]
+        let bpm = Int((Double(max(5, number.integerValue)) * unit.1).rounded())
+        setTempo(bpm, text: word.stringValue.trimmingCharacters(in: .whitespaces), unit: unit.0, name: "Metronome Mark")
+    }
+
     // MARK: Key changes and repeats
 
     /// The bar commands act on: the selected note's (or the cursor's); after a full last bar, the next one.
@@ -2596,18 +2831,39 @@ final class ScoreElementView: ElementView {
         }
         time.submenu = times
         menu.addItem(time)
-        let tempo = NSMenuItem(title: "Tempo (♩ = \(score.tempo))", action: nil, keyEquivalent: "")
-        let tempos = NSMenu()
-        for t in [60, 72, 80, 90, 100, 112, 120, 132, 144, 160] {
-            tempos.addItem(ClosureMenuItem("♩ = \(t)", state: score.tempo == t) { [weak self] in self?.update({ $0.tempo = t }, actionName: "Tempo") })
-        }
-        tempo.submenu = tempos
+        let tempoBar = staff.currentBar
+        let tempo = NSMenuItem(title: tempoBar == 0 ? "Tempo (\(score.tempoLabel(bar: 0)))" : "Tempo from Bar \(tempoBar + 1)", action: nil, keyEquivalent: "")
+        tempo.submenu = tempoMenu(bar: tempoBar)
         menu.addItem(tempo)
         menu.addItem(ClosureMenuItem("Copy Score as Picture") { [weak self] in self?.copyPicture() })
         menu.addItem(ClosureMenuItem("Export MusicXML…") { [weak self] in
             guard let self else { return }
             MusicXML.save(self.score, from: self.window)
         })
+        return menu
+    }
+
+    /// Tempo words, speeds, rit. / accel. / a tempo and the Metronome Mark dialog, for a bar.
+    private func tempoMenu(bar: Int) -> NSMenu {
+        let menu = NSMenu()
+        let here = staff.tempoHere
+        for (term, bpm) in ScoreData.tempoTerms {
+            menu.addItem(ClosureMenuItem("\(term)  (♩ = \(bpm))", state: here.tempoText == term) { [weak self] in self?.staff.setTempoTerm(term, bpm) })
+        }
+        menu.addItem(.separator())
+        let number = staff.tempoNumberHere
+        for t in [60, 72, 80, 90, 100, 112, 120, 132, 144, 160] {
+            menu.addItem(ClosureMenuItem("♩ = \(t)", state: number == t && (bar == 0 || here.tempo != nil)) { [weak self] in self?.staff.setTempo(t) })
+        }
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("rit. (gradually slower)", state: here.gradual == -1) { [weak self] in self?.staff.toggleGradual(-1) })
+        menu.addItem(ClosureMenuItem("accel. (gradually faster)", state: here.gradual == 1) { [weak self] in self?.staff.toggleGradual(1) })
+        if bar > 0 { menu.addItem(ClosureMenuItem("a tempo") { [weak self] in self?.staff.aTempo() }) }
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Metronome Mark…") { [weak self] in self?.staff.editMetronomeMark() })
+        if bar > 0, !here.isEmpty, here.tempo != nil || here.gradual != nil || here.tempoText != nil {
+            menu.addItem(ClosureMenuItem("Remove Tempo Change") { [weak self] in self?.staff.removeTempoChange() })
+        }
         return menu
     }
 

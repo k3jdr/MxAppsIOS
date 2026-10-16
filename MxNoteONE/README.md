@@ -248,6 +248,7 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Fermata | **⇧H** | Score tab ▸ Articulation |
 | Trill, mordent, inverted mordent, turn; staccatissimo | | Score tab ▸ Articulation ▸ Ornament, right-click |
 | Dynamic under the selected note (ppp … fff, sfz, fp) | | Score tab ▸ Expression ▸ Dynamic, right-click ▸ Dynamic |
+| Tempo from the bar of the selected note: a word (Allegro…), ♩ = n, rit., accel., a tempo, Metronome Mark… | | Score tab ▸ Tempo, right-click ▸ Tempo from Bar *n* |
 | Key change from the bar of the selected note (or the cursor) | | Score tab ▸ Bars ▸ Key Change, right-click ▸ Key Change from Bar *n* |
 | Start / end repeat on that bar | | Score tab ▸ Bars ▸ Start Repeat \|: / End Repeat :\|, right-click |
 | Move the note just typed (or selected) a step / an octave | **↑ ↓** / **⌘↑ ⌘↓** | drag the note up or down |
@@ -284,6 +285,13 @@ accents and marcato are louder, a fermata holds its note twice as long while eve
 play their quick notes in the key (a trill alternates with the note above; a mordent dips to the note below; an
 inverted mordent goes to the note above; a turn goes above, back, below and back).
 
+**Tempo changes and metronome marks** — the score's tempo shows over the first bar as a metronome mark (♩ = 100),
+with a tempo word if you give one (**Allegro** (♩ = 132)). A tempo change can start at any bar: pick a word with its
+usual speed (Largo 50 … Presto 184), a speed, or **Metronome Mark…** for any speed counted in quarters, dotted quarters
+(for 6/8, 9/8, 12/8), halves or eighths, with a word of your own. *rit.* and *accel.* get gradually slower or faster,
+with a dashed line, up to the next tempo change (reaching its speed), or over two bars by about a third; **a tempo**
+returns to the speed before them. Playback follows every change, smoothly through rit. and accel.
+
 **Key changes** start at a bar: a double bar line, naturals cancelling the old key's sharps or flats, then the new
 key; later lines start with the key in effect, and the notes sound in it. In the first bar, Key Change sets the score's
 key signature. **Repeat signs** (|: and :|) play the passage twice: an end repeat goes back to the last start repeat,
@@ -298,7 +306,7 @@ play together. While you write in one voice the other is shown in grey; clicking
 **MusicXML** — the format MuseScore, Finale, Sibelius and Dorico exchange scores in. **Insert ▸ Music Score from
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score: title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
+strings, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
 out (other parts, staves and voices, grace notes) is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
 A tie carries its note's accidental across the bar line.
 
@@ -345,6 +353,23 @@ switches between Dark+ and Light+ (the block at the caret changes; new blocks us
 - Enter keeps the indent and adds a level after `{ [ ( :`; Enter on an empty last line leaves the block.
 - Tab types four spaces and ⇧Tab removes them. Backspace in leading spaces steps back to the previous four-space stop.
 - Clear Formatting (⇧⌘N) turns a block back into normal text.
+
+## Arranging the toolbar
+
+The ribbon fits the window: its sections wrap onto more rows instead of running off the side (**View ▸ Toolbar ▸ Wrap
+Sections onto More Rows**; turn it off to scroll sideways instead). Each section — Font, Format, Notes, Articulation,
+Bars… — can be put where it's wanted from **View ▸ Toolbar ▸ *Tab* Sections ▸ *section***, the **⋯** button at the right
+of the ribbon tabs, or by right-clicking a section:
+
+- **In the Toolbar** — as usual;
+- **Collapsed to a Button** — the section's name with ▾; clicking it shows its tools in a popover;
+- **Floating Palette** — the section in a small window of its own that stays over the notes (and doesn't take the
+  keyboard). Closing the palette docks the section back into the toolbar; palettes reopen where they were the next
+  time MxNoteONE starts. Table and Score palettes work while a table or score is being edited;
+- **Hidden**.
+
+**Compact Toolbar** (⌥⇧⌘R) makes every section smaller — no section names, small buttons. **Collapse All**, **Show All
+Sections** and **Dock All Palettes** put things back. The arrangement is remembered.
 
 ## Web links
 
