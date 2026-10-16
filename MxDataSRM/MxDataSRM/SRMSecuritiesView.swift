@@ -94,13 +94,13 @@ struct SRMSecuritiesView: View {
 
                     section("Identifiers") {
                         Table(detail.identifiers) {
-                            TableColumn("Type", value: \.type).width(min: 60, ideal: 100)
+                            TableColumn("Type", value: \.type).width(min: 60, ideal: 90)
                             TableColumn("Value") { Text($0.value).textSelection(.enabled).foregroundStyle($0.isCurrent ? .primary : .secondary) }
-                                .width(min: 80, ideal: 100)
-                            TableColumn("MIC", value: \.mic).width(min: 32, ideal: 38)
-                            TableColumn("From") { Text(knownDate($0.from)) }.width(min: 60, ideal: 72)
-                            TableColumn("To") { Text($0.to.isEmpty ? "current" : $0.to) }.width(min: 52, ideal: 62)
-                            TableColumn("Source", value: \.source).width(min: 50, ideal: 80)
+                                .width(min: 100, ideal: 112)
+                            TableColumn("MIC", value: \.mic).width(min: 40, ideal: 44)
+                            TableColumn("From") { Text(knownDate($0.from)) }.width(min: 56, ideal: 66)
+                            TableColumn("To") { Text($0.to.isEmpty ? "current" : $0.to) }.width(min: 50, ideal: 58)
+                            TableColumn("Source", value: \.source).width(min: 50, ideal: 74)
                         }
                         .frame(height: CGFloat(min(12, detail.identifiers.count + 1)) * 24 + 8)
                     }

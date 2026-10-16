@@ -37,7 +37,7 @@ struct SRMBenchmarksView: View {
                 }
             }
             .padding(10)
-            .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
+            .frame(minWidth: 300, idealWidth: 380, maxWidth: 390)
 
             detail
                 .frame(minWidth: 520)
