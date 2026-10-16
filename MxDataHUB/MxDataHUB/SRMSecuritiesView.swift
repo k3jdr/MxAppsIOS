@@ -71,101 +71,112 @@ struct SRMSecuritiesView: View {
         .padding(10)
     }
 
-    @ViewBuilder
+    /// One container for both states, so the split view keeps the same pane; the previous security stays on
+    /// screen while the next one loads (swapping in the placeholder for that moment flashed the whole screen white).
     private var detailPanel: some View {
-        if let detail = store.detail, detail.security.id == store.selectedSecurityID {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(detail.security.name).font(.title2.bold()).textSelection(.enabled)
-                        Text([detail.security.ticker, detail.security.mic, detail.security.type, detail.security.sector]
-                            .filter { !$0.isEmpty }.joined(separator: " · "))
-                            .foregroundStyle(.secondary)
-                    }
+        ZStack {
+            if let detail = store.detail, store.selectedSecurityID != nil {
+                ScrollViewReader { proxy in
+                    detailContent(detail)
+                        .onChange(of: detail.security.id) { proxy.scrollTo("top", anchor: .top) }
+                }
+            } else {
+                ContentUnavailableView("Select a security", systemImage: "magnifyingglass",
+                                       description: Text("Search by name or any identifier."))
+            }
+        }
+    }
 
-                    if !detail.prices.isEmpty {
-                        Chart(detail.prices) {
-                            LineMark(x: .value("Date", $0.date), y: .value("Close", $0.close))
-                                .interpolationMethod(.linear)
-                        }
-                        .chartYScale(domain: .automatic(includesZero: false))
-                        .frame(height: 140)
-                    }
+    private func detailContent(_ detail: SecurityDetail) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(detail.security.name).font(.title2.bold()).textSelection(.enabled)
+                    Text([detail.security.ticker, detail.security.mic, detail.security.type, detail.security.sector]
+                        .filter { !$0.isEmpty }.joined(separator: " · "))
+                        .foregroundStyle(.secondary)
+                }
+                .id("top")
 
-                    section("Identifiers") {
-                        Table(detail.identifiers) {
-                            TableColumn("Type", value: \.type).width(min: 60, ideal: 90)
-                            TableColumn("Value") { Text($0.value).textSelection(.enabled).foregroundStyle($0.isCurrent ? .primary : .secondary) }
-                                .width(min: 100, ideal: 112)
-                            TableColumn("MIC", value: \.mic).width(min: 40, ideal: 44)
-                            TableColumn("From") { Text(knownDate($0.from)) }.width(min: 56, ideal: 66)
-                            TableColumn("To") { Text($0.to.isEmpty ? "current" : $0.to) }.width(min: 50, ideal: 58)
-                            TableColumn("Source", value: \.source).width(min: 50, ideal: 74)
-                        }
-                        .frame(height: CGFloat(min(12, detail.identifiers.count + 1)) * 24 + 8)
+                if !detail.prices.isEmpty {
+                    Chart(detail.prices) {
+                        LineMark(x: .value("Date", $0.date), y: .value("Close", $0.close))
+                            .interpolationMethod(.linear)
                     }
+                    .chartYScale(domain: .automatic(includesZero: false))
+                    .frame(height: 140)
+                }
 
-                    section("Issuer and security") {
+                section("Identifiers") {
+                    Table(detail.identifiers) {
+                        TableColumn("Type", value: \.type).width(min: 60, ideal: 90)
+                        TableColumn("Value") { Text($0.value).textSelection(.enabled).foregroundStyle($0.isCurrent ? .primary : .secondary) }
+                            .width(min: 100, ideal: 112)
+                        TableColumn("MIC", value: \.mic).width(min: 40, ideal: 44)
+                        TableColumn("From") { Text(knownDate($0.from)) }.width(min: 56, ideal: 66)
+                        TableColumn("To") { Text($0.to.isEmpty ? "current" : $0.to) }.width(min: 50, ideal: 58)
+                        TableColumn("Source", value: \.source).width(min: 50, ideal: 74)
+                    }
+                    .frame(height: CGFloat(min(12, detail.identifiers.count + 1)) * 24 + 8)
+                }
+
+                section("Issuer and security") {
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                        ForEach(detail.facts) { FactRow(name: $0.name, value: $0.value) }
+                    }
+                }
+
+                if !detail.listings.isEmpty {
+                    section("Listings") {
                         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                            ForEach(detail.facts) { FactRow(name: $0.name, value: $0.value) }
-                        }
-                    }
-
-                    if !detail.listings.isEmpty {
-                        section("Listings") {
-                            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                                ForEach(detail.listings) { l in
-                                    GridRow {
-                                        Text(l.ticker).bold()
-                                        Text("\(l.mic) \(l.exchange)").lineLimit(1)
-                                        Text(l.isPrimary ? "primary" : "").foregroundStyle(.secondary)
-                                        Text(l.to.isEmpty ? (knownDate(l.from).isEmpty ? "current" : "since \(l.from)") : "\(knownDate(l.from)) – \(l.to)")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if !detail.classifications.isEmpty {
-                        section("Classification") {
-                            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                                ForEach(detail.classifications) { FactRow(name: $0.name, value: $0.value) }
-                            }
-                        }
-                    }
-
-                    section("Benchmark membership") {
-                        if detail.memberships.isEmpty {
-                            Text("Not in any loaded benchmark").foregroundStyle(.secondary)
-                        } else {
-                            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                                ForEach(detail.memberships) { FactRow(name: $0.name, value: $0.value) }
-                            }
-                        }
-                    }
-
-                    if !detail.actions.isEmpty {
-                        section("Corporate actions") {
-                            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                                ForEach(detail.actions) { a in
-                                    GridRow {
-                                        Text(a.exDate).monospacedDigit()
-                                        Text(a.type.replacingOccurrences(of: "_", with: " ").capitalized)
-                                        Text(a.detail)
-                                        Text(a.source).foregroundStyle(.secondary)
-                                    }
+                            ForEach(detail.listings) { l in
+                                GridRow {
+                                    Text(l.ticker).bold()
+                                    Text("\(l.mic) \(l.exchange)").lineLimit(1)
+                                    Text(l.isPrimary ? "primary" : "").foregroundStyle(.secondary)
+                                    Text(l.to.isEmpty ? (knownDate(l.from).isEmpty ? "current" : "since \(l.from)") : "\(knownDate(l.from)) – \(l.to)")
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
                     }
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !detail.classifications.isEmpty {
+                    section("Classification") {
+                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                            ForEach(detail.classifications) { FactRow(name: $0.name, value: $0.value) }
+                        }
+                    }
+                }
+
+                section("Benchmark membership") {
+                    if detail.memberships.isEmpty {
+                        Text("Not in any loaded benchmark").foregroundStyle(.secondary)
+                    } else {
+                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                            ForEach(detail.memberships) { FactRow(name: $0.name, value: $0.value) }
+                        }
+                    }
+                }
+
+                if !detail.actions.isEmpty {
+                    section("Corporate actions") {
+                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                            ForEach(detail.actions) { a in
+                                GridRow {
+                                    Text(a.exDate).monospacedDigit()
+                                    Text(a.type.replacingOccurrences(of: "_", with: " ").capitalized)
+                                    Text(a.detail)
+                                    Text(a.source).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
             }
-        } else {
-            ContentUnavailableView("Select a security", systemImage: "magnifyingglass",
-                                   description: Text("Search by name or any identifier."))
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
