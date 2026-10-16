@@ -208,6 +208,11 @@ Section and New Section Group. Right-click a page for its own menu.
   web links and links to any page. **Edit Link**: with the caret in a link, ⌘K (or right-click the link ▸ Edit Link…)
   opens the dialog with the link's text and address filled in — change either and Update, or Remove Link. Right-click
   a link also offers Open Link, Copy Link Address and Remove Link.
+- **Link hover card**: rest the pointer on a link (in a text box or a table cell) and a card shows where it goes — a
+  page's title with its notebook › section, a web site and its full address, or an email address — with **Edit
+  Link…** (the Edit Link dialog, filled in), **Copy** (the address) and **Remove Link** (keeps the words). It goes away
+  when the pointer moves off the link and the card, or on a click or key press. The Edit Link dialog's fields and
+  buttons explain themselves when you hover over them.
 - **Paste options** (Edit menu, or right-click ▸ Paste Options in a text box or table cell): **Paste as Plain Text**
   (⌥⇧⌘V) takes on the style where it goes; **Paste with Formatting** keeps the copied fonts, colours and styles. With
   table cells selected, Paste as Plain Text fills them from tab-separated text without formatting; on the page it makes
@@ -231,6 +236,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Dot | **.** | Score tab ▸ Dot |
 | Triplet (next notes, or the selected note) | **⌃3** | Score tab ▸ Triplet |
 | Write in voice 1 / voice 2 | **⌥⌘1 / ⌥⌘2** | Score tab ▸ Voice, or click a note of that voice |
+| Key change from the bar of the selected note (or the cursor) | | Score tab ▸ Bars ▸ Key Change, right-click ▸ Key Change from Bar *n* |
+| Start / end repeat on that bar | | Score tab ▸ Bars ▸ Start Repeat \|: / End Repeat :\|, right-click |
 | Move the note just typed (or selected) a step / an octave | **↑ ↓** / **⌘↑ ⌘↓** | drag the note up or down |
 | Sharp, flat, natural (again takes it off) | **+  -  =** | Score tab ▸ ♯ ♭ ♮ |
 | Tie to the next note / note ↔ rest | **T** / **R** | |
@@ -252,6 +259,12 @@ the Score tab and the right-click menu, as is Copy Score as Picture. Playback us
 note sounding is shown in orange. Every change can be undone. PDF and print show the score; Markdown export and OneNote
 sync write its title, signatures and the notes by name.
 
+**Key changes** start at a bar: a double bar line, naturals cancelling the old key's sharps or flats, then the new
+key; later lines start with the key in effect, and the notes sound in it. In the first bar, Key Change sets the score's
+key signature. **Repeat signs** (|: and :|) play the passage twice: an end repeat goes back to the last start repeat,
+or to the beginning (or just after the previous repeat) when there isn't one. Key changes and repeats belong to bar
+numbers, so adding or deleting notes earlier in the score can move music past them.
+
 **Triplets** — three notes in the time of two (three triplet eighths make a beat) — are marked with a 3, bracketed
 unless they're beamed together, and play in time. **Two voices** share the staff, as in MuseScore: voice 1's stems go up
 and voice 2's down (rests move up and down out of the way), notes sounding at the same time line up, and both voices
@@ -260,8 +273,8 @@ play together. While you write in one voice the other is shown in grey; clicking
 **MusicXML** — the format MuseScore, Finale, Sibelius and Dorico exchange scores in. **Insert ▸ Music Score from
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score: title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
-out (other parts, staves and voices, grace notes, later key changes) is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
+strings, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
+out (other parts, staves and voices, grace notes) is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
 A tie carries its note's accidental across the bar line.
 
 ## Microsoft Office fonts

@@ -98,6 +98,14 @@ struct ChordTone: Codable, Hashable {
     var diatonic: Int { octave * 7 + step }
 }
 
+/// What happens at a bar: a new key from it, a repeat starting there, or ending at its end.
+struct ScoreBarMark: Codable, Hashable {
+    var keyFifths: Int?
+    var repeatStart: Bool?
+    var repeatEnd: Bool?
+    var isEmpty: Bool { keyFifths == nil && repeatStart != true && repeatEnd != true }
+}
+
 struct ScoreData: Codable, Hashable {
     enum Clef: String, Codable, CaseIterable, Identifiable {
         case treble, bass
@@ -120,6 +128,65 @@ struct ScoreData: Codable, Hashable {
     var voices: [[ScoreNote]]?
     /// A guitar TAB staff under the music.
     var showTab: Bool?
+    /// Key changes and repeat signs, by bar (0 = the first bar).
+    var barMarks: [Int: ScoreBarMark]?
+
+    // MARK: Key changes and repeats
+
+    func mark(_ bar: Int) -> ScoreBarMark { barMarks?[bar] ?? ScoreBarMark() }
+
+    mutating func setMark(_ bar: Int, _ change: (inout ScoreBarMark) -> Void) {
+        var m = mark(bar)
+        change(&m)
+        var all = barMarks ?? [:]
+        all[bar] = m.isEmpty ? nil : m
+        barMarks = all.isEmpty ? nil : all
+    }
+
+    /// The key in a bar: the last change at or before it, else the key at the start.
+    func fifths(inBar bar: Int) -> Int {
+        guard let barMarks else { return keyFifths }
+        return barMarks.filter { $0.key <= bar && $0.key > 0 && $0.value.keyFifths != nil }.max { $0.key < $1.key }?.value.keyFifths ?? keyFifths
+    }
+
+    /// The bar a note is in.
+    func bar(of index: Int) -> Int {
+        var filled = 0.0, bar = 0
+        for (i, note) in notes.enumerated() {
+            if i == index { return bar }
+            filled += note.beats
+            if filled >= measureLength - 1e-9 { bar += 1; filled = 0 }
+        }
+        return bar
+    }
+
+    /// Bars in the order they play: at an end repeat, back to the last start repeat (or the beginning), once.
+    func playOrder(bars: Int) -> [Int] {
+        var order: [Int] = [], b = 0, start = 0, repeated = Set<Int>()
+        while b < bars, order.count < 5000 {
+            if mark(b).repeatStart == true { start = b }
+            order.append(b)
+            if mark(b).repeatEnd == true {
+                if !repeated.contains(b) {
+                    repeated.insert(b)
+                    b = start
+                    continue
+                }
+                start = b + 1
+            }
+            b += 1
+        }
+        return order
+    }
+
+    /// Accidentals a new key cancels with naturals (steps and whether they were sharps).
+    static func cancelled(from old: Int, to new: Int) -> (steps: [Int], sharps: Bool) {
+        guard old != 0 else { return ([], true) }
+        let sharps = old > 0
+        let oldSteps = Array((sharps ? sharpOrder : flatOrder).prefix(abs(old)))
+        if new == 0 || (new > 0) != sharps { return (oldSteps, sharps) }
+        return (Array(oldSteps.dropFirst(abs(new))), sharps)
+    }
 
     // MARK: Voices
 
@@ -198,12 +265,17 @@ struct ScoreData: Codable, Hashable {
     static let sharpOrder = [3, 0, 4, 1, 5, 2, 6]   // F C G D A E B
     static let flatOrder = [6, 2, 5, 1, 4, 0, 3]    // B E A D G C F
 
-    /// The key signature's sharp (1) or flat (-1) on a step.
-    func keyAlter(_ step: Int) -> Int {
-        if keyFifths > 0, Self.sharpOrder.prefix(keyFifths).contains(step) { return 1 }
-        if keyFifths < 0, Self.flatOrder.prefix(-keyFifths).contains(step) { return -1 }
+    /// The key signature's sharp (1) or flat (-1) on a step (in the first bar's key, or a bar's).
+    func keyAlter(_ step: Int, bar: Int = 0) -> Int { Self.keyAlter(step, fifths: bar == 0 ? keyFifths : fifths(inBar: bar)) }
+
+    static func keyAlter(_ step: Int, fifths: Int) -> Int {
+        if fifths > 0, sharpOrder.prefix(fifths).contains(step) { return 1 }
+        if fifths < 0, flatOrder.prefix(-fifths).contains(step) { return -1 }
         return 0
     }
+
+    /// The key's alteration where a note is (its bar's key).
+    func keyAlter(_ step: Int, at index: Int) -> Int { barMarks == nil ? keyAlter(step) : keyAlter(step, bar: bar(of: index)) }
 
     static let keyNames: [(Int, String)] = [
         (0, "C major / A minor"), (1, "G major / E minor"), (2, "D major / B minor"), (3, "A major / F♯ minor"),
@@ -246,7 +318,7 @@ struct ScoreData: Codable, Hashable {
         if let alter = note.alter, !tiedFrom(index) { return alter }
         // A note tied over keeps the pitch it's tied from (even across the bar line).
         if tiedFrom(index) { return soundingAlter(index - 1) }
-        return alterBefore(index) ?? keyAlter(note.step)
+        return alterBefore(index) ?? keyAlter(note.step, at: index)
     }
 
     /// Whether the note before is tied to this one (same line or space).
@@ -266,13 +338,13 @@ struct ScoreData: Codable, Hashable {
         let note = notes[index]
         // The continuation of a tie doesn't repeat its accidental.
         guard !note.rest, let alter = note.alter, !tiedFrom(index) else { return false }
-        return alter != (alterBefore(index) ?? keyAlter(note.step))
+        return alter != (alterBefore(index) ?? keyAlter(note.step, at: index))
     }
 
     /// Every pitch a note sounds (the note and its chord tones), as MIDI numbers.
     func midis(_ index: Int) -> [Int] {
         guard let main = midi(index) else { return [] }
-        let tones = (notes[index].chord ?? []).map { Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step)) }
+        let tones = (notes[index].chord ?? []).map { Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step, at: index)) }
         return [main] + tones
     }
 
@@ -315,19 +387,35 @@ struct ScoreData: Codable, Hashable {
 
     /// The melody in letter names (for exports): C4 q, D#4 8., r h…
     var noteNames: String {
-        notes.enumerated().map { i, n in
-            let length = ["", "w", "h", "", "q", "", "", "", "8", "", "", "", "", "", "", "", "16"][n.duration.rawValue] + (n.dotted ? "." : "")
-                + (n.tuplet == true ? "³" : "")
-            if n.rest { return "r" + length }
-            let alter = soundingAlter(i)
-            let name = ["C", "D", "E", "F", "G", "A", "B"][n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "")
-            let tones = (n.chord ?? []).map { t in
-                ["C", "D", "E", "F", "G", "A", "B"][t.step] + ((t.alter ?? keyAlter(t.step)) > 0 ? "♯" : (t.alter ?? keyAlter(t.step)) < 0 ? "♭" : "") + "\(t.octave)"
+        let bars = barMarks == nil ? [] : measures
+        func marked(_ i: Int, _ text: String) -> String {
+            guard let b = bars.firstIndex(where: { $0.contains(i) }) else { return text }
+            var text = text
+            let m = mark(b)
+            if i == bars[b].lowerBound {
+                if b > 0, let k = m.keyFifths { text = "[key: \(Self.keyNames.first { $0.0 == k }?.1 ?? "\(k)")] " + text }
+                if m.repeatStart == true { text = "|: " + text }
             }
-            let symbol = (n.chordSymbol ?? "").isEmpty ? "" : "[\(n.chordSymbol!)] "
-            let lyric = (n.lyric ?? "").isEmpty ? "" : " “\(n.lyric!)”"
-            return symbol + "\(name)\(n.octave)" + tones.map { "+" + $0 }.joined() + " \(length)" + (n.tie ? "~" : "") + lyric
-        }.joined(separator: " · ") + (hasSecondVoice ? " ‖ voice 2: " + forVoice(1).noteNames : "")
+            if i == bars[b].upperBound - 1, m.repeatEnd == true { text += " :|" }
+            return text
+        }
+        return notes.enumerated().map { i, n in marked(i, name(i, n)) }.joined(separator: " · ")
+            + (hasSecondVoice ? " ‖ voice 2: " + forVoice(1).noteNames : "")
+    }
+
+    /// One note by name (C4 q, D♯4 8., r h…).
+    private func name(_ i: Int, _ n: ScoreNote) -> String {
+        let length = ["", "w", "h", "", "q", "", "", "", "8", "", "", "", "", "", "", "", "16"][n.duration.rawValue] + (n.dotted ? "." : "")
+            + (n.tuplet == true ? "³" : "")
+        if n.rest { return "r" + length }
+        let alter = soundingAlter(i)
+        let name = ["C", "D", "E", "F", "G", "A", "B"][n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "")
+        let tones = (n.chord ?? []).map { t in
+            ["C", "D", "E", "F", "G", "A", "B"][t.step] + ((t.alter ?? keyAlter(t.step, at: i)) > 0 ? "♯" : (t.alter ?? keyAlter(t.step, at: i)) < 0 ? "♭" : "") + "\(t.octave)"
+        }
+        let symbol = (n.chordSymbol ?? "").isEmpty ? "" : "[\(n.chordSymbol!)] "
+        let lyric = (n.lyric ?? "").isEmpty ? "" : " “\(n.lyric!)”"
+        return symbol + "\(name)\(n.octave)" + tones.map { "+" + $0 }.joined() + " \(length)" + (n.tie ? "~" : "") + lyric
     }
 }
 
@@ -379,28 +467,48 @@ final class ScorePlayer {
     }
 
     /// Plays every voice from a point (in quarter notes from the start) to the end, highlighting the notes sounding.
-    func play(_ score: ScoreData, fromTime start0: Double, in view: ScoreView) {
+    /// Plays every voice from a point in a bar (`offset` quarter notes in), taking repeats.
+    func play(_ score: ScoreData, fromBar startBar: Int, offset: Double, in view: ScoreView) {
         stop()
         start()
         self.view = view
         let secondsPerBeat = 60 / Double(max(20, score.tempo))
+        let lines = (0..<ScoreData.voiceCount).map { score.forVoice($0) }
+        let barsByVoice = lines.map { $0.notes.isEmpty ? [] : $0.measures }
+        let barCount = barsByVoice.map(\.count).max() ?? 0
+        var order = score.playOrder(bars: barCount)
+        if let first = order.firstIndex(of: startBar) { order = Array(order[first...]) }
         var end = 0.0
-        for v in 0..<ScoreData.voiceCount {
-            let line = score.forVoice(v)
+        for v in lines.indices {
+            let line = lines[v]
             let onsets = line.onsets
-            guard let first = onsets.firstIndex(where: { $0 >= start0 - 1e-6 }) else { continue }
-            var i = first
-            while i < line.notes.count {
+            // The notes in playing order, each with when it starts (quarter notes from the start).
+            var events: [(index: Int, time: Double)] = []
+            var barTime = 0.0
+            for (k, b) in order.enumerated() {
+                defer { barTime += k == 0 ? score.measureLength - offset : score.measureLength }
+                guard barsByVoice[v].indices.contains(b) else { continue }
+                let bar = barsByVoice[v][b]
+                guard let first = bar.first else { continue }
+                for i in bar {
+                    let t = barTime + onsets[i] - onsets[first] - (k == 0 ? offset : 0)
+                    if t >= -1e-6 { events.append((i, max(0, t))) }
+                }
+            }
+            var j = 0
+            while j < events.count {
+                let i = events[j].index
                 var length = line.notes[i].beats
-                var last = i
+                var last = j
                 // Tied notes sound as one.
-                while line.notes[last].tie, last + 1 < line.notes.count, !line.notes[last + 1].rest, line.midi(last + 1) == line.midi(i) {
+                while line.notes[events[last].index].tie, last + 1 < events.count, events[last + 1].index == events[last].index + 1,
+                      !line.notes[events[last + 1].index].rest, line.midi(events[last + 1].index) == line.midi(i) {
                     last += 1
-                    length += line.notes[last].beats
+                    length += line.notes[events[last].index].beats
                 }
                 let ref = NoteRef(voice: v, index: i)
                 let keys = line.midis(i).map { UInt8(max(0, min(127, $0))) }
-                let time = (onsets[i] - start0) * secondsPerBeat
+                let time = events[j].time * secondsPerBeat
                 let on = DispatchWorkItem { [weak self] in
                     self?.view?.playing.insert(ref)
                     for key in keys {
@@ -419,7 +527,7 @@ final class ScorePlayer {
                 DispatchQueue.main.asyncAfter(deadline: .now() + time + length * secondsPerBeat * 0.95, execute: off)
                 work += [on, off]
                 end = max(end, time + length * secondsPerBeat)
-                i = last + 1
+                j = last + 1
             }
         }
         guard !work.isEmpty else { return stop() }
@@ -511,9 +619,16 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// Where the caret goes for each cursor position (x, system).
     private var caretSpots: [(x: CGFloat, system: Int)] = []
     /// Bar lines (x, system), and where each system's notes start.
-    private var barLines: [(x: CGFloat, system: Int, final: Bool)] = []
+    private var barLines: [(x: CGFloat, system: Int, style: BarStyle)] = []
     private var systemCount = 1
     private var systemStarts: [CGFloat] = []
+    /// Each system's first bar (its key signature is that bar's key).
+    private var systemFirstBars: [Int] = [0]
+    /// Key changes within a line (x, system, from, to) and start-repeat signs (x, system).
+    private var keyChanges: [(x: CGFloat, system: Int, from: Int, to: Int)] = []
+    private var repeatStarts: [(x: CGFloat, system: Int)] = []
+
+    enum BarStyle { case single, double, final, endRepeat }
 
     /// The height the score needs at a width.
     func neededHeight() -> CGFloat {
@@ -536,7 +651,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         if let chord = note.chord, !chord.isEmpty {
             let positions = ([note.diatonic] + chord.map(\.diatonic)).sorted()
             if zip(positions, positions.dropFirst()).contains(where: { $1 - $0 == 1 }) { width += space * 1.2 }
-            if chord.contains(where: { $0.alter != nil && $0.alter != score.keyAlter($0.step) }) { width += space * 1.2 }
+            if chord.contains(where: { $0.alter != nil && $0.alter != score.keyAlter($0.step, at: index) }) { width += space * 1.2 }
         }
         // Words and chord names don't run into the next note.
         if let lyric = note.lyric, !lyric.isEmpty {
@@ -549,7 +664,19 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     private func headerWidth(system: Int) -> CGFloat {
-        space * (4.2 + CGFloat(abs(score.keyFifths)) * 1.05 + (system == 0 ? 2.8 : 0) + 0.8)
+        headerWidth(fifths: score.fifths(inBar: systemFirstBars.indices.contains(system) ? systemFirstBars[system] : 0), first: system == 0)
+    }
+
+    private func headerWidth(fifths: Int, first: Bool) -> CGFloat {
+        space * (4.2 + CGFloat(abs(fifths)) * 1.05 + (first ? 2.8 : 0) + 0.8)
+    }
+
+    /// Room for a key change inside a line: naturals for what it cancels, then the new key.
+    private func keyChangeWidth(bar m: Int) -> CGFloat {
+        guard m > 0, let to = score.mark(m).keyFifths else { return 0 }
+        let from = score.fifths(inBar: m - 1)
+        guard from != to else { return 0 }
+        return space * (CGFloat(ScoreData.cancelled(from: from, to: to).steps.count + abs(to)) * 1.05 + 1.2)
     }
 
     /// Places every voice's notes: notes that start together line up, and the bars wrap into lines.
@@ -591,27 +718,46 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             gaps.append(row)
         }
         let widths: [CGFloat] = gaps.map { $0.isEmpty ? space * 8 : $0.reduce(space * 1.2) { $0 + $1.gap } }
+        // Fixed room: a start repeat before the notes, an end repeat after them, a key change (inside a line).
+        let repeatRoom = (0..<barCount).map { score.mark($0).repeatStart == true ? space * 1.6 : 0 }
+        let endRoom = (0..<barCount).map { score.mark($0).repeatEnd == true ? space * 1.2 : 0 }
+        let keyRoom = (0..<barCount).map { keyChangeWidth(bar: $0) }
+        func fixed(_ m: Int, atStart: Bool) -> CGFloat { repeatRoom[m] + endRoom[m] + (atStart ? 0 : keyRoom[m]) }
         // Bars into systems (lines).
         var systems: [[Int]] = [[]]
-        var used = headerWidth(system: 0)
+        var used = headerWidth(fifths: score.keyFifths, first: true)
         for (m, w) in widths.enumerated() {
-            if !systems[systems.count - 1].isEmpty, used + w > usable {
+            if !systems[systems.count - 1].isEmpty, used + w + fixed(m, atStart: false) > usable {
                 systems.append([])
-                used = headerWidth(system: systems.count - 1)
+                used = headerWidth(fifths: score.fifths(inBar: m), first: false)
             }
+            used += w + fixed(m, atStart: systems[systems.count - 1].isEmpty)
             systems[systems.count - 1].append(m)
-            used += w
         }
         systemCount = systems.count
+        systemFirstBars = systems.map { $0.first ?? 0 }
+        keyChanges = []
+        repeatStarts = []
         var spots: [(Double, CGFloat, Int)] = []   // the current voice: (onset key, x, system) per note
         for (s, bars) in systems.enumerated() {
-            let start = space + headerWidth(system: s)
+            let header = headerWidth(system: s)
+            let start = space + header
             systemStarts.append(start)
             let natural = bars.reduce(0) { $0 + widths[$1] }
+            let fixedRoom = bars.enumerated().reduce(0) { $0 + fixed($1.element, atStart: $1.offset == 0) }
             // Full lines are spread to the width (not the last one).
-            let stretch = s < systems.count - 1 && natural > 0 ? max(1, (usable - headerWidth(system: s)) / natural) : 1
+            let stretch = s < systems.count - 1 && natural > 0 ? max(1, (usable - header - fixedRoom) / natural) : 1
             var x = start
-            for m in bars {
+            for (k, m) in bars.enumerated() {
+                // A key change inside a line (at a line's start it's the line's key signature).
+                if k > 0, keyRoom[m] > 0, let to = score.mark(m).keyFifths {
+                    keyChanges.append((x, s, score.fifths(inBar: m - 1), to))
+                    x += keyRoom[m]
+                }
+                if repeatRoom[m] > 0 {
+                    repeatStarts.append((x, s))
+                    x += repeatRoom[m]
+                }
                 var nx = x + space * 1.2 * stretch
                 var xs: [Double: CGFloat] = [:]
                 for (onset, gap) in gaps[m] {
@@ -626,9 +772,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                     if e.voice == voice { spots.append((Double(e.index), ex, s)) }
                 }
                 if barsByVoice[voice].isEmpty, m == 0 { spots.append((-1, x + space * 1.2 * stretch, s)) }
-                x += widths[m] * stretch
+                x += widths[m] * stretch + endRoom[m]
                 let last = m == barCount - 1
-                barLines.append((x, s, last))
+                let style: BarStyle = score.mark(m).repeatEnd == true ? .endRepeat : last ? .final
+                    : m + 1 < barCount && keyRoom[m + 1] > 0 ? .double : .single
+                barLines.append((x, s, style))
             }
         }
         // The current voice's caret: before each of its notes, and after the last.
@@ -680,17 +828,69 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         for bar in barLines {
             let top = staffTop(bar.system), bottom = top + space * 4
             ink.setFill()
-            if bar.final {
+            switch bar.style {
+            case .final, .endRepeat:
                 NSRect(x: bar.x - space * 0.9, y: top, width: 1, height: bottom - top).fill()
                 NSRect(x: bar.x - space * 0.5, y: top, width: 3.5, height: bottom - top).fill()
-            } else {
+                if bar.style == .endRepeat { repeatDots(x: bar.x - space * 1.5, system: bar.system) }
+            case .double:
+                NSRect(x: bar.x - space * 0.45, y: top, width: 1, height: bottom - top).fill()
+                NSRect(x: bar.x - 0.5, y: top, width: 1, height: bottom - top).fill()
+            case .single:
                 NSRect(x: bar.x - 0.5, y: top, width: 1, height: bottom - top).fill()
             }
+        }
+        // Start repeats: thick, thin, dots.
+        for r in repeatStarts {
+            let top = staffTop(r.system)
+            ink.setFill()
+            NSRect(x: r.x - 0.5, y: top, width: 3.5, height: space * 4).fill()
+            NSRect(x: r.x + space * 0.55, y: top, width: 1, height: space * 4).fill()
+            repeatDots(x: r.x + space * 0.95, system: r.system)
+        }
+        for change in keyChanges {
+            drawKeySignature(change.to, cancelling: change.from, x: change.x + space * 0.5, system: change.system, ink: ink)
         }
         drawNotes(ink: ink)
         drawWords(ink: ink)
         if score.showTab == true { drawTab(ink: ink) }
         drawCaret()
+    }
+
+    /// The two dots of a repeat sign (in the second and third spaces).
+    private func repeatDots(x: CGFloat, system: Int) {
+        let top = staffTop(system), d = space * 0.42
+        for line in [1.5, 2.5] {
+            NSBezierPath(ovalIn: NSRect(x: x, y: top + space * CGFloat(line) - d / 2, width: d, height: d)).fill()
+        }
+    }
+
+    /// A key signature: naturals cancelling the old key's accidentals first (on a change), then the new key's.
+    @discardableResult
+    private func drawKeySignature(_ fifths: Int, cancelling old: Int? = nil, x: CGFloat, system: Int, ink: NSColor) -> CGFloat {
+        // Where each accidental sits (treble: F5 C5 G5 D5 A4 E5 B4 / B4 E5 A4 D5 G4 C5 F4; bass two octaves lower).
+        let trebleSharps = [5 * 7 + 3, 5 * 7 + 0, 5 * 7 + 4, 5 * 7 + 1, 4 * 7 + 5, 5 * 7 + 2, 4 * 7 + 6]
+        let trebleFlats = [4 * 7 + 6, 5 * 7 + 2, 4 * 7 + 5, 5 * 7 + 1, 4 * 7 + 4, 5 * 7 + 0, 4 * 7 + 3]
+        func place(_ sharps: Bool, _ k: Int) -> CGFloat {
+            var d = (sharps ? trebleSharps : trebleFlats)[k]
+            if score.clef == .bass { d -= 14 }
+            return y(position: d - score.clef.bottomLine, system: system)
+        }
+        var x = x
+        if let old {
+            let cancel = ScoreData.cancelled(from: old, to: fifths)
+            let order = cancel.sharps ? ScoreData.sharpOrder : ScoreData.flatOrder
+            for step in cancel.steps {
+                guard let k = order.firstIndex(of: step) else { continue }
+                drawAccidental(0, x: x, y: place(cancel.sharps, k), ink: ink)
+                x += space * 1.05
+            }
+        }
+        for k in 0..<abs(fifths) {
+            drawAccidental(fifths > 0 ? 1 : -1, x: x, y: place(fifths > 0, k), ink: ink)
+            x += space * 1.05
+        }
+        return x
     }
 
     /// Chord symbols above the staff, lyrics under it (with hyphens between syllables).
@@ -740,7 +940,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         for bar in barLines {
             ink.setFill()
-            NSRect(x: bar.x - 0.5, y: tabTop(bar.system), width: bar.final ? 3 : 1, height: tabGap * 5).fill()
+            NSRect(x: bar.x - 0.5, y: tabTop(bar.system), width: bar.style == .final || bar.style == .endRepeat ? 3 : 1, height: tabGap * 5).fill()
         }
         for p in placed where !score.forVoice(p.voice).notes[p.index].rest {
             let color = colorFor(NoteRef(voice: p.voice, index: p.index), ink: ink)
@@ -770,20 +970,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let clefSize = (clef as NSString).size(withAttributes: clefAttrs)
         let clefY = score.clef == .treble ? top + space * 2 - clefSize.height * 0.56 : top - clefSize.height * 0.19
         (clef as NSString).draw(at: NSPoint(x: space * 1.4, y: clefY), withAttributes: clefAttrs)
-        // Key signature.
-        var x = space * 5.2
-        let sharps = score.keyFifths > 0
-        let order = sharps ? ScoreData.sharpOrder : ScoreData.flatOrder
-        // Where each accidental sits (treble: F5 C5 G5 D5 A4 E5 B4 / B4 E5 A4 D5 G4 C5 F4; bass two octaves lower).
-        let trebleSharps = [5 * 7 + 3, 5 * 7 + 0, 5 * 7 + 4, 5 * 7 + 1, 4 * 7 + 5, 5 * 7 + 2, 4 * 7 + 6]
-        let trebleFlats = [4 * 7 + 6, 5 * 7 + 2, 4 * 7 + 5, 5 * 7 + 1, 4 * 7 + 4, 5 * 7 + 0, 4 * 7 + 3]
-        for k in 0..<abs(score.keyFifths) {
-            var d = (sharps ? trebleSharps : trebleFlats)[k]
-            if score.clef == .bass { d -= 14 }
-            _ = order
-            drawAccidental(sharps ? 1 : -1, x: x, y: y(position: d - score.clef.bottomLine, system: system), ink: ink)
-            x += space * 1.05
-        }
+        // Key signature (the key of the line's first bar).
+        let fifths = score.fifths(inBar: systemFirstBars.indices.contains(system) ? systemFirstBars[system] : 0)
+        let x = drawKeySignature(fifths, x: space * 5.2, system: system, ink: ink)
         // Time signature (first line only).
         if system == 0 {
             let font = NSFont(name: "Georgia-Bold", size: space * 2.7) ?? .boldSystemFont(ofSize: space * 2.7)
@@ -901,7 +1090,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                     color.setFill()
                     if tp <= -2 { for l in stride(from: -2, through: tp, by: -2) { ledger(x: tx, y: y(position: l, system: p.system)) } }
                     if tp >= 10 { for l in stride(from: 10, through: tp, by: 2) { ledger(x: tx, y: y(position: l, system: p.system)) } }
-                    if let alter = tone.alter, alter != score.keyAlter(tone.step) {
+                    if let alter = tone.alter, alter != score.keyAlter(tone.step, at: p.index) {
                         drawAccidental(alter, x: p.x - space * 1.35 - (score.showsAccidental(p.index) ? space * 1.2 : 0), y: ty, ink: color)
                     }
                     let extra = NSBezierPath(ovalIn: NSRect(x: -w / 2, y: -h / 2, width: w, height: h))
@@ -1158,6 +1347,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         lastEntered = nil
         if let selected { cursor = selected + 1 }
         needsDisplay = true
+        NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
     /// The note commands act on: the selected one, else the one just typed.
@@ -1434,14 +1624,63 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
+    // MARK: Key changes and repeats
+
+    /// The bar commands act on: the selected note's (or the cursor's); after a full last bar, the next one.
+    var currentBar: Int {
+        let line = cur
+        if let i = selected ?? (cursor < line.notes.count ? cursor : nil) { return line.bar(of: i) }
+        guard let lastBar = line.measures.last, !line.notes.isEmpty else { return 0 }
+        let filled = lastBar.reduce(0) { $0 + line.notes[$1].beats }
+        return line.measures.count - (filled >= line.measureLength - 1e-9 ? 0 : 1)
+    }
+
+    /// The key a key change here sets (nil: none here).
+    var keyChangeHere: Int? {
+        let bar = currentBar
+        return bar == 0 ? score.keyFifths : score.mark(bar).keyFifths
+    }
+
+    /// A new key from the current bar on (nil: takes the key change away). In the first bar it's the score's key.
+    func setKeyChange(_ fifths: Int?) {
+        let bar = currentBar
+        let before = bar > 0 ? score.fifths(inBar: bar - 1) : 0
+        edit(bar == 0 ? "Key Signature" : "Key Change") { s in
+            if bar == 0 {
+                s.keyFifths = fifths ?? 0
+            } else {
+                s.setMark(bar) { $0.keyFifths = fifths == before ? nil : fifths }
+            }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// |: — repeat from the current bar.
+    func toggleRepeatStart() {
+        let bar = currentBar
+        edit("Start Repeat") { $0.setMark(bar) { $0.repeatStart = $0.repeatStart == true ? nil : true } }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// :| — back to the start repeat (or the beginning) at the end of the current bar.
+    func toggleRepeatEnd() {
+        let bar = currentBar
+        edit("End Repeat") { $0.setMark(bar) { $0.repeatEnd = $0.repeatEnd == true ? nil : true } }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
     func togglePlay() {
         if ScorePlayer.shared.isPlaying {
             ScorePlayer.shared.stop()
         } else {
             // From the selected note (or the cursor) in the voice being written; every voice plays.
-            let onsets = cur.onsets
-            let from = selected ?? (cursor < cur.notes.count ? cursor : 0)
-            ScorePlayer.shared.play(score, fromTime: onsets.indices.contains(from) ? onsets[from] : 0, in: self)
+            let line = cur
+            let from = selected ?? (cursor < line.notes.count ? cursor : 0)
+            guard line.notes.indices.contains(from) else { return ScorePlayer.shared.play(score, fromBar: 0, offset: 0, in: self) }
+            let bar = line.bar(of: from)
+            let onsets = line.onsets
+            let barStart = line.measures.indices.contains(bar) ? line.measures[bar].lowerBound : from
+            ScorePlayer.shared.play(score, fromBar: bar, offset: onsets[from] - onsets[barStart], in: self)
         }
     }
 
@@ -1577,7 +1816,21 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? { owner?.contextMenu() }
+    override func menu(for event: NSEvent) -> NSMenu? {
+        // Bar commands (key change, repeats) act where the right-click was.
+        if !isExport {
+            let p = convert(event.locationInWindow, from: nil)
+            if let ref = note(at: p) {
+                if ref.voice != voice { setVoice(ref.voice) }
+                select(ref.index)
+            } else if !placed.isEmpty {
+                selected = nil
+                cursor = gap(at: p)
+                needsDisplay = true
+            }
+        }
+        return owner?.contextMenu()
+    }
 }
 
 // MARK: - Container
@@ -1684,6 +1937,26 @@ final class ScoreElementView: ElementView {
         }
         key.submenu = keys
         menu.addItem(key)
+        // At the bar right-clicked (or the cursor's).
+        let bar = staff.currentBar
+        let change = NSMenuItem(title: bar == 0 ? "Key Change (first bar: the key signature)" : "Key Change from Bar \(bar + 1)", action: nil, keyEquivalent: "")
+        let changes = NSMenu()
+        let here = staff.keyChangeHere
+        for (fifths, name) in ScoreData.keyNames {
+            changes.addItem(ClosureMenuItem(name, state: here == fifths) { [weak self] in self?.staff.setKeyChange(fifths) })
+        }
+        if bar > 0, here != nil {
+            changes.addItem(.separator())
+            changes.addItem(ClosureMenuItem("Remove Key Change") { [weak self] in self?.staff.setKeyChange(nil) })
+        }
+        change.submenu = changes
+        menu.addItem(change)
+        menu.addItem(ClosureMenuItem("Start Repeat  |:  (Bar \(bar + 1))", state: score.mark(bar).repeatStart == true) { [weak self] in
+            self?.staff.toggleRepeatStart()
+        })
+        menu.addItem(ClosureMenuItem("End Repeat  :|  (Bar \(bar + 1))", state: score.mark(bar).repeatEnd == true) { [weak self] in
+            self?.staff.toggleRepeatEnd()
+        })
         let time = NSMenuItem(title: "Time Signature", action: nil, keyEquivalent: "")
         let times = NSMenu()
         for (b, u) in ScoreData.times {

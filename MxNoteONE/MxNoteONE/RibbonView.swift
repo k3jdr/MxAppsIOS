@@ -513,6 +513,22 @@ struct ScoreRibbon: View {
             RibbonButton("Dot (.)", "circle.fill", active: ScoreView.inputDotted) { act { $0.toggleDot() } }
             RibbonButton("Triplet (⌃3)", "3.square", active: ScoreView.inputTriplet) { act { $0.toggleTriplet() } }
         }
+        RibbonGroup("Bars") {
+            let bar = staff?.currentBar ?? 0
+            let mark = staff?.score.mark(bar) ?? ScoreBarMark()
+            RibbonMenu("Key Change", "number.square") {
+                ForEach(ScoreData.keyNames, id: \.0) { fifths, name in
+                    Button(name) { act { $0.setKeyChange(fifths) } }
+                }
+                if bar > 0, mark.keyFifths != nil {
+                    Divider()
+                    Button("Remove Key Change") { act { $0.setKeyChange(nil) } }
+                }
+            }
+            .help(bar == 0 ? "Key signature" : "Key change from bar \(bar + 1)")
+            RibbonButton("Start Repeat |: (bar \(bar + 1))", "arrow.right.to.line", active: mark.repeatStart == true) { act { $0.toggleRepeatStart() } }
+            RibbonButton("End Repeat :| (bar \(bar + 1))", "arrow.uturn.backward", active: mark.repeatEnd == true) { act { $0.toggleRepeatEnd() } }
+        }
         RibbonGroup("Voice") {
             RibbonButton("Voice 1 (⌥⌘1)", "1.circle", active: (staff?.currentVoice ?? 0) == 0) { act { $0.setVoice(0) } }
             RibbonButton("Voice 2 (⌥⌘2)", "2.circle", active: staff?.currentVoice == 1) { act { $0.setVoice(1) } }

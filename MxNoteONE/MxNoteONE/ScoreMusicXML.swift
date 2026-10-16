@@ -4,7 +4,8 @@
 //
 //  MusicXML, the format MuseScore, Finale, Sibelius and Dorico exchange
 //  scores in: a score exports as MusicXML 4.0 (notes, rests, dots, ties,
-//  accidentals, chords, chord symbols, lyrics, key, time, clef, tempo, and
+//  accidentals, chords, chord symbols, lyrics, key and key changes, repeats,
+//  time, clef, tempo, and
 //  guitar strings and frets when the TAB staff is on), and MusicXML files —
 //  .musicxml, .xml or compressed .mxl — import as a score (the first part's
 //  first voice; what's left out is reported).
@@ -47,6 +48,13 @@ enum MusicXML {
         let measures = (0..<barCount).map { first.indices.contains($0) ? first[$0] : score.notes.count..<score.notes.count }
         for (m, bar) in measures.enumerated() {
             out += "    <measure number=\"\(m + 1)\">\n"
+            let mark = score.mark(m)
+            if mark.repeatStart == true {
+                out += "      <barline location=\"left\"><bar-style>heavy-light</bar-style><repeat direction=\"forward\"/></barline>\n"
+            }
+            if m > 0, let fifths = mark.keyFifths {
+                out += "      <attributes><key><fifths>\(fifths)</fifths></key></attributes>\n"
+            }
             if m == 0 {
                 out += "      <attributes><divisions>\(divisions)</divisions><key><fifths>\(score.keyFifths)</fifths></key>"
                 out += "<time><beats>\(score.beats)</beats><beat-type>\(score.beatUnit)</beat-type></time>"
@@ -62,7 +70,11 @@ enum MusicXML {
                 if back > 0 { out += "      <backup><duration>\(back)</duration></backup>\n" }
                 out += notesXML(voiceTwo, second[m], voice: 2)
             }
-            if m == measures.count - 1 { out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style></barline>\n" }
+            if mark.repeatEnd == true {
+                out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style><repeat direction=\"backward\"/></barline>\n"
+            } else if m == measures.count - 1 {
+                out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style></barline>\n"
+            }
             out += "    </measure>\n"
         }
         out += "  </part>\n</score-partwise>\n"
@@ -113,10 +125,10 @@ enum MusicXML {
             out += noteXML(chord: false, step: note.step, octave: note.octave, alter: note.rest ? 0 : score.soundingAlter(i),
                            accidental: score.showsAccidental(i) ? note.alter : nil, main: true, tabSpot: mainMidi.flatMap(spot))
             for tone in note.chord ?? [] where !note.rest {
-                let alter = tone.alter ?? score.keyAlter(tone.step)
+                let alter = tone.alter ?? score.keyAlter(tone.step, at: i)
                 let midi = ScoreData.midi(step: tone.step, octave: tone.octave, alter: alter)
                 out += noteXML(chord: true, step: tone.step, octave: tone.octave, alter: alter,
-                               accidental: tone.alter != nil && tone.alter != score.keyAlter(tone.step) ? tone.alter : nil, main: false, tabSpot: spot(midi))
+                               accidental: tone.alter != nil && tone.alter != score.keyAlter(tone.step, at: i) ? tone.alter : nil, main: false, tabSpot: spot(midi))
             }
         }
         return out
@@ -224,7 +236,9 @@ enum MusicXML {
         var divisions = 1.0
         var seenAttributes = false
         var pendingSymbol: String?
-        var skippedVoices = 0, skippedGrace = 0, changedKey = false
+        var skippedVoices = 0, skippedGrace = 0
+        // The bar being read and its key (a key change sets a new one from that bar).
+        var barIndex = -1, key = 0
         let stepNames = ["C", "D", "E", "F", "G", "A", "B"]
         let typeNames: [String: ScoreNote.Duration] = ["whole": .whole, "breve": .whole, "half": .half, "quarter": .quarter,
                                                        "eighth": .eighth, "16th": .sixteenth, "32nd": .sixteenth, "64th": .sixteenth]
@@ -232,6 +246,7 @@ enum MusicXML {
         var time = 0.0, v2: [ScoreNote] = [], v2pos = 0.0, v2Bars: [[ScoreNote]] = [], secondVoice: String?
         var extraVoices = 0
         for measure in part.elements(forName: "measure") {
+            barIndex += 1
             defer {
                 v2Bars.append(v2)
                 v2 = []; v2pos = 0; time = 0
@@ -245,8 +260,13 @@ enum MusicXML {
                     time += (text(e, "duration").flatMap(Double.init) ?? 0) / divisions
                 case "attributes":
                     if let d = text(e, "divisions").flatMap(Double.init), d > 0 { divisions = d }
-                    if let f = text(e, "key/fifths").flatMap(Int.init) {
-                        if seenAttributes, f != score.keyFifths { changedKey = true } else { score.keyFifths = max(-7, min(7, f)) }
+                    if let f = text(e, "key/fifths").flatMap(Int.init).map({ max(-7, min(7, $0)) }) {
+                        if barIndex == 0 {
+                            score.keyFifths = f
+                        } else if f != key {
+                            score.setMark(barIndex) { $0.keyFifths = f }
+                        }
+                        key = f
                     }
                     if !seenAttributes {
                         if let b = text(e, "time/beats").flatMap(Int.init), let u = text(e, "time/beat-type").flatMap(Int.init) {
@@ -260,6 +280,12 @@ enum MusicXML {
                     if let tempo = (e.elements(forName: "sound").first?.attribute(forName: "tempo")?.stringValue).flatMap(Double.init)
                         ?? text(e, "direction-type/metronome/per-minute").flatMap(Double.init) {
                         score.tempo = max(20, min(300, Int(tempo.rounded())))
+                    }
+                case "barline":
+                    switch e.elements(forName: "repeat").first?.attribute(forName: "direction")?.stringValue {
+                    case "forward": score.setMark(barIndex) { $0.repeatStart = true }
+                    case "backward": score.setMark(barIndex) { $0.repeatEnd = true }
+                    default: break
                     }
                 case "harmony":
                     pendingSymbol = symbol(from: e)
@@ -288,7 +314,7 @@ enum MusicXML {
                     let hasAccidental = e.elements(forName: "accidental").first != nil
                     if isChord {
                         guard let step else { continue }
-                        let written: Int? = hasAccidental || alter != score.keyAlter(step) ? alter : nil
+                        let written: Int? = hasAccidental || alter != ScoreData.keyAlter(step, fifths: key) ? alter : nil
                         let tone = ChordTone(step: step, octave: octave, alter: written)
                         if inSecond {
                             if var last = v2.popLast() { last.chord = (last.chord ?? []) + [tone]; v2.append(last) }
@@ -315,7 +341,7 @@ enum MusicXML {
                     if let step, !note.rest {
                         note.step = step
                         note.octave = octave
-                        note.alter = hasAccidental || alter != score.keyAlter(step) ? alter : nil
+                        note.alter = hasAccidental || alter != ScoreData.keyAlter(step, fifths: key) ? alter : nil
                     }
                     note.tie = e.elements(forName: "tie").contains { $0.attribute(forName: "type")?.stringValue == "start" }
                     if text(e, "time-modification/actual-notes") == "3", text(e, "time-modification/normal-notes") == "2" { note.tuplet = true }
@@ -360,7 +386,6 @@ enum MusicXML {
         if extraVoices > 0 { notes.append("\(extraVoices) note\(extraVoices == 1 ? "" : "s") in a third or later voice left out (a score has two voices).") }
         if skippedVoices > 0 { notes.append("\(skippedVoices) note\(skippedVoices == 1 ? "" : "s") on other staves left out (a score has one staff).") }
         if skippedGrace > 0 { notes.append("\(skippedGrace) grace or cue note\(skippedGrace == 1 ? "" : "s") left out.") }
-        if changedKey { notes.append("The key changes during the piece; the first key is used throughout.") }
         return Imported(score: score, notes: notes)
     }
 

@@ -345,6 +345,7 @@ final class NoteTextView: NSTextView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         showLinkCursor(event)
+        hoverLink(event)
     }
 
     override func cursorUpdate(with event: NSEvent) {

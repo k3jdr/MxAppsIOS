@@ -351,14 +351,17 @@ struct LinkSheet: View {
         } content: {
             Form {
                 TextField("Text to display:", text: $text)
+                    .help("The words shown for the link in your notes (leave empty to use the page's title or the address)")
                 TextField("Address:", text: $address, prompt: Text("https://… or pick a page below"))
                     .onChange(of: address) { if !address.isEmpty { page = nil } }
+                    .help("A web address (https://…), an email address, or a link copied with Copy Link to Page or Paragraph")
             }
             Text("Or link to a page in your notebooks:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             TextField("Filter pages", text: $filter)
                 .textFieldStyle(.roundedBorder)
+                .help("Type part of a page's title to narrow the list")
             List(selection: $page) {
                 ForEach(pages, id: \.0) { ref, title, location in
                     VStack(alignment: .leading) {
@@ -370,6 +373,7 @@ struct LinkSheet: View {
             }
             .frame(height: 200)
             .onChange(of: page) { if page != nil { address = "" } }
+            .help("Pick a page to link to it (the link follows the page if it's renamed or moved)")
             if editing {
                 Button("Remove Link", role: .destructive) {
                     if let tv = store.linkTextView {
@@ -380,6 +384,7 @@ struct LinkSheet: View {
                     store.linkExisting = nil
                     dismiss()
                 }
+                .help("Keep the text, take the link off")
             }
         }
         .frame(width: 480)

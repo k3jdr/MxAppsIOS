@@ -1356,6 +1356,39 @@ final class TableGridView: NSView, NSTextViewDelegate {
         // While typing in a cell, the editor shows its own cursor (and links) inside the cell.
         if let editing, cellRect(editing).insetBy(dx: Self.padX, dy: Self.padY).contains(p) { return }
         cursor(at: p).set()
+        hoverLink(at: p)
+    }
+
+    /// The hover card for a link in a cell that isn't being typed in: Edit Link and Remove type in the cell.
+    private func hoverLink(at p: NSPoint) {
+        let found = character(at: p).flatMap { cell, text, index -> (CellRef, URL)? in
+            let value = text.attribute(.link, at: index, effectiveRange: nil)
+            return (value as? URL ?? (value as? String).flatMap { URL(string: $0) }).map { (cell, $0) }
+        }
+        let rect = found.map { cellRect($0.0).insetBy(dx: Self.padX, dy: Self.padY) } ?? .zero
+        LinkHover.shared.pointer(over: found?.1, rect: rect, in: self) { [weak self] in
+            LinkHoverActions(edit: {
+                guard let self, let (cell, url) = found, let range = self.typeInLink(url, in: cell) else { return }
+                self.editor.setSelectedRange(NSRange(location: range.location, length: 0))
+                NotebookStore.shared.beginInsertLink()
+            }, remove: {
+                guard let self, let (cell, url) = found, let range = self.typeInLink(url, in: cell) else { return }
+                self.editor.setSelectedRange(range)
+                TextFormatter.removeLink()
+            })
+        }
+    }
+
+    /// Starts typing in a cell and finds a link in it.
+    private func typeInLink(_ url: URL, in cell: CellRef) -> NSRange? {
+        beginEditing(cell)
+        guard let storage = editor.textStorage else { return nil }
+        var found: NSRange?
+        storage.enumerateAttribute(.link, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
+            let u = value as? URL ?? (value as? String).flatMap { URL(string: $0) }
+            if u == url { found = range; stop.pointee = true }
+        }
+        return found
     }
 
     override func mouseMoved(with event: NSEvent) { updateCursor(event) }
