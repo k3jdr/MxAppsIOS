@@ -157,11 +157,27 @@ private struct SubscriptionForm: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    LabeledContent(subscription.auth == .localService ? "Token" : "API key") {
+                        HStack {
+                            // AppKit field: reports every change (typing or pasting), so Save Key sees it at once.
+                            SecureKeyField(placeholder: hasKey ? "Paste to replace the stored key"
+                                                               : subscription.auth == .localService ? "Optional token" : "Paste your key",
+                                           text: $newKey,
+                                           onSubmit: saveKey)
+                                .frame(minWidth: 160)
+                            Button("Save Key", action: saveKey)
+                                .help("Save the key to your Keychain (or press Return in the field)")
+                        }
+                    }
                     HStack {
-                        SecureField(hasKey ? "Replace stored key" : subscription.auth == .localService ? "Token (optional)" : "API key",
-                                    text: $newKey)
-                        Button("Save Key") { saveKey() }
-                            .disabled(newKey.trimmingCharacters(in: .whitespaces).isEmpty)
+                        Spacer()
+                        Button {
+                            pasteAndSave()
+                        } label: {
+                            Label("Paste & Save", systemImage: "doc.on.clipboard")
+                        }
+                        .controlSize(.small)
+                        .help("Save the key on the clipboard without pasting it into the field")
                     }
                     HStack {
                         if hasKey {
@@ -295,8 +311,26 @@ private struct SubscriptionForm: View {
         }
     }
 
+    private func pasteAndSave() {
+        guard let text = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            keyMessage = "The clipboard has no text. Copy your key first."
+            return
+        }
+        guard !text.contains("\n"), text.count <= 512 else {
+            keyMessage = "The clipboard holds more than a key (several lines or very long text). Copy just the key."
+            return
+        }
+        newKey = text
+        saveKey()
+    }
+
     private func saveKey() {
         let key = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            keyMessage = "Paste your key into the field first (or use Paste & Save)."
+            return
+        }
         if Keychain.setSecret(key, for: subscription.keychainAccount, label: subscription.name) {
             keyMessage = "Key saved to your Keychain."
             runKeyTest()
@@ -305,5 +339,52 @@ private struct SubscriptionForm: View {
             keyMessage = "The key could not be saved to the Keychain."
         }
         refresh()
+    }
+}
+
+/// A secure text field that updates its binding on every edit (typing and pasting) and calls
+/// `onSubmit` on Return. SwiftUI's SecureField did not pass a paste on until the field lost focus,
+/// which left Save Key disabled.
+struct SecureKeyField: NSViewRepresentable {
+    var placeholder: String
+    @Binding var text: String
+    var onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSSecureTextField {
+        let field = NSSecureTextField()
+        field.placeholderString = placeholder
+        field.delegate = context.coordinator
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.submit(_:))
+        field.bezelStyle = .roundedBezel
+        field.lineBreakMode = .byTruncatingTail
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return field
+    }
+
+    func updateNSView(_ field: NSSecureTextField, context: Context) {
+        context.coordinator.parent = self
+        if field.stringValue != text { field.stringValue = text }
+        field.placeholderString = placeholder
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: SecureKeyField
+        init(_ parent: SecureKeyField) { self.parent = parent }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
+
+        @objc func submit(_ sender: NSTextField) {
+            parent.text = sender.stringValue
+            guard !sender.stringValue.isEmpty else { return }
+            parent.onSubmit()
+        }
     }
 }
