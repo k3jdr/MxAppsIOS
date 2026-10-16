@@ -14,6 +14,7 @@ enum WorkspaceForm: String, CaseIterable, Identifiable {
     case connection = "DB Connection"
     case tableSelection = "DB Table Selection"
     case table = "DB Table"
+    case srm = "SRM"
     var id: String { rawValue }
 }
 
@@ -27,6 +28,8 @@ enum ConnectionStatus: Equatable {
 @Observable
 final class WorkspaceSession {
     var form: WorkspaceForm = .connection
+    /// The SRM form's state and its own connection (see SRMStore.swift).
+    let srm = SRMStore()
     var password = ""
     var status: ConnectionStatus = .disconnected
 
@@ -114,6 +117,7 @@ final class WorkspaceSession {
     }
 
     func disconnect() async {
+        await srm.detach()
         if let service { await service.close() }
         service = nil
         status = .disconnected

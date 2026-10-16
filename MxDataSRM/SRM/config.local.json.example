@@ -1,0 +1,5 @@
+{
+  "database": {"host": "192.168.0.223", "port": 5432, "user": "postgres", "dbname": "srm"},
+  "sec_user_agent": "Your Name your.email@example.com",
+  "api_keys": {"openfigi": "", "fmp": ""}
+}

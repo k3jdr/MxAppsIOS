@@ -12,6 +12,31 @@ Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is 
 | **DB Connection** | Host, port, user, database, password, SSL mode (`disable` / `prefer` / `require`, with no certificate verification, like libpq). |
 | **DB Table Selection** | Lists tables with a row count (`~` = planner estimate; **Count Rows** replaces it with `count(*)`) and size. The panel on the right shows a psql `\d` style description: columns, indexes, check constraints, foreign keys and "referenced by". Double-click a table or press **Open Table** to load it. With **Open in New Window** checked, the table opens in its own window instead (see below). |
 | **DB Table** | SQL box with **Run SQL** (see below) above an editable grid that fills the form and resizes with the window. *Columns* (default **3**) are sized to span its width, except columns you resize by dragging, which keep their width (saved per table in the workspace; right-click the header ▸ **Reset Column Widths** to undo); *rows* (default **10**) set its minimum height. Scroll bars reach the rest of the fetched rows (default 1000). Edited cells are highlighted until you run **Update…**. Cells can be selected and copied (see **Selecting and copying cells**). |
+| **SRM** | The security reference master in schema `srm` (see [SRM/README.md](SRM/README.md) for the schema and loaders). Tabs: **Securities**, **Portfolios**, **Benchmarks**, **Data & Loads** (below). |
+
+## SRM form
+
+Shown when the connected database has the `srm` schema (`SRM/srm.py migrate`, then `SRM/srm.py load all`).
+It uses its own connection to the same database, so its writes never mix with the DB Table form's transactions.
+
+- **Securities**: search by name or any identifier (ISIN, CUSIP, SEDOL, FIGI, composite / share-class FIGI,
+  ticker, `TICKER:MIC`, CIK, LEI), filtered by type, benchmark membership and active status. The panel on the
+  right shows the price chart, every identifier with its validity dates and source, the issuer (LEI, CIK, SIC,
+  incorporation), listings, sector / industry, benchmark weights and corporate actions.
+- **Portfolios**: **New…** / **Edit…** (code, name, base currency, benchmark). Holdings are kept in dated
+  snapshots (**Holdings on**, **New Snapshot…** copies the latest earlier one). **Add Holding…** takes any
+  identifier, shows the securities it matches as you type, and takes shares or a weight in percent;
+  **Paste Holdings…** takes one `identifier [type] shares|weight%` per line. **Copy Benchmark** fills the
+  snapshot with a benchmark's weights; **Normalize Weights** scales target weights to 100%. The snapshot is
+  valued with the latest prices and checked (weights add up to 100%, prices present and recent, inactive or
+  short positions); **vs Benchmark** shows portfolio, benchmark and active weights and the active share.
+- **Benchmarks**: members, weights and shares, weights by sector, and the index level. **Build Custom…** makes an
+  equal- or market-cap-weighted benchmark from another benchmark's members, optionally one sector.
+  **Availability…** lists which benchmarks the data sources can and cannot supply, and why.
+- **Data & Loads**: identifier coverage, data sources with their plan limits, and the load audit trail.
+
+Launch arguments for testing: `-autoConnect YES` connects with the Keychain password, `-startForm SRM`
+picks the form, `-srmSection Portfolios` the SRM tab and `-srmQuery AAPL` a security search.
 
 ### Switching databases
 
@@ -250,5 +275,8 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `JSONFormatter.swift`, `JSONViewer.swift` | View JSON…: formatting and colouring like VS Code, and the sheet |
 | `SQLHighlighter.swift` | SQL syntax colouring (PostgreSQL-aware scanner, VS Code colours) |
 | `SQLFiles.swift` | SQL files: folder and recent files (bookmarks), open / save / revert, the SQL box's right-click menu |
+| `SRMStore.swift` | SRM form: row types, its own connection and the queries |
+| `SRMForm.swift`, `SRMSecuritiesView.swift`, `SRMPortfoliosView.swift`, `SRMBenchmarksView.swift`, `SRMLoadsView.swift` | SRM form tabs and dialogs |
+| `SRM/` | PostgreSQL schema migrations and Python loaders for the security master |
 
 The document type is declared in `Info.plist`, which is merged with the Info.plist that Xcode generates.
