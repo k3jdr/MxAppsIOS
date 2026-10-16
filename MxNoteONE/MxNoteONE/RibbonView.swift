@@ -784,6 +784,7 @@ struct ScoreRibbon: View {
 
 struct TableRibbon: View {
     private var grid: TableGridView? { TableGridView.active }
+    @Environment(\.openWindow) private var openWindow
 
     private func palette(_ title: String = "Shading", _ apply: @escaping (NSColor?) -> Void) -> some View {
         Group {
@@ -817,6 +818,13 @@ struct TableRibbon: View {
     }
 
     var body: some View {
+        RibbonGroup("Automation") {
+            RibbonButton("Name & Tags", "tag", large: true) { grid?.editTableNameAndTags() }
+            RibbonButton("Tag Rows", "line.3.horizontal.decrease") { grid?.tagRows() }
+            RibbonButton("Tag Cells", "square.dashed") { grid?.tagCells() }
+            RibbonButton("Copy Reference", "doc.on.clipboard") { grid?.copyPythonReference() }
+            RibbonButton("Scripts (⌥⌘P)", "chevron.left.forwardslash.chevron.right", large: true) { openWindow(id: "scripts") }
+        }
         RibbonGroup("Insert") {
             RibbonButton("Insert Above", "arrow.up.square", large: true) { grid?.insertRowAbove() }
             RibbonButton("Insert Below", "arrow.down.square", large: true) { grid?.insertRowBelow() }

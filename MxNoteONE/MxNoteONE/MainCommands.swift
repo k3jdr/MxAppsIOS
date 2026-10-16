@@ -310,6 +310,21 @@ struct MainCommands: Commands {
 
         // Notebook
         CommandMenu("Notebook") {
+            Button("Notebook Scripts…") { openWindow(id: "scripts") }
+                .keyboardShortcut("p", modifiers: [.command, .option])
+            Menu("Run Script") {
+                let scripts = store.currentNotebook.map(ScriptLibrary.scripts) ?? []
+                ForEach(scripts, id: \.self) { url in
+                    Button(url.deletingPathExtension().lastPathComponent) {
+                        openWindow(id: "scripts")
+                        ScriptsIDE.shared.notebookID = store.currentNotebook?.id
+                        ScriptsIDE.shared.refresh()
+                        ScriptsIDE.shared.run(url)
+                    }
+                }
+                if scripts.isEmpty { Text("No scripts yet — Notebook Scripts… makes one") }
+            }
+            Divider()
             Button("Make Subpage") {
                 if let ref = store.currentPageRef { store.changeLevel(ref, by: 1) }
             }

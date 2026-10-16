@@ -252,6 +252,7 @@ extension QuickHelp {
         "View/Page Setup": "The page's colour and rule lines (lines or grid).",
         "View/Zoom": "Zoom the page in or out, to actual size or to the window's width.",
         "View/Views": "Full Page View, the Recycle Bin, snapping to the grid, the Tag Summary.",
+        "Table/Automation": "Names and tags for the table, its rows and cells, so Python scripts can find them anywhere in the notebook; the Scripts window to write and run them.",
         "Table/Insert": "Rows and columns above, below, left or right of the selected cells.",
         "Table/Merge": "Merge or split cells.",
         "Table/Delete": "Delete rows, columns or the table.",
@@ -367,6 +368,11 @@ extension QuickHelp {
         "Cells": "Shades the selected cells with a colour.",
         "Header": "Shades the header row with a colour.",
         "Headings": "Shows or hides the A B C column letters and 1 2 3 row numbers.",
+        "Name & Tags": "The table's name (unique in the notebook) and tags. Scripts find it with mx.table(\"Name\") or mx.tables(tag=\"…\").",
+        "Tag Rows": "Tags on the selected rows — scripts find them with mx.rows(\"tag\") or table.row(tag=\"tag\"). Tagged rows show a blue mark.",
+        "Tag Cells": "Tags on the selected cells — scripts find one with mx.cell(\"tag\"). Tagged cells show a blue corner.",
+        "Copy Reference": "Copies the Python that gets to the selected cell (or the table), to paste into a script.",
+        "Scripts": "Opens Notebook Scripts: write, run and debug Python that works on the notebook's tables.",
         "Row Up": "Moves the selected rows up.",
         "Row Down": "Moves the selected rows down.",
         // Score
@@ -507,6 +513,7 @@ extension TableGridView {
         }
         if let format = model.numberFormat(cell) { facts.append("\(format.kind.rawValue) format, \(format.decimals) decimals") }
         if model.span(cell).rows > 1 || model.span(cell).columns > 1 { facts.append("merged \(model.span(cell).rows)×\(model.span(cell).columns)") }
+        facts += tagFacts(cell)
         return QuickHelpItem(title: "Cell \(name)", detail: facts.joined(separator: " · ") + ".\nDouble-click to type; = starts a formula; Tab moves on.",
                              shortcut: nil, symbol: "tablecells")
     }

@@ -31,6 +31,11 @@ struct MxNoteONEApp: App {
         .defaultSize(width: 640, height: 560)
         .restorationBehavior(.disabled)
 
+        Window("Notebook Scripts", id: "scripts") {
+            ScriptsWindowView()
+        }
+        .defaultSize(width: 1200, height: 780)
+
         Window("Recycle Bin", id: "trash") {
             RecycleBinView()
         }
@@ -49,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         OfficeFonts.load()
         // ⌃Z / ⌃Y (as in OneNote for Windows) also undo and redo; ⌘Z / ⇧⌘Z are the Mac keys.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // The Scripts window's run and debug keys.
+            if MainActor.assumeIsolated({ ScriptsIDE.shared.handleKey(event) }) { return nil }
             // F7: check spelling of the text in focus.
             if SpellCheck.isTrigger(event) {
                 SpellCheck.run()

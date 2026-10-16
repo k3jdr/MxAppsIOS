@@ -13,6 +13,7 @@ struct MainView: View {
     @State private var visibility: NavigationSplitViewVisibility = .all
     @FocusState private var searchFocused: Bool
     @Bindable private var quickHelp = QuickHelp.shared
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         NavigationSplitView(columnVisibility: $visibility) {
@@ -77,6 +78,7 @@ struct MainView: View {
         }
         .task { store.loadLibraryIfNeeded() }
         .onAppear { if QuickHelp.shared.visible { QuickHelp.shared.startTracking() } }
+        .onReceive(NotificationCenter.default.publisher(for: .mxOpenScripts)) { _ in openWindow(id: "scripts") }
     }
 }
 

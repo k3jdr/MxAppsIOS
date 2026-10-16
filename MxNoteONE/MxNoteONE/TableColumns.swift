@@ -20,6 +20,7 @@ extension TableData {
     mutating func shiftColumns(at index: Int, by delta: Int) {
         shiftFormulas(rows: false, at: index, by: delta)
         moveNumberFormats(rows: false, at: index, by: delta)
+        moveTags(rows: false, at: index, by: delta)
         shiftConditionalRules(rows: false, at: index, by: delta)
         shiftValidationRules(rows: false, at: index, by: delta)
         if var hidden = hiddenColumns {
@@ -97,6 +98,7 @@ extension TableData {
         filteredRows = shifted(filteredRows)
         hiddenRows = shifted(hiddenRows)
         moveNumberFormats(rows: true, at: index, by: delta)
+        moveTags(rows: true, at: index, by: delta)
         shiftConditionalRules(rows: true, at: index, by: delta)
         shiftValidationRules(rows: true, at: index, by: delta)
         if let heights = rowHeightOverrides {
@@ -128,6 +130,51 @@ extension TableData {
             for (r, h) in heights where newIndex.indices.contains(r) { moved[newIndex[r]] = h }
             rowHeightOverrides = moved.isEmpty ? nil : moved
         }
+        // Tags go with their rows when rows are sorted or moved.
+        if let tags = rowTags {
+            var moved: [Int: [String]] = [:]
+            for (r, t) in tags where newIndex.indices.contains(r) { moved[newIndex[r]] = t }
+            rowTags = moved.isEmpty ? nil : moved
+        }
+        if let tags = cellTags {
+            var moved: [String: [String]] = [:]
+            for (key, t) in tags {
+                guard let cell = Self.cell(key), newIndex.indices.contains(cell.row) else { continue }
+                moved[Self.key(CellRef(row: newIndex[cell.row], column: cell.column))] = t
+            }
+            cellTags = moved.isEmpty ? nil : moved
+        }
+    }
+
+    /// Keeps row and cell tags on their rows and cells when a row or column is inserted (+1) or removed (-1).
+    mutating func moveTags(rows: Bool, at index: Int, by delta: Int) {
+        if rows, let tags = rowTags {
+            var moved: [Int: [String]] = [:]
+            for (r, t) in tags where !(delta < 0 && r == index) {
+                moved[r >= index + (delta < 0 ? 1 : 0) ? r + delta : r] = t
+            }
+            rowTags = moved.isEmpty ? nil : moved
+        }
+        guard let tags = cellTags else { return }
+        var moved: [String: [String]] = [:]
+        for (key, t) in tags {
+            guard var cell = Self.cell(key) else { continue }
+            let value = rows ? cell.row : cell.column
+            if delta < 0 && value == index { continue }
+            if value >= index + (delta < 0 ? 1 : 0) {
+                if rows { cell.row += delta } else { cell.column += delta }
+            }
+            moved[Self.key(cell)] = t
+        }
+        cellTags = moved.isEmpty ? nil : moved
+    }
+
+    /// Tags written as typed: "#Weekly, totals  q3" → ["weekly", "totals", "q3"].
+    static func parseTags(_ text: String) -> [String] {
+        var seen = Set<String>()
+        return text.split(whereSeparator: { $0 == "," || $0 == " " || $0 == ";" }).map {
+            $0.trimmingCharacters(in: CharacterSet(charactersIn: "#").union(.whitespaces)).lowercased()
+        }.filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     /// Spreadsheet-style column name: A…Z, AA, AB…

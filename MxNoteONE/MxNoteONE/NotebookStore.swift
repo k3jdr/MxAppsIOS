@@ -602,6 +602,14 @@ final class NotebookStore {
                            style: PageStyle(color: Prefs.pageColor, rules: Prefs.ruleLines))
     }
 
+    /// A page, but only if it has a table (pages without one are skipped without being decoded) — for scripts.
+    func loadPageWithTables(_ ref: PageRef) -> PageContent? {
+        guard let nb = notebook(ref.notebookID), !isLocked(ref.section),
+              let data = try? read(nb.pageURL(ref.pageID), key: nb.keys[ref.sectionID]),
+              data.range(of: Data("\"table\"".utf8)) != nil else { return nil }
+        return try? decoder.decode(PageContent.self, from: data)
+    }
+
     private func writePage(_ content: PageContent, nb: Notebook, key: SymmetricKey?) throws {
         try write(encoder.encode(content), to: nb.pageURL(content.id), key: key)
     }

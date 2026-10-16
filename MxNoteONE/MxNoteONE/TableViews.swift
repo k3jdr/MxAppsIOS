@@ -1887,6 +1887,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             NSColor.controlAccentColor.withAlphaComponent(0.25).setFill()
             rect.fill(using: .sourceOver)
         }
+        drawTagMarks(cell, in: rect)
         var textRect = rect.insetBy(dx: Self.padX, dy: Self.padY)
         if hasFilterButton(cell) || hasDropdown(cell) { textRect.size.width -= Self.filterButtonSize }
         if editing != cell {
@@ -2484,6 +2485,8 @@ final class TableGridView: NSView, NSTextViewDelegate {
         becameActive()
         let menu = tableMenu(for: cell)
         for (i, item) in spellingItems(at: convert(event.locationInWindow, from: nil)).enumerated() { menu.insertItem(item, at: i) }
+        menu.addItem(.separator())
+        menu.addItem(automationMenuItem())
         return menu
     }
 

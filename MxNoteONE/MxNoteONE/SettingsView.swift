@@ -17,6 +17,7 @@ struct SettingsView: View {
     @AppStorage(DeviceUnlock.appLockKey) private var appLock = false
     @State private var useOfficeFonts = OfficeFonts.enabled
     @AppStorage(WebBrowser.key) private var browserID = ""
+    @AppStorage(PythonLocator.key) private var pythonPath = ""
     @State private var browsers = WebBrowser.installed()
 
     private var officeFontsStatus: String {
@@ -83,6 +84,29 @@ struct SettingsView: View {
                 Text(browserID.isEmpty
                      ? "Links in your notes open in the browser the Mac uses for everything."
                      : "Links in your notes (text, tables, the link card) open in \(browsers.first { $0.id == browserID }?.name ?? "the chosen browser") — other apps still use the Mac's default. Email and page links open as usual.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Section("Python (Notebook Scripts)") {
+                Picker("Run scripts with:", selection: $pythonPath) {
+                    Text("Automatic (\(PythonLocator.candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "none found"))").tag("")
+                    Divider()
+                    ForEach(PythonLocator.all(), id: \.self) { Text($0).tag($0) }
+                    if !pythonPath.isEmpty, !PythonLocator.all().contains(pythonPath) { Text(pythonPath).tag(pythonPath) }
+                }
+                HStack {
+                    Button("Choose Python…") {
+                        let panel = NSOpenPanel()
+                        panel.message = "Choose a python3 program"
+                        panel.canChooseDirectories = false
+                        if panel.runModal() == .OK, let url = panel.url { pythonPath = url.path }
+                    }
+                    Spacer()
+                }
+                Text(PythonLocator.find() == nil
+                     ? "No Python 3 found. Install Apple's Command Line Tools (xcode-select --install), the installer from python.org, or Homebrew (brew install python). Each notebook then gets its own environment for the packages its scripts need."
+                     : "Each notebook's scripts run in the notebook's own environment, made from this Python; packages scripts need are installed there (Notebook Scripts ▸ Packages).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

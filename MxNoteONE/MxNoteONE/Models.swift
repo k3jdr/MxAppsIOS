@@ -324,6 +324,12 @@ struct TableData: Codable, Hashable {
     var validationRules: [ValidationRule]?
     /// A pivot table: how it summarises its source table (Refresh Pivot Table works it out again).
     var pivot: PivotSpec?
+    /// The table's name in the notebook (scripts find it by name: mx.table("Inventory")), and its tags.
+    var name: String?
+    var tags: [String]?
+    /// Tags on rows (row index → tags) and on cells ("row,column" → tags), for scripts to find them by.
+    var rowTags: [Int: [String]]?
+    var cellTags: [String: [String]]?
 
     /// Background of a cell: its shading, else light gray for the header row, else nil (white).
     func shade(_ row: Int, _ column: Int) -> RGBA? {

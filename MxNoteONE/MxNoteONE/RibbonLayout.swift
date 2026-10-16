@@ -40,7 +40,7 @@ final class RibbonLayout {
         (.insert, ["Tables", "Music", "Files", "Recording", "Links", "Time Stamp", "Pages"]),
         (.draw, ["Tools", "Shapes", "Pen Color", "Thickness", "Highlighter", "Ink"]),
         (.view, ["Page Setup", "Zoom", "Views"]),
-        (.table, ["Insert", "Merge", "Delete", "Shading", "Cell Text", "Table"]),
+        (.table, ["Automation", "Insert", "Merge", "Delete", "Shading", "Cell Text", "Table"]),
         (.score, ["Notes", "Expression", "Articulation", "Staves", "Bars", "Voice", "Add", "Selected Note", "Chords & Lyrics", "Score"]),
     ]
 

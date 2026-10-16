@@ -390,6 +390,49 @@ of the ribbon tabs, or by right-clicking a section:
 **Compact Toolbar** (⌥⇧⌘R) makes every section smaller — no section names, small buttons. **Collapse All**, **Show All
 Sections** and **Dock All Palettes** put things back. The arrangement is remembered.
 
+## Notebook scripts (Python automation)
+
+Python scripts can read and change the notebook's tables — every page, every section (locked ones aside).
+
+- **Names and tags.** Select a table ▸ Table tab ▸ **Automation ▸ Name & Tags** to give it a name (unique in the
+  notebook — MxNoteONE warns about a clash) and tags (#expenses). **Tag Rows** and **Tag Cells** tag the selection;
+  tagged cells show a blue corner and tagged rows a blue mark. Tags stay on their rows and cells when rows are added,
+  deleted, sorted or moved. **Copy Reference** copies the Python that gets to the selected cell. The same commands are
+  on the right-click menu ▸ Name & Tags, and Quick Help shows a cell's names and tags.
+- **Scripts belong to the notebook.** They're plain `.py` files in the notebook's `scripts` folder (with a
+  `requirements.txt`), not on any page — open them in any editor, keep them in git, copy them to another notebook.
+- **Notebook ▸ Notebook Scripts…** (⌥⌘P) is the editor: the scripts on the left (+ makes one from a template:
+  totals across tagged tables, flag low stock, tables to CSV, pandas summary; or import .py files), Python colouring,
+  auto-indent, ⌘/ comments, line numbers. **Run** (⌘R) and **Debug** (⇧⌘R): click a line number for a breakpoint;
+  the debugger stops there (or at the first line), shows the variables and the call stack, and **Step Over** (F6),
+  **Step Into** (F7), **Step Out** (F8), **Continue** (⌃⌘Y), **Stop** (⌘.); type an expression in the console to see its
+  value. Output and errors (with the line marked in red) go to the console; input() reads from it. Notebook ▸ Run
+  Script runs one straight from the menu.
+- **Changes show as the script runs** — on the page on screen at once (one Undo step), on other pages saved in the
+  background. **Revert Last Run** puts every page the last run changed back as it was.
+- **Python and packages.** Scripts run with the Python on the Mac (Settings ▸ General ▸ Python chooses one; if there's
+  none, the window explains how to install it — Apple's Command Line Tools, python.org, or Homebrew). Each notebook
+  gets its own environment (a Python virtual environment in Application Support). When a script imports a package
+  that isn't installed, a banner says so before it runs and **Install and Run** installs it with pip (and adds it to
+  requirements.txt, so another Mac can install the same); the inspector's **Packages** tab lists, installs and removes
+  packages.
+
+```python
+import mxnote as mx
+
+inv = mx.table("Inventory")                 # a table by name (or tag)
+for row in inv.rows:                        # rows after the header
+    if row["Qty"] < 5:                      # a cell by heading, letter or number
+        row["Status"] = "Reorder"
+        row.tags.add("low")
+total = sum(t.column("Amount").sum() for t in mx.tables(tag="expenses"))
+mx.cell("grand-total").value = total        # a tagged cell, on any page
+inv.append({"Item": "Glue", "Qty": 7})
+```
+
+The inspector's **Tables** tab lists every table in the notebook with its name, tags, page and tagged rows and cells
+(double-click to put a reference into the script); **Help** has the whole mxnote reference.
+
 ## Quick Help
 
 **View ▸ Quick Help** (⌥⌘/) shows a panel at the bottom of the sidebar — like Logic Pro's — telling what's under the
