@@ -1087,6 +1087,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
         needsDisplay = true
     }
 
+    /// The cell under a point (for Quick Help).
+    func cellRef(at point: NSPoint) -> CellRef? { cell(at: point) }
+
     private func cell(at point: NSPoint) -> CellRef? {
         let point = unpinned(point)
         guard model.rowCount > 0, model.columnCount > 0 else { return nil }

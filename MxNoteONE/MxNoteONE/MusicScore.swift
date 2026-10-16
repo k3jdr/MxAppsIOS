@@ -81,6 +81,11 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var tabString: Int?
     /// A triplet note: three in the time of two.
     var tuplet: Bool?
+    /// The tuplet's ratio, [actual, normal] — 5 in the time of 4 is [5, 4]; nil is a triplet (3 in the time of 2).
+    var tupletRatio: [Int]?
+    /// A grace note ("acciaccatura", slashed and quick, or "appoggiatura", taking time from the next note): small,
+    /// before the note it leads to, and no time of its own in the bar.
+    var grace: String?
     /// A dynamic marking under the note (pp … ff, sfz, fp).
     var dynamic: String?
     /// A slur starts here / ends here.
@@ -97,7 +102,13 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var ornament: String?
 
     /// Length in quarter notes.
-    var beats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) * (tuplet == true ? 2.0 / 3.0 : 1) }
+    var beats: Double {
+        guard grace == nil else { return 0 }
+        return 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) * (tupletActual.map { Double(tupletNormal) / Double($0) } ?? 1)
+    }
+    /// How many notes the tuplet has (3 for a triplet), and in the time of how many.
+    var tupletActual: Int? { tuplet == true ? (tupletRatio?.first ?? 3) : nil }
+    var tupletNormal: Int { tupletRatio?.last ?? 2 }
     /// Length without the triplet (what three of them share two of).
     var normalBeats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) }
     /// Steps up from C0 (for staff positions).
@@ -294,17 +305,24 @@ struct ScoreData: Codable, Hashable {
         return notes.map { n in defer { t += n.beats }; return t }
     }
 
-    /// Triplet groups in a bar: runs of triplet notes, three to the time of two.
-    func tripletGroups(in bar: Range<Int>) -> [[Int]] {
-        var groups: [[Int]] = [], current: [Int] = [], total = 0.0, target = 0.0
+    /// Tuplet groups in a bar: runs of notes of one tuplet kind, each as long as its "normal" notes (a triplet of
+    /// eighths: three in the time of two eighths).
+    func tupletGroups(in bar: Range<Int>) -> [[Int]] {
+        var groups: [[Int]] = [], current: [Int] = [], total = 0.0, target = 0.0, ratio: [Int] = []
         for i in bar {
             let n = notes[i]
-            guard n.tuplet == true else {
+            guard let actual = n.tupletActual else {
+                if n.grace != nil { continue }
                 if !current.isEmpty { groups.append(current) }
                 current = []; total = 0
                 continue
             }
-            if current.isEmpty { target = n.normalBeats * 2 }
+            let r = [actual, n.tupletNormal]
+            if !current.isEmpty, r != ratio {
+                groups.append(current)
+                current = []; total = 0
+            }
+            if current.isEmpty { target = n.normalBeats * Double(n.tupletNormal); ratio = r }
             current.append(i)
             total += n.beats
             if total >= target - 1e-6 {
@@ -314,6 +332,18 @@ struct ScoreData: Codable, Hashable {
         }
         if !current.isEmpty { groups.append(current) }
         return groups
+    }
+
+    /// Tuplets offered (⌃2 … ⌃9 as in MuseScore): [actual, normal] and name.
+    static let tupletKinds: [([Int], String)] = [
+        ([2, 3], "Duplet"), ([3, 2], "Triplet"), ([4, 3], "Quadruplet"), ([5, 4], "Quintuplet"), ([6, 4], "Sextuplet"),
+        ([7, 4], "Septuplet"), ([9, 8], "Nonuplet"),
+    ]
+
+    /// A number in superscript (for note names: C5 8³).
+    static func superscript(_ n: Int) -> String {
+        let map: [Character: Character] = ["0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹"]
+        return String(String(n).compactMap { map[$0] })
     }
 
     /// Rests filling a length (largest first), to keep a voice in step.
@@ -583,7 +613,7 @@ struct ScoreData: Codable, Hashable {
     /// One note by name (C4 q, D♯4 8., r h…).
     private func name(_ i: Int, _ n: ScoreNote) -> String {
         let length = ["", "w", "h", "", "q", "", "", "", "8", "", "", "", "", "", "", "", "16"][n.duration.rawValue] + (n.dotted ? "." : "")
-            + (n.tuplet == true ? "³" : "")
+            + (n.tupletActual.map(Self.superscript) ?? "") + (n.grace != nil ? " grace" : "")
         if n.rest { return "r" + length + marks(n) }
         let alter = soundingAlter(i)
         let name = ["C", "D", "E", "F", "G", "A", "B"][n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "")
@@ -661,7 +691,12 @@ final class ScorePlayer {
         Self.plan = []
         #endif
         // 1. What sounds: each voice's notes in playing order (tied notes as one), with when and how long (in beats).
-        struct Sound { let voice: Int; let index: Int; var time: Double; var length: Double; let velocity: Int }
+        struct Sound {
+            let voice: Int; let index: Int; var time: Double; var length: Double; let velocity: Int
+            /// An acciaccatura: how far before the beat it plays (seconds), and how long.
+            var early: Double = 0
+            var quick: Double?
+        }
         var sounds: [Sound] = []
         for v in lines.indices {
             let line = lines[v]
@@ -696,6 +731,23 @@ final class ScorePlayer {
                 j = last + 1
             }
         }
+        // Grace notes: an acciaccatura is crushed in just before its note; an appoggiatura takes half the note's time.
+        for k in sounds.indices.reversed() where lines[sounds[k].voice].notes[sounds[k].index].grace != nil {
+            let kind = lines[sounds[k].voice].notes[sounds[k].index].grace
+            guard let main = sounds[(k + 1)...].firstIndex(where: { $0.voice == sounds[k].voice && lines[$0.voice].notes[$0.index].grace == nil }) else { continue }
+            let between = sounds[(k + 1)..<main].filter { $0.voice == sounds[k].voice }.count
+            if kind == "appoggiatura" {
+                let half = sounds[main].length / 2
+                sounds[k].time = sounds[main].time
+                sounds[k].length = half
+                sounds[main].time += half
+                sounds[main].length -= half
+            } else {
+                sounds[k].time = sounds[main].time
+                sounds[k].early = 0.075 * Double(between + 1)
+                sounds[k].quick = 0.07
+            }
+        }
         // 2. Beats to seconds through the tempo changes (rit. and accel. change it gradually).
         let barLength = score.measureLength, step = 1.0 / 24
         let total = Double(order.count) * barLength
@@ -724,8 +776,8 @@ final class ScorePlayer {
             let line = lines[sound.voice]
             let note = line.notes[sound.index]
             let ref = NoteRef(voice: sound.voice, index: sound.index)
-            let start = seconds(sound.time) + delay(sound.time)
-            let span = (seconds(sound.time + sound.length) - seconds(sound.time)) * (note.fermata == true ? 2 : 1)
+            let start = max(0, seconds(sound.time) + delay(sound.time) - sound.early)
+            let span = sound.quick ?? (seconds(sound.time + sound.length) - seconds(sound.time)) * (note.fermata == true ? 2 : 1)
             let marks = Set(note.articulations ?? [])
             let inSlur = line.slurs.contains { $0.0 <= sound.index && sound.index < $0.1 }
             let sounding = marks.contains("staccatissimo") ? 0.3 : marks.contains("staccato") ? 0.5
@@ -854,7 +906,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// The length, dot and triplet for new notes (shared with the Score ribbon tab).
     static var inputDuration: ScoreNote.Duration = .quarter
     static var inputDotted = false
-    static var inputTriplet = false
+    /// The tuplet new notes go in ([actual, normal]; nil: none).
+    static var inputTuplet: [Int]?
+    static var inputTriplet: Bool { inputTuplet == [3, 2] }
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { !isExport }
@@ -918,6 +972,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     private func width(of note: ScoreNote, index: Int, in line: ScoreData? = nil) -> CGFloat {
         let score = line ?? self.score
+        // Grace notes are small and sit close to their note.
+        if note.grace != nil { return space * (1.9 + (score.showsAccidental(index) ? 1.0 : 0)) }
         let base: CGFloat
         switch note.duration {
         case .sixteenth: base = 2.3
@@ -980,8 +1036,15 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             var list: [Event] = []
             for v in lines.indices where m < barsByVoice[v].count {
                 var t = 0.0
-                for i in barsByVoice[v][m] {
-                    list.append(Event(onset: t, voice: v, index: i))
+                let bar = barsByVoice[v][m]
+                for i in bar {
+                    // Grace notes come just before their note (a sliver earlier each, so they get their own place).
+                    var onset = t
+                    if lines[v].notes[i].grace != nil {
+                        let following = bar[i...].prefix { lines[v].notes[$0].grace != nil }.count
+                        onset = t - 0.001 * Double(following)
+                    }
+                    list.append(Event(onset: onset, voice: v, index: i))
                     t += lines[v].notes[i].beats
                 }
             }
@@ -1594,6 +1657,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             var currentBeat = -1
             for i in bar {
                 let note = score.notes[i]
+                if note.grace != nil { continue }
                 let beatIndex = Int((position + 1e-9) / beat)
                 if !note.rest, note.duration.rawValue >= 8, beatIndex == currentBeat || current.isEmpty {
                     current.append(i)
@@ -1645,6 +1709,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let color = colorFor(NoteRef(voice: v, index: p.index), ink: ink)
             if note.rest {
                 drawRest(note, x: p.x, system: p.system, color: color, lift: forcedUp.map { $0 ? -space * 1.5 : space * 1.5 } ?? 0)
+                continue
+            }
+            if note.grace != nil {
+                drawGrace(note, p, v: v, in: score, color: color, up: forcedUp ?? true)
                 continue
             }
             let pos = position(note)
@@ -1811,7 +1879,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func drawTriplets(_ score: ScoreData, _ placed: [Placed], v: Int, forcedUp: Bool?, ink: NSColor) {
         let font = NSFont(name: "Georgia-BoldItalic", size: 12) ?? .boldSystemFont(ofSize: 12)
         for bar in score.measures {
-            for group in score.tripletGroups(in: bar) {
+            for group in score.tupletGroups(in: bar) {
                 let spots = group.compactMap { i in placed.first { $0.index == i } }
                 guard let first = spots.first, let last = spots.last, first.system == last.system else { continue }
                 let positions = group.map { score.notes[$0].rest ? 4 : position(score.notes[$0]) }
@@ -1820,9 +1888,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 let x1 = first.x - space * 0.2, x2 = last.x + space * 1.45
                 let yLine = up ? min(ys.min()! - space * 4.4, staffTop(first.system) - space * 1.2) : max(ys.max()! + space * 4.4, staffTop(first.system) + space * 5.2)
                 let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: colorFor(NoteRef(voice: v, index: group[0]), ink: ink)]
-                let size = ("3" as NSString).size(withAttributes: attrs)
+                let number = "\(score.notes[group[0]].tupletActual ?? 3)" as NSString
+                let size = number.size(withAttributes: attrs)
                 let mid = (x1 + x2) / 2
-                ("3" as NSString).draw(at: NSPoint(x: mid - size.width / 2, y: yLine - size.height / 2), withAttributes: attrs)
+                number.draw(at: NSPoint(x: mid - size.width / 2, y: yLine - size.height / 2), withAttributes: attrs)
                 let beamedTogether = group.allSatisfy { score.notes[$0].duration.rawValue >= 8 && !score.notes[$0].rest } && group.count > 1
                 if !beamedTogether {
                     ink.setStroke()
@@ -1839,6 +1908,49 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 }
             }
         }
+    }
+
+    /// A grace note: a small head on a short stem, flagged; an acciaccatura has a slash through the stem.
+    private func drawGrace(_ note: ScoreNote, _ p: Placed, v: Int, in score: ScoreData, color: NSColor, up: Bool) {
+        let scale: CGFloat = 0.66
+        let pos = position(note)
+        let cy = y(position: pos, system: p.system)
+        color.setFill()
+        if pos <= -2 { for l in stride(from: -2, through: pos, by: -2) { NSRect(x: p.x - space * 0.3, y: y(position: l, system: p.system) - 0.5, width: space * 1.5, height: 1).fill() } }
+        if pos >= 10 { for l in stride(from: 10, through: pos, by: 2) { NSRect(x: p.x - space * 0.3, y: y(position: l, system: p.system) - 0.5, width: space * 1.5, height: 1).fill() } }
+        if score.showsAccidental(p.index) { drawAccidental(note.alter ?? 0, x: p.x - space * 1.15, y: cy, ink: color) }
+        let w = space * 1.25 * scale, h = space * 0.95 * scale
+        let head = NSBezierPath(ovalIn: NSRect(x: -w / 2, y: -h / 2, width: w, height: h))
+        var t = AffineTransform(translationByX: p.x + w / 2, byY: cy)
+        t.rotate(byDegrees: -20)
+        head.transform(using: t)
+        color.set()
+        if note.duration.rawValue >= 4 { head.fill() } else { head.lineWidth = 1.1; head.stroke() }
+        let sx = up ? p.x + w - 0.5 : p.x + 0.5
+        let end = up ? cy - space * 2.6 : cy + space * 2.6
+        NSRect(x: sx - 0.5, y: min(cy, end), width: 1, height: abs(end - cy)).fill()
+        let dir: CGFloat = up ? 1 : -1
+        if note.duration.rawValue >= 8 {
+            for f in 0..<(note.duration == .sixteenth ? 2 : 1) {
+                let fy = end + dir * CGFloat(f) * space * 0.55
+                let flag = NSBezierPath()
+                flag.move(to: NSPoint(x: sx, y: fy))
+                flag.curve(to: NSPoint(x: sx + space * 0.6, y: fy + dir * space * 1.6),
+                           controlPoint1: NSPoint(x: sx + space * 0.15, y: fy + dir * space * 0.6),
+                           controlPoint2: NSPoint(x: sx + space * 0.95, y: fy + dir * space * 0.9))
+                flag.lineWidth = 1.2
+                flag.stroke()
+            }
+        }
+        if note.grace == "acciaccatura" {
+            let slash = NSBezierPath()
+            slash.move(to: NSPoint(x: sx - space * 0.55, y: end + dir * space * 1.75))
+            slash.line(to: NSPoint(x: sx + space * 0.85, y: end + dir * space * 0.45))
+            slash.lineWidth = 1.1
+            slash.stroke()
+        }
+        stemSpans[p.index] = (cy, cy)
+        shapes[NoteRef(voice: v, index: p.index)] = (up, cy, cy)
     }
 
     private func ledger(x: CGFloat, y: CGFloat) {
@@ -1955,7 +2067,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// Adds a note (or rest) after the cursor; a note goes in the octave nearest the note before it.
     func insert(step: Int?, octave: Int? = nil) {
         var note = ScoreNote(duration: Self.inputDuration, dotted: Self.inputDotted, rest: step == nil)
-        if Self.inputTriplet { note.tuplet = true }
+        if let ratio = Self.inputTuplet {
+            note.tuplet = true
+            note.tupletRatio = ratio == [3, 2] ? nil : ratio
+        }
         if let step {
             note.step = step
             if let octave {
@@ -2210,14 +2325,73 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     var currentVoice: Int { voice }
 
     /// Triplet (⌃3): the selected note becomes (or stops being) a triplet; otherwise the next notes are entered as triplets.
-    func toggleTriplet() {
-        if let s = selected {
-            changeSelected("Triplet") { $0.tuplet = $0.tuplet == true ? nil : true }
-            Self.inputTriplet = cur.notes[s].tuplet == true
+    func toggleTriplet() { toggleTuplet([3, 2]) }
+
+    /// A tuplet ([actual, normal], e.g. [5, 4]): on the selected notes (the same again takes it off), else for the
+    /// next notes entered.
+    func toggleTuplet(_ ratio: [Int]) {
+        let name = ScoreData.tupletKinds.first { $0.0 == ratio }?.1 ?? "Tuplet"
+        if let range = selectedRange {
+            let line = cur
+            let allHave = range.allSatisfy { line.notes[$0].tupletActual == ratio[0] && line.notes[$0].tupletNormal == ratio[1] }
+            editVoice(allHave ? "Remove \(name)" : name) { s in
+                for i in range where s.notes[i].grace == nil {
+                    s.notes[i].tuplet = allHave ? nil : true
+                    s.notes[i].tupletRatio = allHave || ratio == [3, 2] ? nil : ratio
+                }
+            }
+            Self.inputTuplet = allHave ? nil : ratio
         } else {
-            Self.inputTriplet.toggle()
+            Self.inputTuplet = Self.inputTuplet == ratio ? nil : ratio
         }
         NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Notes entered from now on are plain (no tuplet).
+    func clearTuplet() {
+        if let range = selectedRange {
+            editVoice("Remove Tuplet") { s in for i in range { s.notes[i].tuplet = nil; s.notes[i].tupletRatio = nil } }
+        }
+        Self.inputTuplet = nil
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    // MARK: Grace notes
+
+    /// A grace note before the selected note (or the note after the cursor), at its pitch — move it with ↑ ↓.
+    /// "acciaccatura" (/) is slashed and quick; "appoggiatura" (?) takes half the note's time.
+    func insertGrace(_ kind: String) {
+        let line = cur
+        guard let at = selected ?? (cursor < line.notes.count ? cursor : nil), line.notes.indices.contains(at) else { return NSSound.beep() }
+        let main = line.notes[at]
+        var grace = ScoreNote(duration: kind == "appoggiatura" && main.duration.rawValue <= 4 ? .quarter : .eighth)
+        grace.grace = kind
+        if main.rest {
+            grace.step = score.clef == .treble ? 6 : 1
+            grace.octave = score.clef == .treble ? 4 : 3
+        } else {
+            grace.step = main.step
+            grace.octave = main.octave
+            grace.alter = main.alter
+        }
+        editVoice(kind == "appoggiatura" ? "Appoggiatura" : "Acciaccatura") { $0.notes.insert(grace, at: at) }
+        select(at)
+        if let midi = cur.midi(at) { ScorePlayer.shared.preview(midi) }
+    }
+
+    /// Changes the selected grace note's kind, or makes the selected note a grace note (or a normal one again).
+    func setGrace(_ kind: String?) {
+        guard let i = selected, cur.notes.indices.contains(i) else { return NSSound.beep() }
+        editVoice(kind == nil ? "Normal Note" : "Grace Note") { s in
+            s.notes[i].grace = kind
+            if kind != nil { s.notes[i].tuplet = nil; s.notes[i].tupletRatio = nil; s.notes[i].dotted = false }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    var graceHere: String? {
+        guard let i = selected, cur.notes.indices.contains(i) else { return nil }
+        return cur.notes[i].grace
     }
 
     // MARK: Dynamics, slurs and hairpins
@@ -2530,7 +2704,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             switch chars {
             case "k": return beginWords(.chordSymbol)
             case "l": return beginWords(.lyric)
-            case "3": return toggleTriplet()
+            case "2", "3", "4", "5", "6", "7", "9":
+                if let kind = ScoreData.tupletKinds.first(where: { "\($0.0[0])" == chars }) { return toggleTuplet(kind.0) }
+                return super.keyDown(with: event)
             default: return super.keyDown(with: event)
             }
         }
@@ -2564,6 +2740,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         case "t": toggleTie()
         case "r": toggleRest()
         case "s": toggleSlur()
+        case "/": insertGrace("acciaccatura")
+        case "?": insertGrace("appoggiatura")
         case "<": toggleHairpin(1)
         case ">": toggleHairpin(-1)
         default: super.keyDown(with: event)
@@ -2571,6 +2749,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     // MARK: Mouse
+
+    /// The note under a point (for Quick Help).
+    func noteRef(at p: NSPoint) -> NoteRef? { note(at: p) }
 
     /// The note (head or rest) under a point.
     private func note(at p: NSPoint) -> NoteRef? {
@@ -2788,6 +2969,29 @@ final class ScoreElementView: ElementView {
         menu.addItem(ClosureMenuItem("Slur  S", state: staff.slurHere) { [weak self] in self?.staff.toggleSlur() })
         menu.addItem(ClosureMenuItem("Crescendo  <", state: staff.hairpinHere == 1) { [weak self] in self?.staff.toggleHairpin(1) })
         menu.addItem(ClosureMenuItem("Diminuendo  >", state: staff.hairpinHere == -1) { [weak self] in self?.staff.toggleHairpin(-1) })
+        let tuplet = NSMenuItem(title: "Tuplet", action: nil, keyEquivalent: "")
+        let tuplets = NSMenu()
+        for (ratio, name) in ScoreData.tupletKinds {
+            tuplets.addItem(ClosureMenuItem("\(name) (\(ratio[0]):\(ratio[1]))  ⌃\(ratio[0])", state: ScoreView.inputTuplet == ratio) { [weak self] in
+                self?.staff.toggleTuplet(ratio)
+            })
+        }
+        tuplets.addItem(.separator())
+        tuplets.addItem(ClosureMenuItem("No Tuplet") { [weak self] in self?.staff.clearTuplet() })
+        tuplet.submenu = tuplets
+        menu.addItem(tuplet)
+        let grace = NSMenuItem(title: "Grace Note", action: nil, keyEquivalent: "")
+        let graces = NSMenu()
+        graces.addItem(ClosureMenuItem("Add Acciaccatura Before  /") { [weak self] in self?.staff.insertGrace("acciaccatura") })
+        graces.addItem(ClosureMenuItem("Add Appoggiatura Before  ?") { [weak self] in self?.staff.insertGrace("appoggiatura") })
+        if let kind = staff.graceHere {
+            graces.addItem(.separator())
+            graces.addItem(ClosureMenuItem("Acciaccatura", state: kind == "acciaccatura") { [weak self] in self?.staff.setGrace("acciaccatura") })
+            graces.addItem(ClosureMenuItem("Appoggiatura", state: kind == "appoggiatura") { [weak self] in self?.staff.setGrace("appoggiatura") })
+            graces.addItem(ClosureMenuItem("Normal Note") { [weak self] in self?.staff.setGrace(nil) })
+        }
+        grace.submenu = graces
+        menu.addItem(grace)
         let articulation = NSMenuItem(title: "Articulations & Ornaments", action: nil, keyEquivalent: "")
         let arts = NSMenu()
         for (id, name, key) in ScoreData.articulationKinds {

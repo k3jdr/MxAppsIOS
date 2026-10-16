@@ -64,7 +64,7 @@ struct RibbonView: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .focusable(false)
-                .help("Toolbar options: wrap, compact, and show, collapse, float or hide each section")
+                .tip("Toolbar Options", "Wrap the toolbar onto more rows, make it compact, and show, collapse, float or hide each section.")
             }
             .padding(.horizontal, 8)
             .padding(.top, 6)
@@ -141,7 +141,7 @@ struct RibbonButton: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help(title)
+        .tip(title)
     }
 }
 
@@ -194,7 +194,7 @@ struct RibbonGroup<Content: View>: View {
         }
         .contentShape(Rectangle())
         .contextMenu { sectionMenu }
-        .help(layout.compact ? title : "")
+        .onHover { QuickHelp.shared.hoverSection(title, tab: tab, $0) }
     }
 
     /// One button for the whole section; its tools open under it.
@@ -217,7 +217,7 @@ struct RibbonGroup<Content: View>: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .help("\(title) — click for its tools")
+            .tip("\(title) — click for its tools")
             .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
                 HStack(spacing: 2) { content }
                     .padding(8)
@@ -225,6 +225,7 @@ struct RibbonGroup<Content: View>: View {
             Divider().frame(height: layout.compact ? 26 : 46)
         }
         .contextMenu { sectionMenu }
+        .onHover { QuickHelp.shared.hoverSection(title, tab: tab, $0) }
     }
 
     @ViewBuilder private var sectionMenu: some View {
@@ -261,7 +262,7 @@ struct RibbonMenu<Content: View>: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .focusable(false)
-        .help(title)
+        .tip(title)
     }
 }
 
@@ -294,7 +295,7 @@ struct RibbonField<Content: View>: View {
         .controlSize(.small)
         .fixedSize()
         .focusable(false)
-        .help(help)
+        .tip(help)
     }
 }
 
@@ -333,7 +334,7 @@ struct HomeRibbon: View {
 
     var body: some View {
         RibbonGroup("Font") {
-            RibbonField(editor.fontFamily ?? "Mixed", width: 132, help: "Font of the selected text") {
+            RibbonField(editor.fontFamily ?? "Mixed", width: 132, help: "Font") {
                 ForEach(families, id: \.self) { fontItem($0) }
                 if let family = editor.fontFamily, !families.contains(family) {
                     Divider()
@@ -346,7 +347,7 @@ struct HomeRibbon: View {
                 Divider()
                 Button("Show Fonts…") { NSFontManager.shared.orderFrontFontPanel(nil) }
             }
-            RibbonField(sizeText, width: 34, help: "Size of the selected text") {
+            RibbonField(sizeText, width: 34, help: "Font Size") {
                 ForEach(Self.sizes, id: \.self) { size in
                     Button {
                         TextFormatter.setFontSize(size)
@@ -535,7 +536,7 @@ struct DrawRibbon: View {
         }
         .buttonStyle(.plain)
         .focusable(false)
-        .help(help)
+        .tip(help)
     }
 }
 
@@ -559,7 +560,7 @@ struct ViewRibbon: View {
                     Button(rules.title) { canvas?.setRuleLines(rules) }
                 }
             }
-            RibbonButton("Snap to Grid (⌃⌘G) — hold ⌥ to place freely", "square.grid.3x3", large: true,
+            RibbonButton("Snap to Grid (⌃⌘G)", "square.grid.3x3", large: true,
                          active: editor.snapToGrid) { editor.snapToGrid.toggle() }
         }
         RibbonGroup("Zoom") {
@@ -606,7 +607,20 @@ struct ScoreRibbon: View {
                     .overlay(alignment: .bottom) { Text(d.key).font(.system(size: 8, weight: .medium)).foregroundStyle(.secondary).offset(y: 8) }
             }
             RibbonButton("Dot (.)", "circle.fill", active: ScoreView.inputDotted) { act { $0.toggleDot() } }
-            RibbonButton("Triplet (⌃3)", "3.square", active: ScoreView.inputTriplet) { act { $0.toggleTriplet() } }
+            RibbonMenu("Tuplet", ScoreView.inputTuplet.map { "\($0[0]).square" } ?? "3.square", showTitle: false) {
+                ForEach(ScoreData.tupletKinds, id: \.1) { ratio, name in
+                    Button("\(name) (\(ratio[0]):\(ratio[1]))  ⌃\(ratio[0])") { act { $0.toggleTuplet(ratio) } }
+                }
+                Divider()
+                Button("No Tuplet") { act { $0.clearTuplet() } }
+            }
+            RibbonMenu("Grace Note", "music.note.list", showTitle: false) {
+                Button("Acciaccatura (slashed)  /") { act { $0.insertGrace("acciaccatura") } }
+                Button("Appoggiatura  ?") { act { $0.insertGrace("appoggiatura") } }
+                Divider()
+                Button("Make Selected Note a Grace Note") { act { $0.setGrace("acciaccatura") } }
+                Button("Make Selected Grace Note Normal") { act { $0.setGrace(nil) } }
+            }
         }
         RibbonGroup("Expression") {
             RibbonMenu("Dynamic", "speaker.wave.2") {
@@ -616,22 +630,22 @@ struct ScoreRibbon: View {
                 Divider()
                 Button("Remove Dynamic") { act { $0.setDynamic(nil) } }
             }
-            .help("A dynamic under the selected note")
+            .tip("Dynamic")
             RibbonButton("Slur (S)", "point.topleft.down.to.point.bottomright.curvepath", active: staff?.slurHere == true) { act { $0.toggleSlur() } }
             RibbonButton("Crescendo (<)", "lessthan", active: staff?.hairpinHere == 1) { act { $0.toggleHairpin(1) } }
             RibbonButton("Diminuendo (>)", "greaterthan", active: staff?.hairpinHere == -1) { act { $0.toggleHairpin(-1) } }
         }
         RibbonGroup("Articulation") {
             Button { act { $0.toggleArticulation("staccato") } } label: { Text("•").font(.system(size: 15, weight: .bold)).frame(width: 22) }
-                .help("Staccato (⇧S)")
+                .tip("Staccato (⇧S)")
             Button { act { $0.toggleArticulation("tenuto") } } label: { Text("–").font(.system(size: 15, weight: .bold)).frame(width: 22) }
-                .help("Tenuto (⇧N)")
+                .tip("Tenuto (⇧N)")
             Button { act { $0.toggleArticulation("accent") } } label: { Text(">").font(.system(size: 15, weight: .bold)).frame(width: 22) }
-                .help("Accent (⇧V)")
+                .tip("Accent (⇧V)")
             Button { act { $0.toggleArticulation("marcato") } } label: { Text("^").font(.system(size: 15, weight: .bold)).frame(width: 22) }
-                .help("Marcato (⇧O)")
+                .tip("Marcato (⇧O)")
             Button { act { $0.toggleFermata() } } label: { Text("\u{1D110}").font(.custom("Apple Symbols", size: 22)).frame(width: 22) }
-                .help("Fermata (⇧H)")
+                .tip("Fermata (⇧H)")
             RibbonMenu("Ornament", "waveform.path") {
                 ForEach(ScoreData.ornamentKinds, id: \.0) { id, name in
                     Button(name) { act { $0.toggleOrnament(id) } }
@@ -640,7 +654,7 @@ struct ScoreRibbon: View {
                 Divider()
                 Button("Clear Articulations & Ornaments") { act { $0.clearMarks() } }
             }
-            .help("Trill, mordent, inverted mordent, turn")
+            .tip("Ornament")
         }
         .buttonStyle(.borderless)
         RibbonGroup("Bars") {
@@ -655,7 +669,7 @@ struct ScoreRibbon: View {
                     Button("Remove Key Change") { act { $0.setKeyChange(nil) } }
                 }
             }
-            .help(bar == 0 ? "Key signature" : "Key change from bar \(bar + 1)")
+            .tip("Key Change")
             RibbonButton("Start Repeat |: (bar \(bar + 1))", "arrow.right.to.line", active: mark.repeatStart == true) { act { $0.toggleRepeatStart() } }
             RibbonButton("End Repeat :| (bar \(bar + 1))", "arrow.uturn.backward", active: mark.repeatEnd == true) { act { $0.toggleRepeatEnd() } }
         }
@@ -668,7 +682,7 @@ struct ScoreRibbon: View {
                 Button(name) { act { $0.insert(step: step) } }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .help("Add \(name) (\(name.lowercased()))")
+                    .tip("Add \(name) (\(name.lowercased()))", "Adds a \(name) of the current length after the cursor, in the octave nearest the note before. ⇧\(name) adds it to the chord instead.")
             }
             RibbonButton("Rest (0)", "pause", large: true) { act { $0.insert(step: nil) } }
         }
@@ -677,9 +691,9 @@ struct ScoreRibbon: View {
             RibbonButton("Down (↓)", "arrow.down") { act { $0.moveSelected(steps: -1) } }
             RibbonButton("Octave Up (⌘↑)", "arrow.up.to.line") { act { $0.moveSelected(steps: 7) } }
             RibbonButton("Octave Down (⌘↓)", "arrow.down.to.line") { act { $0.moveSelected(steps: -7) } }
-            Button("♯") { act { $0.setAccidental(1) } }.help("Sharp (+)")
-            Button("♭") { act { $0.setAccidental(-1) } }.help("Flat (-)")
-            Button("♮") { act { $0.setAccidental(0) } }.help("Natural (=)")
+            Button("♯") { act { $0.setAccidental(1) } }.tip("Sharp (+)")
+            Button("♭") { act { $0.setAccidental(-1) } }.tip("Flat (-)")
+            Button("♮") { act { $0.setAccidental(0) } }.tip("Natural (=)")
             RibbonButton("Tie (T)", "link") { act { $0.toggleTie() } }
             RibbonButton("Note / Rest (R)", "arrow.left.arrow.right") { act { $0.toggleRest() } }
             RibbonButton("Delete", "delete.left") { act { $0.deleteSelected() } }
@@ -735,7 +749,7 @@ struct ScoreRibbon: View {
                 Button("Metronome Mark…") { staff?.editMetronomeMark() }
                 if bar > 0 { Button("Remove Tempo Change") { act { $0.removeTempoChange() } } }
             }
-            .help("Tempo and metronome mark at the selected note's bar")
+            .tip("Tempo")
             RibbonButton("Title", "textformat", large: true) { act { $0.owner?.editTitle() } }
             RibbonButton("Export MusicXML", "square.and.arrow.up", large: true) {
                 if let owner = staff?.owner { MusicXML.save(owner.score, from: owner.window) }

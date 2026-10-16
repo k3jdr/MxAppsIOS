@@ -232,6 +232,8 @@ struct MainCommands: Commands {
         CommandGroup(before: .sidebar) {
             Button(editor.showRibbon ? "Hide Ribbon" : "Show Ribbon") { editor.showRibbon.toggle() }
                 .keyboardShortcut("r", modifiers: [.command, .option])
+            Toggle("Quick Help", isOn: Binding(get: { QuickHelp.shared.visible }, set: { QuickHelp.shared.visible = $0 }))
+                .keyboardShortcut("/", modifiers: [.command, .option])
             Menu("Toolbar") {
                 Toggle("Wrap Sections onto More Rows", isOn: Binding(get: { RibbonLayout.shared.wrap }, set: { RibbonLayout.shared.wrap = $0 }))
                 Toggle("Compact Toolbar", isOn: Binding(get: { RibbonLayout.shared.compact }, set: { RibbonLayout.shared.compact = $0 }))

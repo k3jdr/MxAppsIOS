@@ -12,11 +12,16 @@ struct MainView: View {
     @Bindable private var store = NotebookStore.shared
     @State private var visibility: NavigationSplitViewVisibility = .all
     @FocusState private var searchFocused: Bool
+    @Bindable private var quickHelp = QuickHelp.shared
 
     var body: some View {
         NavigationSplitView(columnVisibility: $visibility) {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 190, ideal: 236, max: 360)
+                // Quick Help: what's under the pointer, at the bottom of the sidebar.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if quickHelp.visible { QuickHelpPanel() }
+                }
         } content: {
             PageListView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 420)
@@ -71,6 +76,7 @@ struct MainView: View {
             SheetView(sheet: sheet)
         }
         .task { store.loadLibraryIfNeeded() }
+        .onAppear { if QuickHelp.shared.visible { QuickHelp.shared.startTracking() } }
     }
 }
 

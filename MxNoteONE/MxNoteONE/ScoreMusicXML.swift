@@ -109,7 +109,7 @@ enum MusicXML {
         let steps = ["C", "D", "E", "F", "G", "A", "B"]
         var out = ""
         // Triplets: where each group starts and stops.
-        let groups = score.tripletGroups(in: bar)
+        let groups = score.tupletGroups(in: bar)
         let starts = Set(groups.compactMap(\.first)), stops = Set(groups.compactMap(\.last))
         for i in bar {
             let note = score.notes[i]
@@ -127,23 +127,26 @@ enum MusicXML {
             let tab = score.showTab == true ? score.tab(i) : []
             func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?) -> String {
                 var x = "      <note>"
+                if let grace = note.grace { x += grace == "acciaccatura" ? "<grace slash=\"yes\"/>" : "<grace/>" }
                 if chord { x += "<chord/>" }
                 if note.rest {
                     x += "<rest/>"
                 } else {
                     x += "<pitch><step>\(steps[step])</step>" + (alter != 0 ? "<alter>\(alter)</alter>" : "") + "<octave>\(octave)</octave></pitch>"
                 }
-                x += "<duration>\(duration(note))</duration>"
+                if note.grace == nil { x += "<duration>\(duration(note))</duration>" }
                 if main, tiedFrom { x += "<tie type=\"stop\"/>" }
                 if main, note.tie, !note.rest { x += "<tie type=\"start\"/>" }
                 x += "<voice>\(voice)</voice><type>\(types[note.duration]!)</type>"
                 if note.dotted { x += "<dot/>" }
                 if let accidental { x += "<accidental>\(accidental > 0 ? "sharp" : accidental < 0 ? "flat" : "natural")</accidental>" }
-                if note.tuplet == true { x += "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>" }
+                if let actual = note.tupletActual {
+                    x += "<time-modification><actual-notes>\(actual)</actual-notes><normal-notes>\(note.tupletNormal)</normal-notes></time-modification>"
+                }
                 if voice == 2 { x += "<stem>down</stem>" }
                 var notations = ""
-                if main, note.tuplet == true, starts.contains(i) { notations += "<tuplet type=\"start\" bracket=\"\(note.duration.rawValue >= 8 ? "no" : "yes")\"/>" }
-                if main, note.tuplet == true, stops.contains(i) { notations += "<tuplet type=\"stop\"/>" }
+                if main, note.tupletActual != nil, starts.contains(i) { notations += "<tuplet type=\"start\" bracket=\"\(note.duration.rawValue >= 8 ? "no" : "yes")\"/>" }
+                if main, note.tupletActual != nil, stops.contains(i) { notations += "<tuplet type=\"stop\"/>" }
                 if main, tiedFrom { notations += "<tied type=\"stop\"/>" }
                 if main, note.slurEnd == true { notations += "<slur type=\"stop\" number=\"1\"/>" }
                 if main, note.slurStart == true { notations += "<slur type=\"start\" number=\"1\"/>" }
@@ -386,7 +389,8 @@ enum MusicXML {
                 case "harmony":
                     pendingSymbol = symbol(from: e)
                 case "note":
-                    if e.elements(forName: "grace").first != nil || e.elements(forName: "cue").first != nil { skippedGrace += 1; continue }
+                    if e.elements(forName: "cue").first != nil { skippedGrace += 1; continue }
+                    let graceElement = e.elements(forName: "grace").first
                     let isChord = e.elements(forName: "chord").first != nil
                     let length = isChord ? 0 : (text(e, "duration").flatMap(Double.init) ?? 0) / divisions
                     if let staff = text(e, "staff"), staff != "1" { skippedVoices += 1; time += length; continue }
@@ -440,7 +444,15 @@ enum MusicXML {
                         note.alter = hasAccidental || alter != ScoreData.keyAlter(step, fifths: key) ? alter : nil
                     }
                     note.tie = e.elements(forName: "tie").contains { $0.attribute(forName: "type")?.stringValue == "start" }
-                    if text(e, "time-modification/actual-notes") == "3", text(e, "time-modification/normal-notes") == "2" { note.tuplet = true }
+                    if let actual = text(e, "time-modification/actual-notes").flatMap(Int.init),
+                       let normal = text(e, "time-modification/normal-notes").flatMap(Int.init), actual > 1, normal > 0, actual != normal {
+                        note.tuplet = true
+                        note.tupletRatio = actual == 3 && normal == 2 ? nil : [actual, normal]
+                    }
+                    if let graceElement {
+                        note.grace = graceElement.attribute(forName: "slash")?.stringValue == "yes" ? "acciaccatura" : "appoggiatura"
+                        note.tuplet = nil; note.tupletRatio = nil
+                    }
                     for slur in e.elements(forName: "notations").flatMap({ $0.elements(forName: "slur") }) {
                         switch slur.attribute(forName: "type")?.stringValue {
                         case "start": note.slurStart = true
@@ -503,7 +515,7 @@ enum MusicXML {
         }
         if extraVoices > 0 { notes.append("\(extraVoices) note\(extraVoices == 1 ? "" : "s") in a third or later voice left out (a score has two voices).") }
         if skippedVoices > 0 { notes.append("\(skippedVoices) note\(skippedVoices == 1 ? "" : "s") on other staves left out (a score has one staff).") }
-        if skippedGrace > 0 { notes.append("\(skippedGrace) grace or cue note\(skippedGrace == 1 ? "" : "s") left out.") }
+        if skippedGrace > 0 { notes.append("\(skippedGrace) cue note\(skippedGrace == 1 ? "" : "s") left out.") }
         return Imported(score: score, notes: notes)
     }
 

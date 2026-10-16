@@ -239,7 +239,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Add a rest | **0** | Score tab ▸ Rest |
 | Length of the next note — 16th, 8th, quarter, half, whole | **3, 4, 5, 6, 7** (on a selected note: changes it) | Score tab ▸ Notes |
 | Dot | **.** | Score tab ▸ Dot |
-| Triplet (next notes, or the selected note) | **⌃3** | Score tab ▸ Triplet |
+| Tuplet: duplet, triplet, quadruplet, quintuplet, sextuplet, septuplet, nonuplet (next notes, or the selected run) | **⌃2 ⌃3 ⌃4 ⌃5 ⌃6 ⌃7 ⌃9** | Score tab ▸ Notes ▸ Tuplet, right-click ▸ Tuplet |
+| Grace note before the selected note: acciaccatura / appoggiatura | **/  ?** | Score tab ▸ Notes ▸ Grace Note, right-click ▸ Grace Note |
 | Write in voice 1 / voice 2 | **⌥⌘1 / ⌥⌘2** | Score tab ▸ Voice, or click a note of that voice |
 | Select a run of notes | **⇧← ⇧→**, or ⇧-click | |
 | Slur over the selected notes (one note: to the next); again takes it off | **S** | Score tab ▸ Expression, right-click |
@@ -298,6 +299,11 @@ key signature. **Repeat signs** (|: and :|) play the passage twice: an end repea
 or to the beginning (or just after the previous repeat) when there isn't one. Key changes and repeats belong to bar
 numbers, so adding or deleting notes earlier in the score can move music past them.
 
+**Tuplets beyond triplets** — 2 in the time of 3 (a duplet in 6/8), 4:3, 5:4, 6:4, 7:4 and 9:8 — are numbered and
+bracketed like triplets, fill their bar correctly and play in time. **Grace notes** sit small before their note and take
+no time in the bar: an **acciaccatura** (slashed) is crushed in just before the beat; an **appoggiatura** takes half of
+its note's time. Move a grace note with ↑ ↓ like any other.
+
 **Triplets** — three notes in the time of two (three triplet eighths make a beat) — are marked with a 3, bracketed
 unless they're beamed together, and play in time. **Two voices** share the staff, as in MuseScore: voice 1's stems go up
 and voice 2's down (rests move up and down out of the way), notes sounding at the same time line up, and both voices
@@ -306,7 +312,7 @@ play together. While you write in one voice the other is shown in grey; clicking
 **MusicXML** — the format MuseScore, Finale, Sibelius and Dorico exchange scores in. **Insert ▸ Music Score from
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score: title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
+strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
 out (other parts, staves and voices, grace notes) is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
 A tie carries its note's accidental across the bar line.
 
@@ -370,6 +376,15 @@ of the ribbon tabs, or by right-clicking a section:
 
 **Compact Toolbar** (⌥⇧⌘R) makes every section smaller — no section names, small buttons. **Collapse All**, **Show All
 Sections** and **Dock All Palettes** put things back. The arrangement is remembered.
+
+## Quick Help
+
+**View ▸ Quick Help** (⌥⌘/) shows a panel at the bottom of the sidebar — like Logic Pro's — telling what's under the
+pointer in a sentence or two, with its shortcut: any toolbar tool or section; a note in a score (its pitch, length,
+bar, voice, dynamics and marks); a table cell (its formula and value, number format, merging); a link (where it goes,
+its hover text); a text box, picture, attachment, recording, chart, the page title or the page itself. Over nothing
+it can describe, it tells about what's being worked on — the selected notes, the cell being typed in, the text being
+typed. Every toolbar tool has a short one- or two-word tooltip; Quick Help has the details.
 
 ## Web links
 
