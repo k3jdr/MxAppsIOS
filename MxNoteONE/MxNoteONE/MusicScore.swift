@@ -79,9 +79,13 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var lyric: String?
     /// The guitar string for the TAB staff (0 = low E … 5 = high E); nil = chosen automatically.
     var tabString: Int?
+    /// A triplet note: three in the time of two.
+    var tuplet: Bool?
 
     /// Length in quarter notes.
-    var beats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) }
+    var beats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) * (tuplet == true ? 2.0 / 3.0 : 1) }
+    /// Length without the triplet (what three of them share two of).
+    var normalBeats: Double { 4 / Double(duration.rawValue) * (dotted ? 1.5 : 1) }
     /// Steps up from C0 (for staff positions).
     var diatonic: Int { octave * 7 + step }
 }
@@ -112,8 +116,81 @@ struct ScoreData: Codable, Hashable {
     /// Quarter notes per minute.
     var tempo = 100
     var notes: [ScoreNote] = []
+    /// More voices on the staff (voice 2 …): stems down, sharing the bars with voice 1.
+    var voices: [[ScoreNote]]?
     /// A guitar TAB staff under the music.
     var showTab: Bool?
+
+    // MARK: Voices
+
+    /// A voice's notes (0 = voice 1).
+    func line(_ voice: Int) -> [ScoreNote] {
+        voice == 0 ? notes : (voices.flatMap { $0.indices.contains(voice - 1) ? $0[voice - 1] : nil } ?? [])
+    }
+
+    mutating func setLine(_ voice: Int, _ list: [ScoreNote]) {
+        if voice == 0 { notes = list; return }
+        var all = voices ?? []
+        while all.count < voice { all.append([]) }
+        all[voice - 1] = list
+        while all.last?.isEmpty == true { all.removeLast() }
+        voices = all.isEmpty ? nil : all
+    }
+
+    /// The score as one voice sees it (its notes, the same key, time and clef): pitches, accidentals, ties and tab
+    /// work per voice.
+    func forVoice(_ voice: Int) -> ScoreData {
+        guard voice != 0 else { return self }
+        var copy = self
+        copy.notes = line(voice)
+        copy.voices = nil
+        return copy
+    }
+
+    var hasSecondVoice: Bool { !line(1).isEmpty }
+    /// Voices 1 and 2 (the staff shows two).
+    static let voiceCount = 2
+
+    /// Where each note starts, in quarter notes from the beginning.
+    var onsets: [Double] {
+        var t = 0.0
+        return notes.map { n in defer { t += n.beats }; return t }
+    }
+
+    /// Triplet groups in a bar: runs of triplet notes, three to the time of two.
+    func tripletGroups(in bar: Range<Int>) -> [[Int]] {
+        var groups: [[Int]] = [], current: [Int] = [], total = 0.0, target = 0.0
+        for i in bar {
+            let n = notes[i]
+            guard n.tuplet == true else {
+                if !current.isEmpty { groups.append(current) }
+                current = []; total = 0
+                continue
+            }
+            if current.isEmpty { target = n.normalBeats * 2 }
+            current.append(i)
+            total += n.beats
+            if total >= target - 1e-6 {
+                groups.append(current)
+                current = []; total = 0
+            }
+        }
+        if !current.isEmpty { groups.append(current) }
+        return groups
+    }
+
+    /// Rests filling a length (largest first), to keep a voice in step.
+    static func rests(for beats: Double) -> [ScoreNote] {
+        var left = beats, result: [ScoreNote] = []
+        let options: [(ScoreNote.Duration, Bool)] = [(.whole, true), (.whole, false), (.half, true), (.half, false), (.quarter, true),
+                                                    (.quarter, false), (.eighth, true), (.eighth, false), (.sixteenth, false)]
+        while left > 1e-6 {
+            guard let fit = options.first(where: { ScoreNote(duration: $0.0, dotted: $0.1).beats <= left + 1e-6 }) else { break }
+            result.append(ScoreNote(duration: fit.0, dotted: fit.1, rest: true))
+            left -= result.last!.beats
+        }
+        return result
+    }
 
     /// A bar's length in quarter notes.
     var measureLength: Double { Double(beats) * 4 / Double(beatUnit) }
@@ -240,6 +317,7 @@ struct ScoreData: Codable, Hashable {
     var noteNames: String {
         notes.enumerated().map { i, n in
             let length = ["", "w", "h", "", "q", "", "", "", "8", "", "", "", "", "", "", "", "16"][n.duration.rawValue] + (n.dotted ? "." : "")
+                + (n.tuplet == true ? "³" : "")
             if n.rest { return "r" + length }
             let alter = soundingAlter(i)
             let name = ["C", "D", "E", "F", "G", "A", "B"][n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "")
@@ -249,7 +327,7 @@ struct ScoreData: Codable, Hashable {
             let symbol = (n.chordSymbol ?? "").isEmpty ? "" : "[\(n.chordSymbol!)] "
             let lyric = (n.lyric ?? "").isEmpty ? "" : " “\(n.lyric!)”"
             return symbol + "\(name)\(n.octave)" + tones.map { "+" + $0 }.joined() + " \(length)" + (n.tie ? "~" : "") + lyric
-        }.joined(separator: " · ")
+        }.joined(separator: " · ") + (hasSecondVoice ? " ‖ voice 2: " + forVoice(1).noteNames : "")
     }
 }
 
@@ -300,48 +378,54 @@ final class ScorePlayer {
         }
     }
 
-    /// Plays from a note to the end, highlighting each note in the view.
-    func play(_ score: ScoreData, from first: Int, in view: ScoreView) {
+    /// Plays every voice from a point (in quarter notes from the start) to the end, highlighting the notes sounding.
+    func play(_ score: ScoreData, fromTime start0: Double, in view: ScoreView) {
         stop()
-        guard first < score.notes.count else { return }
         start()
         self.view = view
         let secondsPerBeat = 60 / Double(max(20, score.tempo))
-        var time = 0.0
-        var i = first
-        while i < score.notes.count {
-            var length = score.notes[i].beats
-            var last = i
-            // Tied notes sound as one.
-            while score.notes[last].tie, last + 1 < score.notes.count, !score.notes[last + 1].rest,
-                  score.midi(last + 1) == score.midi(i) {
-                last += 1
-                length += score.notes[last].beats
-            }
-            let index = i
-            let keys = score.midis(i).map { UInt8(max(0, min(127, $0))) }
-            let on = DispatchWorkItem { [weak self] in
-                self?.view?.playing = index
-                for key in keys {
-                    self?.sampler.startNote(key, withVelocity: 90, onChannel: 0)
-                    self?.sounding.insert(key)
+        var end = 0.0
+        for v in 0..<ScoreData.voiceCount {
+            let line = score.forVoice(v)
+            let onsets = line.onsets
+            guard let first = onsets.firstIndex(where: { $0 >= start0 - 1e-6 }) else { continue }
+            var i = first
+            while i < line.notes.count {
+                var length = line.notes[i].beats
+                var last = i
+                // Tied notes sound as one.
+                while line.notes[last].tie, last + 1 < line.notes.count, !line.notes[last + 1].rest, line.midi(last + 1) == line.midi(i) {
+                    last += 1
+                    length += line.notes[last].beats
                 }
-            }
-            let off = DispatchWorkItem { [weak self] in
-                for key in keys {
-                    self?.sampler.stopNote(key, onChannel: 0)
-                    self?.sounding.remove(key)
+                let ref = NoteRef(voice: v, index: i)
+                let keys = line.midis(i).map { UInt8(max(0, min(127, $0))) }
+                let time = (onsets[i] - start0) * secondsPerBeat
+                let on = DispatchWorkItem { [weak self] in
+                    self?.view?.playing.insert(ref)
+                    for key in keys {
+                        self?.sampler.startNote(key, withVelocity: 90, onChannel: 0)
+                        self?.sounding.insert(key)
+                    }
                 }
+                let off = DispatchWorkItem { [weak self] in
+                    self?.view?.playing.remove(ref)
+                    for key in keys {
+                        self?.sampler.stopNote(key, onChannel: 0)
+                        self?.sounding.remove(key)
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + time, execute: on)
+                DispatchQueue.main.asyncAfter(deadline: .now() + time + length * secondsPerBeat * 0.95, execute: off)
+                work += [on, off]
+                end = max(end, time + length * secondsPerBeat)
+                i = last + 1
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + time, execute: on)
-            DispatchQueue.main.asyncAfter(deadline: .now() + time + length * secondsPerBeat * 0.95, execute: off)
-            work += [on, off]
-            time += length * secondsPerBeat
-            i = last + 1
         }
-        let end = DispatchWorkItem { [weak self] in self?.stop() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + time + 0.05, execute: end)
-        work.append(end)
+        guard !work.isEmpty else { return stop() }
+        let finish = DispatchWorkItem { [weak self] in self?.stop() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + end + 0.05, execute: finish)
+        work.append(finish)
         view.needsDisplay = true
         NotebookStore.shared.editor.scorePlaying = true
     }
@@ -351,13 +435,19 @@ final class ScorePlayer {
         work = []
         for key in sounding { sampler.stopNote(key, onChannel: 0) }
         sounding = []
-        view?.playing = nil
+        view?.playing = []
         view = nil
         NotebookStore.shared.editor.scorePlaying = false
     }
 }
 
 // MARK: - The staff view
+
+/// A note in a voice (0 = voice 1).
+struct NoteRef: Hashable {
+    let voice: Int
+    let index: Int
+}
 
 /// Draws a score and edits it (it's the first responder while a score is being worked on).
 final class ScoreView: NSView, NSTextFieldDelegate {
@@ -378,14 +468,19 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private(set) var cursor = 0
     /// The note just typed: ↑ ↓, accidentals and ties act on it, while number keys and . set the next note's length.
     private(set) var lastEntered: Int?
-    /// The note sounding during playback.
-    var playing: Int? {
+    /// The notes sounding during playback (every voice).
+    var playing: Set<NoteRef> = [] {
         didSet { if oldValue != playing { needsDisplay = true } }
     }
+    /// The voice being written (0 = voice 1, stems up; 1 = voice 2, stems down).
+    private(set) var voice = 0
+    /// The score as the current voice sees it.
+    private var cur: ScoreData { score.forVoice(voice) }
 
-    /// The length and dot for new notes (shared with the Score ribbon tab).
+    /// The length, dot and triplet for new notes (shared with the Score ribbon tab).
     static var inputDuration: ScoreNote.Duration = .quarter
     static var inputDotted = false
+    static var inputTriplet = false
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { !isExport }
@@ -409,6 +504,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let index: Int
         let x: CGFloat
         let system: Int
+        var voice = 0
     }
 
     private(set) var placed: [Placed] = []
@@ -425,7 +521,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         return (score.title.isEmpty ? 0 : titleHeight) + CGFloat(systemCount) * systemHeight + space
     }
 
-    private func width(of note: ScoreNote, index: Int) -> CGFloat {
+    private func width(of note: ScoreNote, index: Int, in line: ScoreData? = nil) -> CGFloat {
+        let score = line ?? self.score
         let base: CGFloat
         switch note.duration {
         case .sixteenth: base = 2.3
@@ -455,17 +552,45 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         space * (4.2 + CGFloat(abs(score.keyFifths)) * 1.05 + (system == 0 ? 2.8 : 0) + 0.8)
     }
 
+    /// Places every voice's notes: notes that start together line up, and the bars wrap into lines.
     private func layoutNotes() {
         placed = []
         caretSpots = []
         barLines = []
         systemStarts = []
         let usable = max(bounds.width - space * 2, space * 20)
-        let measures = score.measures
-        // Each bar's natural width.
-        let widths: [CGFloat] = measures.map { bar in
-            bar.isEmpty ? space * 8 : bar.reduce(space * 1.2) { $0 + width(of: score.notes[$1], index: $1) }
+        let lines = (0..<ScoreData.voiceCount).map { score.forVoice($0) }
+        let barsByVoice = lines.map { $0.notes.isEmpty ? [] : $0.measures }
+        let barCount = max(1, barsByVoice.map(\.count).max() ?? 1)
+        // Each bar's notes by when they start (in quarter notes from the bar line).
+        struct Event { let onset: Double; let voice: Int; let index: Int }
+        var events: [[Event]] = []
+        var gaps: [[(onset: Double, gap: CGFloat)]] = []
+        for m in 0..<barCount {
+            var list: [Event] = []
+            for v in lines.indices where m < barsByVoice[v].count {
+                var t = 0.0
+                for i in barsByVoice[v][m] {
+                    list.append(Event(onset: t, voice: v, index: i))
+                    t += lines[v].notes[i].beats
+                }
+            }
+            events.append(list)
+            let onsets = Array(Set(list.map { ($0.onset * 1e6).rounded() / 1e6 })).sorted()
+            var row: [(Double, CGFloat)] = []
+            for (k, onset) in onsets.enumerated() {
+                let next = k + 1 < onsets.count ? onsets[k + 1] : nil
+                var gap = space * 2.2
+                for e in list where abs(e.onset - onset) < 1e-6 {
+                    let note = lines[e.voice].notes[e.index]
+                    let w = width(of: note, index: e.index, in: lines[e.voice])
+                    gap = max(gap, next.map { w * min(1, CGFloat(($0 - onset) / note.beats)) } ?? w)
+                }
+                row.append((onset, gap))
+            }
+            gaps.append(row)
         }
+        let widths: [CGFloat] = gaps.map { $0.isEmpty ? space * 8 : $0.reduce(space * 1.2) { $0 + $1.gap } }
         // Bars into systems (lines).
         var systems: [[Int]] = [[]]
         var used = headerWidth(system: 0)
@@ -478,6 +603,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             used += w
         }
         systemCount = systems.count
+        var spots: [(Double, CGFloat, Int)] = []   // the current voice: (onset key, x, system) per note
         for (s, bars) in systems.enumerated() {
             let start = space + headerWidth(system: s)
             systemStarts.append(start)
@@ -486,26 +612,39 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let stretch = s < systems.count - 1 && natural > 0 ? max(1, (usable - headerWidth(system: s)) / natural) : 1
             var x = start
             for m in bars {
-                let bar = measures[m]
                 var nx = x + space * 1.2 * stretch
-                for i in bar {
-                    caretSpots.append((nx - space * 0.9, s))
-                    let accidental = score.showsAccidental(i) ? space * 1.3 : 0
-                    placed.append(Placed(index: i, x: nx + accidental, system: s))
-                    nx += width(of: score.notes[i], index: i) * stretch
+                var xs: [Double: CGFloat] = [:]
+                for (onset, gap) in gaps[m] {
+                    xs[onset] = nx
+                    nx += gap * stretch
                 }
+                for e in events[m] {
+                    let key = (e.onset * 1e6).rounded() / 1e6
+                    let ex = xs[key] ?? nx
+                    let accidental = lines[e.voice].showsAccidental(e.index) ? space * 1.3 : 0
+                    placed.append(Placed(index: e.index, x: ex + accidental, system: s, voice: e.voice))
+                    if e.voice == voice { spots.append((Double(e.index), ex, s)) }
+                }
+                if barsByVoice[voice].isEmpty, m == 0 { spots.append((-1, x + space * 1.2 * stretch, s)) }
                 x += widths[m] * stretch
-                let last = m == measures.count - 1
+                let last = m == barCount - 1
                 barLines.append((x, s, last))
             }
         }
-        // The caret after the last note.
-        if let lastPlaced = placed.last {
-            let note = score.notes[lastPlaced.index]
-            caretSpots.append((lastPlaced.x + width(of: note, index: lastPlaced.index) - space * 1.2, lastPlaced.system))
+        // The current voice's caret: before each of its notes, and after the last.
+        caretSpots = spots.filter { $0.0 >= 0 }.sorted { $0.0 < $1.0 }.map { ($0.1 - space * 0.9, $0.2) }
+        let mine = lines[voice]
+        if let lastPlaced = placed.last(where: { $0.voice == voice && $0.index == mine.notes.count - 1 }) {
+            let note = mine.notes[lastPlaced.index]
+            caretSpots.append((lastPlaced.x + width(of: note, index: lastPlaced.index, in: mine) - space * 1.2, lastPlaced.system))
         } else {
             caretSpots.append(((systemStarts.first ?? space * 6) + space, 0))
         }
+    }
+
+    /// A placed note (by voice and index).
+    private func place(_ voice: Int, _ index: Int) -> Placed? {
+        placed.first { $0.voice == voice && $0.index == index }
     }
 
     /// The top of a system's staff.
@@ -556,9 +695,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// Chord symbols above the staff, lyrics under it (with hyphens between syllables).
     private func drawWords(ink: NSColor) {
+        let placed = self.placed.filter { $0.voice == 0 }
         for (k, p) in placed.enumerated() {
             let note = score.notes[p.index]
-            let color = colorFor(p.index, ink: ink)
+            let color = colorFor(NoteRef(voice: 0, index: p.index), ink: ink)
             if let symbol = note.chordSymbol, !symbol.isEmpty {
                 let attrs: [NSAttributedString.Key: Any] = [.font: Self.chordFont, .foregroundColor: color]
                 (symbol as NSString).draw(at: NSPoint(x: p.x - space * 0.2, y: staffTop(p.system) - space * 2 - chordBand + space * 0.2),
@@ -602,10 +742,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             ink.setFill()
             NSRect(x: bar.x - 0.5, y: tabTop(bar.system), width: bar.final ? 3 : 1, height: tabGap * 5).fill()
         }
-        for p in placed where !score.notes[p.index].rest {
-            let color = colorFor(p.index, ink: ink)
+        for p in placed where !score.forVoice(p.voice).notes[p.index].rest {
+            let color = colorFor(NoteRef(voice: p.voice, index: p.index), ink: ink)
             let attrs: [NSAttributedString.Key: Any] = [.font: fretFont, .foregroundColor: color]
-            for spot in score.tab(p.index) {
+            for spot in score.forVoice(p.voice).tab(p.index) {
                 let text = "\(spot.fret)"
                 let size = (text as NSString).size(withAttributes: attrs)
                 let cy = tabTop(p.system) + CGFloat(5 - spot.string) * tabGap
@@ -666,7 +806,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     /// Beamed groups: eighths and sixteenths together within a beat (a dotted quarter in compound time) and a bar.
-    private func beamGroups() -> [[Int]] {
+    private func beamGroups(_ score: ScoreData, _ placed: [Placed]) -> [[Int]] {
         var groups: [[Int]] = []
         let beat = score.beatUnit == 8 && score.beats % 3 == 0 ? 1.5 : (score.beatUnit == 2 ? 2.0 : 1.0)
         for bar in score.measures {
@@ -700,18 +840,29 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private var stemSpans: [Int: (low: CGFloat, high: CGFloat)] = [:]
 
     private func drawNotes(ink: NSColor) {
+        // With two voices, voice 1's stems go up and voice 2's down.
+        let two = score.hasSecondVoice
+        for v in 0..<ScoreData.voiceCount where !score.line(v).isEmpty {
+            drawVoice(v, ink: ink, forcedUp: two ? v == 0 : nil)
+        }
+    }
+
+    private func drawVoice(_ v: Int, ink: NSColor, forcedUp: Bool?) {
+        let score = self.score.forVoice(v)
+        let placed = self.placed.filter { $0.voice == v }
         stemSpans = [:]
-        let groups = beamGroups()
+        let groups = beamGroups(score, placed)
         var beamed: [Int: (group: [Int], up: Bool)] = [:]
         for g in groups {
             let average = g.reduce(0) { $0 + position(score.notes[$1]) } / g.count
-            for i in g { beamed[i] = (g, average < 4) }
+            for i in g { beamed[i] = (g, forcedUp ?? (average < 4)) }
         }
+        defer { drawTriplets(score, placed, v: v, forcedUp: forcedUp, ink: ink) }
         for p in placed {
             let note = score.notes[p.index]
-            let color = colorFor(p.index, ink: ink)
+            let color = colorFor(NoteRef(voice: v, index: p.index), ink: ink)
             if note.rest {
-                drawRest(note, x: p.x, system: p.system, color: color)
+                drawRest(note, x: p.x, system: p.system, color: color, lift: forcedUp.map { $0 ? -space * 1.5 : space * 1.5 } ?? 0)
                 continue
             }
             let pos = position(note)
@@ -737,7 +888,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             // Chord notes: more heads on the same stem (a step apart: side by side).
             let tones = note.chord ?? []
             let allPositions = ([pos] + tones.map { $0.diatonic - score.clef.bottomLine }).sorted()
-            let up = beamed[p.index]?.up ?? (allPositions.reduce(0, +) / allPositions.count < 4)
+            let up = beamed[p.index]?.up ?? forcedUp ?? (allPositions.reduce(0, +) / allPositions.count < 4)
             if !tones.isEmpty {
                 var shifted = Set<Int>()
                 for (k, tp) in allPositions.enumerated() where k > 0 && tp - allPositions[k - 1] == 1 && !shifted.contains(allPositions[k - 1]) {
@@ -832,7 +983,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 offset = up ? min(offset, needed) : max(offset, needed)
             }
             for pt in points {
-                colorFor(pt.i, ink: ink).setFill()
+                colorFor(NoteRef(voice: v, index: pt.i), ink: ink).setFill()
                 let end = beamY(pt.x) + offset
                 let span = stemSpans[pt.i] ?? (pt.y, pt.y)
                 let from = up ? span.low : span.high
@@ -864,18 +1015,55 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
     }
 
-    private func colorFor(_ index: Int, ink: NSColor) -> NSColor {
-        if index == playing { return .systemOrange }
-        if !isExport, index == selected || index == lastEntered, ScoreView.active === self { return .controlAccentColor }
+    private func colorFor(_ ref: NoteRef, ink: NSColor) -> NSColor {
+        if playing.contains(ref) { return .systemOrange }
+        if !isExport, ref.voice == voice, ref.index == selected || ref.index == lastEntered, ScoreView.active === self { return .controlAccentColor }
+        // The voice not being written is drawn a little lighter while editing.
+        if !isExport, score.hasSecondVoice, ScoreView.active === self, ref.voice != voice { return NSColor(white: 0.45, alpha: 1) }
         return ink
+    }
+
+    /// Triplets: a 3 over (or under) each group, with a bracket when the notes aren't beamed together.
+    private func drawTriplets(_ score: ScoreData, _ placed: [Placed], v: Int, forcedUp: Bool?, ink: NSColor) {
+        let font = NSFont(name: "Georgia-BoldItalic", size: 12) ?? .boldSystemFont(ofSize: 12)
+        for bar in score.measures {
+            for group in score.tripletGroups(in: bar) {
+                let spots = group.compactMap { i in placed.first { $0.index == i } }
+                guard let first = spots.first, let last = spots.last, first.system == last.system else { continue }
+                let positions = group.map { score.notes[$0].rest ? 4 : position(score.notes[$0]) }
+                let up = forcedUp ?? (positions.reduce(0, +) / max(1, positions.count) < 4)
+                let ys = group.map { score.notes[$0].rest ? staffTop(first.system) + space * 2 : y(position: position(score.notes[$0]), system: first.system) }
+                let x1 = first.x - space * 0.2, x2 = last.x + space * 1.45
+                let yLine = up ? min(ys.min()! - space * 4.4, staffTop(first.system) - space * 1.2) : max(ys.max()! + space * 4.4, staffTop(first.system) + space * 5.2)
+                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: colorFor(NoteRef(voice: v, index: group[0]), ink: ink)]
+                let size = ("3" as NSString).size(withAttributes: attrs)
+                let mid = (x1 + x2) / 2
+                ("3" as NSString).draw(at: NSPoint(x: mid - size.width / 2, y: yLine - size.height / 2), withAttributes: attrs)
+                let beamedTogether = group.allSatisfy { score.notes[$0].duration.rawValue >= 8 && !score.notes[$0].rest } && group.count > 1
+                if !beamedTogether {
+                    ink.setStroke()
+                    let bracket = NSBezierPath()
+                    let hook: CGFloat = up ? space * 0.6 : -space * 0.6
+                    bracket.move(to: NSPoint(x: x1, y: yLine + hook))
+                    bracket.line(to: NSPoint(x: x1, y: yLine))
+                    bracket.line(to: NSPoint(x: mid - size.width / 2 - 2, y: yLine))
+                    bracket.move(to: NSPoint(x: mid + size.width / 2 + 2, y: yLine))
+                    bracket.line(to: NSPoint(x: x2, y: yLine))
+                    bracket.line(to: NSPoint(x: x2, y: yLine + hook))
+                    bracket.lineWidth = 1
+                    bracket.stroke()
+                }
+            }
+        }
     }
 
     private func ledger(x: CGFloat, y: CGFloat) {
         NSRect(x: x - space * 0.45, y: y - 0.6, width: space * 2.15, height: 1.2).fill()
     }
 
-    private func drawRest(_ note: ScoreNote, x: CGFloat, system: Int, color: NSColor) {
-        let top = staffTop(system)
+    private func drawRest(_ note: ScoreNote, x: CGFloat, system: Int, color: NSColor, lift: CGFloat = 0) {
+        // Two voices: voice 1's rests sit higher, voice 2's lower.
+        let top = staffTop(system) + lift
         color.set()
         switch note.duration {
         case .whole:
@@ -930,6 +1118,16 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
 
+    /// Changes the current voice's notes (the change sees that voice as the score's notes).
+    private func editVoice(_ name: String, _ change: (inout ScoreData) -> Void) {
+        let v = voice
+        edit(name) { full in
+            var view = full.forVoice(v)
+            change(&view)
+            full.setLine(v, view.notes)
+        }
+    }
+
     func activate() {
         ScoreView.active = self
         if window?.firstResponder !== self { window?.makeFirstResponder(self) }
@@ -956,7 +1154,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     func select(_ index: Int?) {
-        selected = index.flatMap { score.notes.indices.contains($0) ? $0 : nil }
+        selected = index.flatMap { cur.notes.indices.contains($0) ? $0 : nil }
         lastEntered = nil
         if let selected { cursor = selected + 1 }
         needsDisplay = true
@@ -965,38 +1163,39 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// The note commands act on: the selected one, else the one just typed.
     private var target: Int? {
         let i = selected ?? lastEntered
-        return i.flatMap { score.notes.indices.contains($0) ? $0 : nil }
+        return i.flatMap { cur.notes.indices.contains($0) ? $0 : nil }
     }
 
     /// Adds a note (or rest) after the cursor; a note goes in the octave nearest the note before it.
     func insert(step: Int?, octave: Int? = nil) {
         var note = ScoreNote(duration: Self.inputDuration, dotted: Self.inputDotted, rest: step == nil)
+        if Self.inputTriplet { note.tuplet = true }
         if let step {
             note.step = step
             if let octave {
                 note.octave = octave
             } else {
-                let previous = score.notes[..<min(cursor, score.notes.count)].last { !$0.rest }
+                let previous = cur.notes[..<min(cursor, cur.notes.count)].last { !$0.rest }
                 let reference = previous?.diatonic ?? (score.clef == .treble ? 4 * 7 + 6 : 3 * 7 + 1)
                 var best = 4
                 for o in 1...7 where abs(o * 7 + step - reference) < abs(best * 7 + step - reference) { best = o }
                 note.octave = best
             }
         }
-        let at = min(cursor, score.notes.count)
-        edit(step == nil ? "Add Rest" : "Add Note") { $0.notes.insert(note, at: at) }
+        let at = min(cursor, cur.notes.count)
+        editVoice(step == nil ? "Add Rest" : "Add Note") { $0.notes.insert(note, at: at) }
         // Keep entering after it.
         selected = nil
         lastEntered = at
         cursor = at + 1
         needsDisplay = true
-        if let midi = score.midi(at) { ScorePlayer.shared.preview(midi) }
+        if let midi = cur.midi(at) { ScorePlayer.shared.preview(midi) }
     }
 
     private func changeSelected(_ name: String, _ change: (inout ScoreNote) -> Void) {
         guard let i = target else { return NSSound.beep() }
-        edit(name) { change(&$0.notes[i]) }
-        if let midi = score.midi(i) { ScorePlayer.shared.preview(midi) }
+        editVoice(name) { change(&$0.notes[i]) }
+        if let midi = cur.midi(i) { ScorePlayer.shared.preview(midi) }
     }
 
     func moveSelected(steps: Int) {
@@ -1018,7 +1217,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     func toggleDot() {
         if let s = selected {
             changeSelected("Dot") { $0.dotted.toggle() }
-            Self.inputDotted = score.notes[s].dotted
+            Self.inputDotted = cur.notes[s].dotted
         } else {
             Self.inputDotted.toggle()
         }
@@ -1039,13 +1238,13 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// Adds a note to the chord: the step in the octave just above the chord's top note (⇧A–G).
     func addChordTone(step: Int) {
-        guard let i = target, !score.notes[i].rest else { return NSSound.beep() }
-        let note = score.notes[i]
+        guard let i = target, !cur.notes[i].rest else { return NSSound.beep() }
+        let note = cur.notes[i]
         let top = ([note.diatonic] + (note.chord ?? []).map(\.diatonic)).max()!
         var octave = top / 7
         if octave * 7 + step <= top { octave += 1 }
-        edit("Add Chord Note") { $0.notes[i].chord = ($0.notes[i].chord ?? []) + [ChordTone(step: step, octave: octave)] }
-        ScorePlayer.shared.preview(score.midis(i))
+        editVoice("Add Chord Note") { $0.notes[i].chord = ($0.notes[i].chord ?? []) + [ChordTone(step: step, octave: octave)] }
+        ScorePlayer.shared.preview(cur.midis(i))
     }
 
     func clearChordTones() {
@@ -1054,15 +1253,15 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// The selected note onto the next higher (+1) or lower (-1) guitar string, where it can be played.
     func moveString(by delta: Int) {
-        guard let i = target, !score.notes[i].rest, let current = score.tab(i).first?.string else { return NSSound.beep() }
+        guard let i = target, !cur.notes[i].rest, let current = cur.tab(i).first?.string else { return NSSound.beep() }
         let shift = score.clef == .treble ? 12 : 0
-        guard let pitch = score.midi(i).map({ $0 - shift }) else { return }
+        guard let pitch = cur.midi(i).map({ $0 - shift }) else { return }
         var string = current + delta
         while ScoreData.tuning.indices.contains(string) {
             let fret = pitch - ScoreData.tuning[string]
             if fret >= 0 && fret <= 24 {
                 let chosen = string
-                edit("Guitar String") { $0.notes[i].tabString = chosen }
+                editVoice("Guitar String") { $0.notes[i].tabString = chosen }
                 return
             }
             string += delta
@@ -1083,17 +1282,19 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// ⌃L lyrics / ⌃K chord symbols, starting at the selected (or just-typed, or first) note.
     func beginWords(_ kind: WordKind) {
-        guard !score.notes.isEmpty else { return NSSound.beep() }
+        // Lyrics and chord symbols go with voice 1.
+        if voice != 0 { setVoice(0) }
+        guard !cur.notes.isEmpty else { return NSSound.beep() }
         var index = target ?? (cursor > 0 ? cursor - 1 : 0)
-        if kind == .lyric, score.notes[index].rest, let next = nextNote(after: index, kind: kind) { index = next }
+        if kind == .lyric, cur.notes[index].rest, let next = nextNote(after: index, kind: kind) { index = next }
         openField(kind, at: index)
     }
 
     private func nextNote(after index: Int, kind: WordKind, backwards: Bool = false) -> Int? {
         var i = index + (backwards ? -1 : 1)
-        while score.notes.indices.contains(i) {
+        while cur.notes.indices.contains(i) {
             // Lyrics skip rests; chord symbols can go on any note or rest.
-            if kind == .chordSymbol || !score.notes[i].rest { return i }
+            if kind == .chordSymbol || !cur.notes[i].rest { return i }
             i += backwards ? -1 : 1
         }
         return nil
@@ -1102,14 +1303,14 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func openField(_ kind: WordKind, at index: Int) {
         field?.removeFromSuperview()
         layoutNotes()
-        guard let p = placed.first(where: { $0.index == index }) else { return }
+        guard let p = place(voice, index) else { return }
         fieldKind = kind
         fieldIndex = index
         selected = index
         lastEntered = nil
         cursor = index + 1
         let font = kind == .lyric ? Self.lyricFont : Self.chordFont
-        let text = (kind == .lyric ? score.notes[index].lyric : score.notes[index].chordSymbol) ?? ""
+        let text = (kind == .lyric ? cur.notes[index].lyric : cur.notes[index].chordSymbol) ?? ""
         let f = NSTextField(string: text)
         f.font = font
         f.isBordered = true
@@ -1131,10 +1332,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         guard let f = field else { return }
         let text = f.stringValue.trimmingCharacters(in: .whitespaces)
         let i = fieldIndex, kind = fieldKind
-        guard score.notes.indices.contains(i) else { return }
-        let old = kind == .lyric ? score.notes[i].lyric : score.notes[i].chordSymbol
+        guard cur.notes.indices.contains(i) else { return }
+        let old = kind == .lyric ? cur.notes[i].lyric : cur.notes[i].chordSymbol
         guard (old ?? "") != text else { return }
-        edit(kind == .lyric ? "Lyrics" : "Chord Symbol") { data in
+        editVoice(kind == .lyric ? "Lyrics" : "Chord Symbol") { data in
             if kind == .lyric { data.notes[i].lyric = text.isEmpty ? nil : text } else { data.notes[i].chordSymbol = text.isEmpty ? nil : text }
         }
     }
@@ -1183,12 +1384,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     func deleteSelected() {
         if let i = selected {
-            edit("Delete Note") { $0.notes.remove(at: i) }
+            editVoice("Delete Note") { $0.notes.remove(at: i) }
             select(i > 0 ? i - 1 : nil)
             if selected == nil { cursor = 0 }
         } else if cursor > 0 {
             let i = cursor - 1
-            edit("Delete Note") { $0.notes.remove(at: i) }
+            editVoice("Delete Note") { $0.notes.remove(at: i) }
             cursor = i
             lastEntered = i > 0 ? i - 1 : nil
         } else {
@@ -1201,20 +1402,46 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         lastEntered = nil
         if let s = selected {
             let next = s + delta
-            if next < 0 { selected = nil; cursor = 0 } else if next >= score.notes.count { selected = nil; cursor = score.notes.count } else { select(next) }
+            if next < 0 { selected = nil; cursor = 0 } else if next >= cur.notes.count { selected = nil; cursor = cur.notes.count } else { select(next) }
         } else {
             let next = cursor + delta
-            if delta < 0, cursor > 0 { select(cursor - 1) } else if delta > 0, cursor < score.notes.count { select(cursor) } else { cursor = max(0, min(score.notes.count, next)) }
+            if delta < 0, cursor > 0 { select(cursor - 1) } else if delta > 0, cursor < cur.notes.count { select(cursor) } else { cursor = max(0, min(cur.notes.count, next)) }
         }
         needsDisplay = true
+    }
+
+    /// Write in voice 1 or 2 (⌥⌘1 / ⌥⌘2): the caret goes to the end of that voice.
+    func setVoice(_ v: Int) {
+        guard (0..<ScoreData.voiceCount).contains(v) else { return }
+        voice = v
+        selected = nil
+        lastEntered = nil
+        cursor = cur.notes.count
+        NotebookStore.shared.editor.scoreInputChanged += 1
+        needsDisplay = true
+    }
+
+    var currentVoice: Int { voice }
+
+    /// Triplet (⌃3): the selected note becomes (or stops being) a triplet; otherwise the next notes are entered as triplets.
+    func toggleTriplet() {
+        if let s = selected {
+            changeSelected("Triplet") { $0.tuplet = $0.tuplet == true ? nil : true }
+            Self.inputTriplet = cur.notes[s].tuplet == true
+        } else {
+            Self.inputTriplet.toggle()
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
     func togglePlay() {
         if ScorePlayer.shared.isPlaying {
             ScorePlayer.shared.stop()
         } else {
-            let from = selected ?? (cursor < score.notes.count ? cursor : 0)
-            ScorePlayer.shared.play(score, from: from, in: self)
+            // From the selected note (or the cursor) in the voice being written; every voice plays.
+            let onsets = cur.onsets
+            let from = selected ?? (cursor < cur.notes.count ? cursor : 0)
+            ScorePlayer.shared.play(score, fromTime: onsets.indices.contains(from) ? onsets[from] : 0, in: self)
         }
     }
 
@@ -1239,10 +1466,18 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             return
         default: break
         }
+        if event.modifierFlags.contains([.option, .command]) {
+            switch event.keyCode {
+            case 18: return setVoice(0)   // 1
+            case 19: return setVoice(1)   // 2
+            default: break
+            }
+        }
         if event.modifierFlags.contains(.control) {
             switch chars {
             case "k": return beginWords(.chordSymbol)
             case "l": return beginWords(.lyric)
+            case "3": return toggleTriplet()
             default: return super.keyDown(with: event)
             }
         }
@@ -1271,13 +1506,15 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     // MARK: Mouse
 
     /// The note (head or rest) under a point.
-    private func note(at p: NSPoint) -> Int? {
+    private func note(at p: NSPoint) -> NoteRef? {
         layoutNotes()
-        return placed.first { pl in
-            let note = score.notes[pl.index]
+        // The voice being written first (where notes of two voices overlap).
+        let ordered = placed.filter { $0.voice == voice } + placed.filter { $0.voice != voice }
+        return ordered.first { pl in
+            let note = score.forVoice(pl.voice).notes[pl.index]
             let cy = note.rest ? staffTop(pl.system) + space * 2 : y(position: position(note), system: pl.system)
             return NSRect(x: pl.x - space * 0.4, y: cy - space * 1.2, width: space * 2.2, height: space * 2.4).contains(p)
-        }?.index
+        }.map { NoteRef(voice: $0.voice, index: $0.index) }
     }
 
     private func system(at y: CGFloat) -> Int {
@@ -1312,11 +1549,13 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             insert(step: d % 7, octave: d / 7)
             return
         }
-        if let i = note(at: p) {
+        if let ref = note(at: p) {
+            if ref.voice != voice { setVoice(ref.voice) }
+            let i = ref.index
             select(i)
-            if let midi = score.midi(i) { ScorePlayer.shared.preview(midi) }
+            if let midi = cur.midi(i) { ScorePlayer.shared.preview(midi) }
             // Drag up or down to change the pitch.
-            guard !score.notes[i].rest, let window else { return }
+            guard !cur.notes[i].rest, let window else { return }
             let startY = p.y
             var applied = 0
             window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration, mode: .eventTracking) { ev, stop in

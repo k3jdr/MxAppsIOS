@@ -49,6 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         OfficeFonts.load()
         // ⌃Z / ⌃Y (as in OneNote for Windows) also undo and redo; ⌘Z / ⇧⌘Z are the Mac keys.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // F7: check spelling of the text in focus.
+            if SpellCheck.isTrigger(event) {
+                SpellCheck.run()
+                return nil
+            }
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             guard mods == .control || mods == [.control, .shift] else { return event }
             switch event.charactersIgnoringModifiers?.lowercased() {

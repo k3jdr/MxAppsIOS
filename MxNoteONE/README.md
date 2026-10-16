@@ -229,6 +229,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Add a rest | **0** | Score tab ▸ Rest |
 | Length of the next note — 16th, 8th, quarter, half, whole | **3, 4, 5, 6, 7** (on a selected note: changes it) | Score tab ▸ Notes |
 | Dot | **.** | Score tab ▸ Dot |
+| Triplet (next notes, or the selected note) | **⌃3** | Score tab ▸ Triplet |
+| Write in voice 1 / voice 2 | **⌥⌘1 / ⌥⌘2** | Score tab ▸ Voice, or click a note of that voice |
 | Move the note just typed (or selected) a step / an octave | **↑ ↓** / **⌘↑ ⌘↓** | drag the note up or down |
 | Sharp, flat, natural (again takes it off) | **+  -  =** | Score tab ▸ ♯ ♭ ♮ |
 | Tie to the next note / note ↔ rest | **T** / **R** | |
@@ -250,11 +252,16 @@ the Score tab and the right-click menu, as is Copy Score as Picture. Playback us
 note sounding is shown in orange. Every change can be undone. PDF and print show the score; Markdown export and OneNote
 sync write its title, signatures and the notes by name.
 
+**Triplets** — three notes in the time of two (three triplet eighths make a beat) — are marked with a 3, bracketed
+unless they're beamed together, and play in time. **Two voices** share the staff, as in MuseScore: voice 1's stems go up
+and voice 2's down (rests move up and down out of the way), notes sounding at the same time line up, and both voices
+play together. While you write in one voice the other is shown in grey; clicking one of its notes switches to it.
+
 **MusicXML** — the format MuseScore, Finale, Sibelius and Dorico exchange scores in. **Insert ▸ Music Score from
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score: title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, from the first part's first voice — anything left out (other parts and voices, grace notes, later key changes)
-is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
+strings, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
+out (other parts, staves and voices, grace notes, later key changes) is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
 A tie carries its note's accidental across the bar line.
 
 ## Microsoft Office fonts
@@ -306,6 +313,11 @@ switches between Dark+ and Light+ (the block at the caret changes; new blocks us
 Misspelled words are underlined in text boxes, page titles and table cells. Right-click one for suggestions,
 Ignore Spelling and Learn Spelling; in text boxes the app's own items (links, Format as Code) come after them.
 Table cells formatted as code aren't checked.
+
+**F7** (fn F7 on a Mac keyboard), or Edit ▸ Check Spelling, checks spelling as in Office: in the text being typed in
+from the caret on (in a table, then the cells after it), in the selected table cells, or — with nothing being typed in
+— on the whole page, top to bottom. The next misspelt word is selected and the Spelling panel offers corrections,
+Ignore and Learn; F7 again goes on to the next one. When there are none, a message says so.
 
 ## Keyboard
 

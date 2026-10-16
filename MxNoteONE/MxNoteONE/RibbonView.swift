@@ -511,6 +511,11 @@ struct ScoreRibbon: View {
                     .overlay(alignment: .bottom) { Text(d.glyph).font(.system(size: 9)).offset(y: 8) }
             }
             RibbonButton("Dot (.)", "circle.fill", active: ScoreView.inputDotted) { act { $0.toggleDot() } }
+            RibbonButton("Triplet (⌃3)", "3.square", active: ScoreView.inputTriplet) { act { $0.toggleTriplet() } }
+        }
+        RibbonGroup("Voice") {
+            RibbonButton("Voice 1 (⌥⌘1)", "1.circle", active: (staff?.currentVoice ?? 0) == 0) { act { $0.setVoice(0) } }
+            RibbonButton("Voice 2 (⌥⌘2)", "2.circle", active: staff?.currentVoice == 1) { act { $0.setVoice(1) } }
         }
         RibbonGroup("Add") {
             ForEach(Array(["C", "D", "E", "F", "G", "A", "B"].enumerated()), id: \.offset) { step, name in

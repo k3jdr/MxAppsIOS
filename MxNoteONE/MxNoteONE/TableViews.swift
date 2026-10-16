@@ -880,6 +880,9 @@ final class TableGridView: NSView, NSTextViewDelegate {
     var circleInvalid = false {
         didSet { needsDisplay = true }
     }
+    /// The cell being typed in.
+    var editingCell: CellRef? { editing }
+
     private(set) var editing: CellRef? {
         didSet { if (editing == nil) != (oldValue == nil) { updateColumnBar() } }
     }

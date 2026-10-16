@@ -111,6 +111,8 @@ struct MainCommands: Commands {
             Button("Find Previous") { canvas?.findNext(forward: false) }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
             Divider()
+            Button("Check Spelling (F7)") { SpellCheck.run() }
+            Divider()
             Button("Search All Notebooks") { store.focusSearchRequest += 1 }
                 .keyboardShortcut("e")
         }

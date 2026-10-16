@@ -40,8 +40,11 @@ enum MusicXML {
           <part id="P1">
 
         """
-        let steps = ["C", "D", "E", "F", "G", "A", "B"]
-        let measures = score.measures
+        let voiceTwo = score.forVoice(1)
+        let second = score.hasSecondVoice ? voiceTwo.measures : []
+        let first = score.notes.isEmpty ? [] : score.measures
+        let barCount = max(first.count, second.count, 1)
+        let measures = (0..<barCount).map { first.indices.contains($0) ? first[$0] : score.notes.count..<score.notes.count }
         for (m, bar) in measures.enumerated() {
             out += "    <measure number=\"\(m + 1)\">\n"
             if m == 0 {
@@ -52,44 +55,12 @@ enum MusicXML {
                 out += "      <direction placement=\"above\"><direction-type><metronome><beat-unit>quarter</beat-unit>"
                 out += "<per-minute>\(score.tempo)</per-minute></metronome></direction-type><sound tempo=\"\(score.tempo)\"/></direction>\n"
             }
-            for i in bar {
-                let note = score.notes[i]
-                if let symbol = note.chordSymbol, !symbol.isEmpty { out += "      " + harmony(symbol) + "\n" }
-                let tiedFrom = i > 0 && score.notes[i - 1].tie && !note.rest
-                let tab = score.showTab == true ? score.tab(i) : []
-                func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?) -> String {
-                    var x = "      <note>"
-                    if chord { x += "<chord/>" }
-                    if note.rest {
-                        x += "<rest/>"
-                    } else {
-                        x += "<pitch><step>\(steps[step])</step>" + (alter != 0 ? "<alter>\(alter)</alter>" : "") + "<octave>\(octave)</octave></pitch>"
-                    }
-                    x += "<duration>\(duration(note))</duration>"
-                    if main, tiedFrom { x += "<tie type=\"stop\"/>" }
-                    if main, note.tie, !note.rest { x += "<tie type=\"start\"/>" }
-                    x += "<voice>1</voice><type>\(types[note.duration]!)</type>"
-                    if note.dotted { x += "<dot/>" }
-                    if let accidental { x += "<accidental>\(accidental > 0 ? "sharp" : accidental < 0 ? "flat" : "natural")</accidental>" }
-                    var notations = ""
-                    if main, tiedFrom { notations += "<tied type=\"stop\"/>" }
-                    if main, note.tie, !note.rest { notations += "<tied type=\"start\"/>" }
-                    if let tabSpot { notations += "<technical><string>\(6 - tabSpot.string)</string><fret>\(tabSpot.fret)</fret></technical>" }
-                    if !notations.isEmpty { x += "<notations>\(notations)</notations>" }
-                    if main, let lyric = note.lyric, !lyric.isEmpty { x += lyricXML(score, i) }
-                    return x + "</note>\n"
-                }
-                let shift = score.clef == .treble ? 12 : 0
-                func spot(_ midi: Int) -> (string: Int, fret: Int)? { tab.first { ScoreData.tuning[$0.string] + $0.fret == midi - shift } }
-                let mainMidi = score.midi(i)
-                out += noteXML(chord: false, step: note.step, octave: note.octave, alter: note.rest ? 0 : score.soundingAlter(i),
-                               accidental: score.showsAccidental(i) ? note.alter : nil, main: true, tabSpot: mainMidi.flatMap(spot))
-                for tone in note.chord ?? [] where !note.rest {
-                    let alter = tone.alter ?? score.keyAlter(tone.step)
-                    let midi = ScoreData.midi(step: tone.step, octave: tone.octave, alter: alter)
-                    out += noteXML(chord: true, step: tone.step, octave: tone.octave, alter: alter,
-                                   accidental: tone.alter != nil && tone.alter != score.keyAlter(tone.step) ? tone.alter : nil, main: false, tabSpot: spot(midi))
-                }
+            out += notesXML(score, bar, voice: 1)
+            // Voice 2 in the same bar: back to the bar line, then its notes.
+            if second.indices.contains(m), !second[m].isEmpty {
+                let back = bar.reduce(0) { $0 + duration(score.notes[$1]) }
+                if back > 0 { out += "      <backup><duration>\(back)</duration></backup>\n" }
+                out += notesXML(voiceTwo, second[m], voice: 2)
             }
             if m == measures.count - 1 { out += "      <barline location=\"right\"><bar-style>light-heavy</bar-style></barline>\n" }
             out += "    </measure>\n"
@@ -98,6 +69,58 @@ enum MusicXML {
         return out
     }
 
+    /// One voice's notes in a bar (voice 2 after a <backup>).
+    private static func notesXML(_ score: ScoreData, _ bar: Range<Int>, voice: Int) -> String {
+        let steps = ["C", "D", "E", "F", "G", "A", "B"]
+        var out = ""
+        // Triplets: where each group starts and stops.
+        let groups = score.tripletGroups(in: bar)
+        let starts = Set(groups.compactMap(\.first)), stops = Set(groups.compactMap(\.last))
+        for i in bar {
+            let note = score.notes[i]
+            if let symbol = note.chordSymbol, !symbol.isEmpty { out += "      " + harmony(symbol) + "\n" }
+            let tiedFrom = i > 0 && score.notes[i - 1].tie && !note.rest
+            let tab = score.showTab == true ? score.tab(i) : []
+            func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?) -> String {
+                var x = "      <note>"
+                if chord { x += "<chord/>" }
+                if note.rest {
+                    x += "<rest/>"
+                } else {
+                    x += "<pitch><step>\(steps[step])</step>" + (alter != 0 ? "<alter>\(alter)</alter>" : "") + "<octave>\(octave)</octave></pitch>"
+                }
+                x += "<duration>\(duration(note))</duration>"
+                if main, tiedFrom { x += "<tie type=\"stop\"/>" }
+                if main, note.tie, !note.rest { x += "<tie type=\"start\"/>" }
+                x += "<voice>\(voice)</voice><type>\(types[note.duration]!)</type>"
+                if note.dotted { x += "<dot/>" }
+                if let accidental { x += "<accidental>\(accidental > 0 ? "sharp" : accidental < 0 ? "flat" : "natural")</accidental>" }
+                if note.tuplet == true { x += "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>" }
+                if voice == 2 { x += "<stem>down</stem>" }
+                var notations = ""
+                if main, note.tuplet == true, starts.contains(i) { notations += "<tuplet type=\"start\" bracket=\"\(note.duration.rawValue >= 8 ? "no" : "yes")\"/>" }
+                if main, note.tuplet == true, stops.contains(i) { notations += "<tuplet type=\"stop\"/>" }
+                if main, tiedFrom { notations += "<tied type=\"stop\"/>" }
+                if main, note.tie, !note.rest { notations += "<tied type=\"start\"/>" }
+                if let tabSpot { notations += "<technical><string>\(6 - tabSpot.string)</string><fret>\(tabSpot.fret)</fret></technical>" }
+                if !notations.isEmpty { x += "<notations>\(notations)</notations>" }
+                if main, let lyric = note.lyric, !lyric.isEmpty { x += lyricXML(score, i) }
+                return x + "</note>\n"
+            }
+            let shift = score.clef == .treble ? 12 : 0
+            func spot(_ midi: Int) -> (string: Int, fret: Int)? { tab.first { ScoreData.tuning[$0.string] + $0.fret == midi - shift } }
+            let mainMidi = score.midi(i)
+            out += noteXML(chord: false, step: note.step, octave: note.octave, alter: note.rest ? 0 : score.soundingAlter(i),
+                           accidental: score.showsAccidental(i) ? note.alter : nil, main: true, tabSpot: mainMidi.flatMap(spot))
+            for tone in note.chord ?? [] where !note.rest {
+                let alter = tone.alter ?? score.keyAlter(tone.step)
+                let midi = ScoreData.midi(step: tone.step, octave: tone.octave, alter: alter)
+                out += noteXML(chord: true, step: tone.step, octave: tone.octave, alter: alter,
+                               accidental: tone.alter != nil && tone.alter != score.keyAlter(tone.step) ? tone.alter : nil, main: false, tabSpot: spot(midi))
+            }
+        }
+        return out
+    }
     /// A lyric with its syllable kind ("Twin-" "kle" → begin, end).
     private static func lyricXML(_ score: ScoreData, _ i: Int) -> String {
         let lyric = score.notes[i].lyric ?? ""
@@ -205,10 +228,21 @@ enum MusicXML {
         let stepNames = ["C", "D", "E", "F", "G", "A", "B"]
         let typeNames: [String: ScoreNote.Duration] = ["whole": .whole, "breve": .whole, "half": .half, "quarter": .quarter,
                                                        "eighth": .eighth, "16th": .sixteenth, "32nd": .sixteenth, "64th": .sixteenth]
+        // Voice 2: its notes per bar, placed by time (rests fill where it's silent).
+        var time = 0.0, v2: [ScoreNote] = [], v2pos = 0.0, v2Bars: [[ScoreNote]] = [], secondVoice: String?
+        var extraVoices = 0
         for measure in part.elements(forName: "measure") {
+            defer {
+                v2Bars.append(v2)
+                v2 = []; v2pos = 0; time = 0
+            }
             for child in measure.children ?? [] {
                 guard let e = child as? XMLElement else { continue }
                 switch e.name {
+                case "backup":
+                    time -= (text(e, "duration").flatMap(Double.init) ?? 0) / divisions
+                case "forward":
+                    time += (text(e, "duration").flatMap(Double.init) ?? 0) / divisions
                 case "attributes":
                     if let d = text(e, "divisions").flatMap(Double.init), d > 0 { divisions = d }
                     if let f = text(e, "key/fifths").flatMap(Int.init) {
@@ -231,19 +265,37 @@ enum MusicXML {
                     pendingSymbol = symbol(from: e)
                 case "note":
                     if e.elements(forName: "grace").first != nil || e.elements(forName: "cue").first != nil { skippedGrace += 1; continue }
-                    if let voice = text(e, "voice"), voice != "1" { skippedVoices += 1; continue }
-                    if let staff = text(e, "staff"), staff != "1" { skippedVoices += 1; continue }
                     let isChord = e.elements(forName: "chord").first != nil
+                    let length = isChord ? 0 : (text(e, "duration").flatMap(Double.init) ?? 0) / divisions
+                    if let staff = text(e, "staff"), staff != "1" { skippedVoices += 1; time += length; continue }
+                    // Voice 1, and one more voice on the staff as voice 2.
+                    let voiceID = text(e, "voice") ?? "1"
+                    let inSecond: Bool
+                    if voiceID == "1" {
+                        inSecond = false
+                    } else if secondVoice == nil || secondVoice == voiceID {
+                        secondVoice = voiceID
+                        inSecond = true
+                    } else {
+                        extraVoices += 1
+                        time += length
+                        continue
+                    }
                     let pitch = e.elements(forName: "pitch").first
                     let step = text(pitch, "step").flatMap { stepNames.firstIndex(of: $0) }
                     let octave = text(pitch, "octave").flatMap(Int.init) ?? 4
                     let alter = Int((text(pitch, "alter").flatMap(Double.init) ?? 0).rounded())
                     let hasAccidental = e.elements(forName: "accidental").first != nil
                     if isChord {
-                        guard let step, var last = score.notes.popLast() else { continue }
+                        guard let step else { continue }
                         let written: Int? = hasAccidental || alter != score.keyAlter(step) ? alter : nil
-                        last.chord = (last.chord ?? []) + [ChordTone(step: step, octave: octave, alter: written)]
-                        score.notes.append(last)
+                        let tone = ChordTone(step: step, octave: octave, alter: written)
+                        if inSecond {
+                            if var last = v2.popLast() { last.chord = (last.chord ?? []) + [tone]; v2.append(last) }
+                        } else if var last = score.notes.popLast() {
+                            last.chord = (last.chord ?? []) + [tone]
+                            score.notes.append(last)
+                        }
                         continue
                     }
                     var note = ScoreNote()
@@ -266,6 +318,16 @@ enum MusicXML {
                         note.alter = hasAccidental || alter != score.keyAlter(step) ? alter : nil
                     }
                     note.tie = e.elements(forName: "tie").contains { $0.attribute(forName: "type")?.stringValue == "start" }
+                    if text(e, "time-modification/actual-notes") == "3", text(e, "time-modification/normal-notes") == "2" { note.tuplet = true }
+                    if inSecond {
+                        // In step with voice 1: rests where voice 2 starts later.
+                        if time > v2pos + 1e-6 { v2 += ScoreData.rests(for: time - v2pos) }
+                        v2.append(note)
+                        v2pos = time + length
+                        time += length
+                        continue
+                    }
+                    time += length
                     if let lyric = e.elements(forName: "lyric").first(where: { ($0.attribute(forName: "number")?.stringValue ?? "1") == "1" })
                         ?? e.elements(forName: "lyric").first, let words = text(lyric, "text"), !words.isEmpty {
                         let syllabic = text(lyric, "syllabic") ?? "single"
@@ -286,7 +348,17 @@ enum MusicXML {
             }
         }
         guard !score.notes.isEmpty else { throw ImportError.noPart }
-        if skippedVoices > 0 { notes.append("\(skippedVoices) note\(skippedVoices == 1 ? "" : "s") in other voices or staves left out (a score has one melody line).") }
+        // Voice 2: its bars, with whole-bar rests where it's silent and rests to finish a bar.
+        if v2Bars.contains(where: { !$0.isEmpty }) {
+            var line: [ScoreNote] = []
+            for bar in v2Bars {
+                let filled = bar.reduce(0) { $0 + $1.beats }
+                line += bar + ScoreData.rests(for: max(0, score.measureLength - filled))
+            }
+            score.setLine(1, line)
+        }
+        if extraVoices > 0 { notes.append("\(extraVoices) note\(extraVoices == 1 ? "" : "s") in a third or later voice left out (a score has two voices).") }
+        if skippedVoices > 0 { notes.append("\(skippedVoices) note\(skippedVoices == 1 ? "" : "s") on other staves left out (a score has one staff).") }
         if skippedGrace > 0 { notes.append("\(skippedGrace) grace or cue note\(skippedGrace == 1 ? "" : "s") left out.") }
         if changedKey { notes.append("The key changes during the piece; the first key is used throughout.") }
         return Imported(score: score, notes: notes)
