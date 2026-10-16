@@ -2095,7 +2095,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
             }, at: 0)
             items.insert(.separator(), at: 1)
         }
-        TextFormatter.insertAfterSpelling(items + [.separator()], into: menu)
+        TextFormatter.insertAfterSpelling(TextFormatter.editMenuItems(for: view, at: charIndex) + [.separator()] + items + [.separator()], into: menu)
         return menu
     }
 
@@ -3037,6 +3037,13 @@ final class TableGridView: NSView, NSTextViewDelegate {
         model.checkpoint("Cut")
         heightCache.removeAll()
         relayout()
+    }
+
+    /// Paste as Plain Text with cells selected: tab-separated text only (no formatting or shading).
+    func pastePlain() {
+        guard let text = NSPasteboard.general.string(forType: .string),
+              let start = selection.min(by: { ($0.row, $0.column) < ($1.row, $1.column) }) else { return }
+        pasteCells(TableClipboard.parseTabSeparated(text), at: start)
     }
 
     /// Paste: cells from Excel (with their formatting and shading) or tab-separated text, starting at the selected

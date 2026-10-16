@@ -687,6 +687,12 @@ final class CanvasController: NSObject {
         pb.writeObjects([item])
     }
 
+    /// Paste as Plain Text on the page: a new text box with the clipboard's text in the default style.
+    func pastePlainText() {
+        guard ref != nil, let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return NSSound.beep() }
+        createTextElement(at: nextInsertionPoint(), text: NSAttributedString(string: text, attributes: TextFormatter.defaultAttributes))
+    }
+
     func paste(at point: NSPoint? = nil) {
         guard let ref else { return }
         let pb = NSPasteboard.general
@@ -708,6 +714,13 @@ final class CanvasController: NSObject {
         }
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
             insertFiles(urls, at: p)
+            return
+        }
+        // A copied link → a text box with the link (named after what it goes to).
+        if let (url, title) = TextFormatter.clipboardLink() {
+            var attrs = TextFormatter.defaultAttributes
+            attrs[.link] = url
+            createTextElement(at: p, text: NSAttributedString(string: title ?? url.absoluteString, attributes: attrs))
             return
         }
         // Cells from Excel, Numbers or a table (Excel also puts a picture of them on the clipboard) → a new table.

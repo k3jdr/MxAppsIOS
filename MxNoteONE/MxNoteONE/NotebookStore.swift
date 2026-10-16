@@ -150,6 +150,8 @@ final class NotebookStore {
     /// Where Insert ▸ Link puts the link (saved before the sheet takes focus).
     @ObservationIgnored weak var linkTextView: NoteTextView?
     @ObservationIgnored var linkRange = NSRange()
+    /// The link being edited (Edit Link: the caret or selection was in a link).
+    @ObservationIgnored var linkExisting: URL?
 
     @ObservationIgnored private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -1346,11 +1348,14 @@ final class NotebookStore {
 
     // MARK: - Links to pages
 
-    /// Insert ▸ Link (⌘K): remembers the text selection and shows the link sheet.
+    /// Insert ▸ Link (⌘K): remembers the text selection and shows the link sheet. With the caret (or selection) in a
+    /// link, the whole link is edited: the sheet shows its text and address.
     func beginInsertLink() {
         guard let tv = TextFormatter.target else { return NSSound.beep() }
         linkTextView = tv
-        linkRange = tv.selectedRange()
+        let found = TextFormatter.link(around: tv.selectedRange(), in: tv)
+        linkRange = found?.range ?? tv.selectedRange()
+        linkExisting = found?.url
         sheet = .insertLink
     }
 
@@ -1411,10 +1416,18 @@ final class NotebookStore {
         }
     }
 
+    /// The name of what a copied link goes to (used when it's pasted into a note with nothing selected).
+    static let linkTitleType = NSPasteboard.PasteboardType("com.k3jdr.mxnoteone.link-title")
+
+    /// Copy Link: just the address (as a URL and as text), so where it's pasted the link can have any text — paste it on
+    /// selected words to link them, or into Insert Link's address. The target's name goes along for a plain paste.
     private func copyLink(_ url: URL, title: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.writeObjects([NSAttributedString(string: title, attributes: [.link: url, .font: Prefs.defaultFont])])
+        pb.writeObjects([url as NSURL])
+        pb.addTypes([.string, Self.linkTitleType], owner: nil)
+        pb.setString(url.absoluteString, forType: .string)
+        pb.setString(title, forType: Self.linkTitleType)
     }
 
     func copyLink(_ ref: PageRef) {

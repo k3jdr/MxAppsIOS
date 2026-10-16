@@ -195,11 +195,19 @@ Section and New Section Group. Right-click a page for its own menu.
   text and a picture of the selection, for pasting into other apps.
   The eraser removes whole strokes. Press Escape to go back to typing.
 - **Copy links**: right-click a page, section, section group or notebook ▸ **Copy Link to this Page / Section /
-  Section Group / Notebook**; right-click text in a text box or a table cell ▸ **Copy Link to this Paragraph**. Paste
-  the link anywhere in your notes — clicking it opens the place (a paragraph link scrolls to the paragraph and selects
-  it, and still finds it after edits move it; a cell link selects the cell).
+  Section Group / Notebook**; right-click text in a text box or a table cell ▸ **Copy Link to this Paragraph**. The
+  clipboard gets just the link's address, so its words are yours to choose where it goes: select words and paste to
+  link them, paste with nothing selected to put in the target's name as the link, or paste the address into ⌘K's
+  Address. Clicking a link opens the place (a paragraph link scrolls to the paragraph and selects it, and still finds
+  it after edits move it; a cell link selects the cell). A web address on the clipboard pastes as a link the same way.
 - **Links**: type `[[Page Name]]` to link to a page in the notebook (it is created if it doesn't exist), or use ⌘K for
-  web links and links to any page. Right-click a page ▸ Copy Link to Page and paste it anywhere in your notes.
+  web links and links to any page. **Edit Link**: with the caret in a link, ⌘K (or right-click the link ▸ Edit Link…)
+  opens the dialog with the link's text and address filled in — change either and Update, or Remove Link. Right-click
+  a link also offers Open Link, Copy Link Address and Remove Link.
+- **Paste options** (Edit menu, or right-click ▸ Paste Options in a text box or table cell): **Paste as Plain Text**
+  (⌥⇧⌘V) takes on the style where it goes; **Paste with Formatting** keeps the copied fonts, colours and styles. With
+  table cells selected, Paste as Plain Text fills them from tab-separated text without formatting; on the page it makes
+  a new text box in the default style.
 - **Templates**: To Do List, Meeting Notes, Project Overview, Lecture Notes (Cornell), Daily Journal, Weekly Planner, Decision Log.
 - Everything saves automatically. Undo / Redo covers typing, formatting, moving, resizing, inserting, deleting and ink,
   and table changes (sorting, moving rows, inserting / deleting rows and columns, shading, merging, column widths,

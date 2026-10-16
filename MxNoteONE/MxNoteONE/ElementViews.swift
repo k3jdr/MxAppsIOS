@@ -306,6 +306,8 @@ final class NoteTextView: NSTextView {
 
     override func paste(_ sender: Any?) {
         if pasteHandler?() == true { return }
+        // A link on the clipboard links the selected words (or goes in with its target's name).
+        if TextFormatter.pasteLink(into: self) { return }
         super.paste(sender)
     }
 
@@ -594,7 +596,8 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         let paragraph = ns.substring(to: range.location).components(separatedBy: "\n").count - 1
         let text = ns.substring(with: range)
         let elementID = element.id
-        TextFormatter.insertAfterSpelling([
+        TextFormatter.insertAfterSpelling(TextFormatter.editMenuItems(for: view, at: charIndex) + [
+            .separator(),
             ClosureMenuItem("Copy Link to this Paragraph") {
                 NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: paragraph, cell: nil, text: text)
             },

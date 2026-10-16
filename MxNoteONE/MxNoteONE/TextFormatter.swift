@@ -883,6 +883,121 @@ enum TextFormatter {
         }
     }
 
+    /// The link the caret is in (or the selection is within): its whole range and address.
+    static func link(around selection: NSRange, in tv: NSTextView) -> (range: NSRange, url: URL)? {
+        guard let storage = tv.textStorage, storage.length > 0 else { return nil }
+        var probes = [selection.location]
+        if selection.length == 0, selection.location > 0 { probes.append(selection.location - 1) }
+        for probe in probes where probe < storage.length {
+            var range = NSRange()
+            guard let value = storage.attribute(.link, at: probe, longestEffectiveRange: &range,
+                                                in: NSRange(location: 0, length: storage.length)) else { continue }
+            let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:))
+            // A selection that runs past the link isn't editing it.
+            guard let url, NSMaxRange(selection) <= NSMaxRange(range) else { continue }
+            return (range, url)
+        }
+        return nil
+    }
+
+    /// Edit Link: the link's text and address both change (the text keeps its formatting).
+    static func replaceLink(_ url: URL, title: String, in tv: NSTextView, range: NSRange) {
+        guard let storage = tv.textStorage, NSMaxRange(range) <= storage.length else { return }
+        let current = (storage.string as NSString).substring(with: range)
+        guard !title.isEmpty, title != current else { return addLink(url, title: title, in: tv, range: range) }
+        tv.window?.makeFirstResponder(tv)
+        var attrs = range.length > 0 ? storage.attributes(at: range.location, effectiveRange: nil) : tv.typingAttributes
+        attrs[.link] = url
+        guard tv.shouldChangeText(in: range, replacementString: title) else { return }
+        storage.replaceCharacters(in: range, with: NSAttributedString(string: title, attributes: attrs))
+        tv.didChangeText()
+        tv.undoManager?.setActionName("Edit Link")
+        tv.setSelectedRange(NSRange(location: range.location + (title as NSString).length, length: 0))
+    }
+
+    /// A link on the clipboard: an address copied with Copy Link, from a browser, or typed out (one line).
+    static func clipboardLink() -> (url: URL, title: String?)? {
+        let pb = NSPasteboard.general
+        let title = pb.string(forType: NotebookStore.linkTitleType)
+        // Rich text from elsewhere (with words of its own) pastes as it is.
+        if title == nil, pb.availableType(from: [.rtf, .rtfd, .html]) != nil { return nil }
+        let text = (pb.string(forType: .string) ?? (pb.readObjects(forClasses: [NSURL.self]) as? [URL])?.first?.absoluteString)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let text, !text.isEmpty, !text.contains(where: \.isWhitespace), let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(), ["http", "https", "mailto", NotebookStore.linkScheme].contains(scheme) else { return nil }
+        return (url, title)
+    }
+
+    /// Pasting a link into text: selected words become the link; otherwise the link goes in with its target's name.
+    static func pasteLink(into tv: NSTextView) -> Bool {
+        guard let (url, title) = clipboardLink() else { return false }
+        let selection = tv.selectedRange()
+        if selection.length > 0 {
+            addLink(url, title: "", in: tv, range: selection)
+        } else {
+            addLink(url, title: title ?? url.absoluteString, in: tv, range: selection)
+        }
+        return true
+    }
+
+    /// Paste as Plain Text (⌥⇧⌘V): the text takes on the style where it goes.
+    static func pastePlainText() {
+        if let tv = target, tv.window?.firstResponder === tv {
+            tv.pasteAsPlainText(nil)
+        } else if let grid = TableGridView.active, grid.window?.firstResponder === grid {
+            grid.pastePlain()
+        } else {
+            NotebookStore.shared.canvas?.pastePlainText()
+        }
+    }
+
+    /// Paste with Formatting: fonts, colours and styles as they were copied.
+    static func pasteWithFormatting() {
+        if let tv = target, tv.window?.firstResponder === tv {
+            tv.pasteAsRichText(nil)
+        } else if let grid = TableGridView.active, grid.window?.firstResponder === grid {
+            grid.paste(nil)
+        } else {
+            NotebookStore.shared.canvas?.paste()
+        }
+    }
+
+    /// Right-click items for a text box or cell: Paste Options, and for a link Edit / Open / Copy Address / Remove.
+    static func editMenuItems(for tv: NSTextView, at charIndex: Int) -> [NSMenuItem] {
+        var items: [NSMenuItem] = []
+        let ns = tv.string as NSString
+        if charIndex >= 0, charIndex < ns.length, let found = link(around: NSRange(location: charIndex, length: 0), in: tv) {
+            items.append(ClosureMenuItem("Edit Link…") {
+                tv.window?.makeFirstResponder(tv)
+                tv.setSelectedRange(NSRange(location: charIndex, length: 0))
+                NotebookStore.shared.beginInsertLink()
+            })
+            items.append(ClosureMenuItem("Open Link") {
+                if found.url.scheme == NotebookStore.linkScheme { NotebookStore.shared.openLink(found.url) } else { NSWorkspace.shared.open(found.url) }
+            })
+            items.append(ClosureMenuItem("Copy Link Address") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects([found.url as NSURL])
+                NSPasteboard.general.addTypes([.string], owner: nil)
+                NSPasteboard.general.setString(found.url.absoluteString, forType: .string)
+            })
+            items.append(ClosureMenuItem("Remove Link") {
+                tv.window?.makeFirstResponder(tv)
+                tv.setSelectedRange(found.range)
+                removeLink()
+            })
+            items.append(.separator())
+        }
+        let paste = NSMenuItem(title: "Paste Options", action: nil, keyEquivalent: "")
+        let options = NSMenu()
+        options.addItem(ClosureMenuItem("Paste with Formatting") { tv.window?.makeFirstResponder(tv); tv.pasteAsRichText(nil) })
+        options.addItem(ClosureMenuItem("Paste as Plain Text") { tv.window?.makeFirstResponder(tv); tv.pasteAsPlainText(nil) })
+        paste.submenu = options
+        paste.isEnabled = NSPasteboard.general.availableType(from: [.string, .rtf, .rtfd, .html]) != nil
+        items.append(paste)
+        return items
+    }
+
     static func removeLink() {
         perform { tv in
             let sel = tv.selectedRange()

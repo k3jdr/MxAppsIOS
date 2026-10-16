@@ -334,12 +334,19 @@ struct LinkSheet: View {
         return URL(string: "https://" + trimmed)
     }
 
+    private var editing: Bool { store.linkExisting != nil }
+
     var body: some View {
-        DialogFrame("Link", okTitle: "Insert", okDisabled: url == nil) {
+        DialogFrame(editing ? "Edit Link" : "Link", okTitle: editing ? "Update" : "Insert", okDisabled: url == nil) {
             if let url, let tv = store.linkTextView {
                 let title = text.isEmpty ? (page.flatMap { store.meta($0)?.displayTitle } ?? address) : text
-                TextFormatter.addLink(url, title: title, in: tv, range: store.linkRange)
+                if editing {
+                    TextFormatter.replaceLink(url, title: title, in: tv, range: store.linkRange)
+                } else {
+                    TextFormatter.addLink(url, title: title, in: tv, range: store.linkRange)
+                }
             }
+            store.linkExisting = nil
             dismiss()
         } content: {
             Form {
@@ -363,6 +370,17 @@ struct LinkSheet: View {
             }
             .frame(height: 200)
             .onChange(of: page) { if page != nil { address = "" } }
+            if editing {
+                Button("Remove Link", role: .destructive) {
+                    if let tv = store.linkTextView {
+                        tv.window?.makeFirstResponder(tv)
+                        tv.setSelectedRange(store.linkRange)
+                        TextFormatter.removeLink()
+                    }
+                    store.linkExisting = nil
+                    dismiss()
+                }
+            }
         }
         .frame(width: 480)
         .onAppear {
@@ -370,6 +388,16 @@ struct LinkSheet: View {
                NSMaxRange(store.linkRange) <= storage.length {
                 text = (storage.string as NSString).substring(with: store.linkRange)
             }
+            // Editing a link: its address (a link to a whole page shows as that page in the list).
+            if let existing = store.linkExisting {
+                if existing.query == nil, let ref = store.resolve(existing) {
+                    page = ref
+                    filter = ""
+                } else {
+                    address = existing.absoluteString
+                }
+            }
         }
+        .onDisappear { store.linkExisting = nil }
     }
 }

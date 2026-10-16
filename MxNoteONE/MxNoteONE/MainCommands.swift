@@ -89,6 +89,9 @@ struct MainCommands: Commands {
 
         // Edit
         CommandGroup(after: .pasteboard) {
+            Button("Paste as Plain Text") { TextFormatter.pastePlainText() }
+                .keyboardShortcut("v", modifiers: [.command, .option, .shift])
+            Button("Paste with Formatting") { TextFormatter.pasteWithFormatting() }
             Divider()
             Button("Copy Link to this Page") {
                 if let ref = store.currentPageRef { store.copyLink(ref) }
