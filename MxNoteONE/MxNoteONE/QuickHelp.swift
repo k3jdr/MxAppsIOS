@@ -261,6 +261,7 @@ extension QuickHelp {
         "Score/Notes": "The length of the next notes (or the selected one), dots, tuplets and grace notes.",
         "Score/Expression": "Dynamics (pp … ff), slurs, crescendo and diminuendo hairpins.",
         "Score/Articulation": "Staccato, tenuto, accent, marcato, fermata and ornaments on the selected notes.",
+        "Score/Staves": "Several staves: add a treble or bass staff, make a piano grand staff, move between staves (⌥⌘↑ ⌥⌘↓), rename or remove one.",
         "Score/Bars": "Key changes and repeat signs at the selected note's bar.",
         "Score/Voice": "Which voice you're writing: voice 1 (stems up) or voice 2 (stems down).",
         "Score/Add": "Add notes A–G or a rest after the cursor.",
@@ -387,6 +388,11 @@ extension QuickHelp {
         "Marcato": "Strongly accented.",
         "Fermata": "Hold: the note lasts about twice as long and the music waits.",
         "Ornament": "Trill, mordent, inverted mordent or turn — played in the key — and staccatissimo.",
+        "Staff Up": "Write on the staff above (clicking a staff does too).",
+        "Staff Down": "Write on the staff below.",
+        "Add Staff": "Adds a treble or bass staff under the others; they share the bars, key, time and tempo, and play together.",
+        "Piano Staff": "Treble and bass staves joined by a brace, bar lines running through both — for piano, harp or organ.",
+        "Piano": "Inserts a piano score: treble and bass staves joined by a brace.",
         "Key Change": "A new key from the selected note's bar: a double bar, cancelling naturals, the new key.",
         "Start Repeat |:": "The repeated passage starts at the selected note's bar.",
         "End Repeat :|": "At the end of the selected note's bar, go back to the start repeat (once).",
@@ -433,19 +439,20 @@ extension ScoreView {
     /// The selected note, or where the cursor is.
     func quickHelpForSelection() -> QuickHelpItem? {
         if let i = selectedRange?.lowerBound {
-            var item = describe(NoteRef(voice: currentVoice, index: i))
+            var item = describe(NoteRef(voice: currentVoice, index: i, staff: currentStaff))
             if let r = selectedRange, r.count > 1 { item.title = "\(r.count) notes selected"; item.detail = "S slur, < > hairpins, ⇧S ⇧N ⇧V ⇧O articulations, ⌃3 triplet — all apply to the run." }
             return item
         }
         let ratio = ScoreView.inputTuplet
         let tuplet = ratio.map { r in ", in " + (ScoreData.tupletKinds.first { $0.0 == r }?.1.lowercased() ?? "tuplet") + "s" } ?? ""
-        let detail = "Voice \(currentVoice + 1), \(ScoreView.inputDuration.title.lowercased()) notes\(ScoreView.inputDotted ? ", dotted" : "")\(tuplet)."
+        let where_ = fullScore.staffCount > 1 ? fullScore.staffTitle(currentStaff) + ", voice" : "Voice"
+        let detail = "\(where_) \(currentVoice + 1), \(ScoreView.inputDuration.title.lowercased()) notes\(ScoreView.inputDotted ? ", dotted" : "")\(tuplet)."
             + " A–G add notes, 3–7 set the length, Space plays."
         return QuickHelpItem(title: "Writing music", detail: detail, shortcut: nil, symbol: "music.note")
     }
 
     private func describe(_ ref: NoteRef) -> QuickHelpItem {
-        let line = score.forVoice(ref.voice)
+        let line = fullScore.forStaff(ref.staff).forVoice(ref.voice)
         guard line.notes.indices.contains(ref.index) else { return QuickHelpItem(title: "Note", detail: "", shortcut: nil) }
         let n = line.notes[ref.index]
         let names = ["C", "D", "E", "F", "G", "A", "B"]
@@ -459,7 +466,8 @@ extension ScoreView {
             let pitch = names[n.step] + (alter > 0 ? "♯" : alter < 0 ? "♭" : "") + "\(n.octave)"
             title = n.grace != nil ? "Grace note \(pitch) (\(n.grace!))" : "\(pitch) — \(length)"
         }
-        var facts: [String] = ["Bar \(line.bar(of: ref.index) + 1)" + (score.hasSecondVoice ? ", voice \(ref.voice + 1)" : "")]
+        var facts: [String] = ["Bar \(line.bar(of: ref.index) + 1)" + (fullScore.staffCount > 1 ? ", \(fullScore.staffTitle(ref.staff))" : "")
+                               + (fullScore.forStaff(ref.staff).hasSecondVoice ? ", voice \(ref.voice + 1)" : "")]
         if let chord = n.chord, !chord.isEmpty { facts.append("chord of \(chord.count + 1)") }
         if let d = n.dynamic { facts.append(d) }
         let marks = (n.articulations ?? []) + [n.ornament].compactMap { $0 } + (n.fermata == true ? ["fermata"] : [])

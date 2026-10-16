@@ -446,6 +446,7 @@ struct InsertRibbon: View {
         }
         RibbonGroup("Music") {
             RibbonButton("Score", "music.note.list", large: true) { canvas?.insertScore() }
+            RibbonButton("Piano", "pianokeys", large: true) { canvas?.insertScore(piano: true) }
             RibbonButton("MusicXML", "square.and.arrow.down", large: true) { canvas?.chooseMusicXML() }
         }
         RibbonGroup("Files") {
@@ -657,6 +658,27 @@ struct ScoreRibbon: View {
             .tip("Ornament")
         }
         .buttonStyle(.borderless)
+        RibbonGroup("Staves") {
+            let count = staff?.fullScore.staffCount ?? 1
+            RibbonButton("Staff Up (⌥⌘↑)", "chevron.up.square", active: false) { act { $0.setStaff($0.currentStaff - 1) } }
+                .disabled(count < 2)
+            RibbonButton("Staff Down (⌥⌘↓)", "chevron.down.square", active: false) { act { $0.setStaff($0.currentStaff + 1) } }
+                .disabled(count < 2)
+            RibbonMenu("Add Staff", "plus.rectangle") {
+                Button("Treble Staff") { act { $0.addStaff(.treble) } }
+                Button("Bass Staff") { act { $0.addStaff(.bass) } }
+                Divider()
+                Button(count == 1 ? "Make Piano Grand Staff" : "Piano Brace On / Off") { act { $0.makeGrandStaff() } }
+                if count > 1 {
+                    Divider()
+                    Button("Move Staff Up") { act { $0.moveStaff(by: -1) } }
+                    Button("Move Staff Down") { act { $0.moveStaff(by: 1) } }
+                    Button("Rename Staff…") { staff?.renameStaff() }
+                    Button("Remove Staff") { act { $0.removeStaff() } }
+                }
+            }
+            RibbonButton("Piano Staff", "pianokeys", active: staff?.fullScore.grandStaff == true) { act { $0.makeGrandStaff() } }
+        }
         RibbonGroup("Bars") {
             let bar = staff?.currentBar ?? 0
             let mark = staff?.score.mark(bar) ?? ScoreBarMark()
@@ -717,7 +739,7 @@ struct ScoreRibbon: View {
                          active: editor.scorePlaying) { act { $0.togglePlay() } }
             RibbonMenu("Clef", "music.note") {
                 ForEach(ScoreData.Clef.allCases) { c in
-                    Button(c.title) { act { s in s.owner?.update({ $0.clef = c }, actionName: "Clef") } }
+                    Button(c.title) { act { $0.setClef(c) } }
                 }
             }
             RibbonMenu("Key", "number") {

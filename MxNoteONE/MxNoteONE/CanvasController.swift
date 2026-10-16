@@ -586,11 +586,19 @@ final class CanvasController: NSObject {
     }
 
     /// Insert ▸ Music Score: an empty treble staff in 4/4, ready for notes.
-    func insertScore() {
+    func insertScore(piano: Bool = false) {
         guard ref != nil else { return }
         let p = nextInsertionPoint()
         var element = PageElement(kind: .score, x: p.x, y: p.y, width: 560)
-        element.score = ScoreData()
+        var score = ScoreData()
+        if piano {
+            // A piano score: treble and bass staves joined by a brace.
+            var bass = ScoreData()
+            bass.clef = .bass
+            score.setStaff(1, bass)
+            score.grandStaff = true
+        }
+        element.score = score
         guard let view = addElement(element) as? ScoreElementView else { return }
         DispatchQueue.main.async { view.staff.activate() }
     }

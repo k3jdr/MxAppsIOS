@@ -123,6 +123,14 @@ struct ChordTone: Codable, Hashable {
     var diatonic: Int { octave * 7 + step }
 }
 
+/// A staff after the first: its clef, notes and second voice (key, time, tempo and bars are the score's).
+struct ScoreStaff: Codable, Hashable {
+    var name: String?
+    var clef: ScoreData.Clef = .treble
+    var notes: [ScoreNote] = []
+    var voices: [[ScoreNote]]?
+}
+
 /// What happens at a bar: a new key from it, a repeat starting there, or ending at its end.
 struct ScoreBarMark: Codable, Hashable {
     var keyFifths: Int?
@@ -164,6 +172,54 @@ struct ScoreData: Codable, Hashable {
     var showTab: Bool?
     /// Key changes and repeat signs, by bar (0 = the first bar).
     var barMarks: [Int: ScoreBarMark]?
+    /// More staves under the first (a piano's left hand, other instruments), sharing the bars.
+    var staves: [ScoreStaff]?
+    /// The first staff's name (shown nowhere yet; used in exports and Quick Help).
+    var staffName: String?
+    /// The first two staves joined by a brace, as for piano (bar lines run through both).
+    var grandStaff: Bool?
+
+    // MARK: Staves
+
+    var staffCount: Int { 1 + (staves?.count ?? 0) }
+
+    /// One staff as a score of its own (its clef, notes and voices; the shared key, time, tempo and bars).
+    func forStaff(_ i: Int) -> ScoreData {
+        var copy = self
+        copy.staves = nil
+        copy.grandStaff = nil
+        guard i > 0, let more = staves, more.indices.contains(i - 1) else { return copy }
+        let staff = more[i - 1]
+        copy.clef = staff.clef
+        copy.notes = staff.notes
+        copy.voices = staff.voices
+        copy.staffName = staff.name
+        copy.showTab = nil
+        return copy
+    }
+
+    /// Puts a staff's notes (and clef) back from its own score.
+    mutating func setStaff(_ i: Int, _ view: ScoreData) {
+        if i == 0 {
+            clef = view.clef
+            notes = view.notes
+            voices = view.voices
+            staffName = view.staffName
+            return
+        }
+        var more = staves ?? []
+        while more.count < i { more.append(ScoreStaff()) }
+        more[i - 1] = ScoreStaff(name: view.staffName, clef: view.clef, notes: view.notes, voices: view.voices)
+        staves = more
+    }
+
+    /// A staff's name for menus: its own, else "Staff 2 (Bass)".
+    func staffTitle(_ i: Int) -> String {
+        let st = forStaff(i)
+        if let name = st.staffName, !name.isEmpty { return name }
+        if grandStaff == true, i < 2 { return i == 0 ? "Right Hand" : "Left Hand" }
+        return "Staff \(i + 1) (\(st.clef.title))"
+    }
 
     // MARK: Key changes and repeats
 
@@ -578,7 +634,7 @@ struct ScoreData: Codable, Hashable {
     /// A short description (for exports and search).
     var summary: String {
         let key = Self.keyNames.first { $0.0 == keyFifths }?.1 ?? ""
-        return "\(title.isEmpty ? "Music score" : title) — \(measures.count) bars, \(beats)/\(beatUnit), \(key), ♩ = \(tempo)"
+        return "\(title.isEmpty ? "Music score" : title) — \(staffCount > 1 ? "\(staffCount) staves\(grandStaff == true ? " (piano)" : ""), " : "")\(measures.count) bars, \(beats)/\(beatUnit), \(key), ♩ = \(tempo)"
     }
 
     /// The melody in letter names (for exports): C4 q, D#4 8., r h…
@@ -599,6 +655,7 @@ struct ScoreData: Codable, Hashable {
         }
         return notes.enumerated().map { i, n in marked(i, name(i, n)) }.joined(separator: " · ")
             + (hasSecondVoice ? " ‖ voice 2: " + forVoice(1).noteNames : "")
+            + (1..<staffCount).map { " ‖‖ \(staffTitle($0)): " + forStaff($0).noteNames }.joined()
     }
 
     /// Articulations, fermata and ornament in words (‹stacc. tr›).
@@ -682,7 +739,9 @@ final class ScorePlayer {
         start()
         self.view = view
         let secondsPerBeat = 60 / Double(max(20, score.tempo))
-        let lines = (0..<ScoreData.voiceCount).map { score.forVoice($0) }
+        // Every staff's voices, as lines (staff 1 voice 1 first).
+        let parts: [(staff: Int, voice: Int)] = (0..<score.staffCount).flatMap { st in (0..<ScoreData.voiceCount).map { (st, $0) } }
+        let lines = parts.map { score.forStaff($0.staff).forVoice($0.voice) }
         let barsByVoice = lines.map { $0.notes.isEmpty ? [] : $0.measures }
         let barCount = barsByVoice.map(\.count).max() ?? 0
         var order = score.playOrder(bars: barCount)
@@ -775,7 +834,7 @@ final class ScorePlayer {
         for sound in sounds {
             let line = lines[sound.voice]
             let note = line.notes[sound.index]
-            let ref = NoteRef(voice: sound.voice, index: sound.index)
+            let ref = NoteRef(voice: parts[sound.voice].voice, index: sound.index, staff: parts[sound.voice].staff)
             let start = max(0, seconds(sound.time) + delay(sound.time) - sound.early)
             let span = sound.quick ?? (seconds(sound.time + sound.length) - seconds(sound.time)) * (note.fermata == true ? 2 : 1)
             let marks = Set(note.articulations ?? [])
@@ -865,6 +924,7 @@ final class ScorePlayer {
 struct NoteRef: Hashable {
     let voice: Int
     let index: Int
+    var staff = 0
 }
 
 /// Draws a score and edits it (it's the first responder while a score is being worked on).
@@ -878,8 +938,15 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     weak var owner: ScoreElementView?
-    var score: ScoreData { owner?.score ?? ScoreData() }
+    /// The whole score (every staff).
+    var fullScore: ScoreData { owner?.score ?? ScoreData() }
+    /// The staff being drawn (or, between drawing, the one being written) as a score of its own.
+    var score: ScoreData { fullScore.forStaff(drawingStaff) }
     var isExport = false
+    /// The staff being written (0 = the top one).
+    private(set) var staffIndex = 0
+    /// The staff the drawing code is on (it's `staffIndex` except while drawing the others).
+    private var drawingStaff = 0
 
     /// The selected note (clicked or arrowed to), and where new notes go (an index from 0 to the number of notes).
     private(set) var selected: Int?
@@ -918,22 +985,65 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     static let space: CGFloat = 8
     private var space: CGFloat { Self.space }
     private let titleHeight: CGFloat = 26
-    private var chordBand: CGFloat { score.hasChordSymbols ? space * 2.6 : 0 }
-    private var lyricBand: CGFloat { score.hasLyrics ? space * 2.8 : 0 }
-    private var tabBand: CGFloat { score.showTab == true ? space * 10 : 0 }
+    // Room around a staff (for the staff being drawn; the functions take any staff's score).
+    private func chordBand(_ st: ScoreData) -> CGFloat { st.hasChordSymbols ? space * 2.6 : 0 }
+    private func lyricBand(_ st: ScoreData) -> CGFloat { st.hasLyrics ? space * 2.8 : 0 }
+    private func tabBand(_ st: ScoreData) -> CGFloat { st.showTab == true ? space * 10 : 0 }
+    private func dynamicBand(_ st: ScoreData) -> CGFloat { st.hasDynamics ? space * 3 : 0 }
+    private func markBandAbove(_ st: ScoreData) -> CGFloat {
+        st.notes.contains { $0.fermata == true || $0.ornament != nil || (st.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0
+    }
+    private func markBandBelow(_ st: ScoreData) -> CGFloat {
+        st.hasSecondVoice && st.line(1).contains { $0.fermata == true || $0.ornament != nil || $0.articulations != nil } ? space * 3.4 : 0
+    }
+    private var chordBand: CGFloat { chordBand(score) }
+    private var lyricBand: CGFloat { lyricBand(score) }
+    private var tabBand: CGFloat { tabBand(score) }
     /// Dynamics and hairpins under the staff.
-    private var dynamicBand: CGFloat { score.hasDynamics ? space * 3 : 0 }
+    private var dynamicBand: CGFloat { dynamicBand(score) }
     /// Room over the staff for marks above notes (fermatas, ornaments, and voice 1's articulations past its stems),
     /// and under it for voice 2's.
-    private var markBandAbove: CGFloat {
-        score.notes.contains { $0.fermata == true || $0.ornament != nil || (score.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0
-    }
-    private var markBandBelow: CGFloat {
-        score.hasSecondVoice && score.line(1).contains { $0.fermata == true || $0.ornament != nil || $0.articulations != nil } ? space * 3.4 : 0
-    }
+    private var markBandAbove: CGFloat { markBandAbove(score) }
+    private var markBandBelow: CGFloat { markBandBelow(score) }
     /// Metronome marks, tempo words and rit. / accel. over everything else.
     private var tempoBand: CGFloat { space * 2.6 }
-    private var systemHeight: CGFloat { space * 13 + chordBand + lyricBand + tabBand + dynamicBand + markBandAbove + markBandBelow + tempoBand }
+
+    /// Each staff's place in a system: how far its top line is from the system's top, and the system's height.
+    private var staffOffsets: [CGFloat] = [0]
+    private var cachedSystemHeight: CGFloat = 0
+    private var systemHeight: CGFloat { cachedSystemHeight }
+
+    private func measureStaves() {
+        var y = tempoBand
+        var offsets: [CGFloat] = []
+        for i in 0..<fullScore.staffCount {
+            let st = fullScore.forStaff(i)
+            let above = space * 4.5 + chordBand(st) + markBandAbove(st)
+            let below = space * 4.5 + lyricBand(st) + tabBand(st) + dynamicBand(st) + markBandBelow(st)
+            // Staves after the first sit a little closer (a grand staff's two hands most of all).
+            let tighten: CGFloat = i == 0 ? 0 : (fullScore.grandStaff == true && i == 1 ? space * 2.2 : space * 1.2)
+            offsets.append(y + above - tighten)
+            y += above + space * 4 + below - tighten
+        }
+        staffOffsets = offsets
+        cachedSystemHeight = y
+    }
+
+    /// Room at the left for a brace or bracket when there are several staves.
+    private var staffLeft: CGFloat { fullScore.staffCount > 1 ? space * 2.8 : space }
+
+    /// Draws (or measures) as the given staff.
+    private func useStaff(_ i: Int) {
+        drawingStaff = max(0, min(fullScore.staffCount - 1, i))
+        placed = allPlaced.filter { $0.staff == drawingStaff }
+    }
+
+    private func withStaff<T>(_ i: Int, _ body: () -> T) -> T {
+        let old = drawingStaff
+        useStaff(i)
+        defer { useStaff(old) }
+        return body()
+    }
     /// TAB lines' spacing.
     private var tabGap: CGFloat { space * 1.3 }
 
@@ -945,8 +1055,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let x: CGFloat
         let system: Int
         var voice = 0
+        var staff = 0
     }
 
+    /// Every staff's placed notes, and the staff being drawn's.
+    private var allPlaced: [Placed] = []
     private(set) var placed: [Placed] = []
     /// Where the caret goes for each cursor position (x, system).
     private var caretSpots: [(x: CGFloat, system: Int)] = []
@@ -1020,16 +1133,23 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// Places every voice's notes: notes that start together line up, and the bars wrap into lines.
     private func layoutNotes() {
-        placed = []
+        allPlaced = []
         caretSpots = []
         barLines = []
         systemStarts = []
-        let usable = max(bounds.width - space * 2, space * 20)
-        let lines = (0..<ScoreData.voiceCount).map { score.forVoice($0) }
+        measureStaves()
+        if staffIndex >= fullScore.staffCount { staffIndex = 0; voice = 0 }
+        drawingStaff = staffIndex
+        let usable = max(bounds.width - space - staffLeft, space * 20)
+        // Every staff's voices (bars and beats line up across all of them).
+        let parts: [(staff: Int, voice: Int)] = (0..<fullScore.staffCount).flatMap { st in (0..<ScoreData.voiceCount).map { (st, $0) } }
+        let staffScores = (0..<fullScore.staffCount).map { fullScore.forStaff($0) }
+        let lines = parts.map { staffScores[$0.staff].forVoice($0.voice) }
+        let mineLine = parts.firstIndex { $0.staff == staffIndex && $0.voice == voice } ?? 0
         let barsByVoice = lines.map { $0.notes.isEmpty ? [] : $0.measures }
         let barCount = max(1, barsByVoice.map(\.count).max() ?? 1)
         // Each bar's notes by when they start (in quarter notes from the bar line).
-        struct Event { let onset: Double; let voice: Int; let index: Int }
+        struct Event { let onset: Double; let voice: Int; let index: Int }   // voice: the line (staff and voice)
         var events: [[Event]] = []
         var gaps: [[(onset: Double, gap: CGFloat)]] = []
         for m in 0..<barCount {
@@ -1088,7 +1208,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         var spots: [(Double, CGFloat, Int)] = []   // the current voice: (onset key, x, system) per note
         for (s, bars) in systems.enumerated() {
             let header = headerWidth(system: s)
-            let start = space + header
+            let start = staffLeft + header
             systemStarts.append(start)
             let natural = bars.reduce(0) { $0 + widths[$1] }
             let fixedRoom = bars.enumerated().reduce(0) { $0 + fixed($1.element, atStart: $1.offset == 0) }
@@ -1116,10 +1236,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                     let key = (e.onset * 1e6).rounded() / 1e6
                     let ex = xs[key] ?? nx
                     let accidental = lines[e.voice].showsAccidental(e.index) ? space * 1.3 : 0
-                    placed.append(Placed(index: e.index, x: ex + accidental, system: s, voice: e.voice))
-                    if e.voice == voice { spots.append((Double(e.index), ex, s)) }
+                    allPlaced.append(Placed(index: e.index, x: ex + accidental, system: s, voice: parts[e.voice].voice, staff: parts[e.voice].staff))
+                    if e.voice == mineLine { spots.append((Double(e.index), ex, s)) }
                 }
-                if barsByVoice[voice].isEmpty, m == 0 { spots.append((-1, x + space * 1.2 * stretch, s)) }
+                if barsByVoice[mineLine].isEmpty, m == 0 { spots.append((-1, x + space * 1.2 * stretch, s)) }
                 x += widths[m] * stretch + endRoom[m]
                 let last = m == barCount - 1
                 let style: BarStyle = score.mark(m).repeatEnd == true ? .endRepeat : last ? .final
@@ -1129,7 +1249,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         // The current voice's caret: before each of its notes, and after the last.
         caretSpots = spots.filter { $0.0 >= 0 }.sorted { $0.0 < $1.0 }.map { ($0.1 - space * 0.9, $0.2) }
-        let mine = lines[voice]
+        let mine = lines[mineLine]
+        useStaff(staffIndex)
         if let lastPlaced = placed.last(where: { $0.voice == voice && $0.index == mine.notes.count - 1 }) {
             let note = mine.notes[lastPlaced.index]
             caretSpots.append((lastPlaced.x + width(of: note, index: lastPlaced.index, in: mine) - space * 1.2, lastPlaced.system))
@@ -1145,7 +1266,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// The top of a system's staff.
     private func staffTop(_ system: Int) -> CGFloat {
-        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight + space * 4.5 + chordBand + markBandAbove + tempoBand
+        (score.title.isEmpty ? 0 : titleHeight) + CGFloat(system) * systemHeight
+            + (staffOffsets.indices.contains(drawingStaff) ? staffOffsets[drawingStaff] : tempoBand + space * 4.5)
     }
 
     private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 + dynamicBand + markBandBelow }
@@ -1175,41 +1297,126 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let size = (score.title as NSString).size(withAttributes: attrs)
             (score.title as NSString).draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: 4), withAttributes: attrs)
         }
-        for s in 0..<systemCount { drawStaff(s, ink: ink) }
-        for bar in barLines {
-            let top = staffTop(bar.system), bottom = top + space * 4
-            ink.setFill()
-            switch bar.style {
-            case .final, .endRepeat:
-                NSRect(x: bar.x - space * 0.9, y: top, width: 1, height: bottom - top).fill()
-                NSRect(x: bar.x - space * 0.5, y: top, width: 3.5, height: bottom - top).fill()
-                if bar.style == .endRepeat { repeatDots(x: bar.x - space * 1.5, system: bar.system) }
-            case .double:
-                NSRect(x: bar.x - space * 0.45, y: top, width: 1, height: bottom - top).fill()
-                NSRect(x: bar.x - 0.5, y: top, width: 1, height: bottom - top).fill()
-            case .single:
-                NSRect(x: bar.x - 0.5, y: top, width: 1, height: bottom - top).fill()
+        // Each staff in turn (the code below draws "the staff"), then what joins them, then the tempo marks.
+        for st in 0..<fullScore.staffCount {
+            useStaff(st)
+            for s in 0..<systemCount { drawStaff(s, ink: ink) }
+            for bar in barLines {
+                let top = staffTop(bar.system), bottom = top + space * 4
+                ink.setFill()
+                switch bar.style {
+                case .final, .endRepeat:
+                    NSRect(x: bar.x - space * 0.9, y: top, width: 1, height: bottom - top).fill()
+                    NSRect(x: bar.x - space * 0.5, y: top, width: 3.5, height: bottom - top).fill()
+                    if bar.style == .endRepeat { repeatDots(x: bar.x - space * 1.5, system: bar.system) }
+                case .double:
+                    NSRect(x: bar.x - space * 0.45, y: top, width: 1, height: bottom - top).fill()
+                    NSRect(x: bar.x - 0.5, y: top, width: 1, height: bottom - top).fill()
+                case .single:
+                    NSRect(x: bar.x - 0.5, y: top, width: 1, height: bottom - top).fill()
+                }
+            }
+            // Start repeats: thick, thin, dots.
+            for r in repeatStarts {
+                let top = staffTop(r.system)
+                ink.setFill()
+                NSRect(x: r.x - 0.5, y: top, width: 3.5, height: space * 4).fill()
+                NSRect(x: r.x + space * 0.55, y: top, width: 1, height: space * 4).fill()
+                repeatDots(x: r.x + space * 0.95, system: r.system)
+            }
+            for change in keyChanges {
+                drawKeySignature(change.to, cancelling: change.from, x: change.x + space * 0.5, system: change.system, ink: ink)
+            }
+            drawNotes(ink: ink)
+            drawSlurs(ink: ink)
+            drawMarks(ink: ink)
+            drawDynamics(ink: ink)
+            drawWords(ink: ink)
+            if score.showTab == true { drawTab(ink: ink) }
+        }
+        drawStaffGroups(ink: ink)
+        useStaff(0)
+        drawTempos(ink: ink)
+        useStaff(staffIndex)
+        drawCaret()
+    }
+
+    // MARK: Several staves
+
+    /// Where staves meet: a line down the left of each system, a brace for a grand staff (or a bracket for other
+    /// staves), and bar lines running through from one staff to the next.
+    private func drawStaffGroups(ink: NSColor) {
+        let count = fullScore.staffCount
+        guard count > 1 else { return }
+        let tops = (0..<count).map { st in withStaff(st) { (0..<systemCount).map { staffTop($0) } } }
+        ink.setFill()
+        for system in 0..<systemCount {
+            let top = tops[0][system], bottom = tops[count - 1][system] + space * 4
+            // The system's left line.
+            NSRect(x: staffLeft - 0.5, y: top, width: 1.2, height: bottom - top).fill()
+            if fullScore.grandStaff == true {
+                drawBrace(x: staffLeft - space * 1.5, top: top, bottom: tops[1][system] + space * 4, ink: ink)
+                if count > 2 { drawBracket(x: staffLeft - space * 1.0, top: tops[2][system], bottom: bottom, ink: ink) }
+            } else {
+                drawBracket(x: staffLeft - space * 1.0, top: top, bottom: bottom, ink: ink)
+            }
+            // Bar lines through the gaps between staves.
+            for bar in barLines where bar.system == system {
+                for st in 0..<(count - 1) {
+                    let from = tops[st][system] + space * 4, to = tops[st + 1][system]
+                    let wide = bar.style == .final || bar.style == .endRepeat
+                    if wide {
+                        NSRect(x: bar.x - space * 0.9, y: from, width: 1, height: to - from).fill()
+                        NSRect(x: bar.x - space * 0.5, y: from, width: 3.5, height: to - from).fill()
+                    } else {
+                        NSRect(x: bar.x - 0.5, y: from, width: 1, height: to - from).fill()
+                        if bar.style == .double { NSRect(x: bar.x - space * 0.45, y: from, width: 1, height: to - from).fill() }
+                    }
+                }
+            }
+            for r in repeatStarts where r.system == system {
+                for st in 0..<(count - 1) {
+                    let from = tops[st][system] + space * 4, to = tops[st + 1][system]
+                    NSRect(x: r.x - 0.5, y: from, width: 3.5, height: to - from).fill()
+                    NSRect(x: r.x + space * 0.55, y: from, width: 1, height: to - from).fill()
+                }
             }
         }
-        // Start repeats: thick, thin, dots.
-        for r in repeatStarts {
-            let top = staffTop(r.system)
-            ink.setFill()
-            NSRect(x: r.x - 0.5, y: top, width: 3.5, height: space * 4).fill()
-            NSRect(x: r.x + space * 0.55, y: top, width: 1, height: space * 4).fill()
-            repeatDots(x: r.x + space * 0.95, system: r.system)
+    }
+
+    /// A curly brace from top to bottom (piano staves).
+    private func drawBrace(x: CGFloat, top: CGFloat, bottom: CGFloat, ink: NSColor) {
+        let mid = (top + bottom) / 2, w = space * 1.3
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: x + w, y: top))
+        path.curve(to: NSPoint(x: x, y: mid), controlPoint1: NSPoint(x: x - w * 0.2, y: top + (mid - top) * 0.25),
+                   controlPoint2: NSPoint(x: x + w * 0.9, y: mid - (mid - top) * 0.2))
+        path.curve(to: NSPoint(x: x + w, y: bottom), controlPoint1: NSPoint(x: x + w * 0.9, y: mid + (bottom - mid) * 0.2),
+                   controlPoint2: NSPoint(x: x - w * 0.2, y: bottom - (bottom - mid) * 0.25))
+        path.curve(to: NSPoint(x: x + w * 0.3, y: mid), controlPoint1: NSPoint(x: x + w * 0.45, y: bottom - (bottom - mid) * 0.3),
+                   controlPoint2: NSPoint(x: x + w * 1.6, y: mid + (bottom - mid) * 0.15))
+        path.curve(to: NSPoint(x: x + w, y: top), controlPoint1: NSPoint(x: x + w * 1.6, y: mid - (mid - top) * 0.15),
+                   controlPoint2: NSPoint(x: x + w * 0.45, y: top + (mid - top) * 0.3))
+        path.close()
+        ink.setFill()
+        path.fill()
+    }
+
+    /// A square bracket (ensemble staves): a thick line with hooks.
+    private func drawBracket(x: CGFloat, top: CGFloat, bottom: CGFloat, ink: NSColor) {
+        ink.setFill()
+        NSRect(x: x, y: top - space * 0.4, width: space * 0.45, height: bottom - top + space * 0.8).fill()
+        for (y, dir) in [(top - space * 0.4, -1.0), (bottom + space * 0.4, 1.0)] {
+            let hook = NSBezierPath()
+            hook.move(to: NSPoint(x: x, y: y))
+            hook.curve(to: NSPoint(x: x + space * 1.3, y: y + CGFloat(dir) * space * 0.7), controlPoint1: NSPoint(x: x + space * 0.6, y: y),
+                       controlPoint2: NSPoint(x: x + space * 1.1, y: y + CGFloat(dir) * space * 0.3))
+            hook.line(to: NSPoint(x: x + space * 1.15, y: y + CGFloat(dir) * space * 0.75))
+            hook.curve(to: NSPoint(x: x, y: y - CGFloat(dir) * space * 0.25), controlPoint1: NSPoint(x: x + space * 0.9, y: y + CGFloat(dir) * space * 0.3),
+                       controlPoint2: NSPoint(x: x + space * 0.4, y: y - CGFloat(dir) * space * 0.1))
+            hook.close()
+            hook.fill()
         }
-        for change in keyChanges {
-            drawKeySignature(change.to, cancelling: change.from, x: change.x + space * 0.5, system: change.system, ink: ink)
-        }
-        drawNotes(ink: ink)
-        drawSlurs(ink: ink)
-        drawMarks(ink: ink)
-        drawDynamics(ink: ink)
-        drawTempos(ink: ink)
-        drawWords(ink: ink)
-        if score.showTab == true { drawTab(ink: ink) }
-        drawCaret()
     }
 
     // MARK: Tempo marks
@@ -1614,7 +1821,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let top = staffTop(system)
         ink.setFill()
         for line in 0..<5 {
-            NSRect(x: space, y: top + CGFloat(line) * space - 0.5, width: bounds.width - space * 2, height: 1).fill()
+            NSRect(x: staffLeft, y: top + CGFloat(line) * space - 0.5, width: bounds.width - space - staffLeft, height: 1).fill()
         }
         // Clef.
         let symbols = NSFont(name: "Apple Symbols", size: space * (score.clef == .treble ? 7.2 : 4.2)) ?? .systemFont(ofSize: space * 5)
@@ -1622,10 +1829,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let clefAttrs: [NSAttributedString.Key: Any] = [.font: symbols, .foregroundColor: ink]
         let clefSize = (clef as NSString).size(withAttributes: clefAttrs)
         let clefY = score.clef == .treble ? top + space * 2 - clefSize.height * 0.56 : top - clefSize.height * 0.19
-        (clef as NSString).draw(at: NSPoint(x: space * 1.4, y: clefY), withAttributes: clefAttrs)
+        (clef as NSString).draw(at: NSPoint(x: staffLeft + space * 0.4, y: clefY), withAttributes: clefAttrs)
         // Key signature (the key of the line's first bar).
         let fifths = score.fifths(inBar: systemFirstBars.indices.contains(system) ? systemFirstBars[system] : 0)
-        let x = drawKeySignature(fifths, x: space * 5.2, system: system, ink: ink)
+        let x = drawKeySignature(fifths, x: staffLeft + space * 4.2, system: system, ink: ink)
         // Time signature (first line only).
         if system == 0 {
             let font = NSFont(name: "Georgia-Bold", size: space * 2.7) ?? .boldSystemFont(ofSize: space * 2.7)
@@ -1867,7 +2074,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     private func colorFor(_ ref: NoteRef, ink: NSColor) -> NSColor {
+        let ref = NoteRef(voice: ref.voice, index: ref.index, staff: drawingStaff)
         if playing.contains(ref) { return .systemOrange }
+        // Only the staff being written shows its selection; the others are a little lighter while editing.
+        if !isExport, ScoreView.active === self, fullScore.staffCount > 1, drawingStaff != staffIndex { return NSColor(white: 0.35, alpha: 1) }
         if !isExport, ref.voice == voice, ref.index == selected || ref.index == lastEntered || selectedRange?.contains(ref.index) == true,
            ScoreView.active === self { return .controlAccentColor }
         // The voice not being written is drawn a little lighter while editing.
@@ -2015,12 +2225,111 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
 
     /// Changes the current voice's notes (the change sees that voice as the score's notes).
+    /// Changes the current staff's current voice (the change sees that voice as the score's notes).
     private func editVoice(_ name: String, _ change: (inout ScoreData) -> Void) {
-        let v = voice
+        let v = voice, st = staffIndex
         edit(name) { full in
-            var view = full.forVoice(v)
+            var staff = full.forStaff(st)
+            var view = staff.forVoice(v)
             change(&view)
-            full.setLine(v, view.notes)
+            staff.setLine(v, view.notes)
+            full.setStaff(st, staff)
+        }
+    }
+
+    // MARK: Staves
+
+    var currentStaff: Int { staffIndex }
+
+    /// Write on another staff (⌥⌘↑ / ⌥⌘↓, or click it): voice 1, the cursor at its end.
+    func setStaff(_ i: Int) {
+        guard (0..<fullScore.staffCount).contains(i) else { return NSSound.beep() }
+        staffIndex = i
+        useStaff(i)
+        voice = 0
+        selected = nil
+        rangeEnd = nil
+        lastEntered = nil
+        cursor = cur.notes.count
+        NotebookStore.shared.editor.scoreInputChanged += 1
+        needsDisplay = true
+    }
+
+    /// Adds an empty staff at the bottom (or a bass staff under a single treble one, joined as a piano grand staff).
+    func addStaff(_ clef: ScoreData.Clef, grand: Bool = false) {
+        edit(grand ? "Piano Grand Staff" : "Add Staff") { full in
+            var st = ScoreData()
+            st.clef = clef
+            full.setStaff(full.staffCount, st)
+            if grand { full.grandStaff = true; full.clef = .treble }
+        }
+        setStaff(fullScore.staffCount - 1)
+    }
+
+    /// Makes the score a piano score: treble and bass staves joined by a brace.
+    func makeGrandStaff() {
+        if fullScore.staffCount == 1 {
+            addStaff(.bass, grand: true)
+        } else {
+            edit("Piano Grand Staff") { $0.grandStaff = $0.grandStaff == true ? nil : true }
+            NotebookStore.shared.editor.scoreInputChanged += 1
+        }
+    }
+
+    /// Removes the staff being written (its notes go too; Undo brings them back).
+    func removeStaff() {
+        let i = staffIndex
+        guard fullScore.staffCount > 1 else { return NSSound.beep() }
+        edit("Remove Staff") { full in
+            var all = (0..<full.staffCount).map { full.forStaff($0) }
+            all.remove(at: i)
+            full.setStaff(0, all[0])
+            full.staves = all.count > 1 ? all.dropFirst().map { ScoreStaff(name: $0.staffName, clef: $0.clef, notes: $0.notes, voices: $0.voices) } : nil
+            if full.staffCount < 2 || i < 2 { full.grandStaff = nil }
+        }
+        setStaff(max(0, i - 1))
+    }
+
+    /// Moves the staff being written up or down among the staves.
+    func moveStaff(by delta: Int) {
+        let i = staffIndex, j = staffIndex + delta
+        guard (0..<fullScore.staffCount).contains(j) else { return NSSound.beep() }
+        edit("Move Staff") { full in
+            let a = full.forStaff(i), b = full.forStaff(j)
+            full.setStaff(i, b)
+            full.setStaff(j, a)
+        }
+        setStaff(j)
+    }
+
+    /// The current staff's clef.
+    func setClef(_ clef: ScoreData.Clef) {
+        let i = staffIndex
+        edit("Clef") { full in
+            var st = full.forStaff(i)
+            st.clef = clef
+            full.setStaff(i, st)
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// The current staff's name (for exports and menus).
+    func renameStaff() {
+        let alert = NSAlert()
+        alert.messageText = "Staff Name"
+        alert.informativeText = "A name for \(fullScore.staffTitle(staffIndex)) — the instrument or part (Violin, Left Hand…)."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.stringValue = score.staffName ?? ""
+        alert.accessoryView = field
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let i = staffIndex, name = field.stringValue.trimmingCharacters(in: .whitespaces)
+        edit("Staff Name") { full in
+            var st = full.forStaff(i)
+            st.staffName = name.isEmpty ? nil : name
+            full.setStaff(i, st)
         }
     }
 
@@ -2662,11 +2971,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             // From the selected note (or the cursor) in the voice being written; every voice plays.
             let line = cur
             let from = selected ?? (cursor < line.notes.count ? cursor : 0)
-            guard line.notes.indices.contains(from) else { return ScorePlayer.shared.play(score, fromBar: 0, offset: 0, in: self) }
+            guard line.notes.indices.contains(from) else { return ScorePlayer.shared.play(fullScore, fromBar: 0, offset: 0, in: self) }
             let bar = line.bar(of: from)
             let onsets = line.onsets
             let barStart = line.measures.indices.contains(bar) ? line.measures[bar].lowerBound : from
-            ScorePlayer.shared.play(score, fromBar: bar, offset: onsets[from] - onsets[barStart], in: self)
+            ScorePlayer.shared.play(fullScore, fromBar: bar, offset: onsets[from] - onsets[barStart], in: self)
         }
     }
 
@@ -2678,6 +2987,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         case 124 where event.modifierFlags.contains(.shift): return extendSelection(by: 1)
         case 123: return moveCursor(by: -1)
         case 124: return moveCursor(by: 1)
+        case 126 where event.modifierFlags.contains([.option, .command]): return setStaff(staffIndex - 1)
+        case 125 where event.modifierFlags.contains([.option, .command]): return setStaff(staffIndex + 1)
         case 126 where event.modifierFlags.contains(.option): return moveString(by: 1)
         case 125 where event.modifierFlags.contains(.option): return moveString(by: -1)
         case 126: return moveSelected(steps: command ? 7 : 1)
@@ -2756,18 +3067,37 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// The note (head or rest) under a point.
     private func note(at p: NSPoint) -> NoteRef? {
         layoutNotes()
-        // The voice being written first (where notes of two voices overlap).
-        let ordered = placed.filter { $0.voice == voice } + placed.filter { $0.voice != voice }
-        return ordered.first { pl in
-            let note = score.forVoice(pl.voice).notes[pl.index]
-            let cy = note.rest ? staffTop(pl.system) + space * 2 : y(position: position(note), system: pl.system)
-            return NSRect(x: pl.x - space * 0.4, y: cy - space * 1.2, width: space * 2.2, height: space * 2.4).contains(p)
-        }.map { NoteRef(voice: $0.voice, index: $0.index) }
+        // The staff and voice being written first (where notes overlap).
+        let order = [staffIndex] + (0..<fullScore.staffCount).filter { $0 != staffIndex }
+        for st in order {
+            let found: NoteRef? = withStaff(st) {
+                let ordered = placed.filter { $0.voice == voice || st != staffIndex } + placed.filter { $0.voice != voice && st == staffIndex }
+                return ordered.first { pl in
+                    let note = score.forVoice(pl.voice).notes[pl.index]
+                    let cy = note.rest ? staffTop(pl.system) + space * 2 : y(position: position(note), system: pl.system)
+                    return NSRect(x: pl.x - space * 0.4, y: cy - space * 1.2, width: space * 2.2, height: space * 2.4).contains(p)
+                }.map { NoteRef(voice: $0.voice, index: $0.index, staff: st) }
+            }
+            if let found { return found }
+        }
+        return nil
     }
 
     private func system(at y: CGFloat) -> Int {
         let base = score.title.isEmpty ? 0 : titleHeight
-        return max(0, min(systemCount - 1, Int((y - base) / systemHeight)))
+        return max(0, min(systemCount - 1, Int((y - base) / max(1, systemHeight))))
+    }
+
+    /// The staff nearest a point (the one whose lines it's between, or closest to).
+    private func staffAt(_ p: NSPoint) -> Int {
+        let sys = system(at: p.y)
+        var best = 0, distance = CGFloat.greatestFiniteMagnitude
+        for st in 0..<fullScore.staffCount {
+            let top = withStaff(st) { staffTop(sys) }
+            let d = p.y < top ? top - p.y : p.y > top + space * 4 ? p.y - top - space * 4 : 0
+            if d < distance { distance = d; best = st }
+        }
+        return best
     }
 
     /// The cursor position nearest a point.
@@ -2787,6 +3117,14 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         owner?.canvas?.selectedElement = nil
         activate()
         let p = convert(event.locationInWindow, from: nil)
+        // A click on (or near) another staff writes there.
+        if let ref = note(at: p), ref.staff != staffIndex {
+            setStaff(ref.staff)
+            layoutNotes()
+        } else if note(at: p) == nil, staffAt(p) != staffIndex {
+            setStaff(staffAt(p))
+            layoutNotes()
+        }
         if event.clickCount == 2, note(at: p) == nil {
             // Double-click on the staff: a note at that pitch.
             let s = system(at: p.y)
@@ -2836,6 +3174,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         // Bar commands (key change, repeats) act where the right-click was.
         if !isExport {
             let p = convert(event.locationInWindow, from: nil)
+            let st = note(at: p)?.staff ?? staffAt(p)
+            if st != staffIndex { setStaff(st); layoutNotes() }
             if let ref = note(at: p) {
                 if ref.voice != voice { setVoice(ref.voice) }
                 select(ref.index)
@@ -2937,13 +3277,36 @@ final class ScoreElementView: ElementView {
         menu.addItem(ClosureMenuItem("Chord Symbols…  ⌃K") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.chordSymbol) })
         menu.addItem(ClosureMenuItem("Lyrics…  ⌃L") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.lyric) })
         menu.addItem(ClosureMenuItem("Guitar Tab", state: score.showTab == true) { [weak self] in self?.staff.toggleTab() })
-        let clef = NSMenuItem(title: "Clef", action: nil, keyEquivalent: "")
+        let clef = NSMenuItem(title: score.staffCount > 1 ? "Clef (\(score.staffTitle(staff.currentStaff)))" : "Clef", action: nil, keyEquivalent: "")
         let clefs = NSMenu()
         for c in ScoreData.Clef.allCases {
-            clefs.addItem(ClosureMenuItem(c.title, state: score.clef == c) { [weak self] in self?.update({ $0.clef = c }, actionName: "Clef") })
+            clefs.addItem(ClosureMenuItem(c.title, state: staff.score.clef == c) { [weak self] in self?.staff.setClef(c) })
         }
         clef.submenu = clefs
         menu.addItem(clef)
+        // Staves: add, piano, move between, rename, remove.
+        let staves = NSMenuItem(title: "Staves", action: nil, keyEquivalent: "")
+        let staffMenu = NSMenu()
+        if score.staffCount > 1 {
+            for i in 0..<score.staffCount {
+                staffMenu.addItem(ClosureMenuItem("Write in \(score.staffTitle(i))", state: staff.currentStaff == i) { [weak self] in self?.staff.setStaff(i) })
+            }
+            staffMenu.addItem(.separator())
+        }
+        staffMenu.addItem(ClosureMenuItem("Add Treble Staff") { [weak self] in self?.staff.addStaff(.treble) })
+        staffMenu.addItem(ClosureMenuItem("Add Bass Staff") { [weak self] in self?.staff.addStaff(.bass) })
+        staffMenu.addItem(ClosureMenuItem(score.staffCount == 1 ? "Make Piano Grand Staff" : "Piano Brace (Grand Staff)", state: score.grandStaff == true) { [weak self] in
+            self?.staff.makeGrandStaff()
+        })
+        if score.staffCount > 1 {
+            staffMenu.addItem(.separator())
+            staffMenu.addItem(ClosureMenuItem("Move Staff Up") { [weak self] in self?.staff.moveStaff(by: -1) })
+            staffMenu.addItem(ClosureMenuItem("Move Staff Down") { [weak self] in self?.staff.moveStaff(by: 1) })
+            staffMenu.addItem(ClosureMenuItem("Rename Staff…") { [weak self] in self?.staff.renameStaff() })
+            staffMenu.addItem(ClosureMenuItem("Remove \(score.staffTitle(staff.currentStaff))") { [weak self] in self?.staff.removeStaff() })
+        }
+        staves.submenu = staffMenu
+        menu.addItem(staves)
         let key = NSMenuItem(title: "Key Signature", action: nil, keyEquivalent: "")
         let keys = NSMenu()
         for (fifths, name) in ScoreData.keyNames {

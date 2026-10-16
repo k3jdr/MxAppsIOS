@@ -241,6 +241,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Dot | **.** | Score tab ▸ Dot |
 | Tuplet: duplet, triplet, quadruplet, quintuplet, sextuplet, septuplet, nonuplet (next notes, or the selected run) | **⌃2 ⌃3 ⌃4 ⌃5 ⌃6 ⌃7 ⌃9** | Score tab ▸ Notes ▸ Tuplet, right-click ▸ Tuplet |
 | Grace note before the selected note: acciaccatura / appoggiatura | **/  ?** | Score tab ▸ Notes ▸ Grace Note, right-click ▸ Grace Note |
+| Write on the staff above / below (or click it) | **⌥⌘↑ / ⌥⌘↓** | Score tab ▸ Staves |
+| Add a treble or bass staff; piano grand staff; move, rename, remove a staff | | Score tab ▸ Staves, right-click ▸ Staves |
 | Write in voice 1 / voice 2 | **⌥⌘1 / ⌥⌘2** | Score tab ▸ Voice, or click a note of that voice |
 | Select a run of notes | **⇧← ⇧→**, or ⇧-click | |
 | Slur over the selected notes (one note: to the next); again takes it off | **S** | Score tab ▸ Expression, right-click |
@@ -299,6 +301,14 @@ key signature. **Repeat signs** (|: and :|) play the passage twice: an end repea
 or to the beginning (or just after the previous repeat) when there isn't one. Key changes and repeats belong to bar
 numbers, so adding or deleting notes earlier in the score can move music past them.
 
+**Several staves and the piano grand staff** — **Insert ▸ Piano Score** (or the Insert tab's Piano button, or
+Score tab ▸ Staves ▸ Make Piano Grand Staff) gives treble and bass staves joined by a brace, with bar lines running
+through both. **Add Staff** puts more treble or bass staves under them (an ensemble: bracketed). Every staff shares the
+bars, key, time, tempo, repeats and title; notes that sound together line up across the staves, and they all play
+together (a staff without its own dynamics follows the top one). Click a staff, or press ⌥⌘↑ / ⌥⌘↓, to write on it;
+each staff has its own clef, two voices, slurs, dynamics, lyrics and the rest. The others show a little lighter while
+you write. Staves can be moved up and down, named (the name goes into MusicXML) and removed.
+
 **Tuplets beyond triplets** — 2 in the time of 3 (a duplet in 6/8), 4:3, 5:4, 6:4, 7:4 and 9:8 — are numbered and
 bracketed like triplets, fill their bar correctly and play in time. **Grace notes** sit small before their note and take
 no time in the bar: an **acciaccatura** (slashed) is crushed in just before the beat; an **appoggiatura** takes half of
@@ -311,9 +321,12 @@ play together. While you write in one voice the other is shown in grey; clicking
 
 **MusicXML** — the format MuseScore, Finale, Sibelius and Dorico exchange scores in. **Insert ▸ Music Score from
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
-score: title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice (rests fill where it's silent), from the first part's first staff — anything left
-out (other parts, staves and voices, grace notes) is listed. Right-click a score (or the Score tab) ▸ **Export MusicXML…** saves it as MusicXML 4.0 with all of that.
+score — every part and staff (a piano part's two staves become a grand staff; other parts each a staff, named) —
+with title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
+strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
+voices, staves beyond a part's first two, cue notes) is listed. Right-click a score (or the Score tab) ▸ **Export
+MusicXML…** saves it as MusicXML 4.0 with all of that: a piano grand staff as one part with two staves, every other
+staff as a part of its own.
 A tie carries its note's accidental across the bar line.
 
 ## Microsoft Office fonts
