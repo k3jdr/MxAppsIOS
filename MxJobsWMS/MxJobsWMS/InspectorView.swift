@@ -31,6 +31,7 @@ struct InspectorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .quickHelpArea(JobsHelp.inspector(space, editor: editor))
     }
 }
 
@@ -189,6 +190,7 @@ private struct NodeInspector: View {
 
             if !issues.isEmpty {
                 Section("Checks") { IssueList(issues: issues, editor: editor) }
+                    .quickHelpArea(JobsHelp.section("Checks"))
             }
 
             if let state = editor.run.states[node.id], state != .pending {
@@ -200,6 +202,7 @@ private struct NodeInspector: View {
                     }
                     Button("Show Output in Console") { editor.showConsole = true }
                 }
+                .quickHelpArea(JobsHelp.section("Last Run"))
             }
 
             kindSection
@@ -211,11 +214,14 @@ private struct NodeInspector: View {
             } footer: {
                 Text("Use {{name}} in paths, parameters, headers and templates. Built-ins: {{today}}, {{yesterday}}.")
             }
+            .quickHelpArea(JobsHelp.section("Arguments"))
 
             OutcomeSection(outcome: $node.outcome, isAPI: node.kind == .apiRead,
                            inputs: space.inputNames(for: node.id))
+                .quickHelpArea(JobsHelp.section("Expected Outcome"))
 
             ExceptionSection(policy: $node.exceptions)
+                .quickHelpArea(JobsHelp.section("Exception Handling"))
         }
         .formStyle(.grouped)
     }
@@ -224,15 +230,20 @@ private struct NodeInspector: View {
         switch node.kind {
         case .trigger:
             ScheduleSection(spec: Binding($node.schedule, default: ScheduleSpec()))
+                .quickHelpArea(JobsHelp.section("Schedule"))
         case .instructionSet, .agentTask, .aggregate, .decision:
             AgentSection(kind: node.kind, spec: Binding($node.agent, default: AgentSpec()),
                          available: space.inputNames(for: node.id))
+                .quickHelpArea(JobsHelp.section(node.kind == .instructionSet ? "Instruction Assembly" : node.kind == .decision ? "Decision" : "Agent"))
         case .approvalGate:
             ApprovalSection(spec: Binding($node.approval, default: ApprovalSpec()))
+                .quickHelpArea(JobsHelp.section("User Approval"))
         case .executeRequest:
             ExecutionSection(spec: Binding($node.execution, default: ExecutionSpec()))
+                .quickHelpArea(JobsHelp.section("Execution Request"))
         case .outcomeReport:
             ReportSection(spec: Binding($node.report, default: ReportSpec()))
+                .quickHelpArea(JobsHelp.section("Outcome Report"))
         case .apiRead:
             ApiSection(node: $node, space: space, editor: editor)
         case .pythonScript:
@@ -246,6 +257,7 @@ private struct NodeInspector: View {
             } footer: {
                 Text("Each output field takes the value at a dotted JSON path of the incoming data.")
             }
+            .quickHelpArea(JobsHelp.section("Field Mappings"))
         }
     }
 }
@@ -363,6 +375,7 @@ private struct ApiSection: View {
         let api = Binding($node.api, default: ApiCallSpec())
         if let service = ServiceAboutSection.service(for: space.subscription(node.api?.subscriptionID)) {
             ServiceAboutSection(service: service, path: node.api?.path ?? "")
+                .quickHelpArea(JobsHelp.section("About This Service"))
         }
         Section {
             Picker("Subscription", selection: api.subscriptionID) {
@@ -391,13 +404,16 @@ private struct ApiSection: View {
         } header: {
             Text("API Call")
         }
+        .quickHelpArea(JobsHelp.section("API Call"))
 
         Section("Query Parameters") {
             KeyValueEditor(items: api.query, keyPrompt: "name", valuePrompt: "value", addTitle: "Add Parameter")
         }
+        .quickHelpArea(JobsHelp.section("Query Parameters"))
         Section("Headers") {
             KeyValueEditor(items: api.headers, keyPrompt: "header", valuePrompt: "value", addTitle: "Add Header")
         }
+        .quickHelpArea(JobsHelp.section("Headers"))
         if node.api?.method == .POST {
             Section("Body (JSON)") {
                 TextEditor(text: api.body)
@@ -428,6 +444,7 @@ private struct ApiSection: View {
         } footer: {
             Text("Sends one request now with the stored key and checks the expected outcome.")
         }
+        .quickHelpArea(JobsHelp.section("Try It"))
     }
 
     private func runTest() {
@@ -519,6 +536,7 @@ private struct ScriptSection: View {
             Text("The script reads {\"arguments\", \"inputs\", \"step\"} as JSON on stdin and prints its output as JSON. "
                  + "The subscription's key and base URL arrive as MXJOBS_API_KEY and MXJOBS_BASE_URL.")
         }
+        .quickHelpArea(JobsHelp.section("Python Script"))
 
         Section {
             TextEditor(text: spec.code)
@@ -532,6 +550,7 @@ private struct ScriptSection: View {
         } header: {
             Text("Code")
         }
+        .quickHelpArea(JobsHelp.section("Code"))
 
         Section {
             HStack {
@@ -555,6 +574,7 @@ private struct ScriptSection: View {
         } footer: {
             Text("Runs the script once with the arguments above and the inputs from the last run, then checks the expected outcome.")
         }
+        .quickHelpArea(JobsHelp.section("Try It"))
     }
 
     private func runTest() {

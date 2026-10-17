@@ -64,6 +64,17 @@ time, the checks of the expected outcome, and the response (the key is masked in
   draw.io XML, so draw.io / diagrams.net opens it for editing: each layer becomes a swimlane holding its nodes,
   and links become connectors (results going up a layer are dashed).
 
+## Quick Help
+
+**View ▸ Quick Help** (⌥⌘/) shows a panel at the bottom of the palette, as in MxNoteONE, telling what's under the
+pointer in a sentence or two, with its shortcut: a palette step or Layer 3 service; a step on the canvas (its kind,
+how it last ran, its problems), its ● handle or breakpoint; the lane; a run bar control, the run console or an
+approval waiting for you; an inspector section; a toolbar button; a part of API Subscriptions. Over nothing it can
+describe, it tells about the selection (a step, several, a link) and then the jobspace. **View ▸ Float Quick Help**
+(or the panel's float button) puts it in a small window of its own, which also follows the Layer 3 Services, New from
+Sample and Adding API Keys windows; closing that window docks it again. Both choices are remembered. The panel is
+shared with MxDataHUB and MxDataSQL (`../Shared/QuickHelp`); what it says here is in `JobsQuickHelp.swift`.
+
 ## Run and debug
 
 The **run bar** above the canvas runs the jobspace across its three layers:

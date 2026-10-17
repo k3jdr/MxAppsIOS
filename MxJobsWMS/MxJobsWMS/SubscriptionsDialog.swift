@@ -40,6 +40,7 @@ struct SubscriptionsDialog: View {
                         .menuIndicator(.hidden)
                         .fixedSize()
                         .help("Add a subscription")
+                        .quickHelp("Add Subscription", "A new subscription for a data service, or one for the local Python service (127.0.0.1:\(ApiSubscription.localServicePort)).")
                         Button {
                             confirmDelete = true
                         } label: { Image(systemName: "minus").frame(width: 24, height: 20) }
@@ -50,6 +51,7 @@ struct SubscriptionsDialog: View {
                     .padding(6)
                 }
                 .frame(minWidth: 190, idealWidth: 210, maxWidth: 280)
+                .quickHelpArea("Subscriptions", "This jobspace's API subscriptions and whether each has its key stored. Select one to edit it; − deletes it and its stored key.", symbol: "list.bullet")
 
                 Group {
                     if let selection, let i = space.subscriptions.firstIndex(where: { $0.id == selection }) {
@@ -141,6 +143,7 @@ private struct SubscriptionForm: View {
                     LabeledContent("Used by", value: "\(usage) step\(usage == 1 ? "" : "s")")
                 }
             }
+            .quickHelpArea(JobsHelp.section("Service"))
 
             Section {
                 Picker("Authentication", selection: $subscription.auth) {
@@ -247,6 +250,7 @@ private struct SubscriptionForm: View {
                     }
                 }
             }
+            .quickHelpArea(JobsHelp.section("API Key"))
 
             Section {
                 KeyValueEditor(items: $subscription.defaultHeaders, keyPrompt: "header", valuePrompt: "value",
@@ -254,6 +258,7 @@ private struct SubscriptionForm: View {
             } header: {
                 Text("Headers Sent With Every Call")
             }
+            .quickHelpArea(JobsHelp.section("Headers Sent With Every Call"))
 
             Section {
                 HStack {
@@ -274,12 +279,14 @@ private struct SubscriptionForm: View {
             } footer: {
                 Text("For services you develop, such as Services/portfolio-java or Services/portfolio-cpp: steps using this subscription get an “Open Project” button.")
             }
+            .quickHelpArea(JobsHelp.section("Source Project"))
 
             Section("Notes") {
                 TextField("Notes", text: $subscription.notes, axis: .vertical)
                     .lineLimit(2...6)
                     .labelsHidden()
             }
+            .quickHelpArea(JobsHelp.section("Notes"))
         }
         .formStyle(.grouped)
         .onAppear(perform: refresh)
