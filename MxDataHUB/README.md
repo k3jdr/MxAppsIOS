@@ -52,6 +52,15 @@ Launch arguments for testing: `-autoConnect YES` connects with the saved passwor
 and `-query AAPL` searches Securities; the connection fields can be given as `-host`,
 `-port`, `-user`, `-database` and `-sslMode`. Debug builds also take the password from `PGPASSWORD`.
 
+## Quick Help
+
+**View ▸ Quick Help** (⌥⌘/) shows a panel at the bottom of the sidebar, as in MxNoteONE, telling what's under the
+pointer in a sentence or two, with its shortcut: a screen in the sidebar, a button, the search, the results,
+holdings, active weights or constituents table, a Data Refresh category, a Load History panel. Over nothing it can
+describe, it tells about what's selected (a security, portfolio or benchmark) and then the screen — including why a
+screen is empty (not connected, no `srm` schema). **View ▸ Float Quick Help** (or the panel's float button) puts it
+in a small window of its own; closing that window docks it again. Both choices are remembered.
+
 ## Source layout
 
 | File | Purpose |
@@ -65,8 +74,9 @@ and `-query AAPL` searches Securities; the connection fields can be given as `-h
 | `SRMSecuritiesView.swift`, `SRMPortfoliosView.swift`, `SRMBenchmarksView.swift`, `SRMLoadsView.swift` | The screens and their dialogs |
 | `DataRefreshView.swift` | Data Refresh: categories, freshness and refresh through the SRM loader service |
 | `ServicesWorkflowsView.swift` | Services & Workflows, and the Workflows menu of Portfolios |
+| `HubQuickHelp.swift` | What Quick Help says about each screen, the selection and the controls |
 | `Info.plist` | The `mxdatahub` URL scheme (merged into the generated Info.plist) |
-| `../Shared/` | Compiled into both apps: `ServiceCatalog.swift` (services, use cases, samples), `ServicesView.swift` (the services and workflows views), `AppLinks.swift` (the `mxdatahub://` / `mxjobswms://` hand-offs) |
+| `../Shared/` | Compiled into both apps: `ServiceCatalog.swift` (services, use cases, samples), `ServicesView.swift` (the services and workflows views), `AppLinks.swift` (the `mxdatahub://` / `mxjobswms://` hand-offs), `QuickHelp/` (the Quick Help panel, also in MxDataSQL) |
 | `Formatting.swift` | Number formatting shared by the screens |
 | `SRM/` | PostgreSQL migrations and the Python loaders |
 

@@ -23,6 +23,7 @@ struct ConnectionView: View {
                     ForEach(SSLMode.allCases) { Text($0.rawValue).tag($0) }
                 }
                 Toggle("Save password in Keychain", isOn: $store.settings.savePasswordInKeychain)
+                    .quickHelp("Save Password in Keychain", "Keeps the password in your login Keychain so MxDataHUB can connect without asking. Turning it off removes the saved one.")
                     .onChange(of: store.settings.savePasswordInKeychain) { _, save in
                         if !save { Keychain.deletePassword(for: store.settings.keychainAccount) }
                     }
@@ -39,11 +40,13 @@ struct ConnectionView: View {
                     }
                     .keyboardShortcut(.defaultAction)
                     .disabled(store.status == .connecting || store.settings.host.isEmpty || store.settings.user.isEmpty)
+                    .quickHelp(store.isConnected ? "Reconnect" : "Connect", "Connects with these fields and checks the database for the security master; then Securities opens.", shortcut: "⇧⌘K")
 
                     Button("Disconnect") {
                         Task { await store.disconnect() }
                     }
                     .disabled(!store.isConnected)
+                    .quickHelp("Disconnect", "Closes the connection. Data Refresh and Services & Workflows still work: they go through the Layer 3 services.")
 
                     Spacer()
                     statusView

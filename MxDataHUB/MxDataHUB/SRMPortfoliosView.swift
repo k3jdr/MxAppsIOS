@@ -52,14 +52,18 @@ struct SRMPortfoliosView: View {
             .contextMenu(forSelectionType: Int.self) { _ in } primaryAction: { ids in
                 editing = store.portfolios.first { $0.id == ids.first }
             }
+            .quickHelpArea(HubHelp.portfolioList)
             HStack {
                 Button("New…") { creating = true }
+                    .quickHelp("New Portfolio", "A portfolio with a code, name, currency and optional benchmark; then add its holdings.")
                 Button("Edit…") { editing = store.selectedPortfolio }
                     .disabled(store.selectedPortfolio == nil)
+                    .quickHelp("Edit Portfolio", "Changes the selected portfolio's code, name, currency, benchmark or description (double-clicking it does too).")
                 PortfolioWorkflowsMenu(portfolio: store.selectedPortfolio)
                 Spacer()
                 Button("Delete…", role: .destructive) { confirmDelete = true }
                     .disabled(store.selectedPortfolio == nil)
+                    .quickHelp("Delete Portfolio", "Deletes the selected portfolio with its holdings and transactions, after asking. It can't be undone.")
             }
         }
         .padding(10)
@@ -83,7 +87,9 @@ struct SRMPortfoliosView: View {
                         ForEach(snapshotChoices, id: \.self) { Text($0).tag($0) }
                     }
                     .fixedSize()
+                    .quickHelp("Holdings On", "The snapshot date shown: each date has its own holdings, valued with the latest prices.")
                     Button("New Snapshot…") { snapshotDay = Date(); newSnapshot = true }
+                        .quickHelp("New Snapshot", "Starts holdings on another date, copied from the latest earlier snapshot, to change from there.")
                         .help("Start holdings on another date, copied from the latest earlier snapshot")
                         .popover(isPresented: $newSnapshot) {
                             VStack(alignment: .leading, spacing: 10) {
@@ -109,12 +115,15 @@ struct SRMPortfoliosView: View {
                     .pickerStyle(.segmented)
                     .fixedSize()
                     .disabled(portfolio.benchmarkID == nil)
+                    .quickHelp("Holdings / vs Benchmark", "The holdings, or each security's weight against the benchmark's (needs a benchmark).")
                 }
 
                 if showBenchmark && portfolio.benchmarkID != nil {
                     activeWeightsTable
+                        .quickHelpArea(HubHelp.activeWeights)
                 } else {
                     holdingsTable
+                        .quickHelpArea(HubHelp.holdings)
                 }
 
                 if !store.issues.isEmpty {
@@ -137,7 +146,9 @@ struct SRMPortfoliosView: View {
                 HStack {
                     Button("Add Holding…") { addingHolding = true }
                         .keyboardShortcut("n", modifiers: [.command, .shift])
+                        .quickHelp("Add Holding", "Adds a security by any identifier (ticker, TICKER:MIC, ISIN, CUSIP, SEDOL, FIGI) as shares or a weight; one already held is replaced.", shortcut: "⇧⌘N")
                     Button("Paste Holdings…") { pasting = true }
+                        .quickHelp("Paste Holdings", "Adds many holdings from pasted lines: an identifier, optionally its type, then shares or a weight ending in % (\"AAPL 100\", \"US5949181045, 4.5%\").")
                     Menu("Copy Benchmark") {
                         ForEach(store.benchmarks.filter { $0.members > 0 }) { b in
                             Button("\(b.code) — \(b.members) members") { Task { await store.copyBenchmark(b.id) } }
@@ -145,12 +156,15 @@ struct SRMPortfoliosView: View {
                     }
                     .fixedSize()
                     .help("Fill this snapshot with a benchmark's weights")
+                    .quickHelp("Copy Benchmark", "Fills this snapshot with a benchmark's members and weights, as target weights — a start for an index-like portfolio.")
                     Button("Normalize Weights") { Task { await store.normalizeWeights() } }
                         .help("Scale target weights to add up to 100%")
                         .disabled(!store.holdings.contains { $0.targetWeight != nil })
+                        .quickHelp("Normalize Weights", "Scales the target weights so they add up to 100%.")
                     Spacer()
                     Button("Remove", role: .destructive) { Task { await store.removeHoldings(store.selectedHoldingIDs) } }
                         .disabled(store.selectedHoldingIDs.isEmpty)
+                        .quickHelp("Remove", "Takes the selected holdings out of this snapshot.")
                 }
             }
             .padding(10)

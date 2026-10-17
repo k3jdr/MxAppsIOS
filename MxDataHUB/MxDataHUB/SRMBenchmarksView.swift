@@ -27,9 +27,12 @@ struct SRMBenchmarksView: View {
                         .width(min: 46, ideal: 52)
                     TableColumn("As of", value: \.asOf).width(min: 76, ideal: 80)
                 }
+                .quickHelpArea(HubHelp.benchmarkList)
                 HStack {
                     Button("Build Custom…") { building = true }
+                        .quickHelp("Build Custom Benchmark", "A benchmark from another's members on its latest date: equal weighted or by market cap, optionally one sector only.")
                     Button("Availability…") { showAvailability = true }
+                        .quickHelp("Availability", "Which benchmarks the data sources can supply, and which they can't (and why).")
                     Button("Track…") {
                         if let b = store.selectedBenchmark {
                             AppLink.sample(id: "passive-tracking", portfolio: nil, benchmark: b.code).open()
@@ -37,10 +40,12 @@ struct SRMBenchmarksView: View {
                     }
                     .disabled(store.selectedBenchmark == nil)
                     .help("Build an index-tracking portfolio for this benchmark in MxJobsWMS")
+                    .quickHelp("Track", "Opens MxJobsWMS's passive tracking workflow for this benchmark: an index-tracking portfolio within a tracking-error budget.")
                     Spacer()
                     Button("Delete…", role: .destructive) { confirmDelete = true }
                         .disabled(!(store.selectedBenchmark?.isCustom ?? false))
                         .help("Only custom benchmarks built here can be deleted")
+                        .quickHelp("Delete Benchmark", "Deletes a custom benchmark built here, after asking. Loaded benchmarks can't be deleted.")
                 }
             }
             .padding(10)
@@ -120,6 +125,7 @@ struct SRMBenchmarksView: View {
                         TableColumn("Shares") { Text(numberText($0.shares, digits: 0)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
                             .width(min: 60, ideal: 100)
                     }
+                    .quickHelpArea(HubHelp.constituents)
                     Text("\(filteredConstituents.count) of \(store.constituents.count) · weights total \(percentText(store.constituents.reduce(0) { $0 + $1.weight }, digits: 2))")
                         .foregroundStyle(.secondary)
                 }

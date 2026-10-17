@@ -31,6 +31,8 @@ struct SRMLoadsView: View {
                         TableColumn("Sources", value: \.sources)
                     }
                 }
+                .quickHelpArea("Identifier Coverage", "How many securities have each kind of identifier (ISIN, CUSIP, FIGI, LEI…), as a share of all, and the sources they came from.",
+                               symbol: "checklist")
                 .padding(10)
                 .frame(minWidth: 420)
                 VStack(alignment: .leading, spacing: 6) {
@@ -41,6 +43,8 @@ struct SRMLoadsView: View {
                         TableColumn("Terms and plan") { Text($0.note).lineLimit(3).help($0.note) }
                     }
                 }
+                .quickHelpArea("Sources", "The data sources the loaders read, when each last loaded, and its terms and plan limits (rest the pointer on a note for all of it).",
+                               symbol: "shippingbox")
                 .padding(10)
                 .frame(minWidth: 360)
                 VStack(alignment: .leading, spacing: 6) {
@@ -75,6 +79,9 @@ struct SRMLoadsView: View {
                         Text("Needs migration V010 (SRM/srm.py migrate).").font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                .quickHelpArea("Snapshot History", "The dated weight snapshots of each benchmark and portfolio: how many, from when to when, over how many months, and the longest gap. "
+                               + "Attribution uses the snapshot at the start of each month, so fewer than two snapshots or a gap over a month shows in orange.",
+                               symbol: "calendar")
                 .padding(10)
                 .frame(minWidth: 420)
             }
@@ -85,6 +92,7 @@ struct SRMLoadsView: View {
                     Text("Loads").font(.headline)
                     Spacer()
                     Button("Refresh", systemImage: "arrow.clockwise") { Task { await store.loadAudit() } }
+                        .quickHelp("Refresh", "Reads the coverage, sources, snapshots and loads again.")
                 }
                 Table(store.loads) {
                     TableColumn("#") { Text(String($0.id)).monospacedDigit() }.width(min: 30, ideal: 40)
@@ -105,10 +113,13 @@ struct SRMLoadsView: View {
                     TableColumn("Time", value: \.duration).width(min: 55, ideal: 65)
                     TableColumn("Message") { Text($0.message).help($0.message) }
                 }
+                .quickHelpArea("Loads", "Every loader run (srm.load_run), newest first: when, which loader, how it ended, rows read, inserted, updated and rejected, API calls, how long it took and its message.",
+                               symbol: "tray.and.arrow.down")
                 HStack {
                     Text("Refresh data in Data Refresh, or with SRM/srm.py load all; automate it in MxJobsWMS.")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Data Refresh") { store.section = .refresh }
+                        .quickHelp("Data Refresh", "Goes to Data Refresh, to see how fresh each category is and run its loaders.", shortcut: "⌘5")
                 }
             }
             .padding(10)

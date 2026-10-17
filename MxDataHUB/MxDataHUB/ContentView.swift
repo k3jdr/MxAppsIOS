@@ -18,15 +18,22 @@ struct ContentView: View {
                 set: { if let s = $0 { store.section = s } })
             ) { section in
                 Label(section.rawValue, systemImage: section.systemImage)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .quickHelpArea(HubHelp.about(section))
                     .tag(section)
             }
             .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
+            // Quick Help: what's under the pointer, at the bottom of the sidebar.
+            .quickHelpDock()
         } detail: {
             VStack(spacing: 0) {
                 screen
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 StatusBar(store: store)
+                    .quickHelpArea("Status", "The connection — server, database and PostgreSQL version, and whether it has the security master — and the last action's message.",
+                                   symbol: "info.circle")
             }
             .navigationTitle(store.section.rawValue)
             .toolbar {
@@ -36,6 +43,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 1360, minHeight: 720)
+        .quickHelpScreen(store.section.rawValue, HubHelp.screen(store), selection: HubHelp.selection(store))
         .task { await start() }
         .onOpenURL { url in open(AppLink(url: url)) }
         .alert("MxDataHUB", isPresented: Binding(
@@ -114,6 +122,7 @@ struct ContentView: View {
         .fixedSize()
         .disabled(store.busy || store.status == .connecting)
         .help("Database on \(store.connectedSettings?.host ?? ""); choosing another reconnects with the same user and password")
+        .quickHelp("Database", "The database on \(store.connectedSettings?.host ?? "the server") this window works in. Choosing another reconnects with the same user and password.")
     }
 
     /// Saved password, then launch arguments for testing and demos:

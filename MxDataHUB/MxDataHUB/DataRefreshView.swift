@@ -131,6 +131,8 @@ struct DataRefreshView: View {
                         .frame(minWidth: 640, maxWidth: .infinity, maxHeight: .infinity)
                     resultsPanel
                         .frame(minWidth: 320, idealWidth: 400, maxWidth: 520, maxHeight: .infinity)
+                        .quickHelpArea("This Session's Refreshes", "What each refresh you ran here did: every loader's status and rows read and rejected; open one for the end of its output. Load History has every load, from here or elsewhere.",
+                                       symbol: "clock.arrow.circlepath")
                 }
             }
         }
@@ -153,6 +155,7 @@ struct DataRefreshView: View {
             Toggle("Preview only (dry run)", isOn: $refresh.dryRun)
                 .toggleStyle(.checkbox)
                 .help("Show the srm.py command each loader would run, without loading")
+                .quickHelp("Preview Only", "Refresh and Refresh All show the srm.py command each loader would run, without loading anything.")
             Button {
                 Task { await refresh.refreshAll() }
             } label: {
@@ -160,6 +163,7 @@ struct DataRefreshView: View {
             }
             .disabled(refresh.running != nil || refresh.categories.isEmpty)
             .help("Every category in dependency order, except the optional ones; stops at the first failure")
+            .quickHelp("Refresh All", "Refreshes every category in dependency order — later ones use the earlier ones — except the optional ones, and stops at the first failure.")
             Button {
                 if !AppLink.sample(id: "srm-daily-refresh", portfolio: nil, benchmark: nil).open() {
                     refresh.error = "MxJobsWMS is not installed in Applications."
@@ -168,12 +172,14 @@ struct DataRefreshView: View {
                 Label("Automate in MxJobsWMS…", systemImage: "flowchart")
             }
             .help("Open the SRM Daily Refresh workflow: scheduled, checked and approved")
+            .quickHelp("Automate in MxJobsWMS", "Opens the SRM Daily Refresh workflow in MxJobsWMS: the same loaders on a schedule, with data-quality checks and the data steward's approval.")
             Button {
                 Task { await refresh.load() }
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .help("Reload freshness")
+            .quickHelp("Reload", "Asks the SRM loader service again how fresh each category is.")
         }
         .padding(12)
     }
@@ -297,8 +303,14 @@ private struct CategoryRow: View {
             }
             Button("Refresh", action: refresh)
                 .disabled(busy)
+                .quickHelp("Refresh \(category.name)", "Runs " + category.loaders.map(\.loader).joined(separator: ", ") + " now through the SRM loader service; the result appears on the right.")
         }
         .padding(.vertical, 6)
+        .quickHelpArea(QuickHelpItem(
+            title: category.name,
+            detail: category.description + "\n" + category.state.capitalized + (category.optional == true ? " · optional: Refresh All skips it" : "")
+                + " · refreshed \(category.cadence) · loaders " + category.loaders.map { "\($0.loader) (\($0.status))" }.joined(separator: ", ") + ".",
+            symbol: "arrow.triangle.2.circlepath"))
     }
 
     private func shortDate(_ iso: String?) -> String {

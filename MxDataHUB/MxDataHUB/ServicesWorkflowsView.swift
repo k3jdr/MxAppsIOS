@@ -24,6 +24,7 @@ struct ServicesWorkflowsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+                .quickHelp(HubHelp.servicesTabs.title, HubHelp.servicesTabs.detail)
                 Spacer()
                 Text("MxDataHUB keeps the data; MxJobsWMS runs the workflows over it.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -77,6 +78,7 @@ struct PortfolioWorkflowsMenu: View {
         .fixedSize()
         .disabled(portfolio == nil)
         .help("Optimize, track or attribute this portfolio in MxJobsWMS")
+        .quickHelp("Workflows", "Opens a workflow for this portfolio in MxJobsWMS: optimize it against \(benchmark) within a tracking-error budget, track \(benchmark) passively, or attribute its returns against \(benchmark).")
         .alert("MxDataHUB", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("OK") { message = nil }
         } message: {

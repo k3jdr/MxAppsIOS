@@ -19,6 +19,7 @@ struct SRMSecuritiesView: View {
                 .frame(minWidth: 460, idealWidth: 600, maxWidth: 720)
             detailPanel
                 .frame(minWidth: 440, idealWidth: 540)
+                .quickHelpArea(store.selectedSecurityID == nil ? nil : HubHelp.securityDetail)
         }
         .task { if store.results.isEmpty { await store.search() } }
         .task(id: store.selectedSecurityID) { await store.loadDetail() }
@@ -33,19 +34,23 @@ struct SRMSecuritiesView: View {
                 Button("Search") { Task { await store.search() } }
                     .keyboardShortcut(.defaultAction)
             }
+            .quickHelpArea(HubHelp.search)
             HStack {
                 Picker("Type", selection: $store.typeFilter) {
                     Text("All types").tag("All")
                     ForEach(store.securityTypes, id: \.self) { Text($0).tag($0) }
                 }
                 .fixedSize()
+                .quickHelp("Type", "Only securities of this type: common stock, ETF, ADR…")
                 Picker("In", selection: $store.benchmarkFilter) {
                     Text("Any benchmark").tag("")
                     ForEach(store.benchmarks) { Text($0.code).tag($0.code) }
                 }
                 .fixedSize()
+                .quickHelp("In", "Only the members of a benchmark on its latest date.")
                 Toggle("Active only", isOn: $store.activeOnly)
                     .toggleStyle(.checkbox)
+                    .quickHelp("Active Only", "Leaves out securities that are no longer active (delisted, matured, merged).")
                 Spacer()
             }
             .onChange(of: store.typeFilter) { Task { await store.search() } }
@@ -62,6 +67,7 @@ struct SRMSecuritiesView: View {
                 TableColumn("Sector", value: \.sector).width(min: 60, ideal: 120)
                 TableColumn("MIC", value: \.mic).width(min: 40, ideal: 45)
             }
+            .quickHelpArea(HubHelp.results)
             HStack {
                 Text(store.resultsTruncated ? "First 1,000 matches — narrow the search" : "\(store.results.count.formatted()) securities")
                     .foregroundStyle(.secondary)

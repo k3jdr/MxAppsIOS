@@ -36,6 +36,7 @@ struct MxDataHUBApp: App {
                 }
                 .disabled(!store.isConnected)
             }
+            QuickHelpCommands()
         }
     }
 }
