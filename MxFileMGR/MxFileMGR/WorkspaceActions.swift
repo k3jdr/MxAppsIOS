@@ -395,6 +395,15 @@ extension Workspace {
         }
     }
 
+    func addSFTPAccount() {
+        sheet = .sftp(nil)
+    }
+
+    /// Opens an SFTP account's browser window.
+    func openSFTP(_ account: SFTPAccount) {
+        openWindow?(value: SFTPRequest(accountID: account.id))
+    }
+
     func addWebDAVAccount() {
         sheet = .webDAV(nil)
     }

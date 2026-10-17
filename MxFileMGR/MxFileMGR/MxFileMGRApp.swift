@@ -83,6 +83,13 @@ struct MxFileMGRApp: App {
         .restorationBehavior(.disabled)
         .commandsRemoved()
 
+        WindowGroup("SFTP", for: SFTPRequest.self) { $request in
+            if let request { SFTPView(request: request) }
+        }
+        .defaultSize(width: 900, height: 600)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Window("Google Cloud Storage", id: "gcs") {
             GCSView()
         }

@@ -22,6 +22,7 @@ struct WorkspaceSheetView: View {
         case .properties(let urls): PropertiesSheet(urls: urls)
         case .connect(let prefill): ConnectServerSheet(workspace: workspace, address: prefill)
         case .webDAV(let account): WebDAVSheet(workspace: workspace, account: account)
+        case .sftp(let account): SFTPSheet(workspace: workspace, account: account)
         }
     }
 }

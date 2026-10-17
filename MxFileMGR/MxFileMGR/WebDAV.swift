@@ -36,18 +36,21 @@ struct WebDAVAccount: Identifiable, Codable, Hashable {
     }
 }
 
-/// Passwords for WebDAV accounts in the login Keychain (generic passwords, one per account).
-nonisolated enum WebDAVKeychain {
-    private static let service = "com.k3jdr.MxFileMGR.webdav"
+/// Saved passwords in the login Keychain (generic passwords, one per account id), for WebDAV and SFTP accounts.
+nonisolated struct PasswordKeychain {
+    let service: String
 
-    private static func query(_ account: WebDAVAccount) -> [String: Any] {
+    static let webDAV = PasswordKeychain(service: "com.k3jdr.MxFileMGR.webdav")
+    static let sftp = PasswordKeychain(service: "com.k3jdr.MxFileMGR.sftp")
+
+    private func query(_ id: UUID) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
-         kSecAttrAccount as String: account.id.uuidString]
+         kSecAttrAccount as String: id.uuidString]
     }
 
-    static func password(for account: WebDAVAccount) -> String? {
-        var q = query(account)
+    func password(for id: UUID) -> String? {
+        var q = query(id)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
@@ -55,19 +58,19 @@ nonisolated enum WebDAVKeychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func save(_ password: String, for account: WebDAVAccount) {
+    func save(_ password: String, for id: UUID, label: String) {
         let data = Data(password.utf8)
-        let q = query(account)
+        let q = query(id)
         if SecItemUpdate(q as CFDictionary, [kSecValueData as String: data] as CFDictionary) == errSecItemNotFound {
             var add = q
             add[kSecValueData as String] = data
-            add[kSecAttrLabel as String] = "MxFileMGR WebDAV: \(account.name)"
+            add[kSecAttrLabel as String] = label
             SecItemAdd(add as CFDictionary, nil)
         }
     }
 
-    static func delete(for account: WebDAVAccount) {
-        SecItemDelete(query(account) as CFDictionary)
+    func delete(for id: UUID) {
+        SecItemDelete(query(id) as CFDictionary)
     }
 }
 
@@ -98,7 +101,7 @@ final class WebDAVStore {
 
     func remove(_ account: WebDAVAccount) {
         accounts.removeAll { $0.id == account.id }
-        WebDAVKeychain.delete(for: account)
+        PasswordKeychain.webDAV.delete(for: account.id)
         save()
     }
 
@@ -133,7 +136,7 @@ final class WebDAVStore {
             if let completion { completion(message) } else { Alerts.message("Couldn't connect to “\(account.name)”.", info: message) }
             return
         }
-        let secret = password ?? WebDAVKeychain.password(for: account)
+        let secret = password ?? PasswordKeychain.webDAV.password(for: account.id)
         connecting.insert(account.id)
         var requestID: AsyncRequestID?
         // Without a password NetFS shows macOS's own sign-in dialog.
@@ -198,7 +201,7 @@ struct WebDAVSheet: View {
         isNew = account == nil
         let start = account ?? WebDAVAccount(name: "", address: "https://", user: "")
         _account = State(initialValue: start)
-        let saved = account.flatMap(WebDAVKeychain.password(for:))
+        let saved = account.flatMap { PasswordKeychain.webDAV.password(for: $0.id) }
         _password = State(initialValue: saved ?? "")
         _remember = State(initialValue: account == nil || saved != nil)
     }
@@ -262,9 +265,9 @@ struct WebDAVSheet: View {
         }
         WebDAVStore.shared.upsert(account)
         if remember, !password.isEmpty {
-            WebDAVKeychain.save(password, for: account)
+            PasswordKeychain.webDAV.save(password, for: account.id, label: "MxFileMGR WebDAV: \(account.name)")
         } else {
-            WebDAVKeychain.delete(for: account)
+            PasswordKeychain.webDAV.delete(for: account.id)
         }
     }
 

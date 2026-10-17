@@ -16,6 +16,7 @@ struct SidebarView: View {
     private let showPhotos = PhotosModel.libraryExists
     private let showS3 = AWSCLI.isAvailable
     private var webDAV = WebDAVStore.shared
+    private var sftp = SFTPStore.shared
 
     init(workspace: Workspace) { self.workspace = workspace }
 
@@ -74,6 +75,30 @@ struct SidebarView: View {
                 }
                 .onMove { WebDAVStore.shared.move(from: $0, to: $1) }
                 windowRow("Add WebDAV Account…", icon: "plus.circle", help: FileHelp.addWebDAV) { workspace.addWebDAVAccount() }
+                ForEach(sftp.accounts) { account in
+                    Button {
+                        workspace.openSFTP(account)
+                    } label: {
+                        Label(account.name, systemImage: "terminal").lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .help(account.link(account.path))
+                    .quickHelp(account.name, FileHelp.sftpAccount(account), symbol: "terminal")
+                    .contextMenu {
+                        Button("Open") { workspace.openSFTP(account) }
+                        Button("Edit…") { workspace.sheet = .sftp(account) }
+                        Divider()
+                        Button("Remove Account…") {
+                            if Alerts.confirm("Remove the SFTP account “\(account.name)”?",
+                                              info: "Its saved password is removed from the Keychain too. Files on the server aren't touched.",
+                                              ok: "Remove") {
+                                SFTPStore.shared.remove(account)
+                            }
+                        }
+                    }
+                }
+                .onMove { SFTPStore.shared.move(from: $0, to: $1) }
+                windowRow("Add SFTP Account…", icon: "plus.circle", help: FileHelp.addSFTP) { workspace.addSFTPAccount() }
                 ForEach(settings.favorites, id: \.self) { path in
                     let url = URL(fileURLWithPath: path)
                     row(title: title(forFavorite: path), icon: icon(forFavorite: path), url: url)

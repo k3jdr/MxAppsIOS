@@ -66,6 +66,8 @@ enum FileHelp {
                 shortcut: "⌘I", symbol: "info.circle"))
         case .connect:
             return ("Connect to Server", connect)
+        case .sftp(let account):
+            return (account == nil ? "Add SFTP Account" : "Edit SFTP Account", sftpSheet)
         case .webDAV(let account):
             return (account == nil ? "Add WebDAV Account" : "Edit WebDAV Account", webDAVSheet)
         }
@@ -166,6 +168,28 @@ enum FileHelp {
             + (mounted ? "Connected: click to open it in the active pane." : "Click to connect (mount) and open it in the active pane.")
             + " Right-click to edit, disconnect or remove it."
     }
+
+    static let sftpSheet = QuickHelpItem(
+        title: "SFTP Account",
+        detail: "A name for the sidebar and the server: a host name or an alias from ~/.ssh/config (pick one above), with an optional user, port and starting folder. "
+            + "Sign in with your SSH key or agent, as ssh in Terminal does, or with a password kept in your login Keychain. Test Connection tries it.",
+        symbol: "terminal")
+
+    static func sftpAccount(_ account: SFTPAccount) -> String {
+        "\(account.destination)\(account.port.isEmpty ? "" : ":\(account.port)")\(account.path.isEmpty ? "" : " in \(account.path)"). "
+            + "Click to open it in its own window: browse, download to and upload from the active pane, rename, delete. Right-click to edit or remove it."
+    }
+
+    static let addSFTP = QuickHelpItem(
+        title: "Add SFTP Account",
+        detail: "Saves an SFTP server in Favorites — from your ~/.ssh/config hosts or typed in — signing in with your SSH key or a password kept in your Keychain.",
+        symbol: "plus.circle")
+
+    static let sftpScreen = QuickHelpItem(
+        title: "SFTP",
+        detail: "The server's folder, through the system's sftp (macOS can't mount SFTP). Double-click a folder to open it or a file to download it to the active pane; "
+            + "Upload sends what's marked there, or drop files on the list. Errors from ssh, such as a refused key or an expired jump-host sign-in, show in red.",
+        symbol: "terminal")
 
     static let addWebDAV = QuickHelpItem(
         title: "Add WebDAV Account",

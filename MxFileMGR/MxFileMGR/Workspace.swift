@@ -20,6 +20,7 @@ enum WorkspaceSheet: Identifiable {
     case properties([URL])
     case connect(prefill: String)
     case webDAV(WebDAVAccount?)
+    case sftp(SFTPAccount?)
 
     var id: String {
         switch self {
@@ -29,6 +30,7 @@ enum WorkspaceSheet: Identifiable {
         case .properties(let urls): "properties-\(urls.hashValue)"
         case .connect: "connect"
         case .webDAV(let account): "webdav-\(account?.id.uuidString ?? "new")"
+        case .sftp(let account): "sftp-\(account?.id.uuidString ?? "new")"
         }
     }
 }
