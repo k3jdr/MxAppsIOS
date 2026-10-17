@@ -1,0 +1,106 @@
+//
+//  MxPortMGRApp.swift
+//  MxPortMGR
+//
+//  A portfolio-management IDE that teaches: one window with a guide in the sidebar — Start Here, Learn the Why, the
+//  Active Portfolio and Passive Index Portfolio paths, Market Reports walkthroughs and the Library — over sample
+//  accounts in an illustrative market. Optimization and attribution run built-in or through the shared Layer 3
+//  services (MXcodeIDE/Services). Educational only; never investment advice.
+//
+
+import SwiftUI
+
+@main
+struct MxPortMGRApp: App {
+    @State private var store = PortStore()
+
+    var body: some Scene {
+        Window("MxPortMGR", id: "main") {
+            ContentView(store: store)
+        }
+        .defaultSize(width: 1440, height: 900)
+        .windowResizability(.contentMinSize)
+        .commands {
+            CommandMenu("Guide") {
+                Button("Welcome") { store.go(.welcome) }
+                    .keyboardShortcut("0", modifiers: .command)
+                Button("Choose Your Path") { store.go(.choosePath) }
+                Menu("Learn the Why") {
+                    ForEach([Screen.whyOptimize, .whyAttribution, .activeVsPassive]) { s in Button(s.title) { store.go(s) } }
+                }
+                Divider()
+                Section("Active Portfolio") {
+                    ForEach(Array(Screen.activePath.enumerated()), id: \.element) { i, s in
+                        Button("\(i + 1). \(s.title)") { store.go(s) }
+                            .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: .command)
+                    }
+                }
+                Section("Passive Index Portfolio") {
+                    ForEach(Array(Screen.passivePath.enumerated()), id: \.element) { i, s in
+                        Button("\(i + 1). \(s.title)") { store.go(s) }
+                            .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: [.command, .option])
+                    }
+                }
+                Divider()
+                Button("Sample Portfolios") { store.go(.samples) }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                Button("Layer 3 Services") { store.go(.services) }
+                    .keyboardShortcut("l", modifiers: [.command, .option])
+            }
+            CommandMenu("Portfolio") {
+                Picker("Account", selection: $store.selectedID) {
+                    ForEach(store.portfolios) { p in Text(p.name).tag(p.id) }
+                }
+                Divider()
+                Button("Optimize (Active)") {
+                    store.go(.activeOptimize)
+                    Task { await store.optimize() }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+                Button("Build Index Tracker (Passive)") {
+                    store.go(.passiveTrack)
+                    Task { await store.buildTracker() }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                Button("Run Attribution") {
+                    if store.screen != .passiveAttribution { store.go(.activeAttribution) }
+                    Task { await store.attribute() }
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                Divider()
+                Picker("Engine", selection: $store.engine) {
+                    ForEach(EngineChoice.allCases) { Text($0.rawValue).tag($0) }
+                }
+                Divider()
+                Button("Copy Account to My Portfolio") { store.copyToMine(store.portfolio) }
+                    .disabled(store.selectedID == "mine")
+                Button("Reset My Portfolio") { store.resetMyPortfolio() }
+            }
+            CommandMenu("Reports") {
+                Button("Jobs Report") { store.go(.jobsReport) }
+                    .keyboardShortcut("j", modifiers: [.command, .option])
+                Button("Earnings Report") { store.go(.earningsReport) }
+                    .keyboardShortcut("e", modifiers: [.command, .option])
+                Button("Yield Curve Report") { store.go(.yieldCurveReport) }
+                    .keyboardShortcut("y", modifiers: [.command, .option])
+                Divider()
+                Button("Simulate the Long Run") {
+                    if let r = store.screen.report {
+                        store.updateReport(r) { $0.step = 5 }
+                        Task { await store.simulate(r) }
+                    }
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(store.screen.report == nil)
+            }
+            CommandGroup(after: .sidebar) {
+                Button("Previous Step") { if let p = store.screen.guidePrevious { store.go(p) } }
+                    .keyboardShortcut("[", modifiers: .command)
+                Button("Next Step") { if let n = store.screen.guideNext { store.go(n) } }
+                    .keyboardShortcut("]", modifiers: .command)
+                Divider()
+            }
+            QuickHelpCommands()
+        }
+    }
+}

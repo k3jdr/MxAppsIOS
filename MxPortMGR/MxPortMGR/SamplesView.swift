@@ -1,0 +1,63 @@
+//
+//  SamplesView.swift
+//  MxPortMGR
+//
+//  Library ▸ Sample Portfolios: every sample account, the edge case it teaches, what to look for, and where to go
+//  with it. Use makes it the account every screen works on; Copy to My Portfolio makes an editable copy.
+//
+
+import SwiftUI
+
+struct SamplesView: View {
+    @Bindable var store: PortStore
+
+    var body: some View {
+        StepPage(store: store, subtitle: "Accounts built to show the cases real portfolios run into. Use each one on every screen to learn to read the results.", lesson: [
+            "Each sample is one edge case: what a tool should flag, and what its results look like when something is unusual.",
+            "Try the same sample on both paths, and in all three report walkthroughs — the same news lands very differently on a concentrated, an income and a cash-heavy account.",
+            "My Portfolio is yours to edit, in the same illustrative universe; it is remembered between launches.",
+        ]) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 14)], alignment: .leading, spacing: 14) {
+                ForEach(store.portfolios) { p in card(p) }
+            }
+        }
+    }
+
+    private func card(_ p: Portfolio) -> some View {
+        let selected = p.id == store.selectedID
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: p.symbol).font(.title2).foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading) {
+                    Text(p.name).font(.headline)
+                    Text("\(p.account.rawValue) · \(money(p.total)) · vs \(p.benchmark) · \(p.style.rawValue)").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).help("The account in use") }
+            }
+            Text(p.lesson).font(.callout).fixedSize(horizontal: false, vertical: true)
+            ForEach(p.lookFor, id: \.self) { Label($0, systemImage: "eye").font(.caption).foregroundStyle(.secondary) }
+            let issues = p.issues
+            if !issues.isEmpty {
+                Text("\(issues.count) check\(issues.count == 1 ? "" : "s"): " + issues.map(\.title).joined(separator: "; ")).font(.caption).foregroundStyle(.orange).lineLimit(3)
+            }
+            Spacer(minLength: 0)
+            HStack {
+                Button(selected ? "In Use" : "Use") { store.selectedID = p.id }.disabled(selected)
+                Button(p.style == .passive ? "Passive Path" : "Active Path") {
+                    store.selectedID = p.id
+                    store.go(p.style == .passive ? .passivePortfolio : .activePortfolio)
+                }
+                if p.id != "mine" {
+                    Button("Copy to My Portfolio") { store.copyToMine(p) }
+                        .help("Make an editable copy of these holdings as My Portfolio (replaces it)")
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 250, alignment: .topLeading)
+        .background(selected ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Color.accentColor.opacity(0.5) : .clear))
+        .quickHelpArea(QuickHelpItem(title: p.name, detail: p.lesson + " Look for: " + p.lookFor.joined(separator: " "), symbol: p.symbol))
+    }
+}
