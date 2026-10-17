@@ -77,21 +77,31 @@ struct MxPortMGRApp: App {
                 Button("Reset My Portfolio") { store.resetMyPortfolio() }
             }
             CommandMenu("Reports") {
-                Button("Jobs Report") { store.go(.jobsReport) }
-                    .keyboardShortcut("j", modifiers: [.command, .option])
-                Button("Earnings Report") { store.go(.earningsReport) }
-                    .keyboardShortcut("e", modifiers: [.command, .option])
-                Button("Yield Curve Report") { store.go(.yieldCurveReport) }
-                    .keyboardShortcut("y", modifiers: [.command, .option])
+                Button("Report Library") { store.go(.reportLibrary) }
+                    .keyboardShortcut("r", modifiers: [.command, .option])
+                Button("Morning Briefing") { store.go(.morningBriefing) }
+                    .keyboardShortcut("m", modifiers: [.command, .option])
                 Divider()
-                Button("Simulate the Long Run") {
-                    if let r = store.screen.report {
-                        store.updateReport(r) { $0.step = 5 }
-                        Task { await store.simulate(r) }
+                Section("The Five Most Important") {
+                    ForEach(MarketReport.topFive) { r in
+                        Button(r.title) { store.openReport(r.id) }
+                            .keyboardShortcut(KeyEquivalent(Character(String(r.topFive!))), modifiers: [.command, .control])
                     }
                 }
+                Divider()
+                ForEach(ReportTier.all) { tier in
+                    Menu(tier.title) {
+                        ForEach(MarketReport.all.filter { $0.tier == tier.id }) { r in Button(r.title) { store.openReport(r.id) } }
+                    }
+                }
+                Divider()
+                Button("Simulate the Long Run") {
+                    let r = store.currentReport
+                    store.updateReport(r) { $0.step = 5 }
+                    Task { await store.simulate(r) }
+                }
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(store.screen.report == nil)
+                .disabled(store.screen != .reportWalkthrough)
             }
             CommandGroup(after: .sidebar) {
                 Button("Previous Step") { if let p = store.screen.guidePrevious { store.go(p) } }

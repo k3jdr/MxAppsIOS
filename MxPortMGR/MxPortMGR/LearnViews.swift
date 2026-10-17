@@ -24,7 +24,7 @@ struct WelcomeView: View {
             HStack(alignment: .top, spacing: 14) {
                 card("1. Learn the Why", "lightbulb", "Why a portfolio needs optimizing, why results need attributing, and what active and passive cost.", .whyOptimize)
                 card("2. Choose a Path", "signpost.right.and.left", "Active: beat a benchmark within a risk budget. Passive: match an index cheaply and stay matched.", .choosePath)
-                card("3. Read the News", "newspaper", "Walk through a jobs report, an earnings report and a yield-curve report — then simulate your reaction over twenty years.", .jobsReport)
+                card("3. Read the News", "newspaper", "Eighteen reports portfolio managers watch — jobs, CPI, the Fed, earnings, the yield curve and more — and a morning briefing. Simulate your reaction to each over twenty years.", .reportLibrary)
             }
             Box(title: "How to use it", symbol: "questionmark.circle", help: "How the window is laid out and how Quick Help works.") {
                 VStack(alignment: .leading, spacing: 6) {

@@ -102,14 +102,14 @@ struct StepFooter: View {
     var body: some View {
         HStack {
             if let prev = previous {
-                Button { store.go(prev) } label: { Label(prev.fullTitle, systemImage: "chevron.left") }
+                Button { store.go(prev) } label: { Label(label(prev), systemImage: "chevron.left") }
                     .help("Previous step: \(prev.fullTitle) (⌘[)")
                     .quickHelp("Previous Step", "Back to \(prev.fullTitle).", shortcut: "⌘[")
             }
             Spacer()
             if let next = next {
                 Button { store.go(next) } label: {
-                    HStack { Text("Next: \(next.fullTitle)"); Image(systemName: "chevron.right") }
+                    HStack { Text("Next: \(label(next))"); Image(systemName: "chevron.right") }
                 }
                 .buttonStyle(.borderedProminent)
                 .help("Next step: \(next.fullTitle) (⌘])")
@@ -120,6 +120,8 @@ struct StepFooter: View {
     }
 
     private var next: Screen? { store.screen.guideNext }
+
+    private func label(_ s: Screen) -> String { s == .reportWalkthrough ? store.currentReport.title : s.fullTitle }
     private var previous: Screen? { store.screen.guidePrevious }
 }
 
@@ -127,7 +129,7 @@ extension Screen {
     /// Within a path, its steps; at a path's end, on to the market reports; from Choose Your Path, the active path.
     var guideNext: Screen? {
         switch self {
-        case .activeAttribution, .passiveAttribution: .jobsReport
+        case .activeAttribution, .passiveAttribution: .reportLibrary
         case .choosePath: .activePortfolio
         default: next
         }
@@ -162,13 +164,15 @@ struct StepPage<Content: View>: View {
     var subtitle: String
     var lessonTitle: String = "Why this step"
     var lesson: [String]
+    /// The page title, when it isn't the screen's (a report walkthrough's report).
+    var title: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.screen.fullTitle).font(.largeTitle.weight(.semibold))
+                    Text(title ?? store.screen.fullTitle).font(.largeTitle.weight(.semibold))
                     Text(subtitle).font(.title3).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 if !lesson.isEmpty {

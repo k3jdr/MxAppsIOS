@@ -15,7 +15,7 @@ enum Screen: String, CaseIterable, Identifiable {
     case whyOptimize, whyAttribution, activeVsPassive
     case activePortfolio, activeRisk, activeOptimize, activeTrades, activeAttribution
     case passivePortfolio, passiveDrift, passiveTrack, passiveBands, passiveAttribution
-    case jobsReport, earningsReport, yieldCurveReport
+    case reportLibrary, morningBriefing, reportWalkthrough
     case samples, services
 
     var id: String { rawValue }
@@ -31,7 +31,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .whyOptimize, .whyAttribution, .activeVsPassive: .learn
         case .activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution: .active
         case .passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution: .passive
-        case .jobsReport, .earningsReport, .yieldCurveReport: .reports
+        case .reportLibrary, .morningBriefing, .reportWalkthrough: .reports
         case .samples, .services: .library
         }
     }
@@ -53,9 +53,9 @@ enum Screen: String, CaseIterable, Identifiable {
         case .passiveTrack: "Build the Tracker"
         case .passiveBands: "Rebalance Bands"
         case .passiveAttribution: "Attribution"
-        case .jobsReport: "Jobs Report"
-        case .earningsReport: "Earnings Report"
-        case .yieldCurveReport: "Yield Curve Report"
+        case .reportLibrary: "Report Library"
+        case .morningBriefing: "Morning Briefing"
+        case .reportWalkthrough: "Report Walkthrough"
         case .samples: "Sample Portfolios"
         case .services: "Layer 3 Services"
         }
@@ -85,9 +85,9 @@ enum Screen: String, CaseIterable, Identifiable {
         case .passiveDrift: "arrow.left.and.right.righttriangle.left.righttriangle.right"
         case .passiveTrack: "scope"
         case .passiveBands: "rectangle.split.3x1"
-        case .jobsReport: "person.3"
-        case .earningsReport: "building.2"
-        case .yieldCurveReport: "chart.line.uptrend.xyaxis"
+        case .reportLibrary: "books.vertical"
+        case .morningBriefing: "sunrise"
+        case .reportWalkthrough: "newspaper"
         case .samples: "square.grid.2x2"
         case .services: "server.rack"
         }
@@ -101,15 +101,6 @@ enum Screen: String, CaseIterable, Identifiable {
 
     static let activePath: [Screen] = [.activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution]
     static let passivePath: [Screen] = [.passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution]
-
-    var report: MarketReport? {
-        switch self {
-        case .jobsReport: .jobs
-        case .earningsReport: .earnings
-        case .yieldCurveReport: .yieldCurve
-        default: nil
-        }
-    }
 
     /// The next and previous screens in the guide's order.
     var next: Screen? { Screen.allCases.firstIndex(of: self).flatMap { $0 + 1 < Screen.allCases.count ? Screen.allCases[$0 + 1] : nil } }
@@ -186,6 +177,16 @@ final class PortStore {
     var bandWidth = 0.05
 
     var reports: [String: ReportState] = [:]
+    /// The report the walkthrough shows.
+    var reportID = UserDefaults.standard.string(forKey: "report") ?? "jobs" {
+        didSet { UserDefaults.standard.set(reportID, forKey: "report") }
+    }
+    var currentReport: MarketReport { MarketReport.report(reportID) }
+
+    func openReport(_ id: String) {
+        reportID = id
+        screen = .reportWalkthrough
+    }
     var collapsedLessons: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "collapsedLessons") ?? []) {
         didSet { UserDefaults.standard.set(Array(collapsedLessons), forKey: "collapsedLessons") }
     }

@@ -32,6 +32,63 @@ nonisolated struct MarketMove: Hashable, Sendable, Identifiable {
     var why: String
 }
 
+/// What a report tells the market about: the four primary determinants of asset prices, plus positioning.
+nonisolated enum Driver: String, CaseIterable, Hashable, Sendable {
+    case growth = "Growth", inflation = "Inflation", rates = "Interest rates", profits = "Corporate profits", sentiment = "Sentiment & positioning"
+    var symbol: String {
+        switch self {
+        case .growth: "chart.line.uptrend.xyaxis"
+        case .inflation: "flame"
+        case .rates: "percent"
+        case .profits: "dollarsign.circle"
+        case .sentiment: "person.3.sequence"
+        }
+    }
+}
+
+nonisolated struct ReportPoint: Hashable, Sendable, Identifiable {
+    var id: String { label }
+    var label: String
+    var value: Double
+}
+
+/// A small history that puts the report in context (core CPI by month, ISM with its 50 line, weekly flows…).
+nonisolated struct ReportSeries: Hashable, Sendable {
+    enum Kind: Hashable, Sendable { case line, bar }
+    var title: String
+    var unit: String
+    var kind: Kind = .line
+    var points: [ReportPoint]
+    var reference: Double? = nil
+    var referenceLabel: String = ""
+    var note: String = ""
+
+    init(_ title: String, unit: String, kind: Kind = .line, _ values: [(String, Double)], reference: Double? = nil, referenceLabel: String = "", note: String = "") {
+        self.title = title
+        self.unit = unit
+        self.kind = kind
+        points = values.map { ReportPoint(label: $0.0, value: $0.1) }
+        self.reference = reference
+        self.referenceLabel = referenceLabel
+        self.note = note
+    }
+}
+
+nonisolated struct ReportTier: Identifiable, Hashable, Sendable {
+    var id: Int
+    var title: String
+    var summary: String
+
+    static let all: [ReportTier] = [
+        ReportTier(id: 1, title: "Tier 1 · Market-Moving Economic Reports", summary: "Released on a fixed schedule and priced within seconds: jobs, inflation and the Federal Reserve set expectations for growth, inflation and interest rates."),
+        ReportTier(id: 2, title: "Tier 2 · Economic Growth Reports", summary: "Whether the economy is accelerating or slowing: output, purchasing managers' surveys and consumer spending."),
+        ReportTier(id: 3, title: "Tier 3 · Corporate Reports", summary: "Stock prices ultimately follow earnings: results, guidance, and how analysts revise their estimates."),
+        ReportTier(id: 4, title: "Tier 4 · Market Positioning Reports", summary: "Who owns what and where money is moving: crowded trades and investor sentiment."),
+        ReportTier(id: 5, title: "Tier 5 · Fixed Income Reports", summary: "Demand for government debt and the shape of the yield curve: the price of money across maturities."),
+        ReportTier(id: 6, title: "Tier 6 · Industry Reports", summary: "Sector-specific data that specialists follow: semiconductors, banks, housing, energy."),
+    ]
+}
+
 nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
     var id: String
     var title: String
@@ -52,18 +109,43 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
     var reactions: [Reaction]
     var takeaways: [String]
     var suggestedSample: String
+    var tier: Int = 1
+    var publisher: String = ""
+    var frequency: String = ""
+    var keyMetrics: [String] = []
+    var whyCare: [String] = []
+    var drivers: [Driver] = []
+    /// How much it typically moves markets on the day: 1 low, 2 medium, 3 high.
+    var impact: Int = 2
+    /// Its rank among the five reports with the greatest impact on a diversified U.S. equity portfolio.
+    var topFive: Int? = nil
+    var context: ReportSeries? = nil
+    /// The industry, for Tier 6.
+    var industry: String? = nil
 
     static let steps = ["The Report", "Reading It", "The Market's Move", "Your Account", "Your Reaction", "The Long Run", "Takeaways"]
 
     /// The day's return of a security under this report.
     func shock(_ s: Security) -> Double {
-        if let parts = s.lookThrough { return parts.reduce(0) { $0 + $1.value * (Universe.security($1.key).map(shock) ?? 0) } }
-        if let c = companyMoves[s.ticker] { return c }
+        MarketReport.move(s, market: marketMove, rate: rateMove, sectors: sectorMoves, companies: companyMoves)
+    }
+
+    /// A security's return for a market move, a change in yields, sector and company moves (funds by look-through).
+    static func move(_ s: Security, market: Double, rate: Double, sectors: [String: Double] = [:], companies: [String: Double] = [:]) -> Double {
+        if let parts = s.lookThrough {
+            return parts.reduce(0) { $0 + $1.value * (Universe.security($1.key).map { move($0, market: market, rate: rate, sectors: sectors, companies: companies) } ?? 0) }
+        }
+        if let c = companies[s.ticker] { return c }
         switch s.assetClass {
         case .cash: return 0
-        case .bond: return s.rateBeta * rateMove + s.beta * marketMove
-        case .equity: return s.beta * marketMove + s.rateBeta * rateMove * 0.5 + (sectorMoves[s.sector] ?? 0)
+        case .bond: return s.rateBeta * rate + s.beta * market
+        case .equity: return s.beta * market + s.rateBeta * rate * 0.5 + (sectors[s.sector] ?? 0)
         }
+    }
+
+    /// The account's change in dollars for such a move.
+    static func accountMove(_ p: Portfolio, market: Double, rate: Double, sectors: [String: Double] = [:], companies: [String: Double] = [:]) -> Double {
+        p.holdings.reduce(0) { acc, h in acc + h.value * (h.security.map { move($0, market: market, rate: rate, sectors: sectors, companies: companies) } ?? 0) }
     }
 
     /// Today's move of each sleeve of the account (the lab's starting shock).
@@ -148,7 +230,14 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             "Selling after a fall locks in the loss, and the best days often come within weeks of the worst: being out for them is what does the long-term damage.",
             "If a weak report makes you want to sell, the plan may hold more risk than you are comfortable with. The fix is a calmer plan, chosen on a calm day — not a trade on a scary one.",
         ],
-        suggestedSample: "cash-heavy")
+        suggestedSample: "cash-heavy",
+        tier: 1, publisher: "U.S. Bureau of Labor Statistics (BLS)", frequency: "Monthly, first Friday, 8:30 a.m. ET",
+        keyMetrics: ["Nonfarm payroll growth", "Unemployment rate", "Average hourly earnings", "Labor force participation rate"],
+        whyCare: ["Strong jobs numbers can signal economic strength — but also inflation pressure.", "Weak numbers raise expectations of Federal Reserve rate cuts."],
+        drivers: [.growth, .inflation, .rates], impact: 3, topFive: 2,
+        context: ReportSeries("Payrolls, monthly change", unit: "thousand jobs", kind: .bar,
+                              [("Nov", 212), ("Dec", 186), ("Jan", 175), ("Feb", 151), ("Mar", 168), ("Apr", 142), ("May", 128), ("Jun", 110), ("Jul", 96), ("Aug", 74), ("Sep", 61), ("Oct", 48)],
+                              note: "Illustrative: hiring has slowed for months — one weak report continues a trend rather than starting one."))
 
     static let earnings = MarketReport(
         id: "earnings", title: "Earnings Report", symbol: "chart.bar.doc.horizontal",
@@ -205,7 +294,14 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             "Selling to wait for the bottom and buying back later is market timing: the rebound often comes on news you can't predict.",
             "Doubling down raises the stakes on the one risk diversification would remove. Compare the 10th-percentile outcomes, not just the medians.",
         ],
-        suggestedSample: "employer-stock")
+        suggestedSample: "employer-stock",
+        tier: 3, publisher: "The company (press release, 10-Q filing, conference call)", frequency: "Quarterly, mostly in the four 'earnings seasons'",
+        keyMetrics: ["Revenue", "Earnings per share (EPS)", "Margins", "Guidance"],
+        whyCare: ["Ultimately stock prices follow earnings.", "Guidance often matters more than the current quarter's results."],
+        drivers: [.profits], impact: 3, topFive: 4,
+        context: ReportSeries("NWD earnings per share: reported vs expected", unit: "$", kind: .bar,
+                              [("Q4 ’25", 1.58), ("Q1 ’26", 1.49), ("Q2 ’26", 1.55), ("Q3 ’26", 1.42)], reference: 1.61, referenceLabel: "expected this quarter",
+                              note: "Illustrative: the first miss after three quarters of meeting expectations."))
 
     static let yieldCurve = MarketReport(
         id: "yield-curve", title: "Yield Curve Report", symbol: "chart.line.uptrend.xyaxis",
@@ -261,9 +357,22 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             "The yield curve has a poor record as a timing tool: acting on it means guessing both whether and when a recession comes — and how markets will have moved by then.",
             "Owning both stocks and bonds is a plan for many kinds of years, including the rare ones when both fall together.",
         ],
-        suggestedSample: "income")
+        suggestedSample: "income",
+        tier: 5, publisher: "U.S. Treasury market (daily yields from the Treasury Department)", frequency: "Continuous; most watched spreads: 2Y–10Y and 3M–10Y",
+        keyMetrics: ["2-year, 10-year and 30-year yields", "2Y–10Y spread", "3M–10Y spread", "Inflation breakevens"],
+        whyCare: ["An inverted curve has preceded many recessions.", "The slope influences sector allocation: banks, utilities, real estate and long-duration growth stocks all depend on it."],
+        drivers: [.rates, .growth, .inflation], impact: 2,
+        context: ReportSeries("10-year minus 2-year spread", unit: "points",
+                              [("2022", 0.20), ("’22 H2", -0.55), ("2023", -0.80), ("’23 H2", -0.35), ("2024", -0.40), ("’24 H2", 0.10), ("2025", 0.25), ("’25 H2", 0.15), ("2026", 0.12), ("Now", 0.45)],
+                              reference: 0, referenceLabel: "inverted below 0",
+                              note: "Shaped like the real curve: inverted from mid-2022 to late 2024, positive since. Stocks rose through much of the inversion."))
 
-    static let all = [jobs, earnings, yieldCurve]
+    /// Every walkthrough, in tier order.
+    static let all: [MarketReport] = [jobs, cpi, ppi, fomc, gdp, ismManufacturing, ismServices, retailSales,
+                                      earnings, revisions, cot, fundFlows, auctions, yieldCurve,
+                                      semiconductors, banks, housing, energy]
+    static func report(_ id: String) -> MarketReport { all.first { $0.id == id } ?? jobs }
+    static var topFive: [MarketReport] { all.filter { $0.topFive != nil }.sorted { $0.topFive! < $1.topFive! } }
 
     /// Yields by maturity (years) before and after the yield-curve report, for its chart.
     static let curveBefore: [(Double, Double)] = [(0.25, 4.20), (2, 4.15), (5, 4.12), (10, 4.27), (30, 4.65)]

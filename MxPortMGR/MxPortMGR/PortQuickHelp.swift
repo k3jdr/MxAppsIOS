@@ -27,9 +27,9 @@ enum PortHelp {
         case .passiveTrack: detail = "Passive path, step 3: the fewest names that track the index within budget, the tracking-error curve, and the one-fund alternative — built-in or portfolio-cpp."
         case .passiveBands: detail = "Passive path, step 4: the stock / bond / cash mix against its targets and rebalance bands, when the bands were crossed, and the trades to return."
         case .passiveAttribution: detail = "Passive path, step 5: attribution for an index portfolio — small effects everywhere is success; any large effect is drift or a mistake."
-        case .jobsReport: detail = "Walkthrough: read a monthly jobs report, see the day's market move on your account, choose a reaction and simulate its long-run consequences."
-        case .earningsReport: detail = "Walkthrough: a company misses earnings and its shares fall 18%. Read the release, see your exposure, choose a reaction and simulate the long run."
-        case .yieldCurveReport: detail = "Walkthrough: long-term yields jump. Read the curve, see what bonds and rate-sensitive stocks do, choose a reaction and simulate the long run."
+        case .reportLibrary: detail = "The reports portfolio managers watch, in six tiers — market-moving economic reports, growth, corporate, positioning, fixed income and industry — with what each measures, why PMs care, the price drivers it moves, and the five with the greatest impact. Open any one's walkthrough."
+        case .morningBriefing: detail = "An illustrative morning: overnight markets, Treasury yields, the economic calendar, the economic surprise index, Fed funds futures, analyst rating changes, earnings releases, fund flows, credit spreads and the VIX — with what the account would be worth if it opened with the futures."
+        case .reportWalkthrough: detail = "A report walkthrough in seven steps: the report, how to read it, the market's move, what it did to the account, your reaction, its long-run consequences against the plan, and the takeaways. Choose another report with the Report menu at the top."
         case .samples: detail = "Every sample account, the edge case it teaches and what to look for. Select one to use it everywhere; copy one into My Portfolio to edit."
         case .services: detail = "The shared Layer 3 services (MXcodeIDE/Services) — portfolio-java for active optimization, portfolio-cpp for tracking and risk, analytics for attribution — whether they run and how to start them."
         }

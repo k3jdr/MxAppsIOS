@@ -17,10 +17,11 @@ struct ReportView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: report.headline, lessonTitle: "What this walkthrough shows", lesson: [
-            "How to read a \(report.title.lowercased()) — what each number means and what the market watches.",
+            "How to read the \(report.title) — what each number means and what the market watches.",
             "What the day's move does to the account selected in the toolbar, holding by holding.",
             "Then you choose a reaction and the Behaviour Lab simulates it against staying with the plan over many possible futures: missed recovery days, trading costs, taxes and tracking error.",
-        ]) {
+        ], title: report.title) {
+            header
             stepBar
             Group {
                 switch state.step {
@@ -50,6 +51,30 @@ struct ReportView: View {
                 }
             }
         }
+    }
+
+    /// The report's tier and drivers, and a menu of every report by tier.
+    private var header: some View {
+        HStack(spacing: 8) {
+            Text(ReportTier.all[report.tier - 1].title).font(.callout.weight(.semibold))
+                .padding(.horizontal, 8).padding(.vertical, 3).background(Color.accentColor.opacity(0.15), in: Capsule())
+            if let n = report.topFive {
+                Text("Top five · #\(n)").font(.callout.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 3).background(Color.orange.opacity(0.2), in: Capsule())
+            }
+            ForEach(report.drivers, id: \.self) { d in Label(d.rawValue, systemImage: d.symbol).font(.caption).foregroundStyle(.secondary) }
+            Spacer()
+            Menu {
+                ForEach(ReportTier.all) { tier in
+                    Section(tier.title) {
+                        ForEach(MarketReport.all.filter { $0.tier == tier.id }) { r in Button(r.title) { store.openReport(r.id) } }
+                    }
+                }
+            } label: { Label("Report", systemImage: "newspaper") }
+            .fixedSize()
+            .help("Choose another report to walk through")
+            Button("Report Library") { store.go(.reportLibrary) }
+        }
+        .quickHelpArea(QuickHelpItem(title: ReportTier.all[report.tier - 1].title, detail: ReportTier.all[report.tier - 1].summary + " This report moves expectations for: " + report.drivers.map(\.rawValue).joined(separator: ", ") + ".", symbol: "books.vertical"))
     }
 
     private var stepBar: some View {
@@ -103,6 +128,16 @@ struct ReportView: View {
             .overlay(alignment: .topTrailing) {
                 Text("ILLUSTRATIVE").font(.caption2.weight(.heavy)).foregroundStyle(.orange).padding(8)
             }
+            Box(title: "About this report", symbol: "info.circle", help: "Who publishes it, when, what it measures and why portfolio managers watch it.") {
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
+                    GridRow { Text("Published by").foregroundStyle(.secondary); Text(report.publisher) }
+                    GridRow { Text("When").foregroundStyle(.secondary); Text(report.frequency) }
+                    GridRow { Text("Key metrics").foregroundStyle(.secondary); Text(report.keyMetrics.joined(separator: " · ")) }
+                    GridRow { Text("Why PMs care").foregroundStyle(.secondary); Text(report.whyCare.joined(separator: " ")) }
+                    GridRow { Text("Typical impact").foregroundStyle(.secondary); ImpactDots(level: report.impact) }
+                }
+                .font(.callout)
+            }
             Text("Read it the way the market does: point at each line for what it measures, then go on to Reading It.").font(.callout).foregroundStyle(.secondary)
         }
     }
@@ -141,6 +176,29 @@ struct ReportView: View {
                             Text(m.why).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         }
                     }
+                }
+            }
+            if let c = report.context {
+                Box(title: c.title, symbol: "chart.xyaxis.line", help: "Recent history that puts the report in context." + (c.note.isEmpty ? "" : " " + c.note)) {
+                    Chart {
+                        ForEach(c.points) { p in
+                            if c.kind == .bar {
+                                BarMark(x: .value("When", p.label), y: .value(c.unit, p.value), width: .ratio(0.6))
+                                    .foregroundStyle(p.id == c.points.last?.id ? Color.orange : Color.accentColor.opacity(0.7))
+                            } else {
+                                LineMark(x: .value("When", p.label), y: .value(c.unit, p.value))
+                                PointMark(x: .value("When", p.label), y: .value(c.unit, p.value))
+                                    .foregroundStyle(p.id == c.points.last?.id ? Color.orange : Color.accentColor)
+                            }
+                        }
+                        if let ref = c.reference {
+                            RuleMark(y: .value("Reference", ref)).foregroundStyle(.secondary).lineStyle(StrokeStyle(dash: [4, 3]))
+                                .annotation(position: .top, alignment: .leading) { Text(c.referenceLabel).font(.caption2).foregroundStyle(.secondary) }
+                        }
+                    }
+                    .chartYAxisLabel(c.unit)
+                    .frame(height: 200)
+                    if !c.note.isEmpty { Text(c.note).font(.caption).foregroundStyle(.secondary) }
                 }
             }
             if report.id == "yield-curve" {
@@ -304,9 +362,12 @@ struct ReportView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                ForEach(MarketReport.all.filter { $0.id != report.id }) { r in
-                    Button("Next walkthrough: \(r.title)") { store.go(r.id == "jobs" ? .jobsReport : r.id == "earnings" ? .earningsReport : .yieldCurveReport) }
+                if let i = MarketReport.all.firstIndex(where: { $0.id == report.id }), i + 1 < MarketReport.all.count {
+                    let next = MarketReport.all[i + 1]
+                    Button("Next walkthrough: \(next.title)") { store.openReport(next.id) }.buttonStyle(.borderedProminent)
                 }
+                Button("Report Library") { store.go(.reportLibrary) }
+                Button("Morning Briefing") { store.go(.morningBriefing) }
             }
         }
     }

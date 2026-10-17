@@ -36,7 +36,7 @@ gives both.
 | --- | --- |
 | **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize (Active) ⌘R · Build Index Tracker (Passive) ⇧⌘R · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
-| **Reports** | Jobs Report ⌥⌘J · Earnings Report ⌥⌘E · Yield Curve Report ⌥⌘Y · Simulate the Long Run ⌘↩ |
+| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) · Previous Step ⌘[ · Next Step ⌘] |
 
 ## The guide
@@ -83,16 +83,51 @@ gives both.
    band; the stock share through the year; holding-level trades and their taxes.
 5. **Attribution** — read as a check-up: for a passive account every effect should be close to zero.
 
-### Market Reports walkthroughs
+### Market Reports
 
-Each walkthrough has seven steps — **The Report**, **Reading It**, **The Market's Move**, **Your Account**,
-**Your Reaction**, **The Long Run**, **Takeaways**:
+The hierarchy of reports portfolio managers, hedge funds, pension funds and mutual-fund managers watch — some move
+markets within seconds, others shape positioning over weeks or months.
 
-| Walkthrough | The report (illustrative) | Written for | Reactions to simulate |
+* **Report Library** — every report by tier as a card (publisher, schedule, key metrics, why PMs care, the price
+  drivers it moves, typical impact), **If you had to pick five** (CPI, Nonfarm Payrolls, FOMC, earnings and guidance,
+  ISM PMI — together they drive expectations for growth, inflation, interest rates and profits, the four primary
+  determinants of asset prices), and a report × driver matrix.
+* **Morning Briefing** — an illustrative morning's ten items: overnight markets, Treasury yield changes (with the
+  2Y–10Y and 3M–10Y spreads), the economic calendar (consensus, prior, impact; each release opens its walkthrough),
+  an economic surprise index, Fed funds futures probabilities, analyst upgrades and downgrades (fictional firms),
+  earnings releases (marked "you hold"), weekly fund flows, credit spreads and the VIX — with what the selected
+  account would be worth if it opened with the futures. Each panel says what it measures and how a long-term investor
+  might use it.
+* **Report Walkthrough** — one report at a time (the sidebar row shows which; the **Report** menu at the top of the
+  page or the Reports menu picks another), in seven steps — **The Report** (with *About this report*), **Reading It**,
+  **The Market's Move** (with a context chart: core CPI by month, ISM against its 50 line, auction tails, weekly
+  flows…), **Your Account**, **Your Reaction**, **The Long Run**, **Takeaways**.
+
+| Tier | Report | The illustrative release | Written for |
 | --- | --- | --- | --- |
-| **Jobs Report** | Payrolls +48,000 vs +150,000 expected, unemployment 4.6%, downward revisions, slower wages; stocks −2.4%, yields down, bonds up | Cash-Heavy | Sell all stocks and buy back later · sell half · rotate into bonds for good · buy the dip · react to every scary headline |
-| **Earnings Report** | Northwind Devices (fictional) misses revenue, EPS and margin, cuts guidance; −18% after hours; the index −2.6% because NWD is ~13% of it | Concentrated Employer Stock | Sell the company and buy the index · sell, wait in cash, buy back · double down · sell all stocks |
-| **Yield Curve Report** | 10-year 4.55% (+0.28), 30-year 4.95%, a bear steepener, with an inverted curve for comparison; long bonds −4.6%, REITs and utilities −3% | Retiree Income | Sell the bonds and sit in cash · sell stocks before the recession · chase the higher yields · react to every scary headline |
+| 1 | **Jobs Report** (#2 of the five) | Payrolls +48,000 vs +150,000, unemployment 4.6%, downward revisions | Cash-Heavy |
+| 1 | **CPI Inflation Report** (#1) | Core +0.5% m/m, 3.4% y/y; 2-year yield +0.20; growth stocks −4% | Sector-Heavy Technology |
+| 1 | **PPI Producer Prices** | Final demand +0.7%; margin pressure; producers up, users down | Core & Satellite |
+| 1 | **FOMC Decision & Projections** (#3) | Hold, but the dot plot shows one cut instead of three; dollar up | 60/40 Outside Its Band |
+| 2 | **GDP Report** | 0.8% annualised; consumers and business investment cool | Core & Satellite |
+| 2 | **ISM Manufacturing PMI** (#5) | 46.8, a sixth month below 50; cyclicals −2.5% | Core & Satellite |
+| 2 | **ISM Services PMI** | 56.4, a two-year high — a *good-news* case: stocks up, yields up | 60/40 Outside Its Band |
+| 2 | **Retail Sales** | −0.9%, control group −0.6%; discretionary −3% | Missing & Messy Data |
+| 3 | **Earnings Report** (#4) | Northwind Devices misses and cuts guidance; −18% | Concentrated Employer Stock |
+| 3 | **Earnings Revisions** | Four weeks of upward revisions to Helix Software (FactSet / Bloomberg / Visible Alpha / Refinitiv-style data) | Sector-Heavy Technology |
+| 4 | **CFTC Commitments of Traders** | Record speculative long in equity futures, record short in Treasuries — a crowded trade | 60/40 Outside Its Band |
+| 4 | **Fund Flow Report** | −$24bn from stock funds, +$41bn into money-market funds (EPFR / Morningstar / Lipper-style) | Core & Satellite |
+| 5 | **Treasury Auction Results** | Weak 10-year auction: 3.2bp tail, low bid-to-cover; long yields +0.12 | Retiree Income |
+| 5 | **Yield Curve Report** | 10-year +0.28 in a bear steepener, with an inverted curve for comparison | Retiree Income |
+| 6 | **Semiconductor Sales** (Technology) | Chip sales −6%, cloud capex cut; Qubitron −9% | Sector-Heavy Technology |
+| 6 | **Bank Earnings & Credit** (Financials) | Higher loan-loss provisions, card charge-offs at a 10-year high | Core & Satellite |
+| 6 | **Housing Starts & Home Sales** (Housing) | Starts −11%, permits at a five-year low, mortgage rates near 7% | Retiree Income |
+| 6 | **EIA Petroleum Status** (Energy) | 9.6m-barrel crude build, OPEC+ adds output; oil −6% | Retiree Income |
+
+Reactions to simulate include selling all stocks and buying back later, selling half, rotating into bonds, buying the
+dip, reacting to every scary headline, going all in on good news, taking profits, selling bonds for cash, chasing
+yields, betting against or following the crowd, and — for the single-company reports — selling the stock into the
+index, doubling down, buying more of a winner, or selling and buying back later.
 
 The day's move is expressed in the factor model (market, rates, sectors, one company), so it lands on any account
 through its own holdings. **The Long Run** runs the **Behaviour Lab**: every reaction and *Stay with the plan* on the
@@ -162,7 +197,7 @@ configuration is compiled with `-O`: the optimizers and the simulator are numeri
 unoptimised.
 
 Launch arguments for demos and tests: `-screen activeOptimize` (any `Screen` case), `-sample employer-stock` (a sample
-id), and for a walkthrough `-reportStep 5 -reaction sell-all` (step 5 runs the simulation). `-quickHelpVisible NO`
+id), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
 hides Quick Help.
 
 ## Files
@@ -174,6 +209,7 @@ hides Quick Help.
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
 | `Universe.swift`, `Portfolio.swift`, `Samples.swift` | The illustrative market, accounts and checks, the samples |
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | Built-in engines and the Layer 3 service client |
-| `BehaviorLab.swift`, `MarketReports.swift` | The long-horizon simulator and the three report walkthroughs |
+| `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
+| `ReportsHubViews.swift` | Report Library and Morning Briefing |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

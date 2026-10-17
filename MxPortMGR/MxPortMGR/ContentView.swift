@@ -17,7 +17,8 @@ struct ContentView: View {
                 ForEach(Screen.Group.allCases, id: \.self) { group in
                     Section(group.rawValue) {
                         ForEach(Screen.allCases.filter { $0.group == group }) { screen in
-                            Label(screen.step.map { "\($0). \(screen.title)" } ?? screen.title, systemImage: screen.systemImage)
+                            Label(screen == .reportWalkthrough ? store.currentReport.title : screen.step.map { "\($0). \(screen.title)" } ?? screen.title,
+                                  systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
                                 .quickHelpArea(PortHelp.about(screen))
@@ -71,7 +72,9 @@ struct ContentView: View {
         case .passiveDrift: DriftView(store: store)
         case .passiveTrack: TrackView(store: store)
         case .passiveBands: BandsView(store: store)
-        case .jobsReport, .earningsReport, .yieldCurveReport: ReportView(store: store, report: store.screen.report!)
+        case .reportLibrary: ReportLibraryView(store: store)
+        case .morningBriefing: MorningBriefingView(store: store)
+        case .reportWalkthrough: ReportView(store: store, report: store.currentReport)
         case .samples: SamplesView(store: store)
         case .services:
             ServicesView()
@@ -106,12 +109,13 @@ struct ContentView: View {
     }
 
     /// Launch arguments for testing and demos: `-screen activeOptimize -sample employer-stock`, and for a report
-    /// walkthrough `-reportStep 5` (0–6; 5 simulates the long run) with `-reaction sell-all`.
+    /// walkthrough `-screen reportWalkthrough -report cpi -reportStep 5` (0–6; 5 simulates the long run) with `-reaction sell-all`.
     private func start() {
         let defaults = UserDefaults.standard
         if let s = defaults.string(forKey: "screen").flatMap(Screen.init(rawValue:)) { store.screen = s }
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
-        if let r = store.screen.report, defaults.object(forKey: "reportStep") != nil {
+        if store.screen == .reportWalkthrough, defaults.object(forKey: "reportStep") != nil {
+            let r = store.currentReport
             let step = min(max(defaults.integer(forKey: "reportStep"), 0), MarketReport.steps.count - 1)
             store.updateReport(r) { s in
                 s.step = step
