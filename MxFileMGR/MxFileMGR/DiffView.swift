@@ -99,6 +99,7 @@ struct DiffView: View {
             }
         }
         .navigationTitle("\(request.left.lastPathComponent) ↔ \(request.right.lastPathComponent)")
+        .quickHelpScreen("Compare Files", FileHelp.diff)
         .task {
             let (a, b) = (request.left, request.right)
             let result = await Task.detached { Differ.diff(a, b) }.value

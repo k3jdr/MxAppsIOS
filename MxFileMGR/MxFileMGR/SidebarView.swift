@@ -23,6 +23,7 @@ struct SidebarView: View {
             Section("Favorites") {
                 ForEach(AppSettings.cloudLocations.filter { !settings.favorites.contains($0.url.path) }) { cloud in
                     row(title: cloud.name, icon: cloud.icon, url: cloud.url)
+                        .quickHelp(cloud.name, FileHelp.cloudFolder(cloud.name, cloud.url), symbol: cloud.icon)
                         .contextMenu {
                             Button("Open in New Tab") { workspace.activePane.newTab(cloud.url) }
                             Button("Open in Other Pane") { workspace.otherTab.navigate(to: cloud.url) }
@@ -30,33 +31,17 @@ struct SidebarView: View {
                         }
                 }
                 if showPhotos {
-                    Button {
-                        workspace.openPhotos()
-                    } label: {
-                        Label("iCloud Photos", systemImage: "photo.on.rectangle").lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Browse iCloud Photos and export originals into the active pane's folder")
+                    windowRow("iCloud Photos", icon: "photo.on.rectangle", help: FileHelp.photos) { workspace.openPhotos() }
                 }
                 if showS3 {
-                    Button {
-                        workspace.openS3()
-                    } label: {
-                        Label("Amazon S3", systemImage: "server.rack").lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Browse Amazon S3 buckets with your AWS CLI profiles")
+                    windowRow("Amazon S3", icon: "server.rack", help: FileHelp.s3) { workspace.openS3() }
                 }
-                Button {
-                    workspace.openAzure()
-                } label: {
-                    Label("Azure Blob Storage", systemImage: "cylinder.split.1x2").lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                .help("Browse Azure Blob Storage with the Azure CLI (az login)")
+                windowRow("Azure Blob Storage", icon: "cylinder.split.1x2", help: FileHelp.azure) { workspace.openAzure() }
+                windowRow("Google Cloud Storage", icon: "cloud.circle", help: FileHelp.gcs) { workspace.openGCS() }
                 ForEach(settings.favorites, id: \.self) { path in
                     let url = URL(fileURLWithPath: path)
                     row(title: title(forFavorite: path), icon: icon(forFavorite: path), url: url)
+                        .quickHelp(title(forFavorite: path), "Opens \(path) in the active pane. Right-click to open it in a new tab or the other pane, or to remove it from Favorites; drag to reorder.", symbol: icon(forFavorite: path))
                         .contextMenu {
                             Button("Open in New Tab") { workspace.activePane.newTab(url) }
                             Button("Open in Other Pane") { workspace.otherTab.navigate(to: url) }
@@ -67,6 +52,7 @@ struct SidebarView: View {
                 }
                 .onMove { settings.favorites.move(fromOffsets: $0, toOffset: $1) }
             }
+            .quickHelpArea(FileHelp.favorites)
             .dropDestination(for: URL.self) { urls, _ in
                 let folders = urls.filter(FileOps.isRealDirectory)
                 folders.forEach(settings.addFavorite)
@@ -87,9 +73,11 @@ struct SidebarView: View {
                             }
                             .buttonStyle(.borderless)
                             .help("Eject “\(volume.name)”")
+                            .quickHelp("Eject", "Unmounts “\(volume.name)” so it can be unplugged or disconnected.")
                         }
                     }
                     .help(volume.capacityText)
+                    .quickHelp(volume.name, "Opens the volume in the active pane. \(volume.capacityText).", symbol: volume.isNetwork ? "network" : "externaldrive")
                     .contextMenu {
                         Button("Open in New Tab") { workspace.activePane.newTab(volume.url) }
                         Button("Open in Other Pane") { workspace.otherTab.navigate(to: volume.url) }
@@ -105,6 +93,7 @@ struct SidebarView: View {
                     Label("Connect to Server…", systemImage: "network")
                 }
                 .buttonStyle(.plain)
+                .quickHelp("Connect to Server", FileHelp.connect.detail, shortcut: "⌘K", symbol: "network")
                 ForEach(settings.recentServers, id: \.self) { address in
                     Button {
                         workspace.sheet = .connect(prefill: address)
@@ -112,6 +101,7 @@ struct SidebarView: View {
                         Label(address, systemImage: "server.rack").lineLimit(1)
                     }
                     .buttonStyle(.plain)
+                    .quickHelp(address, "Opens Connect to Server with this address filled in. Right-click to remove it from the list.", symbol: "server.rack")
                     .contextMenu {
                         Button("Remove") { settings.recentServers.removeAll { $0 == address } }
                     }
@@ -119,6 +109,17 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .quickHelpDock()
+    }
+
+    /// A Favorites entry that opens a browser window (iCloud Photos, the cloud object stores).
+    private func windowRow(_ title: String, icon: String, help: QuickHelpItem, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).lineLimit(1)
+        }
+        .buttonStyle(.plain)
+        .help(help.detail)
+        .quickHelp(title, help.detail, symbol: icon)
     }
 
     private func row(title: String, icon: String, url: URL) -> some View {

@@ -211,6 +211,7 @@ struct SearchView: View {
             .padding(10)
         }
         .navigationTitle("Find Files")
+        .quickHelpScreen("Find Files", FileHelp.search, selection: selection.isEmpty ? nil : QuickHelpItem(title: Fmt.count(selection.count, "Result") + " Selected", detail: "Show in Pane reveals the first one in the active pane; Copy Paths copies their paths.", symbol: "checkmark.circle"))
         .onDisappear { model.cancel() }
     }
 
@@ -256,6 +257,7 @@ struct SearchView: View {
                         Button("Stop") { model.cancel() }
                     } else {
                         Button("Find") { model.start() }.keyboardShortcut(.defaultAction)
+                            .quickHelp("Find", "Starts the search; results appear as they are found.", shortcut: "↩")
                     }
                 }
                 .textFieldStyle(.roundedBorder)

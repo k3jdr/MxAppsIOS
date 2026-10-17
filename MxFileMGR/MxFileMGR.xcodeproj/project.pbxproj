@@ -17,6 +17,12 @@
 			path = MxFileMGR;
 			sourceTree = "<group>";
 		};
+		7C3B5F2A30A1B2C4004D5E6F /* Shared QuickHelp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = "Shared QuickHelp";
+			path = ../Shared/QuickHelp;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +39,7 @@
 			children = (
 				7C3B5F0830A1B2C3004D5E6F /* README.md */,
 				7C3B5F1630A1B2C3004D5E6F /* MxFileMGR */,
+				7C3B5F2A30A1B2C4004D5E6F /* Shared QuickHelp */,
 				7C3B5F1530A1B2C3004D5E6F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,6 +67,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				7C3B5F1630A1B2C3004D5E6F /* MxFileMGR */,
+				7C3B5F2A30A1B2C4004D5E6F /* Shared QuickHelp */,
 			);
 			name = MxFileMGR;
 			productName = MxFileMGR;

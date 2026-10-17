@@ -111,6 +111,7 @@ struct MainCommands: Commands {
             }
             item("Amazon S3") { $0.openS3() }
             item("Azure Blob Storage") { $0.openAzure() }
+            item("Google Cloud Storage") { $0.openGCS() }
             item("Box") { workspace in
                 if let url = AppSettings.boxURLs.first { workspace.go(to: url) } else { Alerts.message("Box isn't set up on this Mac.", info: "Install Box Drive and sign in; its folder then appears under Favorites.") }
             }

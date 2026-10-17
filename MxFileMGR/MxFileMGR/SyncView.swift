@@ -195,11 +195,13 @@ struct SyncView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Synchronize") { synchronize() }
+                    .quickHelp("Synchronize", "Copies every row with a direction (→ or ←) after asking, replacing older files at the destination.")
                     .disabled(toRight + toLeft == 0)
             }
             .padding(10)
         }
         .navigationTitle("Synchronize Folders")
+        .quickHelpScreen("Synchronize Folders", FileHelp.sync)
     }
 
     private func info(_ side: (size: Int64, date: Date)?, dir: Bool) -> String {

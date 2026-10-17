@@ -186,6 +186,7 @@ struct MultiRenameView: View {
                 Text(message).foregroundStyle(.secondary)
                 Spacer()
                 Button("Undo") { performUndo() }.disabled(undo.isEmpty)
+                    .quickHelp("Undo", "Gives the files of the last batch their old names back.")
                 Button("Rename") { rename(rows) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(rows.contains { $0.problem != nil } || rows.allSatisfy { $0.old == $0.new })
@@ -193,6 +194,7 @@ struct MultiRenameView: View {
             .padding(10)
         }
         .navigationTitle("Multi-Rename — \(Fmt.count(urls.count, "item"))")
+        .quickHelpScreen("Multi-Rename", FileHelp.multiRename)
     }
 
     /// Renames in two passes through temporary names so swaps (a→b, b→a) work.

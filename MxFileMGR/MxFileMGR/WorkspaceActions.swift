@@ -354,6 +354,11 @@ extension Workspace {
         openWindow?(id: "azure")
     }
 
+    /// Opens the Google Cloud Storage browser window.
+    func openGCS() {
+        openWindow?(id: "gcs")
+    }
+
     func search() {
         openWindow?(value: SearchRequest(root: activeTab.url))
     }

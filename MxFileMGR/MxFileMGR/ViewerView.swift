@@ -49,6 +49,7 @@ struct ViewerView: View {
             }
         }
         .navigationTitle(request.url.lastPathComponent)
+        .quickHelpScreen("Viewer", FileHelp.viewer, selection: QuickHelpItem(title: request.url.lastPathComponent, detail: request.url.path, symbol: "doc"))
         .navigationSubtitle(request.url.deletingLastPathComponent().path)
         .task(id: mode) { await load() }
         .onAppear {

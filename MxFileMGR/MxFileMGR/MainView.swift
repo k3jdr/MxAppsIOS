@@ -36,12 +36,15 @@ struct MainView: View {
         .navigationTitle(workspace.activeTab.title)
         .navigationSubtitle(workspace.activeTab.url.path)
         .toolbar { MainToolbar(workspace: workspace) }
+        .quickHelpScreen(FileHelp.screen(workspace).name, FileHelp.screen(workspace).item,
+                         selection: FileHelp.selection(workspace))
         .focusedSceneValue(\.workspace, workspace)
         .sheet(item: $workspace.sheet) { sheet in
             WorkspaceSheetView(workspace: workspace, sheet: sheet)
         }
         .background(WindowReader(workspace: workspace))
         .onAppear {
+            FileHelp.install()
             workspace.openWindow = openWindow
             Workspace.current = workspace
         }
@@ -62,28 +65,38 @@ private struct MainToolbar: ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             Button { workspace.activePane.newTab() } label: { Label("New Tab", systemImage: "plus.square.on.square") }
                 .help("New Tab (⌘T)")
+                .quickHelp("New Tab", "Opens a new tab in the active pane, on the same folder.", shortcut: "⌘T")
             Button { workspace.swapPanes() } label: { Label("Swap Panes", systemImage: "arrow.left.arrow.right") }
                 .help("Swap Panes (⌘U)")
+                .quickHelp("Swap Panes", "Exchanges the left and right panes, tabs and all.", shortcut: "⌘U")
             Button { workspace.mirrorToOtherPane() } label: { Label("Same Folder", systemImage: "equal.square") }
                 .help("Show this folder in the other pane")
+                .quickHelp("Same Folder", "Shows the active pane's folder in the other pane too.", shortcut: "⌥⌘=")
             Toggle(isOn: Binding(get: { settings.showHidden }, set: { settings.showHidden = $0 })) {
                 Label("Hidden Files", systemImage: settings.showHidden ? "eye" : "eye.slash")
             }
             .help("Show Hidden Files (⌘⇧.)")
+            .quickHelp("Hidden Files", "Shows or hides hidden items (dot files and the like) in every pane; they appear dimmed.", shortcut: "⇧⌘.")
         }
         ToolbarItemGroup(placement: .primaryAction) {
             Button { workspace.search() } label: { Label("Find", systemImage: "magnifyingglass") }
                 .help("Find Files (⌘F)")
+                .quickHelp("Find Files", FileHelp.search.detail, shortcut: "⌘F")
             Button { workspace.multiRename() } label: { Label("Multi-Rename", systemImage: "character.cursor.ibeam") }
                 .help("Multi-Rename (⌃M)")
+                .quickHelp("Multi-Rename", FileHelp.multiRename.detail, shortcut: "⌃M")
             Button { workspace.compareFolders() } label: { Label("Compare", systemImage: "rectangle.split.2x1") }
                 .help("Select differences between the panes")
+                .quickHelp("Compare Folders", "Marks, in both panes, the items missing on the other side or newer than their twin (by name, date and size).", shortcut: "⌥⌘K")
             Button { workspace.synchronizeFolders() } label: { Label("Synchronize", systemImage: "arrow.triangle.2.circlepath") }
                 .help("Synchronize Folders…")
+                .quickHelp("Synchronize Folders", FileHelp.sync.detail, shortcut: "⌥⌘Y")
             Button { workspace.openTerminal() } label: { Label("Terminal", systemImage: "terminal") }
                 .help("Open Terminal Here (⌥⌘T)")
+                .quickHelp("Terminal", "Opens the active pane's folder (or the marked folder) in Terminal, or the app chosen in Settings.", shortcut: "⌥⌘T")
             Button { workspace.sheet = .connect(prefill: "") } label: { Label("Connect", systemImage: "network") }
                 .help("Connect to Server (⌘K)")
+                .quickHelp("Connect to Server", FileHelp.connect.detail, shortcut: "⌘K")
         }
     }
 }
@@ -104,6 +117,7 @@ private struct FunctionKeyBar: View {
             key("⌥F7", "Find") { workspace.search() }
         }
         .padding(.vertical, 3)
+        .quickHelpArea(FileHelp.functionKeys)
     }
 
     private func key(_ name: String, _ title: String, action: @escaping () -> Void) -> some View {
@@ -118,6 +132,7 @@ private struct FunctionKeyBar: View {
         .buttonStyle(.borderless)
         .font(.callout)
         .overlay(alignment: .trailing) { Divider().frame(height: 14) }
+        .quickHelp(title, "\(title) the marked items (\(name)). " + FileHelp.functionKeys.detail, shortcut: name)
     }
 }
 
@@ -135,6 +150,7 @@ private struct TransferPanel: View {
                 }
             }
             .background(.bar)
+            .quickHelpArea(FileHelp.transfers)
         }
     }
 }

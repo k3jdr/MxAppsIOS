@@ -387,6 +387,7 @@ struct S3View: View {
             }
         }
         .navigationTitle("Amazon S3")
+        .quickHelpScreen("Amazon S3", FileHelp.s3Screen, selection: FileHelp.remoteSelection(model.selectedEntries))
         .navigationSubtitle(model.bucket == nil ? "" : model.uri(model.prefix))
         .task { await model.loadBuckets() }
     }
@@ -492,6 +493,7 @@ struct S3View: View {
             }
         }
         .onDeleteCommand { Task { await model.delete(model.selectedEntries) } }
+        .quickHelpArea(FileHelp.remoteList("S3"))
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
             model.upload(files)
@@ -517,9 +519,11 @@ struct S3View: View {
             Button("New Folder…") { Task { await model.newFolder() } }
                 .disabled(model.bucket == nil)
             Button("Upload from “\(paneName ?? "Pane")”") { model.upload(marked) }
+                .quickHelp("Upload", FileHelp.uploadDetail)
                 .disabled(model.bucket == nil || marked.isEmpty)
                 .help("Upload the items marked in the active pane into this S3 folder")
             Button("Delete…", role: .destructive) { Task { await model.delete(model.selectedEntries) } }
+                .quickHelp("Delete", "Deletes the selected items, and folders with everything in them, after asking. There is no trash.", shortcut: "⌫")
                 .disabled(model.selection.isEmpty)
             Button("Download to “\(paneName ?? "Pane")”") {
                 if let url = pane?.url { model.download(model.selectedEntries, to: url) }

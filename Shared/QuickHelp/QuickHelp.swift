@@ -1,6 +1,6 @@
 //
 //  QuickHelp.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxDataSQL (MXcodeIDE/Shared/QuickHelp; MxDataSQL compiles only this folder of Shared)
+//  Shared by MxDataHUB, MxJobsWMS, MxDataSQL and MxFileMGR (MXcodeIDE/Shared/QuickHelp; MxDataSQL and MxFileMGR compile only this folder of Shared)
 //
 //  Quick Help, as in MxNoteONE (and Logic Pro): a panel that describes what's under the pointer — a
 //  button, a list, a table cell, a node — in a sentence or two, with its shortcut. With the pointer over

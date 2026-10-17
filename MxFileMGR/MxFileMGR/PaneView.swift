@@ -90,6 +90,7 @@ private struct TabStrip: View {
             .padding(.vertical, 3)
         }
         .font(.callout)
+        .quickHelpArea(FileHelp.tabs)
     }
 }
 
@@ -102,10 +103,13 @@ private struct PaneHeader: View {
         HStack(spacing: 6) {
             Button { tab.goBack() } label: { Image(systemName: "chevron.left") }
                 .disabled(!tab.canGoBack).help("Back")
+                .quickHelp("Back", "Goes back to the folder this tab showed before.", shortcut: "⌘[")
             Button { tab.goForward() } label: { Image(systemName: "chevron.right") }
                 .disabled(!tab.canGoForward).help("Forward")
+                .quickHelp("Forward", "Goes forward again after Back.", shortcut: "⌘]")
             Button { tab.goUp() } label: { Image(systemName: "arrow.up") }
                 .disabled(tab.parentURL == nil).help("Enclosing Folder")
+                .quickHelp("Enclosing Folder", "Goes up to the folder that contains this one.", shortcut: "⌘↑")
             PathBar(url: tab.url) { url in
                 tab.navigate(to: url)
                 workspace.focus(side)
@@ -120,6 +124,7 @@ private struct PaneHeader: View {
                     workspace.goToFolderPrompt()
                 }
             }
+            .quickHelpArea(FileHelp.pathBar)
             if tab.isLoading { ProgressView().controlSize(.small) }
             TextField("Filter", text: $tab.filterText)
                 .textFieldStyle(.roundedBorder)
@@ -130,6 +135,7 @@ private struct PaneHeader: View {
                     workspace.focus(side)
                 }
                 .help("Show only items whose name contains this text (or matches wildcards such as *.txt)")
+                .quickHelp(FileHelp.filter.title, FileHelp.filter.detail, shortcut: "⎋")
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 8)
@@ -200,6 +206,7 @@ private struct StatusLine: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
+        .quickHelpArea(FileHelp.status)
     }
 
     private var freeSpace: Int64? {

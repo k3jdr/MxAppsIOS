@@ -451,6 +451,7 @@ struct AzureView: View {
             }
         }
         .navigationTitle("Azure Blob Storage")
+        .quickHelpScreen("Azure Blob Storage", FileHelp.azureScreen, selection: FileHelp.remoteSelection(model.selectedEntries))
         .navigationSubtitle(model.container == nil ? "" : model.url(model.prefix))
         .task { await model.start() }
     }
@@ -549,6 +550,7 @@ struct AzureView: View {
             }
         }
         .onDeleteCommand { Task { await model.delete(model.selectedEntries) } }
+        .quickHelpArea(FileHelp.remoteList("Blob Storage"))
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
             model.upload(files)
@@ -577,9 +579,11 @@ struct AzureView: View {
             Button("New Folder…") { model.newFolder() }
                 .disabled(model.container == nil)
             Button("Upload from “\(paneName ?? "Pane")”") { model.upload(marked) }
+                .quickHelp("Upload", FileHelp.uploadDetail)
                 .disabled(model.container == nil || marked.isEmpty)
                 .help("Upload the items marked in the active pane into this folder")
             Button("Delete…", role: .destructive) { Task { await model.delete(model.selectedEntries) } }
+                .quickHelp("Delete", "Deletes the selected items, and folders with everything in them, after asking. There is no trash.", shortcut: "⌫")
                 .disabled(model.selection.isEmpty)
             Button("Download to “\(paneName ?? "Pane")”") {
                 if let url = pane?.url { model.download(model.selectedEntries, to: url) }

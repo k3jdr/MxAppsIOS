@@ -24,6 +24,7 @@ struct MxFileMGRApp: App {
         .commands {
             MainCommands()
             SidebarCommands()
+            QuickHelpCommands()
         }
 
         WindowGroup("Find Files", for: SearchRequest.self) { $request in
@@ -77,6 +78,13 @@ struct MxFileMGRApp: App {
 
         Window("Azure Blob Storage", id: "azure") {
             AzureView()
+        }
+        .defaultSize(width: 1050, height: 680)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
+        Window("Google Cloud Storage", id: "gcs") {
+            GCSView()
         }
         .defaultSize(width: 1050, height: 680)
         .restorationBehavior(.disabled)

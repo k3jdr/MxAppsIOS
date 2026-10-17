@@ -390,6 +390,7 @@ struct PhotosView: View {
             }
         }
         .navigationTitle("iCloud Photos")
+        .quickHelpScreen("iCloud Photos", FileHelp.photosScreen, selection: model.selection.isEmpty ? nil : QuickHelpItem(title: Fmt.count(model.selection.count, "Item") + " Selected", detail: "Export copies the originals to the active pane; Delete moves them to Recently Deleted; Organize adds them to an album, favorites or hides them.", symbol: "checkmark.circle"))
         .task { await model.start() }
         .onDisappear { model.stop() }
     }
@@ -472,6 +473,7 @@ struct PhotosView: View {
             }
             .toggleStyle(.button)
             .help("Show only likely duplicates: same type, size, capture time and duration")
+            .quickHelp("Duplicates", "Shows only likely duplicates — same type, pixel size, capture second and duration — in numbered groups. Select Extras then selects all but one of each.")
             Spacer()
             Image(systemName: "photo").imageScale(.small)
             Slider(value: $thumbSize, in: 70...260).frame(width: 110)
