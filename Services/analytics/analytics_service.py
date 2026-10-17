@@ -12,7 +12,9 @@ Reads the security master (MxDataHUB/SRM, PostgreSQL schema srm) and serves:
                                        so megabytes of covariance never pass through the workflow.
     GET  /inputs/<id>                  the full inputs (mxjobs.inputs/1)
     POST /attribution                  Brinson-Fachler (or Brinson-Hood-Beebower) performance attribution by
-                                       sector, monthly, Carino-linked (mxjobs.attribution/1)
+                                       sector, monthly, Carino-linked (mxjobs.attribution/1): of a security-master
+                                       portfolio by its code, or of inputs passed inline (assets, sectors, and
+                                       monthly periods of returns and portfolio / benchmark weights)
 
     python3 analytics_service.py                 # http://127.0.0.1:8772
     python3 analytics_service.py --srm-dir ../../MxDataHUB/SRM --port 8772
@@ -56,7 +58,8 @@ DESCRIBE = {
         {"method": "POST", "path": "/inputs", "summary": "Optimization inputs for a portfolio / benchmark; returns inputsUrl",
          "contract": "mxjobs.inputs/1"},
         {"method": "GET", "path": "/inputs/{id}", "summary": "The full inputs, fetched by the optimizers"},
-        {"method": "POST", "path": "/attribution", "summary": "Sector attribution of a portfolio against its benchmark",
+        {"method": "POST", "path": "/attribution",
+         "summary": "Sector attribution of a portfolio against its benchmark (by portfolio code, or inputs inline)",
          "contract": "mxjobs.attribution/1"},
         {"method": "GET", "path": "/portfolios", "summary": "Portfolios with their benchmark and latest snapshot"},
         {"method": "GET", "path": "/benchmarks", "summary": "Benchmarks with members and snapshot date"},
@@ -422,17 +425,138 @@ def describe_runs(label, runs):
     return "%s weights: %s." % (label, "; ".join(parts))
 
 
+def attribution_method(req):
+    method = req.get("method", "brinson-fachler")
+    if method not in ("brinson-fachler", "brinson-hood-beebower"):
+        raise ValueError("method must be brinson-fachler or brinson-hood-beebower")
+    return method
+
+
+def brinson_carino(tickers, group_of, wp_by_period, wb_by_period, r_by_period, method, missing="prices"):
+    """Sector Brinson-Fachler (or Brinson-Hood-Beebower) effects for each period, Carino-linked over all of them.
+
+    tickers, group_of: per security. wp_by_period, wb_by_period: start-of-period weights, one vector per period.
+    r_by_period: security returns per period, NaN where missing (a data gap: that weight is left out of the period).
+    Returns the linked totals, sector rows, per-period effects, contributors, data gaps and review reasons.
+    """
+    sectors = sorted(set(group_of))
+    wp, wb = np.mean(wp_by_period, axis=0), np.mean(wb_by_period, axis=0)     # reported: average start weights
+
+    periods, gaps = [], {"portfolio": 0.0, "benchmark": 0.0}
+    contrib = np.zeros(len(tickers))
+    for wp_k, wb_k, r in zip(wp_by_period, wb_by_period, r_by_period):
+        ok = ~np.isnan(r)
+        gaps["portfolio"] = max(gaps["portfolio"], float(wp_k[~ok].sum()))
+        gaps["benchmark"] = max(gaps["benchmark"], float(wb_k[~ok].sum()))
+        r = np.where(ok, r, 0.0)
+        p_w = np.where(ok, wp_k, 0.0); p_w = p_w / p_w.sum() if p_w.sum() else p_w
+        b_w = np.where(ok, wb_k, 0.0); b_w = b_w / b_w.sum() if b_w.sum() else b_w
+        rp, rb = float(p_w @ r), float(b_w @ r)
+        contrib += (p_w - b_w) * r
+        groups = {}
+        for g in sectors:
+            m = np.array([x == g for x in group_of])
+            wpg, wbg = float(p_w[m].sum()), float(b_w[m].sum())
+            rbg = float(b_w[m] @ r[m] / wbg) if wbg > 0 else 0.0
+            rpg = float(p_w[m] @ r[m] / wpg) if wpg > 0 else rbg
+            if wbg == 0:
+                rbg = rpg                              # sector held only by the portfolio: all selection-free
+            ref = rb if method == "brinson-fachler" else 0.0
+            groups[g] = {"wp": wpg, "wb": wbg, "rp": rpg, "rb": rbg,
+                         "allocation": (wpg - wbg) * (rbg - ref),
+                         "selection": wbg * (rpg - rbg),
+                         "interaction": (wpg - wbg) * (rpg - rbg)}
+        periods.append({"rp": rp, "rb": rb, "groups": groups})
+
+    # Carino linking: scale each period's effects so they add up to the compounded active return.
+    rp_total = float(np.prod([1 + p["rp"] for p in periods]) - 1)
+    rb_total = float(np.prod([1 + p["rb"] for p in periods]) - 1)
+
+    def k(rp, rb):
+        return (math.log1p(rp) - math.log1p(rb)) / (rp - rb) if abs(rp - rb) > 1e-12 else 1 / (1 + rp)
+
+    big_k = k(rp_total, rb_total)
+    by_group = {g: {"allocation": 0.0, "selection": 0.0, "interaction": 0.0} for g in sectors}
+    period_rows = []
+    for p in periods:
+        scale = k(p["rp"], p["rb"]) / big_k
+        effects = {"allocation": 0.0, "selection": 0.0, "interaction": 0.0}
+        for g, e in p["groups"].items():
+            for name in effects:
+                by_group[g][name] += e[name] * scale
+                effects[name] += e[name]
+        period_rows.append({"portfolioReturn": round(p["rp"], 6), "benchmarkReturn": round(p["rb"], 6),
+                            "activeReturn": round(p["rp"] - p["rb"], 6),
+                            **{n: round(v, 6) for n, v in effects.items()}})
+
+    totals = {n: sum(by_group[g][n] for g in sectors) for n in ("allocation", "selection", "interaction")}
+    residual = (rp_total - rb_total) - sum(totals.values())
+    groups_out = []
+    for g in sectors:
+        m = np.array([x == g for x in group_of])
+        e = by_group[g]
+        groups_out.append({"group": g, "portfolioWeight": round(float(wp[m].sum()), 6),
+                           "benchmarkWeight": round(float(wb[m].sum()), 6),
+                           "activeWeight": round(float(wp[m].sum() - wb[m].sum()), 6),
+                           **{n: round(v, 6) for n, v in e.items()},
+                           "total": round(sum(e.values()), 6)})
+    groups_out.sort(key=lambda r: -abs(r["total"]))
+    order = np.argsort(contrib)
+    row = lambda j: {"ticker": tickers[j], "sector": group_of[j],
+                     "portfolioWeight": round(float(wp[j]), 6), "benchmarkWeight": round(float(wb[j]), 6),
+                     "activeContribution": round(float(contrib[j]), 6)}
+
+    reasons = []
+    if max(gaps.values()) > 0.02:
+        reasons.append("%s missing for up to %.1f%% of weight in a period" % (missing, 100 * max(gaps.values())))
+    if abs(residual) > 1e-6:
+        reasons.append("linking residual %.2e" % residual)
+    if len(periods) < 3:
+        reasons.append("only %d monthly periods" % len(periods))
+    return {"rp": rp_total, "rb": rb_total, "totals": totals, "residual": residual, "byGroup": groups_out,
+            "periods": period_rows, "top": [row(j) for j in order[::-1][:5]], "bottom": [row(j) for j in order[:5]],
+            "gaps": gaps, "reasons": reasons}
+
+
+def attribution_outcome(res, portfolio, benchmark, method, period, assumptions, reasons):
+    """The mxjobs.attribution/1 outcome from brinson_carino's result."""
+    rp_total, rb_total = res["rp"], res["rb"]
+    top_group = res["byGroup"][0] if res["byGroup"] else None
+    return {
+        "schema": "mxjobs.attribution/1",
+        "portfolio": portfolio, "benchmark": benchmark,
+        "method": method, "groupBy": "sector", "frequency": "monthly", "linking": "carino",
+        "period": period,
+        "assumptions": assumptions + [
+            "%s effects per month, linked over the period with Carino factors." %
+            ("Brinson-Fachler" if method == "brinson-fachler" else "Brinson-Hood-Beebower")],
+        "portfolioReturn": round(rp_total, 6), "benchmarkReturn": round(rb_total, 6),
+        "activeReturn": round(rp_total - rb_total, 6),
+        "effects": {**{n: round(v, 6) for n, v in res["totals"].items()}, "residual": round(res["residual"], 10)},
+        "byGroup": res["byGroup"],
+        "periods": res["periods"],
+        "topContributors": res["top"],
+        "bottomContributors": res["bottom"],
+        "dataGaps": {k2: round(v, 6) for k2, v in res["gaps"].items()},
+        "decisionContext": {
+            "recommendation": "review" if reasons else "publish",
+            "confidence": 0.6 if reasons else 0.9,
+            "reasons": reasons or ["complete prices, effects add up to the active return"],
+            "highlight": ("%s drove %+.2f%% of the %+.2f%% active return" %
+                          (top_group["group"], 100 * top_group["total"], 100 * (rp_total - rb_total))) if top_group else "",
+        },
+    }
+
+
 def attribution(conn, req):
     portfolio = req.get("portfolio")
     if not portfolio:
-        raise ValueError("portfolio is required")
+        raise ValueError("portfolio is required (or pass the inputs inline: assets, sectors and periods)")
     end = parse_date(req.get("end")) or last_price_date(conn)
     start = parse_date(req.get("start")) or end - dt.timedelta(days=365)
     if start >= end:
         raise ValueError("start must be before end")
-    method = req.get("method", "brinson-fachler")
-    if method not in ("brinson-fachler", "brinson-hood-beebower"):
-        raise ValueError("method must be brinson-fachler or brinson-hood-beebower")
+    method = attribution_method(req)
     info = portfolio_info(conn, portfolio)
     benchmark = req.get("benchmark") or info["benchmark"]
     if not benchmark:
@@ -474,134 +598,112 @@ def attribution(conn, req):
         valid = np.where(~np.isnan(col))[0]
         return col[valid[-1]] if len(valid) else np.nan
 
-    sectors = sorted({meta[s]["sector"] for s in ids})
-    group_of = [meta[s]["sector"] for s in ids]
     vector = lambda weights: np.array([weights.get(s, 0.0) for s in ids])
     wp_by_period = [vector(p_maps[d]) for d, _ in p_chosen]
     wb_by_period = [vector(b_maps[d]) for d, _ in b_chosen]
-    wp, wb = np.mean(wp_by_period, axis=0), np.mean(wb_by_period, axis=0)     # reported: average start weights
-
-    periods, gaps = [], {"portfolio": 0.0, "benchmark": 0.0}
-    contrib = np.zeros(len(ids))
-    for k, (a, b) in enumerate(zip(bounds[:-1], bounds[1:])):
-        wp_k, wb_k = wp_by_period[k], wb_by_period[k]
+    r_by_period = []
+    for a, b in zip(bounds[:-1], bounds[1:]):
         pa = np.array([last_price(j, a) for j in range(len(ids))])
         pb = np.array([last_price(j, b) for j in range(len(ids))])
-        r = pb / pa - 1
-        ok = ~np.isnan(r)
-        gaps["portfolio"] = max(gaps["portfolio"], float(wp_k[~ok].sum()))
-        gaps["benchmark"] = max(gaps["benchmark"], float(wb_k[~ok].sum()))
-        r = np.where(ok, r, 0.0)
-        p_w = np.where(ok, wp_k, 0.0); p_w = p_w / p_w.sum() if p_w.sum() else p_w
-        b_w = np.where(ok, wb_k, 0.0); b_w = b_w / b_w.sum() if b_w.sum() else b_w
-        rp, rb = float(p_w @ r), float(b_w @ r)
-        contrib += (p_w - b_w) * r
-        groups = {}
-        for g in sectors:
-            m = np.array([x == g for x in group_of])
-            wpg, wbg = float(p_w[m].sum()), float(b_w[m].sum())
-            rbg = float(b_w[m] @ r[m] / wbg) if wbg > 0 else 0.0
-            rpg = float(p_w[m] @ r[m] / wpg) if wpg > 0 else rbg
-            if wbg == 0:
-                rbg = rpg                              # sector held only by the portfolio: all selection-free
-            ref = rb if method == "brinson-fachler" else 0.0
-            groups[g] = {"wp": wpg, "wb": wbg, "rp": rpg, "rb": rbg,
-                         "allocation": (wpg - wbg) * (rbg - ref),
-                         "selection": wbg * (rpg - rbg),
-                         "interaction": (wpg - wbg) * (rpg - rbg)}
-        periods.append({"start": a, "end": b, "rp": rp, "rb": rb, "groups": groups,
-                        "portfolioSnapshot": p_chosen[k][0], "benchmarkSnapshot": b_chosen[k][0]})
+        r_by_period.append(pb / pa - 1)
+    res = brinson_carino([meta[s]["ticker"] for s in ids], [meta[s]["sector"] for s in ids],
+                         wp_by_period, wb_by_period, r_by_period, method)
+    for k, (a, b) in enumerate(zip(bounds[:-1], bounds[1:])):
+        res["periods"][k] = {"start": a.isoformat(), "end": b.isoformat(),
+                             "portfolioSnapshot": p_chosen[k][0].isoformat(),
+                             "benchmarkSnapshot": b_chosen[k][0].isoformat(), **res["periods"][k]}
 
-    # Carino linking: scale each period's effects so they add up to the compounded active return.
-    rp_total = float(np.prod([1 + p["rp"] for p in periods]) - 1)
-    rb_total = float(np.prod([1 + p["rb"] for p in periods]) - 1)
-
-    def k(rp, rb):
-        return (math.log1p(rp) - math.log1p(rb)) / (rp - rb) if abs(rp - rb) > 1e-12 else 1 / (1 + rp)
-
-    big_k = k(rp_total, rb_total)
-    by_group = {g: {"allocation": 0.0, "selection": 0.0, "interaction": 0.0} for g in sectors}
-    period_rows = []
-    for p in periods:
-        scale = k(p["rp"], p["rb"]) / big_k
-        effects = {"allocation": 0.0, "selection": 0.0, "interaction": 0.0}
-        for g, e in p["groups"].items():
-            for name in effects:
-                by_group[g][name] += e[name] * scale
-                effects[name] += e[name]
-        period_rows.append({"start": p["start"].isoformat(), "end": p["end"].isoformat(),
-                            "portfolioSnapshot": p["portfolioSnapshot"].isoformat(),
-                            "benchmarkSnapshot": p["benchmarkSnapshot"].isoformat(),
-                            "portfolioReturn": round(p["rp"], 6), "benchmarkReturn": round(p["rb"], 6),
-                            "activeReturn": round(p["rp"] - p["rb"], 6),
-                            **{n: round(v, 6) for n, v in effects.items()}})
-
-    totals = {n: sum(by_group[g][n] for g in sectors) for n in ("allocation", "selection", "interaction")}
-    residual = (rp_total - rb_total) - sum(totals.values())
-    groups_out = []
-    for g in sectors:
-        m = np.array([x == g for x in group_of])
-        e = by_group[g]
-        groups_out.append({"group": g, "portfolioWeight": round(float(wp[m].sum()), 6),
-                           "benchmarkWeight": round(float(wb[m].sum()), 6),
-                           "activeWeight": round(float(wp[m].sum() - wb[m].sum()), 6),
-                           **{n: round(v, 6) for n, v in e.items()},
-                           "total": round(sum(e.values()), 6)})
-    groups_out.sort(key=lambda r: -abs(r["total"]))
-    order = np.argsort(contrib)
-    row = lambda j: {"ticker": meta[ids[j]]["ticker"], "sector": group_of[j],
-                     "portfolioWeight": round(float(wp[j]), 6), "benchmarkWeight": round(float(wb[j]), 6),
-                     "activeContribution": round(float(contrib[j]), 6)}
-
-    reasons = []
-    if max(gaps.values()) > 0.02:
-        reasons.append("prices missing for up to %.1f%% of weight in a period" % (100 * max(gaps.values())))
-    if abs(residual) > 1e-6:
-        reasons.append("linking residual %.2e" % residual)
-    if len(periods) < 3:
-        reasons.append("only %d monthly periods" % len(periods))
+    reasons = res["reasons"]
     later = {"portfolio": sum(1 for _, x in p_chosen if x), "benchmark": sum(1 for _, x in b_chosen if x)}
     first = {"portfolio": p_dates[0], "benchmark": b_dates[0]}
-    late = ["%s weights for %d of %d months (history from %s)" % (side, n, len(periods), first[side])
+    late = ["%s weights for %d of %d months (history from %s)" % (side, n, len(months), first[side])
             for side, n in later.items() if n]
     if late:
         reasons.append("snapshot after the month start used for " + " and ".join(late))
     p_runs, b_runs = snapshot_runs(months, p_chosen), snapshot_runs(months, b_chosen)
-    top_group = groups_out[0] if groups_out else None
-    return {
-        "schema": "mxjobs.attribution/1",
-        "portfolio": portfolio, "benchmark": benchmark,
-        "method": method, "groupBy": "sector", "frequency": "monthly", "linking": "carino",
-        "period": {"start": bounds[0].isoformat(), "end": bounds[-1].isoformat(), "months": len(periods)},
-        "assumptions": [
-            "Weights at the start of each month come from the latest snapshot on or before the month's first day "
-            "(the start date for the first month), else from the nearest later snapshot; share holdings are valued "
-            "with prices on the snapshot date.",
-            describe_runs("Portfolio %s" % portfolio, p_runs),
-            describe_runs("Benchmark %s" % benchmark, b_runs),
-            "Security returns from adjusted closes (dividends included where the source adjusts).",
-            "%s effects per month, linked over the period with Carino factors." %
-            ("Brinson-Fachler" if method == "brinson-fachler" else "Brinson-Hood-Beebower"),
-        ],
-        "portfolioReturn": round(rp_total, 6), "benchmarkReturn": round(rb_total, 6),
-        "activeReturn": round(rp_total - rb_total, 6),
-        "effects": {**{n: round(v, 6) for n, v in totals.items()}, "residual": round(residual, 10)},
-        "snapshots": {"portfolio": p_runs, "benchmark": b_runs, "monthsWithLaterSnapshot": later,
-                      "available": {"portfolio": {"count": len(p_dates), "first": p_dates[0], "last": p_dates[-1]},
-                                    "benchmark": {"count": len(b_dates), "first": b_dates[0], "last": b_dates[-1]}}},
-        "byGroup": groups_out,
-        "periods": period_rows,
-        "topContributors": [row(j) for j in order[::-1][:5]],
-        "bottomContributors": [row(j) for j in order[:5]],
-        "dataGaps": {k2: round(v, 6) for k2, v in gaps.items()},
-        "decisionContext": {
-            "recommendation": "review" if reasons else "publish",
-            "confidence": 0.6 if reasons else 0.9,
-            "reasons": reasons or ["complete prices, effects add up to the active return"],
-            "highlight": ("%s drove %+.2f%% of the %+.2f%% active return" %
-                          (top_group["group"], 100 * top_group["total"], 100 * (rp_total - rb_total))) if top_group else "",
-        },
-    }
+    out = attribution_outcome(
+        res, portfolio, benchmark, method,
+        {"start": bounds[0].isoformat(), "end": bounds[-1].isoformat(), "months": len(months)},
+        ["Weights at the start of each month come from the latest snapshot on or before the month's first day "
+         "(the start date for the first month), else from the nearest later snapshot; share holdings are valued "
+         "with prices on the snapshot date.",
+         describe_runs("Portfolio %s" % portfolio, p_runs),
+         describe_runs("Benchmark %s" % benchmark, b_runs),
+         "Security returns from adjusted closes (dividends included where the source adjusts)."],
+        reasons)
+    out["snapshots"] = {"portfolio": p_runs, "benchmark": b_runs, "monthsWithLaterSnapshot": later,
+                        "available": {"portfolio": {"count": len(p_dates), "first": p_dates[0], "last": p_dates[-1]},
+                                      "benchmark": {"count": len(b_dates), "first": b_dates[0], "last": b_dates[-1]}}}
+    return out
+
+
+def inline_attribution(req):
+    """Attribution of inputs passed in the request instead of read from the security master:
+
+        assets   ["AAA", ...]                       securities
+        sectors  ["Tech", ...] or {"AAA": "Tech"}   each asset's sector
+        periods  [{"period": "2025-11",             one per month, in order
+                   "returns": {"AAA": 0.012, ...},  that month's security returns; an asset left out (or null) is a
+                                                    data gap: its weight is left out of that month
+                   "portfolioWeights": {...},       weights at the start of the month (normalised to 1)
+                   "benchmarkWeights": {...}}]
+        portfolio, benchmark                        optional labels for the outcome
+    """
+    method = attribution_method(req)
+    assets, sectors, periods = req.get("assets"), req.get("sectors"), req.get("periods")
+    if not isinstance(assets, list) or not assets:
+        raise ValueError("assets (a list of security names) is required with inline periods")
+    if len(set(assets)) != len(assets):
+        raise ValueError("assets must not repeat")
+    if isinstance(sectors, list):
+        if len(sectors) != len(assets):
+            raise ValueError("sectors must have one entry per asset")
+        sectors = dict(zip(assets, sectors))
+    if not isinstance(sectors, dict) or any(not sectors.get(a) for a in assets):
+        raise ValueError("sectors must give every asset a sector (a list parallel to assets, or an object)")
+    if not isinstance(periods, list) or not periods:
+        raise ValueError("periods (a list of monthly periods) is required")
+    known = set(assets)
+
+    def vector(period, key, label):
+        weights = period.get(key) or {}
+        if not isinstance(weights, dict):
+            raise ValueError("%s %s must be an object of asset weights" % (label, key))
+        unknown = sorted(set(weights) - known)
+        if unknown:
+            raise ValueError("%s %s names assets not in assets: %s" % (label, key, ", ".join(unknown[:5])))
+        v = np.array([float(weights.get(a) or 0.0) for a in assets])
+        if v.sum() <= 0:
+            raise ValueError("%s %s must be positive somewhere" % (label, key))
+        return v / v.sum()
+
+    labels, wp_by_period, wb_by_period, r_by_period = [], [], [], []
+    for i, period in enumerate(periods):
+        if not isinstance(period, dict):
+            raise ValueError("each period must be an object")
+        label = str(period.get("period") or i + 1)
+        returns = period.get("returns") or {}
+        if not isinstance(returns, dict) or set(returns) - known:
+            raise ValueError("period %s returns must be an object of returns of assets in assets" % label)
+        labels.append(label)
+        wp_by_period.append(vector(period, "portfolioWeights", "period " + label))
+        wb_by_period.append(vector(period, "benchmarkWeights", "period " + label))
+        r_by_period.append(np.array([float(returns[a]) if returns.get(a) is not None else np.nan for a in assets]))
+
+    # Securities no period weights add nothing; leave them out of the sectors and contributors.
+    keep = [j for j in range(len(assets)) if any(w[j] > 0 for w in wp_by_period + wb_by_period)]
+    pick = lambda vs: [v[keep] for v in vs]
+    res = brinson_carino([assets[j] for j in keep], [sectors[assets[j]] for j in keep],
+                         pick(wp_by_period), pick(wb_by_period), pick(r_by_period), method, missing="returns")
+    res["periods"] = [{"period": label, **row} for label, row in zip(labels, res["periods"])]
+    portfolio, benchmark = req.get("portfolio") or "inline", req.get("benchmark") or "inline"
+    return attribution_outcome(
+        res, portfolio, benchmark, method,
+        {"start": labels[0], "end": labels[-1], "months": len(labels)},
+        ["Inputs passed inline: %d periods of security returns and start-of-period portfolio and benchmark weights "
+         "(normalised to 1); nothing is read from the security master." % len(labels),
+         "A security without a return in a period is a data gap: its weight is left out of that period."],
+        res["reasons"])
 
 
 # ---------------------------------------------------------------------------
@@ -657,6 +759,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, payload, indent=None)
             body = self.read_json() if method == "POST" else {}
             req = dict(q, **body)
+            if url.path == "/attribution" and method == "POST" and "periods" in req:
+                out = inline_attribution(req)        # inputs passed inline: no database needed
+                out["seconds"] = round(time.time() - started, 2)
+                return self.send_json(200, out)
             conn = Handler.srm.connect()
             try:
                 if url.path == "/portfolios" and method == "GET":

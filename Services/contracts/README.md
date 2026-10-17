@@ -86,9 +86,27 @@ portfolio is within budget and turnover < 2%, `rebalance_partially` above `maxTu
 `sectorActiveRisk`, `withinTrackingErrorLimit` (with `maxTrackingError`). With `inputsUrl` and no `weights`, the
 current weights are used.
 
+**`POST /attribution` request.** Either a security-master portfolio — `portfolio` (code), optional `benchmark`
+(default: the portfolio's), `start`, `end` (default: the year to the last price date), `method` (`brinson-fachler`,
+default, or `brinson-hood-beebower`) — or the **inputs inline**, used when `periods` is present (no database read):
+
+```json
+{"method": "brinson-fachler", "portfolio": "label", "benchmark": "label",
+ "assets": ["AAA", "BBB"], "sectors": ["Technology", "Energy"],
+ "periods": [{"period": "2025-11", "returns": {"AAA": 0.012, "BBB": -0.004},
+              "portfolioWeights": {"AAA": 0.7, "BBB": 0.3}, "benchmarkWeights": {"AAA": 0.5, "BBB": 0.5}}]}
+```
+
+`sectors` is a list parallel to `assets` or an object `{asset: sector}`; `periods` are monthly and in order. Weights are
+each period's start weights (normalised to 1; assets left out weigh 0). An asset left out of a period's `returns` (or
+`null`) is a data gap: as with a missing price, its weight is left out of that period and reported in `dataGaps`.
+Assets no period weights are dropped. The maths and the outcome are the same as for a portfolio code, except that the
+inline outcome has no `snapshots`, its `period` start / end are the first and last `period` labels, and each `periods`
+row carries its `period` label instead of dates and snapshots.
+
 **`mxjobs.attribution/1`** (`POST /attribution`): `period`, `assumptions`, `portfolioReturn`, `benchmarkReturn`,
 `activeReturn`, `effects` {allocation, selection, interaction, residual}, `snapshots` {portfolio, benchmark: runs of
-{snapshot, from, to, months, later}; monthsWithLaterSnapshot; available {count, first, last}}, `byGroup` (per sector:
+{snapshot, from, to, months, later}; monthsWithLaterSnapshot; available {count, first, last}; DB path only}, `byGroup` (per sector:
 average weights, effects, total), `periods` (per month, with the `portfolioSnapshot` and `benchmarkSnapshot` used),
 `topContributors`, `bottomContributors`, `dataGaps`, `decisionContext` {recommendation `publish` | `review`,
 confidence, reasons, highlight}.
