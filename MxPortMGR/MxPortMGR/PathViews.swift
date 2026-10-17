@@ -15,8 +15,6 @@ private func isPassive(_ store: PortStore) -> Bool { store.passiveContext }
 
 struct PortfolioView: View {
     @Bindable var store: PortStore
-    @State private var addTicker = "MXTM"
-    @State private var addValue = 10_000.0
 
     var body: some View {
         let p = store.portfolio
@@ -63,8 +61,8 @@ struct PortfolioView: View {
                 }
                 .frame(width: 340)
             }
-            HoldingsTable(store: store)
             if p.id == "mine" { addRow }
+            HoldingsTable(store: store)
             Box(title: "What this account teaches", symbol: p.symbol, help: "The edge case of this sample and what to look for on the next screens.") {
                 Text(p.lesson).fixedSize(horizontal: false, vertical: true)
                 ForEach(p.lookFor, id: \.self) { Label($0, systemImage: "eye").font(.callout) }
@@ -74,22 +72,16 @@ struct PortfolioView: View {
 
     private var addRow: some View {
         HStack {
-            Picker("Add", selection: $addTicker) {
-                ForEach(Universe.all) { Text("\($0.ticker) — \($0.name)").tag($0.ticker) }
-            }
-            .frame(maxWidth: 380)
-            TextField("Value", value: $addValue, format: .currency(code: "USD")).frame(width: 120)
-            Button("Add Holding") {
-                var q = store.portfolio
-                if let i = q.holdings.firstIndex(where: { $0.ticker == addTicker }) { q.holdings[i].value += addValue } else {
-                    q.holdings.append(Holding(ticker: addTicker, value: addValue))
-                }
-                store.portfolio = q
-            }
-            .help("Add this security or fund to My Portfolio")
+            Button { store.addingSecurities = true } label: { Label("Add Securities…", systemImage: "plus.circle.fill") }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .help("Find and add stocks, individual bonds, funds or cash (⇧⌘N)")
+            Text("Edit a value in the table to resize a holding; the trash button removes it.").font(.callout).foregroundStyle(.secondary)
+            Spacer()
             Button("Reset My Portfolio") { store.resetMyPortfolio() }
         }
-        .quickHelpArea("Add Holding", "Add a fund or company from the illustrative universe to My Portfolio, with its market value. Values are edited in the table above; My Portfolio is remembered.", symbol: "plus.circle")
+        .sheet(isPresented: $store.addingSecurities) { AddSecuritiesSheet(store: store) }
+        .quickHelpArea("Add Securities", "Opens a dialog to find companies, individual bonds (Treasuries, TIPS, corporates, high yield, municipal), funds and cash, see what each is and how it behaves, and add it by amount, shares or face value — with a tax lot for a taxable account.", shortcut: "⇧⌘N", symbol: "plus.circle")
     }
 }
 
@@ -116,7 +108,7 @@ struct HoldingsTable: View {
                 }
                 .width(70)
                 TableColumn("Name") { h in Text(h.security?.name ?? "Unknown — not in the security master").foregroundStyle(h.security == nil ? .red : .primary) }
-                TableColumn("Sector / class") { h in Text(h.security.map { $0.lookThrough == nil ? $0.sector : "Fund · \($0.assetClass.rawValue)" } ?? "—") }
+                TableColumn("Sector / class") { h in Text(h.security.map { $0.lookThrough != nil ? "Fund · \($0.assetClass.rawValue)" : $0.issuer.map { "Bond · \($0)" } ?? $0.sector } ?? "—") }
                     .width(170)
                 TableColumn("Value") { h in
                     if p.id == "mine" {
@@ -141,6 +133,14 @@ struct HoldingsTable: View {
                     Text(h.lots.map { "\($0.acquired) (\(pct($0.share, 0)))" }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
                         .help(h.lots.map { "\($0.acquired): \(pct($0.share, 0)) of the position, cost \(money($0.costBasis))" }.joined(separator: "\n"))
                 }
+                TableColumn("") { h in
+                    if p.id == "mine" {
+                        Button { store.removeFromMine(h.ticker) } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                            .help("Remove \(h.ticker) from My Portfolio")
+                    }
+                }
+                .width(28)
             }
             .frame(minHeight: CGFloat(min(p.holdings.count, 14)) * 26 + 34)
         }

@@ -14,9 +14,10 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: Binding(get: { Optional(store.screen) }, set: { if let s = $0 { store.screen = s } })) {
-                ForEach(Screen.Group.allCases, id: \.self) { group in
-                    Section(group.rawValue) {
-                        ForEach(Screen.allCases.filter { $0.group == group }) { screen in
+                ForEach(Screen.Group.allCases.filter { $0 != .passive }, id: \.self) { group in
+                    // Active and Passive are one Model Portfolio section whose steps follow the model type.
+                    Section(group == .active ? "Model Portfolio" : group.rawValue) {
+                        ForEach(group == .active ? store.modelPath : Screen.allCases.filter { $0.group == group }) { screen in
                             Label(sidebarTitle(screen),
                                   systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,6 +124,7 @@ struct ContentView: View {
         let defaults = UserDefaults.standard
         if let s = defaults.string(forKey: "screen").flatMap(Screen.init(rawValue:)) { store.screen = s }
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
+        if defaults.bool(forKey: "addSecurities") { store.go(.myPortfolio); store.addingSecurities = true }
         if store.screen == .reportWalkthrough, defaults.object(forKey: "reportStep") != nil {
             let r = store.currentReport
             let step = min(max(defaults.integer(forKey: "reportStep"), 0), MarketReport.steps.count - 1)

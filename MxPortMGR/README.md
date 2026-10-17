@@ -19,7 +19,7 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Seven groups: Start Here, Learn the Why, **My Portfolio** (5 steps, your own account), Active Portfolio (5 steps), Passive Index Portfolio (5 steps), Market Reports, Library. |
+| **Sidebar — the guide** | Six groups: Start Here, Learn the Why, **My Portfolio** (5 steps, your own account), **Model Portfolio** (5 steps on a sample; Active or Passive index), Market Reports, Library. |
 | **Quick Help** (bottom of the sidebar) | The shared MXcodeIDE Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **Account** — the sample (or My Portfolio) every screen works on. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Back / Next** along the guide. |
@@ -34,7 +34,7 @@ gives both.
 
 | Menu | Items |
 | --- | --- |
-| **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · My Portfolio steps 1–5 · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
+| **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · My Portfolio steps 1–5 ⌥⌘1–⌥⌘5 · Model Portfolio steps 1–5 ⌘1–⌘5 and Model Type ▸ Active / Passive Index · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize (Active) ⌘R · Build Index Tracker (Passive) ⇧⌘R · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) · Previous Step ⌘[ · Next Step ⌘] |
@@ -60,6 +60,14 @@ step works on **My Portfolio** (the toolbar's Account picker is fixed to it), an
 the account and sets **My approach** — *Active* or *Passive index* — its account type, and **Start From a Sample**
 (copy any sample's holdings, lots and benchmark) or reset to the three-fund starter.
 
+**Add Securities…** (⇧⌘N, above the holdings table) opens a dialog listing every security in the illustrative
+universe — the 36 companies, **individual bonds** (U.S. Treasury notes and bonds from 2028 to 2056, a TIPS, investment-
+grade and high-yield corporates, a California general-obligation muni), the bond and index funds, and cash. Search by
+ticker, name or issuer, filter by type and sector, and select one for its details (price or price per 100 face,
+coupon, maturity, rating, yield, duration, beta, model volatility and expected return, and what kind of security it
+is). Add it by dollar amount, shares or face value, optionally with a tax lot (cost basis and purchase date); adding a
+security already held adds to the position and its lots. Each holding row has a trash button to remove it.
+
 1. **My Holdings & Benchmark** — add, edit and remove holdings; choose the benchmark that matches your plan; checks.
 2. **Risk Today** — your account's volatility, tracking error, beta, VaR and where the risk comes from.
 3. **Optimize** (active) or **Build the Tracker** (passive).
@@ -69,7 +77,23 @@ the account and sets **My approach** — *Active* or *Passive index* — its acc
 Steps 3 and 4 change name and screen with the approach (in the sidebar too). *Copy to My Portfolio* on a sample, the
 Portfolio menu's *Copy Account to My Portfolio* and Choose Your Path's *Start My Portfolio* all lead here.
 
-### Active Portfolio path
+### Model Portfolio
+
+The Active and Passive paths are one **Model Portfolio** section that works on the sample accounts. A bar at the top of
+each step sets the **Model type** — *Active* or *Passive index* — and the **Sample**, and offers *Copy to My Portfolio*
+(continuing at the same My Portfolio step). The sidebar's five steps follow the type:
+
+| Step | Active | Passive index |
+| --- | --- | --- |
+| 1 | Portfolio & Benchmark | Portfolio & Index |
+| 2 | Risk Today | Tracking Error & Drift |
+| 3 | Optimize | Build the Tracker |
+| 4 | Trades & Taxes | Rebalance Bands |
+| 5 | Attribution | Attribution |
+
+Switching the type keeps you on the same step; choosing My Portfolio as the account moves to the same My Portfolio step.
+
+#### Active model type
 
 1. **Portfolio & Benchmark** — value, holdings, look-through securities, weighted fee, unrealised gain; benchmark
    picker; *Check before you go on* (unknown or unpriced holdings, a single name over 20%, a sector more than twice
@@ -87,7 +111,7 @@ Portfolio menu's *Copy Account to My Portfolio* and Choose Your Path's *Start My
 5. **Attribution** — account, benchmark and active return; allocation, selection, interaction by sector (bars and
    table) and month by month; top and bottom contributors; assumptions; *publish* or *review* with reasons.
 
-### Passive Index Portfolio path
+#### Passive index model type
 
 1. **Portfolio & Index** — the same screen, read for tracking.
 2. **Tracking Error & Drift** — tracking error today and after a year untouched, month by month for the account and for

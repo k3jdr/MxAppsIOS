@@ -72,8 +72,8 @@ enum Screen: String, CaseIterable, Identifiable {
     var fullTitle: String {
         switch group {
         case .mine: "My Portfolio · \(step!). \(title)"
-        case .active: "Active · \(step!). \(title)"
-        case .passive: "Passive · \(step!). \(title)"
+        case .active: "Model Portfolio (Active) · \(step!). \(title)"
+        case .passive: "Model Portfolio (Passive) · \(step!). \(title)"
         default: title
         }
     }
@@ -111,6 +111,9 @@ enum Screen: String, CaseIterable, Identifiable {
         let path = Screen.myPath.firstIndex(of: self) ?? Screen.activePath.firstIndex(of: self) ?? Screen.passivePath.firstIndex(of: self)
         return path.map { $0 + 1 }
     }
+
+    /// A Model Portfolio step (the active or passive path).
+    var isModel: Bool { group == .active || group == .passive }
 
     static let myPath: [Screen] = [.myPortfolio, .myRisk, .myImprove, .myTrades, .myAttribution]
     static let activePath: [Screen] = [.activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution]
@@ -161,14 +164,32 @@ final class PortStore {
     var screen: Screen = .welcome {
         didSet {
             UserDefaults.standard.set(screen.rawValue, forKey: "screen")
-            // The My Portfolio path always works on the user's own account.
+            // The My Portfolio path always works on the user's own account; the Model Portfolio on a sample.
             if screen.group == .mine, selectedID != "mine" { selectedID = "mine" }
+            if screen.isModel {
+                modelApproach = screen.group == .active ? .active : .passive
+                if selectedID == "mine" { selectedID = modelApproach == .active ? "core-satellite" : "drifted-tracker" }
+            }
         }
     }
     /// How the user runs My Portfolio: active (optimize, trades & taxes) or passive (track, rebalance bands).
     var myApproach: PortfolioStyle = UserDefaults.standard.string(forKey: "myApproach") == PortfolioStyle.active.rawValue ? .active : .passive {
         didSet { UserDefaults.standard.set(myApproach.rawValue, forKey: "myApproach") }
     }
+    /// The Model Portfolio's type: its steps are the active path's or the passive path's.
+    var modelApproach: PortfolioStyle = UserDefaults.standard.string(forKey: "modelApproach") == PortfolioStyle.passive.rawValue ? .passive : .active {
+        didSet { UserDefaults.standard.set(modelApproach.rawValue, forKey: "modelApproach") }
+    }
+    /// The Model Portfolio's steps for its type.
+    var modelPath: [Screen] { modelApproach == .active ? Screen.activePath : Screen.passivePath }
+
+    /// Switches the Model Portfolio's type, staying on the same step.
+    func setModelApproach(_ a: PortfolioStyle) {
+        let step = screen.isModel ? screen.step : nil
+        modelApproach = a
+        if let step { screen = modelPath[step - 1] }
+    }
+
     /// The passive reading of a shared screen: the passive path, or My Portfolio run passively.
     var passiveContext: Bool { screen.group == .passive || (screen.group == .mine && myApproach == .passive) }
 
@@ -189,6 +210,8 @@ final class PortStore {
         didSet {
             UserDefaults.standard.set(selectedID, forKey: "sample")
             clearResults()
+            // Choosing My Portfolio on a Model Portfolio step moves to the same My Portfolio step.
+            if selectedID == "mine", screen.isModel, let step = screen.step { screen = Screen.myPath[step - 1] }
         }
     }
     var engine: EngineChoice = .builtIn {
@@ -229,6 +252,8 @@ final class PortStore {
     }
 
     var busy = false
+    /// My Portfolio ▸ Add Securities… is open.
+    var addingSecurities = false
     var message: String?
     var errorMessage: String?
 
@@ -255,6 +280,38 @@ final class PortStore {
             }
             clearResults()
         }
+    }
+
+    /// Adds a security to My Portfolio (to the position if already held), with a tax lot when a cost is given.
+    func addToMine(_ ticker: String, value: Double, cost: Double?, acquired: Date?) {
+        guard var mine = portfolios.first(where: { $0.id == "mine" }), value > 0 else { return }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let lot = cost.map { TaxLot(acquired: formatter.string(from: acquired ?? Date()), share: 0, costBasis: $0) }
+        if let i = mine.holdings.firstIndex(where: { $0.ticker == ticker }) {
+            var h = mine.holdings[i]
+            let old = h.value, total = old + value
+            if h.lots.isEmpty, lot != nil { h.lots = [TaxLot(acquired: "—", share: 1, costBasis: old)] }
+            if !h.lots.isEmpty {
+                h.lots = h.lots.map { var l = $0; l.share *= old / total; return l }
+                var l = lot ?? TaxLot(acquired: formatter.string(from: Date()), share: 0, costBasis: value)
+                l.share = value / total
+                h.lots.append(l)
+            }
+            h.value = total
+            mine.holdings[i] = h
+        } else {
+            var h = Holding(ticker: ticker, value: value)
+            if var l = lot { l.share = 1; h.lots = [l] }
+            mine.holdings.append(h)
+        }
+        portfolio = mine
+    }
+
+    func removeFromMine(_ ticker: String) {
+        guard var mine = portfolios.first(where: { $0.id == "mine" }) else { return }
+        mine.holdings.removeAll { $0.ticker == ticker }
+        portfolio = mine
     }
 
     func resetMyPortfolio() {

@@ -35,6 +35,17 @@ nonisolated struct Security: Identifiable, Hashable, Sendable {
     /// A fund's holdings (weights adding up to 1); nil for a single security.
     var lookThrough: [String: Double]? = nil
     var fee: Double = 0
+    /// An individual bond's coupon, maturity, credit rating and issuer type.
+    var coupon: Double? = nil
+    var maturity: String? = nil
+    var rating: String? = nil
+    var issuer: String? = nil
+
+    var isFund: Bool { lookThrough != nil || (assetClass == .bond && coupon == nil) }
+    /// Annual volatility under the factor model (base securities only).
+    var volatility: Double? { Universe.baseIndex[ticker].map { Universe.covariance[$0][$0].squareRoot() } }
+    /// ≈ duration for a bond (the price change for a 1-point move in yields, with the sign flipped).
+    var duration: Double { -rateBeta }
 }
 
 nonisolated struct Benchmark: Identifiable, Hashable, Sendable {
@@ -105,6 +116,20 @@ nonisolated enum Universe {
         ("MNB", "Municipal Bond Fund", 106.30, 0.05, -5.8, 0.012, 0.031),
     ]
 
+    // ticker, name, issuer type, coupon, maturity, rating, price per 100, beta, rate beta (≈ −duration), own vol, yield
+    private static let individualBonds: [(String, String, String, Double, String, String, Double, Double, Double, Double, Double)] = [
+        ("T-2028", "U.S. Treasury 4.25% note 2028", "U.S. Treasury", 0.0425, "2028-11-15", "AA+", 100.3, 0.00, -1.9, 0.002, 0.041),
+        ("T-2031", "U.S. Treasury 4.375% note 2031", "U.S. Treasury", 0.04375, "2031-10-31", "AA+", 100.6, 0.00, -4.5, 0.003, 0.042),
+        ("T-2036", "U.S. Treasury 4.50% note 2036", "U.S. Treasury", 0.045, "2036-08-15", "AA+", 99.7, -0.02, -8.0, 0.004, 0.045),
+        ("T-2056", "U.S. Treasury 4.75% bond 2056", "U.S. Treasury", 0.0475, "2056-05-15", "AA+", 96.8, -0.05, -16.5, 0.008, 0.050),
+        ("TIPS-2035", "U.S. Treasury Inflation-Protected 2.00% 2035", "U.S. Treasury (TIPS)", 0.02, "2035-07-15", "AA+", 101.2, 0.02, -7.6, 0.012, 0.020),
+        ("NWD-2033", "Northwind Devices 5.10% senior notes 2033", "Corporate", 0.051, "2033-03-01", "A", 99.1, 0.12, -5.8, 0.012, 0.053),
+        ("FBK-2030", "Fairbank Financial 5.60% senior notes 2030", "Corporate", 0.056, "2030-06-15", "BBB+", 100.4, 0.18, -3.6, 0.015, 0.055),
+        ("PTR-2035", "Petra Energy 6.25% notes 2035", "Corporate", 0.0625, "2035-09-01", "BBB-", 101.8, 0.25, -6.9, 0.022, 0.060),
+        ("ROV-2029", "Rover Motors 7.875% notes 2029 (high yield)", "Corporate (high yield)", 0.07875, "2029-04-01", "BB-", 98.5, 0.40, -2.8, 0.040, 0.084),
+        ("CA-GO-2034", "State of California 4.00% general obligation 2034", "Municipal (tax-exempt)", 0.04, "2034-10-01", "AA-", 104.2, 0.03, -6.6, 0.008, 0.034),
+    ]
+
     static let base: [Security] = {
         var list: [Security] = equityRows.map { r in
             Security(ticker: r.0, name: r.1, sector: r.2, assetClass: .equity, price: r.3, beta: r.4, rateBeta: r.5,
@@ -113,6 +138,10 @@ nonisolated enum Universe {
         list += bondRows.map { r in
             Security(ticker: r.0, name: r.1, sector: fixedIncome, assetClass: .bond, price: r.2, beta: r.3, rateBeta: r.4,
                      idioVol: r.5, marketCap: 0, alpha: 0, yield: r.6, fee: 0.0005)
+        }
+        list += individualBonds.map { r in
+            Security(ticker: r.0, name: r.1, sector: fixedIncome, assetClass: .bond, price: r.6, beta: r.7, rateBeta: r.8,
+                     idioVol: r.9, marketCap: 0, alpha: 0, yield: r.10, coupon: r.3, maturity: r.4, rating: r.5, issuer: r.2)
         }
         list.append(Security(ticker: "CASH", name: "Cash & Money Market", sector: cashSector, assetClass: .cash, price: 1,
                              beta: 0, rateBeta: 0, idioVol: 0.0005, marketCap: 0, alpha: 0, yield: riskFree))

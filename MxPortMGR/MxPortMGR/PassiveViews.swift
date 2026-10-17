@@ -252,15 +252,18 @@ struct BandsView: View {
                         Text("± points").tag(false)
                         Text("± 25% of target").tag(true)
                     }
-                    .pickerStyle(.segmented).frame(width: 260)
+                    .labelsHidden()
+                    .pickerStyle(.segmented).fixedSize()
                     if !relative {
                         Slider(value: $store.bandWidth, in: 0.01...0.15, step: 0.01) { Text("± \(Int(store.bandWidth * 100)) points") }.frame(width: 320)
                     }
+                    Text("Trade back to").fixedSize()
                     Picker("Trade back to", selection: $toEdge) {
                         Text("the target").tag(false)
                         Text("the band's edge").tag(true)
                     }
-                    .pickerStyle(.segmented).frame(width: 300)
+                    .labelsHidden()
+                    .pickerStyle(.segmented).fixedSize()
                     .help("All the way to the target, or only back inside the band (less trading)")
                 }
                 .term("Rebalance band")

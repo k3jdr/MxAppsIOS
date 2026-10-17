@@ -32,18 +32,17 @@ struct MxPortMGRApp: App {
                 Section("My Portfolio") {
                     ForEach(Array(Screen.myPath.enumerated()), id: \.element) { i, s in
                         Button(store.title(s, full: false)) { store.go(s) }
+                            .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: [.command, .option])
                     }
                 }
-                Section("Active Portfolio") {
-                    ForEach(Array(Screen.activePath.enumerated()), id: \.element) { i, s in
+                Section("Model Portfolio") {
+                    ForEach(Array(store.modelPath.enumerated()), id: \.element) { i, s in
                         Button("\(i + 1). \(s.title)") { store.go(s) }
                             .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: .command)
                     }
-                }
-                Section("Passive Index Portfolio") {
-                    ForEach(Array(Screen.passivePath.enumerated()), id: \.element) { i, s in
-                        Button("\(i + 1). \(s.title)") { store.go(s) }
-                            .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: [.command, .option])
+                    Picker("Model Type", selection: Binding(get: { store.modelApproach }, set: { store.setModelApproach($0) })) {
+                        Text("Active").tag(PortfolioStyle.active)
+                        Text("Passive Index").tag(PortfolioStyle.passive)
                     }
                 }
                 Divider()

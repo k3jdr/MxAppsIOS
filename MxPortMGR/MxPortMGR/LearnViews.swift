@@ -103,7 +103,7 @@ struct ChoosePathView: View {
                 Image(systemName: "person.crop.circle.fill").font(.largeTitle).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ready to work on your own account?").font(.title3.weight(.semibold))
-                    Text("My Portfolio follows the same five steps with your own holdings: choose Active or Passive index there, and steps 3 and 4 follow your choice. The two paths below use sample accounts, so you can learn on them first.")
+                    Text("My Portfolio follows the same five steps with your own holdings: choose Active or Passive index there, and steps 3 and 4 follow your choice. The Model Portfolio below uses sample accounts, so you can learn on them first.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -113,8 +113,8 @@ struct ChoosePathView: View {
             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             .quickHelpArea("My Portfolio", "The five steps on your own account: My Holdings & Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
             HStack(spacing: 14) {
-                start("Start the Active Path", "wand.and.stars", "Portfolio & Benchmark → Risk Today → Optimize → Trades & Taxes → Attribution", .activePortfolio, sample: "core-satellite")
-                start("Start the Passive Path", "scope", "Portfolio & Index → Tracking Error & Drift → Build the Tracker → Rebalance Bands → Attribution", .passivePortfolio, sample: "drifted-tracker")
+                start("Start an Active Model Portfolio", "wand.and.stars", "Portfolio & Benchmark → Risk Today → Optimize → Trades & Taxes → Attribution", .activePortfolio, sample: "core-satellite")
+                start("Start a Passive Model Portfolio", "scope", "Portfolio & Index → Tracking Error & Drift → Build the Tracker → Rebalance Bands → Attribution", .passivePortfolio, sample: "drifted-tracker")
             }
         }
     }
