@@ -354,6 +354,27 @@ extension Workspace {
         openWindow?(id: "azure")
     }
 
+    /// Opens the first synced SharePoint library folder, or explains how to sync one.
+    func openSharePoint() {
+        if let url = AppSettings.sharePointURLs.first {
+            go(to: url)
+            return
+        }
+        // App Store and standalone builds of OneDrive have different bundle identifiers.
+        let oneDrive = ["com.microsoft.OneDrive-mac", "com.microsoft.OneDrive"]
+            .lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }.first
+        let info = "SharePoint document libraries show up here once the OneDrive app syncs them: sign in to OneDrive with your work or school account, "
+            + "then in SharePoint open a library and click Sync (or Add shortcut to My files). Each organisation's libraries appear as “SharePoint – Organisation”."
+        if let oneDrive {
+            if Alerts.confirm("No SharePoint libraries are synced to this Mac.", info: info, ok: "Open OneDrive") {
+                NSWorkspace.shared.openApplication(at: oneDrive, configuration: NSWorkspace.OpenConfiguration())
+            }
+        } else {
+            Alerts.message("No SharePoint libraries are synced to this Mac.",
+                           info: "Install the OneDrive app (from the App Store or microsoft.com) first. " + info)
+        }
+    }
+
     /// Opens the Google Cloud Storage browser window.
     func openGCS() {
         openWindow?(id: "gcs")

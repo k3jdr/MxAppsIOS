@@ -15,7 +15,7 @@ extension Notification.Name {
     static let mxFilesChanged = Notification.Name("MxFileMGR.filesChanged")
 }
 
-/// A cloud storage root (iCloud Drive, OneDrive, Google Drive, Dropbox, Box) with the name to show for it.
+/// A cloud storage root (iCloud Drive, OneDrive, SharePoint, Google Drive, Dropbox, Box) with the name to show for it.
 struct CloudLocation: Identifiable {
     let name: String
     let icon: String
@@ -87,7 +87,22 @@ final class AppSettings {
 
     /// OneDrive accounts synced by the OneDrive app (File Provider folders in ~/Library/CloudStorage):
     /// "OneDrive-Personal" and "OneDrive-<Organisation>" for work or school accounts.
-    static var oneDriveURLs: [URL] { cloudStorageFolders(prefix: "OneDrive") }
+    static var oneDriveURLs: [URL] {
+        cloudStorageFolders(prefix: "OneDrive").filter { !$0.lastPathComponent.hasPrefix(sharePointPrefix) }
+    }
+
+    /// SharePoint document libraries synced by the OneDrive app ("Sync" in SharePoint, or OneDrive's
+    /// "Add shortcut"): one "OneDrive-SharedLibraries-<Organisation>" folder per organisation in
+    /// ~/Library/CloudStorage, holding a "<Site> - <Library>" folder for each library.
+    static var sharePointURLs: [URL] { cloudStorageFolders(prefix: sharePointPrefix) }
+
+    private static let sharePointPrefix = "OneDrive-SharedLibraries"
+
+    /// "SharePoint – Contoso" for "OneDrive-SharedLibraries-Contoso".
+    static func sharePointName(_ url: URL) -> String {
+        let org = url.lastPathComponent.dropFirst(sharePointPrefix.count).trimmingCharacters(in: CharacterSet(charactersIn: "- "))
+        return org.isEmpty ? "SharePoint" : "SharePoint – \(org)"
+    }
 
     /// Google Drive accounts: "GoogleDrive-<email>" in ~/Library/CloudStorage (Google Drive for desktop),
     /// or the older /Volumes/GoogleDrive (streaming) and ~/Google Drive (Backup and Sync) folders.
@@ -161,7 +176,7 @@ final class AppSettings {
         return "Google Drive – " + folder.dropFirst("GoogleDrive-".count)
     }
 
-    /// iCloud Drive, OneDrive, Google Drive, Dropbox and Box accounts present on this Mac, shown at the top of Favorites.
+    /// iCloud Drive, OneDrive, SharePoint, Google Drive, Dropbox and Box accounts present on this Mac, shown at the top of Favorites.
     /// Re-scanned at most every few seconds (the path bar asks on every redraw).
     static var cloudLocations: [CloudLocation] {
         if let cached = cloudCache, Date().timeIntervalSince(cached.time) < 5 { return cached.list }
@@ -171,6 +186,9 @@ final class AppSettings {
             let account = url.lastPathComponent.dropFirst("OneDrive".count).drop { $0 == "-" || $0 == " " }
             let name = account.isEmpty || account == "Personal" ? "OneDrive" : "OneDrive – \(account)"
             list.append(CloudLocation(name: name, icon: "cloud", url: url))
+        }
+        for url in sharePointURLs {
+            list.append(CloudLocation(name: sharePointName(url), icon: "building.2", url: url))
         }
         let google = googleDriveURLs
         for url in google {

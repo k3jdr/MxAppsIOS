@@ -137,13 +137,23 @@ enum FileHelp {
 
     static let favorites = QuickHelpItem(
         title: "Favorites",
-        detail: "Cloud storage on this Mac (iCloud Drive, OneDrive, Google Drive, Dropbox, Box), iCloud Photos and the cloud object stores, then your folders. "
+        detail: "Cloud storage on this Mac (iCloud Drive, OneDrive, SharePoint, Google Drive, Dropbox, Box), iCloud Photos and the cloud object stores, then your folders. "
             + "Click one to open it in the active pane. Drop a folder here to add it; drag to reorder; right-click to remove. ⌃D adds the current folder.",
         symbol: "star")
 
     static func cloudFolder(_ name: String, _ url: URL) -> String {
-        "\(name), kept on this Mac by its app at \(url.path). Opens in the active pane like any folder; files stored only online download when opened."
+        if name.hasPrefix("SharePoint") {
+            return "\(name): the SharePoint document libraries the OneDrive app syncs for this organisation, one “Site - Library” folder each, at \(url.path). "
+                + "Files stored only online download when opened; changes sync back to SharePoint."
+        }
+        return "\(name), kept on this Mac by its app at \(url.path). Opens in the active pane like any folder; files stored only online download when opened."
     }
+
+    static let sharePointSetup = QuickHelpItem(
+        title: "SharePoint",
+        detail: "SharePoint document libraries appear here once the OneDrive app syncs them (work or school account; in SharePoint, a library's Sync or Add shortcut to My files). "
+            + "None are synced yet: click for how, and to open OneDrive.",
+        symbol: "building.2")
 
     static let photos = QuickHelpItem(
         title: "iCloud Photos",

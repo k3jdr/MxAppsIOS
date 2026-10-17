@@ -30,6 +30,9 @@ struct SidebarView: View {
                             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([cloud.url]) }
                         }
                 }
+                if AppSettings.sharePointURLs.isEmpty {
+                    windowRow("SharePoint", icon: "building.2", help: FileHelp.sharePointSetup) { workspace.openSharePoint() }
+                }
                 if showPhotos {
                     windowRow("iCloud Photos", icon: "photo.on.rectangle", help: FileHelp.photos) { workspace.openPhotos() }
                 }
