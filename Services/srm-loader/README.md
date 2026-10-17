@@ -15,11 +15,11 @@ database and API-key configuration (environment, Keychain `SRM-postgres` / `SRM-
 | Endpoint | What it does |
 | -------- | ------------ |
 | `GET /health`, `GET /describe` | service status, SRM folder, whether a load is running; what the service is for |
-| `GET /categories` | the six data categories (reference data, listed universe & issuers, benchmark constituents, identifiers & issuer data, prices & index levels, corporate actions) with their loaders, last load, data date and a state: `fresh`, `due`, `stale`, `failed`, `never` |
+| `GET /categories` | the data categories (reference data, listed universe & issuers, benchmark constituents, identifiers & issuer data, prices & index levels, corporate actions, and the optional portfolio snapshots) with their loaders, last load, data date, `optional` and a state: `fresh`, `due`, `stale`, `failed`, `never` |
 | `POST /refresh/<category>` | runs the category's loaders in order (stops at the first failure); honours `X-SRM-Dry-Run` |
 | `GET /loaders` | the 12 loaders in `srm.py`'s dependency order |
 | `POST /load/<loader>` | runs `srm.py load <loader>` and returns its `srm.load_run` rows, the worst status (`succeeded` / `partial` / `failed`), totals and the output tail |
-| `GET /status` | read-only: migrations, row counts, identifier coverage, benchmarks, price freshness, recent loads, and data-quality `checks` with a `summary` |
+| `GET /status` | read-only: migrations, row counts, identifier coverage, benchmarks, `snapshotHistory` (dated weight snapshots per benchmark and portfolio, from `srm.v_snapshot_coverage`), price freshness, recent loads, and data-quality `checks` with a `summary` |
 
 `/load` options (query parameters, only srm.py's own): `max`, `since` (YYYY-MM-DD), `months`, `force=1`,
 `history=1`, `allSecurities=1`, `includeOtc=1`, `symbols=AAPL,MSFT`, `benchmarks=SP500 DJIA`.
@@ -40,3 +40,4 @@ Data-quality checks in `/status` (`fail` blocks the jobspace's status step until
 | prices fresh | last price date older than `--stale-days` business days |
 | benchmark members with ISIN / CUSIP / composite FIGI ≥ 95% | coverage below 95% (warning) |
 | no failed loads among the last 12 | any of them failed |
+| snapshot history | a benchmark or portfolio has fewer than 2 weight snapshots, or more than 35 days between two (warning: attribution then uses a later or older snapshot for some months) |

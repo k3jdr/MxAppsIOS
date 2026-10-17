@@ -74,9 +74,12 @@ a 3.0% tracking error at an information ratio of 0.49 with 118 names; a 100-name
 0.83% tracking error (50 names: 1.69%, 200: 0.40%); attribution over 12 months shows −9.5% active return —
 allocation +3.7%, selection −7.1%, interaction −6.1%, led by Technology.
 
-**Assumption to know:** the security master keeps the *current* benchmark and portfolio snapshots, not their history,
-so attribution holds today's weights through the period (stated in each result's `assumptions`). Daily snapshots build
-history from now on.
+**Weight history:** attribution takes each month's weights from the latest benchmark and portfolio snapshots on or before
+the month's first day, falling back to the nearest later snapshot, and lists which months used which snapshot in
+`assumptions` (and `snapshots`). The SPDR and Nasdaq-100 files only give the current date, so benchmark history builds up
+one dated snapshot per `ssga` / `nasdaq100` load; portfolio history builds up from the snapshots entered in MxDataHUB and,
+optionally, `srm.py load portfolio-snapshots` (Data Refresh ▸ Portfolio snapshots), which carries each portfolio's latest
+holdings forward to the latest price date. Until a month has its own snapshot, its result is marked `review`.
 
 ## Develop
 

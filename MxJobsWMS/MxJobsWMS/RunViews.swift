@@ -26,6 +26,10 @@ struct RunBar: View {
                 }
                 .help(engine.canContinue ? "Continue (⌃⌘Y)" : "Run (⌘R)")
                 .disabled(engine.isActive && !engine.canContinue)
+                .quickHelp(engine.canContinue ? "Continue" : "Run",
+                           engine.canContinue ? "Carries on from where the run paused, to the next breakpoint or the end."
+                               : "Runs the jobspace from its trigger, step by step down and back up the layers, following each layer's setting in this bar.",
+                           shortcut: engine.canContinue ? "⌃⌘Y" : "⌘R")
 
                 Button {
                     if engine.phase == .running { engine.pause() } else { engine.continueRun() }
@@ -33,6 +37,9 @@ struct RunBar: View {
                     Image(systemName: engine.phase == .paused ? "play.square" : "pause.fill")
                 }
                 .help(engine.phase == .paused ? "Continue (⌃⌘Y)" : "Pause before the next step")
+                .quickHelp(engine.phase == .paused ? "Continue" : "Pause",
+                           engine.phase == .paused ? "Carries on from where the run paused." : "Pauses the run before its next step; Continue or Step goes on.",
+                           shortcut: engine.phase == .paused ? "⌃⌘Y" : nil)
                 .disabled(!(engine.phase == .running || engine.phase == .paused))
 
                 Button {
@@ -41,6 +48,7 @@ struct RunBar: View {
                     Image(systemName: "arrow.turn.down.right")
                 }
                 .help("Step — run to the next step and pause (F6)")
+                .quickHelp("Step", "Runs the next step and pauses, so you can look at its output in the console before going on.", shortcut: "F6")
                 .disabled(engine.phase == .running || engine.phase == .waiting)
 
                 Button {
@@ -50,6 +58,7 @@ struct RunBar: View {
                         .foregroundStyle(engine.isActive ? Color.red : Color.secondary)
                 }
                 .help("Stop (⌘.)")
+                .quickHelp("Stop", "Stops the run. Its results stay on the canvas and in the console until you run again or clear them.", shortcut: "⌘.")
                 .disabled(!engine.isActive)
             }
             .buttonStyle(.borderless)
@@ -87,6 +96,7 @@ struct RunBar: View {
             }
             .buttonStyle(.borderless)
             .help("Breakpoints on / off (⌘Y). Toggle one on the selected step with ⌘\\.")
+            .quickHelp("Breakpoints", "Turns all breakpoints on or off. A run pauses before each step with a breakpoint while they're on; ⌘\\ toggles one on the selected step.", shortcut: "⌘Y")
 
             Menu {
                 Toggle("Stop the run when a step fails", isOn: $settings.stopOnError)
@@ -106,11 +116,13 @@ struct RunBar: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Run options")
+            .quickHelp("Run Options", "Stop the run when a step fails, a delay between steps to watch it go, and Clear Run Results.")
 
             Divider().frame(height: 18)
 
             RunStatus(engine: engine, space: editor.document?.wrappedValue.space)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .quickHelp("Run Status", "Ready, running, paused, waiting for you, finished, failed or stopped — with the current step, or how long the run took.", symbol: "info.circle")
 
             Button {
                 editor.showConsole.toggle()
@@ -120,10 +132,12 @@ struct RunBar: View {
             }
             .buttonStyle(.borderless)
             .help("Show or hide the run console (⇧⌘Y)")
+            .quickHelp("Run Console", "Shows or hides the run log and step outputs under the canvas.", shortcut: "⇧⌘Y")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.bar)
+        .quickHelpArea(JobsHelp.runBar)
     }
 }
 
@@ -149,6 +163,7 @@ private struct LayerActionMenu<Content: View>: View {
             .fixedSize()
         }
         .help("What a run does with Layer \(layer.rawValue) · \(layer.title)")
+        .quickHelp(JobsHelp.layerAction(layer).title, JobsHelp.layerAction(layer).detail, symbol: JobsHelp.layerAction(layer).symbol)
     }
 }
 
@@ -240,6 +255,7 @@ struct RunPromptBanner: View {
         .padding(12)
         .background(Color.orange.opacity(0.10))
         .overlay(alignment: .leading) { Rectangle().fill(.orange).frame(width: 3) }
+        .quickHelpArea(JobsHelp.prompt(prompt))
     }
 }
 
@@ -267,6 +283,7 @@ struct ConsoleDivider: View {
                 }
                 .onEnded { _ in start = nil })
             .help("Drag to resize the run console")
+            .quickHelp("Console Divider", "Drag to give the run console more or less room.", symbol: "arrow.up.and.down")
     }
 }
 
@@ -295,6 +312,7 @@ struct RunConsole: View {
         }
         .clipped()
         .background(Color(nsColor: .textBackgroundColor))
+        .quickHelpArea(JobsHelp.console)
     }
 
     private func logPane(_ engine: RunEngine) -> some View {

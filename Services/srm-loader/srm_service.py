@@ -11,9 +11,10 @@ Endpoints (JSON):
     GET  /health                      service status and SRM folder
     GET  /loaders                     loader names in dependency order (srm.py LOADERS)
     POST /load/<loader>?max=&force=1&since=&months=&history=1&benchmarks=SP500,DJIA&symbols=AAPL,MSFT
+                                      &asOf=&portfolios= (portfolio-snapshots)
                                       runs `srm.py load <loader> ...` and returns its srm.load_run rows
     GET  /status                      read-only: migrations, row counts, identifier coverage, benchmarks,
-                                      price freshness, recent loads and data-quality checks
+                                      snapshot history, price freshness, recent loads and data-quality checks
 
 Send the header `X-SRM-Dry-Run: 1` (the sample jobspace's subscription does) to get the command a load would
 run without running it. Only srm.py's own loaders and options are accepted, loads run one at a time, and the
@@ -51,7 +52,7 @@ DESCRIBE = {
         {"method": "GET", "path": "/categories", "summary": "Data categories with their loaders, freshness and last load"},
         {"method": "POST", "path": "/load/{loader}", "summary": "Run one srm.py loader (X-SRM-Dry-Run: 1 to preview)"},
         {"method": "POST", "path": "/refresh/{category}", "summary": "Run every loader of a category in order"},
-        {"method": "GET", "path": "/status", "summary": "Coverage, benchmarks, price freshness, recent loads, quality checks"},
+        {"method": "GET", "path": "/status", "summary": "Coverage, benchmarks, snapshot history, price freshness, recent loads, quality checks"},
         {"method": "GET", "path": "/loaders", "summary": "Loaders in dependency order"},
     ],
     "samples": ["srm-daily-refresh"],
@@ -71,6 +72,10 @@ CATEGORIES = [
      "description": "End-of-day prices and benchmark levels.", "cadence": "daily"},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
+    {"id": "portfolio-snapshots", "name": "Portfolio snapshots", "loaders": ["portfolio-snapshots"], "optional": True,
+     "description": "Optional: carries each portfolio's latest holdings forward to the latest price date (weights "
+                    "drifted by returns), so attribution has weight history. Not part of Refresh All.",
+     "cadence": "daily"},
 ]
 # srm.load_run.loader names written by each srm.py loader.
 RUN_NAMES = {
@@ -78,7 +83,7 @@ RUN_NAMES = {
     "ssga": ["ssga_spy", "ssga_dia", "ssga_mdy", "ssga_spsm"], "nasdaq100": ["nasdaq100"],
     "openfigi": ["openfigi_mapping"], "fmp-profiles": ["fmp_profiles"], "sec-submissions": ["sec_submissions"],
     "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "fmp-index-levels": ["fmp_index_levels"],
-    "fmp-corporate-actions": ["fmp_corporate_actions"],
+    "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "..", "..", "MxDataHUB", "SRM"))
@@ -135,6 +140,10 @@ class SRM:
                 price_date = cur.fetchone()[0]
                 cur.execute("SELECT min(as_of_date), max(as_of_date) FROM srm.v_benchmark_summary")
                 bench_min, bench_max = cur.fetchone()
+                portfolio_min = None
+                if table_exists(cur, "srm.v_snapshot_coverage"):
+                    cur.execute("SELECT min(last_date) FROM srm.v_snapshot_coverage WHERE kind = 'portfolio'")
+                    portfolio_min = cur.fetchone()[0]
         finally:
             conn.close()
         limits = {"daily": (1, 3), "weekly": (7, 14), "monthly": (31, 62)}
@@ -149,14 +158,16 @@ class SRM:
                                 "message": latest["message"] if latest else None})
             ran = [l["lastRun"] for l in loaders if l["lastRun"]]
             last_run = min(ran) if len(ran) == len(loaders) else None     # the oldest loader decides
-            data_date = {"prices": price_date, "constituents": bench_min}.get(cat["id"])
+            data_date = {"prices": price_date, "constituents": bench_min,
+                         "portfolio-snapshots": portfolio_min}.get(cat["id"])
             basis = data_date or (last_run.date() if last_run else None)
             ok, due = limits[cat["cadence"]]
             age = business_days_between(basis, today) if cat["cadence"] == "daily" and basis else ((today - basis).days if basis else None)
             state = "never" if basis is None else "fresh" if age <= ok else "due" if age <= due else "stale"
             if any(l["status"] == "failed" for l in loaders):
                 state = "failed"
-            out.append(dict(cat, loaders=loaders, lastRun=last_run, dataAsOf=data_date, ageDays=age, state=state))
+            out.append(dict(cat, optional=cat.get("optional", False), loaders=loaders, lastRun=last_run,
+                            dataAsOf=data_date, ageDays=age, state=state))
         return out
 
     def status(self, stale_days):
@@ -180,6 +191,12 @@ class SRM:
                 cur.execute("""SELECT code, as_of_date, members, round(weight_sum, 6) AS weight_sum, last_level_date,
                                       constituent_source FROM srm.v_benchmark_summary ORDER BY code""")
                 out["benchmarks"] = {r["code"]: r for r in rows(cur)}
+                # Weight history (dated snapshots) that attribution uses month by month.
+                out["snapshotHistory"] = None
+                if table_exists(cur, "srm.v_snapshot_coverage"):
+                    cur.execute("""SELECT kind, code, snapshots, first_date, last_date, months, drifted_snapshots,
+                                          max_gap_days FROM srm.v_snapshot_coverage ORDER BY kind, code""")
+                    out["snapshotHistory"] = rows(cur)
                 # Coverage of the securities SRM enriches: current benchmark members.
                 cur.execute("""
                     WITH members AS (
@@ -250,6 +267,19 @@ def quality_checks(status, stale_days):
         pct = float(members[key] or 0)
         add("benchmark members with %s ≥ %.0f%%" % (label, minimum), pct >= minimum,
             "%.1f%% of %s members" % (pct, members["members"]), warn_only=True)
+    history = status.get("snapshotHistory")
+    if history is None:
+        add("snapshot history", False, "srm.v_snapshot_coverage is missing: run srm.py migrate (V010)", warn_only=True)
+    else:
+        thin = ["%s %s: %s" % (h["kind"], h["code"], "no snapshots" if not h["snapshots"] else "1 snapshot (%s)" % h["first_date"])
+                for h in history if h["snapshots"] < 2]
+        # Attribution takes one snapshot per month, so only gaps longer than a month matter.
+        gaps = ["%s %s: %s days without a snapshot" % (h["kind"], h["code"], h["max_gap_days"])
+                for h in history if (h["max_gap_days"] or 0) > 35]
+        covered = ", ".join("%s %s→%s (%d)" % (h["code"], h["first_date"], h["last_date"], h["snapshots"])
+                            for h in history if h["snapshots"] >= 2)
+        add("snapshot history", not thin and not gaps,
+            "; ".join(thin + gaps + ([covered] if covered else [])) or "no benchmarks or portfolios", warn_only=True)
     failed = [r for r in status["recentLoads"][:12] if r["status"] == "failed"]
     add("no failed loads among the last 12", not failed,
         ", ".join("%s #%s" % (r["loader"], r["load_id"]) for r in failed) or "none")
@@ -383,6 +413,9 @@ def run_loader(loader, q, dry=False):
 def options(q):
     """srm.py load options from query parameters (only the ones srm.py defines)."""
     out = []
+    if q.get("asOf"):
+        dt.date.fromisoformat(q["asOf"])    # raises ValueError when not YYYY-MM-DD
+        out += ["--as-of", q["asOf"]]
     for name in ("max", "months"):
         if q.get(name):
             if not q[name].isdigit():
@@ -395,11 +428,11 @@ def options(q):
                        ("allSecurities", "--all-securities"), ("includeOtc", "--include-otc")):
         if q.get(flag, "").lower() in ("1", "true", "yes"):
             out.append(name)
-    for name in ("symbols", "benchmarks"):
+    for name in ("symbols", "benchmarks", "portfolios"):
         values = [v for v in re.split(r"[,\s]+", q.get(name, "")) if v]
         if values:
-            if not all(re.fullmatch(r"[A-Za-z0-9.^:-]{1,20}", v) for v in values):
-                raise ValueError("%s: letters, digits and . ^ : - only" % name)
+            if not all(re.fullmatch(r"[A-Za-z0-9_.^:-]{1,40}", v) for v in values):
+                raise ValueError("%s: letters, digits and _ . ^ : - only" % name)
             out += ["--" + name] + values
     return out
 

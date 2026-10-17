@@ -81,6 +81,7 @@ struct NodeView<HG: Gesture>: View {
                 BreakpointTag(enabled: breakpointsEnabled)
                     .offset(x: -7, y: -7)
                     .help("Breakpoint — runs pause before this step")
+                    .quickHelpArea(interactive ? JobsHelp.breakpoint : nil)
             }
         }
         .opacity(node.enabled ? 1 : 0.5)
@@ -96,11 +97,13 @@ struct NodeView<HG: Gesture>: View {
                     .offset(x: 12)
                     .gesture(handleGesture)
                     .help("Drag onto another node to link them")
+                    .quickHelpArea(JobsHelp.handle)
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 10))
         .onHover { hovering = $0 }
         .help(node.kind.summary)
+        .quickHelpArea(interactive ? JobsHelp.node(node, state: runState, issue: issue, selected: selected) : nil)
     }
 
     private var summary: String { NodeSummary.text(for: node, in: space) }

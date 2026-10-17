@@ -221,6 +221,19 @@ struct CoverageRow: Identifiable, Hashable {
     var sources: String
 }
 
+/// Weight history of a benchmark or portfolio (srm.v_snapshot_coverage).
+struct SnapshotCoverageRow: Identifiable, Hashable {
+    var id: String { kind + ":" + code }
+    var kind: String
+    var code: String
+    var snapshots: Int
+    var first: String
+    var last: String
+    var months: Int
+    var drifted: Int
+    var maxGapDays: Int?
+}
+
 struct SourceRow: Identifiable, Hashable {
     var id: String { code }
     var code: String
@@ -274,6 +287,7 @@ final class SRMStore {
     var loads: [LoadRow] = []
     var coverage: [CoverageRow] = []
     var sources: [SourceRow] = []
+    var snapshotCoverage: [SnapshotCoverageRow] = []
 
     // Connection
     /// The DB Connection screen's fields (saved in the app's defaults; the password in the Keychain).
@@ -849,6 +863,20 @@ final class SRMStore {
                   FROM srm.data_source ds ORDER BY ds.code
                 """).map {
                 SourceRow(code: $0[0] ?? "", name: $0[1] ?? "", url: $0[2] ?? "", note: $0[3] ?? "", lastLoad: $0[4] ?? "")
+            }
+            // srm.v_snapshot_coverage arrived with migration V010.
+            if try await scalar("SELECT (to_regclass('srm.v_snapshot_coverage') IS NOT NULL)::text") == "true" {
+                snapshotCoverage = try await rows("""
+                    SELECT kind, code, snapshots::text, coalesce(first_date::text, ''), coalesce(last_date::text, ''),
+                           months::text, drifted_snapshots::text, max_gap_days::text
+                      FROM srm.v_snapshot_coverage ORDER BY kind, code
+                    """).map {
+                    SnapshotCoverageRow(kind: $0[0] ?? "", code: $0[1] ?? "", snapshots: Int($0[2] ?? "") ?? 0,
+                                        first: $0[3] ?? "", last: $0[4] ?? "", months: Int($0[5] ?? "") ?? 0,
+                                        drifted: Int($0[6] ?? "") ?? 0, maxGapDays: $0[7].flatMap { Int($0) })
+                }
+            } else {
+                snapshotCoverage = []
             }
         }
     }

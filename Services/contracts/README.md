@@ -87,6 +87,8 @@ portfolio is within budget and turnover < 2%, `rebalance_partially` above `maxTu
 current weights are used.
 
 **`mxjobs.attribution/1`** (`POST /attribution`): `period`, `assumptions`, `portfolioReturn`, `benchmarkReturn`,
-`activeReturn`, `effects` {allocation, selection, interaction, residual}, `byGroup` (per sector: weights, effects,
-total), `periods` (per month), `topContributors`, `bottomContributors`, `dataGaps`, `decisionContext`
-{recommendation `publish` | `review`, confidence, reasons, highlight}.
+`activeReturn`, `effects` {allocation, selection, interaction, residual}, `snapshots` {portfolio, benchmark: runs of
+{snapshot, from, to, months, later}; monthsWithLaterSnapshot; available {count, first, last}}, `byGroup` (per sector:
+average weights, effects, total), `periods` (per month, with the `portfolioSnapshot` and `benchmarkSnapshot` used),
+`topContributors`, `bottomContributors`, `dataGaps`, `decisionContext` {recommendation `publish` | `review`,
+confidence, reasons, highlight}.

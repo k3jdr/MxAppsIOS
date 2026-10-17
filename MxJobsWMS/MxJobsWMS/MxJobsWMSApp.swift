@@ -23,10 +23,12 @@ struct MxJobsWMSApp: App {
         .defaultSize(width: 1560, height: 920)
         .commands {
             JobspaceCommands()
+            QuickHelpCommands()
         }
 
         Window("Adding API Keys", id: "keys-help") {
             KeysHelpView()
+                .quickHelpScreen("Adding API Keys", JobsHelp.keys)
         }
         .defaultSize(width: 820, height: 560)
 
@@ -40,6 +42,7 @@ struct MxJobsWMSApp: App {
                     }
                 })
             }, openSample: { PendingSample.open($0.id) }, openSampleTitle: "New Jobspace")
+            .quickHelpScreen("Layer 3 Services", JobsHelp.services)
         }
         .defaultSize(width: 1040, height: 720)
 
@@ -48,6 +51,7 @@ struct MxJobsWMSApp: App {
                               note: "Each sample is a complete three-layer workflow. Portfolio samples use DEMO_GROWTH; "
                                   + "open them from a portfolio in MxDataHUB to use another one.")
                 .frame(minWidth: 720, minHeight: 520)
+                .quickHelpScreen("New from Sample", JobsHelp.samples)
         }
         .defaultSize(width: 860, height: 640)
     }

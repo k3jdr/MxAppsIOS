@@ -360,6 +360,68 @@ def month_ends(dates, start, end):
     return [first] + ends
 
 
+def snapshot_dates(conn, kind, key):
+    """Dates of a benchmark's (key = code) or a portfolio's (key = portfolio_id) weight snapshots, oldest first."""
+    if kind == "benchmark":
+        sql = """SELECT DISTINCT w.as_of_date AS d FROM srm.benchmark_weight w JOIN srm.benchmark b USING (benchmark_id)
+                  WHERE b.code = upper(%s) ORDER BY 1"""
+    else:
+        sql = "SELECT DISTINCT as_of_date AS d FROM srm.portfolio_holding WHERE portfolio_id = %s ORDER BY 1"
+    return [r["d"] for r in fetch(conn, sql, (key,))]
+
+
+def pick_snapshot(dates, day):
+    """The latest of `dates` on or before `day`, else the nearest later one. Returns (date, later)."""
+    before = [d for d in dates if d <= day]
+    return (before[-1], False) if before else (dates[0], True)
+
+
+def snapshot_members(conn, kind, key, days):
+    """Securities in any of the given snapshots."""
+    if kind == "benchmark":
+        sql = """SELECT DISTINCT w.security_id FROM srm.benchmark_weight w JOIN srm.benchmark b USING (benchmark_id)
+                  WHERE b.code = upper(%s) AND w.as_of_date = ANY(%s)"""
+    else:
+        sql = "SELECT DISTINCT security_id FROM srm.portfolio_holding WHERE portfolio_id = %s AND as_of_date = ANY(%s)"
+    return [r["security_id"] for r in fetch(conn, sql, (key, sorted(days)))]
+
+
+def benchmark_snapshot(conn, code, day):
+    rows = fetch(conn, """SELECT w.security_id, w.weight FROM srm.benchmark_weight w JOIN srm.benchmark b USING (benchmark_id)
+                           WHERE b.code = upper(%s) AND w.as_of_date = %s""", (code, day))
+    total = sum(float(r["weight"]) for r in rows)
+    return {r["security_id"]: float(r["weight"]) / total for r in rows}
+
+
+def portfolio_snapshot(conn, info, day):
+    """Weights of the portfolio's snapshot on `day`, valued with prices on or before that day."""
+    rows = fetch(conn, "SELECT security_id, weight FROM srm.portfolio_valuation(%s, %s)", (info["portfolio_id"], day))
+    weights = {r["security_id"]: float(r["weight"]) for r in rows if r["weight"] is not None}
+    total = sum(weights.values())
+    if total <= 0:
+        raise ValueError("portfolio %s has no valued holdings on %s (prices missing?)" % (info["code"], day))
+    return {k: v / total for k, v in weights.items()}
+
+
+def snapshot_runs(months, chosen):
+    """Consecutive months that used the same snapshot: [{snapshot, from, to, months, later}]."""
+    runs = []
+    for month, (day, later) in zip(months, chosen):
+        if runs and runs[-1]["snapshot"] == day.isoformat() and runs[-1]["later"] == later:
+            runs[-1].update(to=month, months=runs[-1]["months"] + 1)
+        else:
+            runs.append({"snapshot": day.isoformat(), "from": month, "to": month, "months": 1, "later": later})
+    return runs
+
+
+def describe_runs(label, runs):
+    parts = ["%s for %s%s (%d month%s%s)" % (
+        r["snapshot"], r["from"], "" if r["from"] == r["to"] else " to " + r["to"], r["months"],
+        "" if r["months"] == 1 else "s", ", a later snapshot: none on or before the month start" if r["later"] else "")
+        for r in runs]
+    return "%s weights: %s." % (label, "; ".join(parts))
+
+
 def attribution(conn, req):
     portfolio = req.get("portfolio")
     if not portfolio:
@@ -371,16 +433,41 @@ def attribution(conn, req):
     method = req.get("method", "brinson-fachler")
     if method not in ("brinson-fachler", "brinson-hood-beebower"):
         raise ValueError("method must be brinson-fachler or brinson-hood-beebower")
-    wp_map, snap, info = portfolio_weights(conn, portfolio, end)
+    info = portfolio_info(conn, portfolio)
     benchmark = req.get("benchmark") or info["benchmark"]
     if not benchmark:
         raise ValueError("portfolio %s has no benchmark; pass one" % portfolio)
-    wb_map, bench_date = benchmark_weights(conn, benchmark, end)
-    ids = list(dict.fromkeys(list(wb_map) + list(wp_map)))
-    meta = security_meta(conn, ids)
+    p_dates = snapshot_dates(conn, "portfolio", info["portfolio_id"])
+    if not p_dates:
+        raise ValueError("portfolio %s has no holdings" % portfolio)
+    b_dates = snapshot_dates(conn, "benchmark", benchmark)
+    if not b_dates:
+        raise ValueError("benchmark %s has no constituents" % benchmark)
+
+    # Each month's weights: the latest snapshot on or before the month's first day (the requested start for the
+    # first month), else the nearest later one. The snapshots any month in the range could use give the securities
+    # to price; the monthly periods (trading month ends) then pick theirs.
+    firsts, day = [], (start.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+    while day <= end:
+        firsts.append(day)
+        day = (day + dt.timedelta(days=32)).replace(day=1)
+    candidates = [start] + firsts
+    ids = list(dict.fromkeys(
+        snapshot_members(conn, "benchmark", benchmark, {pick_snapshot(b_dates, d)[0] for d in candidates})
+        + snapshot_members(conn, "portfolio", info["portfolio_id"], {pick_snapshot(p_dates, d)[0] for d in candidates})))
     dates, panel = price_panel(conn, ids, start - dt.timedelta(days=10), end)
     bounds = month_ends(dates, start, end)
     pos = {d: i for i, d in enumerate(dates)}
+    month_starts = [start] + [b.replace(day=1) for b in bounds[2:]]
+    months = [b.strftime("%Y-%m") for b in bounds[1:]]
+    p_chosen = [pick_snapshot(p_dates, d) for d in month_starts]
+    b_chosen = [pick_snapshot(b_dates, d) for d in month_starts]
+    p_maps = {d: portfolio_snapshot(conn, info, d) for d, _ in set(p_chosen)}
+    b_maps = {d: benchmark_snapshot(conn, benchmark, d) for d, _ in set(b_chosen)}
+    held = set().union(*p_maps.values(), *b_maps.values())
+    keep = [j for j, sid in enumerate(ids) if sid in held]       # drop members of snapshots no month used
+    ids, panel = [ids[j] for j in keep], panel[:, keep]
+    meta = security_meta(conn, ids)
 
     def last_price(j, d):
         col = panel[: pos[d] + 1, j]
@@ -389,21 +476,24 @@ def attribution(conn, req):
 
     sectors = sorted({meta[s]["sector"] for s in ids})
     group_of = [meta[s]["sector"] for s in ids]
-    wp = np.array([wp_map.get(s, 0.0) for s in ids])
-    wb = np.array([wb_map.get(s, 0.0) for s in ids])
+    vector = lambda weights: np.array([weights.get(s, 0.0) for s in ids])
+    wp_by_period = [vector(p_maps[d]) for d, _ in p_chosen]
+    wb_by_period = [vector(b_maps[d]) for d, _ in b_chosen]
+    wp, wb = np.mean(wp_by_period, axis=0), np.mean(wb_by_period, axis=0)     # reported: average start weights
 
     periods, gaps = [], {"portfolio": 0.0, "benchmark": 0.0}
     contrib = np.zeros(len(ids))
-    for a, b in zip(bounds[:-1], bounds[1:]):
+    for k, (a, b) in enumerate(zip(bounds[:-1], bounds[1:])):
+        wp_k, wb_k = wp_by_period[k], wb_by_period[k]
         pa = np.array([last_price(j, a) for j in range(len(ids))])
         pb = np.array([last_price(j, b) for j in range(len(ids))])
         r = pb / pa - 1
         ok = ~np.isnan(r)
-        gaps["portfolio"] = max(gaps["portfolio"], float(wp[~ok].sum()))
-        gaps["benchmark"] = max(gaps["benchmark"], float(wb[~ok].sum()))
+        gaps["portfolio"] = max(gaps["portfolio"], float(wp_k[~ok].sum()))
+        gaps["benchmark"] = max(gaps["benchmark"], float(wb_k[~ok].sum()))
         r = np.where(ok, r, 0.0)
-        p_w = np.where(ok, wp, 0.0); p_w = p_w / p_w.sum() if p_w.sum() else p_w
-        b_w = np.where(ok, wb, 0.0); b_w = b_w / b_w.sum() if b_w.sum() else b_w
+        p_w = np.where(ok, wp_k, 0.0); p_w = p_w / p_w.sum() if p_w.sum() else p_w
+        b_w = np.where(ok, wb_k, 0.0); b_w = b_w / b_w.sum() if b_w.sum() else b_w
         rp, rb = float(p_w @ r), float(b_w @ r)
         contrib += (p_w - b_w) * r
         groups = {}
@@ -419,7 +509,8 @@ def attribution(conn, req):
                          "allocation": (wpg - wbg) * (rbg - ref),
                          "selection": wbg * (rpg - rbg),
                          "interaction": (wpg - wbg) * (rpg - rbg)}
-        periods.append({"start": a, "end": b, "rp": rp, "rb": rb, "groups": groups})
+        periods.append({"start": a, "end": b, "rp": rp, "rb": rb, "groups": groups,
+                        "portfolioSnapshot": p_chosen[k][0], "benchmarkSnapshot": b_chosen[k][0]})
 
     # Carino linking: scale each period's effects so they add up to the compounded active return.
     rp_total = float(np.prod([1 + p["rp"] for p in periods]) - 1)
@@ -439,6 +530,8 @@ def attribution(conn, req):
                 by_group[g][name] += e[name] * scale
                 effects[name] += e[name]
         period_rows.append({"start": p["start"].isoformat(), "end": p["end"].isoformat(),
+                            "portfolioSnapshot": p["portfolioSnapshot"].isoformat(),
+                            "benchmarkSnapshot": p["benchmarkSnapshot"].isoformat(),
                             "portfolioReturn": round(p["rp"], 6), "benchmarkReturn": round(p["rb"], 6),
                             "activeReturn": round(p["rp"] - p["rb"], 6),
                             **{n: round(v, 6) for n, v in effects.items()}})
@@ -467,6 +560,13 @@ def attribution(conn, req):
         reasons.append("linking residual %.2e" % residual)
     if len(periods) < 3:
         reasons.append("only %d monthly periods" % len(periods))
+    later = {"portfolio": sum(1 for _, x in p_chosen if x), "benchmark": sum(1 for _, x in b_chosen if x)}
+    first = {"portfolio": p_dates[0], "benchmark": b_dates[0]}
+    late = ["%s weights for %d of %d months (history from %s)" % (side, n, len(periods), first[side])
+            for side, n in later.items() if n]
+    if late:
+        reasons.append("snapshot after the month start used for " + " and ".join(late))
+    p_runs, b_runs = snapshot_runs(months, p_chosen), snapshot_runs(months, b_chosen)
     top_group = groups_out[0] if groups_out else None
     return {
         "schema": "mxjobs.attribution/1",
@@ -474,8 +574,11 @@ def attribution(conn, req):
         "method": method, "groupBy": "sector", "frequency": "monthly", "linking": "carino",
         "period": {"start": bounds[0].isoformat(), "end": bounds[-1].isoformat(), "months": len(periods)},
         "assumptions": [
-            "Portfolio weights of the snapshot on %s and benchmark weights of %s, held at the start of every month "
-            "(the security master keeps current snapshots, not their history)." % (snap, bench_date),
+            "Weights at the start of each month come from the latest snapshot on or before the month's first day "
+            "(the start date for the first month), else from the nearest later snapshot; share holdings are valued "
+            "with prices on the snapshot date.",
+            describe_runs("Portfolio %s" % portfolio, p_runs),
+            describe_runs("Benchmark %s" % benchmark, b_runs),
             "Security returns from adjusted closes (dividends included where the source adjusts).",
             "%s effects per month, linked over the period with Carino factors." %
             ("Brinson-Fachler" if method == "brinson-fachler" else "Brinson-Hood-Beebower"),
@@ -483,6 +586,9 @@ def attribution(conn, req):
         "portfolioReturn": round(rp_total, 6), "benchmarkReturn": round(rb_total, 6),
         "activeReturn": round(rp_total - rb_total, 6),
         "effects": {**{n: round(v, 6) for n, v in totals.items()}, "residual": round(residual, 10)},
+        "snapshots": {"portfolio": p_runs, "benchmark": b_runs, "monthsWithLaterSnapshot": later,
+                      "available": {"portfolio": {"count": len(p_dates), "first": p_dates[0], "last": p_dates[-1]},
+                                    "benchmark": {"count": len(b_dates), "first": b_dates[0], "last": b_dates[-1]}}},
         "byGroup": groups_out,
         "periods": period_rows,
         "topContributors": [row(j) for j in order[::-1][:5]],

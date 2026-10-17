@@ -3,8 +3,10 @@
 
     ./srm.py migrate                 apply pending migrations
     ./srm.py status                  migrations, row counts, identifier coverage, recent loads
-    ./srm.py load all                run every loader in dependency order
+    ./srm.py load all                run every loader in dependency order (not the OPTIONAL ones)
     ./srm.py load <name> [options]   one loader (see LOADERS)
+    ./srm.py load portfolio-snapshots [--as-of DATE] [--portfolios CODE ...]
+                                     carry portfolios' latest holdings forward (weight history)
 
 Connection: --host/--port/--user/--dbname, or SRM_PG* environment variables, or
 config.local.json; defaults postgres@192.168.0.223:5432/srm. Secrets: see srmlib/common.py.
@@ -15,7 +17,7 @@ import sys
 
 from srmlib import migrate
 from srmlib.common import Config, log
-from srmlib.loaders import fmp, gleif, nasdaq100, nasdaqtrader, openfigi, reference, sec, ssga
+from srmlib.loaders import fmp, gleif, nasdaq100, nasdaqtrader, openfigi, portfolios, reference, sec, ssga
 
 # Dependency order: venues and the listed universe first, then constituents, then the
 # per-security enrichment that works on the benchmark / portfolio securities.
@@ -32,7 +34,10 @@ LOADERS = {
     "fmp-prices": fmp.load_prices,              # end-of-day prices
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
     "fmp-corporate-actions": fmp.load_corporate_actions,
+    "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
 }
+# Not run by `load all`: name them to run them.
+OPTIONAL = {"portfolio-snapshots"}
 
 
 def status(conn):
@@ -83,6 +88,8 @@ def main():
                       help="FMP loaders: every active security instead of benchmark / portfolio members (~13k calls)")
     load.add_argument("--benchmarks", nargs="*", help="ssga: only these benchmark codes (SP500 DJIA SP400 SP600)")
     load.add_argument("--include-otc", action="store_true", help="sec-tickers: also create OTC securities")
+    load.add_argument("--as-of", help="portfolio-snapshots: snapshot date (default: the latest price date)")
+    load.add_argument("--portfolios", nargs="*", help="portfolio-snapshots: only these portfolio codes")
     args = parser.parse_args()
 
     cfg = Config(args)
@@ -93,7 +100,7 @@ def main():
         elif args.command == "status":
             status(conn)
         else:
-            names = list(LOADERS) if args.loader == "all" else [args.loader]
+            names = [n for n in LOADERS if n not in OPTIONAL] if args.loader == "all" else [args.loader]
             for name in names:
                 log(f"== {name}")
                 try:

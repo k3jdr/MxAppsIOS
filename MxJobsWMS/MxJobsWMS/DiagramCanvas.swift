@@ -82,6 +82,8 @@ struct DiagramCanvas: View {
     @State private var pendingLink: PendingLink?
     @State private var rubberBand: CGRect?
     @State private var dropTargetLayer: Layer?
+    /// The lane under the pointer, for Quick Help.
+    @State private var hoverLane: Layer?
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -101,6 +103,12 @@ struct DiagramCanvas: View {
                         .onTapGesture(coordinateSpace: .named(canvasSpace)) { tapBackground(at: $0) }
                         .gesture(rubberBandGesture)
                 }
+                .onContinuousHover { phase in
+                    var lane: Layer?
+                    if case .active(let p) = phase { lane = Metrics.layer(atY: p.y) }
+                    if lane != hoverLane { hoverLane = lane }
+                }
+                .quickHelpArea(JobsHelp.canvas(lane: hoverLane))
                 .coordinateSpace(.named(canvasSpace))
                 .contextMenu {
                     Button(editor.run.canContinue ? "Continue" : "Run") { editor.startRun() }

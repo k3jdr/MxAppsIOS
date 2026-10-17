@@ -2,8 +2,9 @@
 //  SRMLoadsView.swift
 //  MxDataHUB
 //
-//  SRM ▸ Load History: identifier coverage, the data sources with their plan limits, and the
-//  load audit trail (srm.load_run). Loads themselves run from SRM/srm.py.
+//  SRM ▸ Load History: identifier coverage, the data sources with their plan limits, the weight history
+//  (dated benchmark and portfolio snapshots) and the load audit trail (srm.load_run). Loads themselves run
+//  from SRM/srm.py.
 //
 
 import SwiftUI
@@ -42,6 +43,40 @@ struct SRMLoadsView: View {
                 }
                 .padding(10)
                 .frame(minWidth: 360)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Snapshot history").font(.headline)
+                        .help("Dated weight snapshots: attribution uses the one at the start of each month")
+                    Table(store.snapshotCoverage) {
+                        TableColumn("Weights of") { (row: SnapshotCoverageRow) in
+                            Text(row.code).help(row.kind == "benchmark" ? "Benchmark" : "Portfolio")
+                        }
+                        .width(min: 80, ideal: 110)
+                        TableColumn("Snapshots") { (row: SnapshotCoverageRow) in
+                            Text(row.snapshots.formatted()).monospacedDigit()
+                                .foregroundStyle(row.snapshots < 2 ? .orange : .primary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .help(row.drifted > 0 ? "\(row.drifted) carried forward by portfolio-snapshots" : "")
+                        }
+                        .width(min: 55, ideal: 65)
+                        TableColumn("From") { (row: SnapshotCoverageRow) in Text(row.first).monospacedDigit() }.width(min: 75, ideal: 85)
+                        TableColumn("To") { (row: SnapshotCoverageRow) in Text(row.last).monospacedDigit() }.width(min: 75, ideal: 85)
+                        TableColumn("Months") { (row: SnapshotCoverageRow) in
+                            Text(row.months.formatted()).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        .width(min: 45, ideal: 55)
+                        TableColumn("Longest gap") { (row: SnapshotCoverageRow) in
+                            Text(row.maxGapDays.map { "\($0) d" } ?? "—").monospacedDigit()
+                                .foregroundStyle((row.maxGapDays ?? 0) > 35 ? .orange : .primary)
+                                .help("Longest stretch between snapshots; over a month means a month used an older one")
+                        }
+                        .width(min: 60, ideal: 75)
+                    }
+                    if store.snapshotCoverage.isEmpty {
+                        Text("Needs migration V010 (SRM/srm.py migrate).").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(10)
+                .frame(minWidth: 420)
             }
             .frame(minHeight: 220)
 

@@ -17,9 +17,12 @@ struct ContentView: View {
         let _ = editor.keyRevision
         let _ = KeychainChanges.shared.revision  // re-run the key checks when a key is saved or removed
         let issues = Validator.check(document.space)
+        let screen = JobsHelp.screen(document.space, editor: editor, problems: issues.count)
         NavigationSplitView {
             PaletteView(editor: editor)
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
+                // Quick Help: what's under the pointer, at the bottom of the palette.
+                .quickHelpDock()
         } detail: {
             VStack(spacing: 0) {
                 RunBar(settings: $document.space.run, editor: editor)
@@ -52,12 +55,15 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button("Zoom Out", systemImage: "minus.magnifyingglass") { editor.zoomOut() }
+                    .quickHelp("Zoom Out", "Makes the diagram smaller (down to 40%).", shortcut: "⌘−")
                 Text("\(Int((editor.zoom * 100).rounded()))%")
                     .monospacedDigit()
                     .frame(minWidth: 44)
                     .onTapGesture { editor.zoom = 1 }
                     .help("Click for 100%")
+                    .quickHelp("Zoom", "The diagram's zoom. Click for actual size; pinch on the trackpad to zoom.", shortcut: "⌘0")
                 Button("Zoom In", systemImage: "plus.magnifyingglass") { editor.zoomIn() }
+                    .quickHelp("Zoom In", "Makes the diagram bigger (up to 200%).", shortcut: "⌘+")
             }
             ToolbarItemGroup {
                 Button {
@@ -68,6 +74,7 @@ struct ContentView: View {
                                      : issues.isEmpty ? "checkmark.seal" : "exclamationmark.triangle")
                 }
                 .help("Configuration checks")
+                .quickHelp("Problems", "Configuration checks: missing subscriptions or keys, unlinked steps, empty settings. Click one to go to the step or subscription.", shortcut: "⇧⌘K")
                 .popover(isPresented: $editor.showIssues, arrowEdge: .bottom) {
                     Form {
                         if issues.isEmpty {
@@ -81,8 +88,10 @@ struct ContentView: View {
                 }
                 Button("API Subscriptions", systemImage: "key.horizontal") { editor.showSubscriptions = true }
                     .help("Layer 3 API subscriptions and keys")
+                    .quickHelp("API Subscriptions", JobsHelp.subscriptions.detail, shortcut: "⌥⌘K")
                 Button("Inspector", systemImage: "sidebar.trailing") { editor.showInspector.toggle() }
                     .help("Show or hide the properties panel")
+                    .quickHelp("Inspector", "Shows or hides the properties panel on the right: the selected step's settings, or the jobspace's.", shortcut: "⌥⌘I")
             }
         }
         .sheet(isPresented: $editor.showSubscriptions, onDismiss: { editor.keyRevision += 1 }) {
@@ -95,5 +104,6 @@ struct ContentView: View {
         }
         .onChange(of: activeState) { if activeState == .key { EditorState.lastActive = editor } }
         .frame(minWidth: 1000, minHeight: 620)
+        .quickHelpScreen(screen.name, screen.item, selection: JobsHelp.selection(document.space, editor: editor))
     }
 }

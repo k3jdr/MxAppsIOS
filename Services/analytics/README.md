@@ -35,8 +35,12 @@ python3 analytics_service.py            # or: python3 Services/mxservices.py sta
 - Carino linking, so the linked effects add up to the compounded active return (`effects.residual` ≈ 0).
 - Also: per-period effects, sector table, top and bottom contributors, data gaps, and a `decisionContext`
   (`publish`, or `review` when prices are missing for more than 2% of weight or the residual is not zero).
-- Assumption: the security master keeps the current portfolio and benchmark snapshots, so their weights are held
-  at the start of every month of the period. This is stated in the result's `assumptions`.
+- Weights per month: the latest portfolio and benchmark snapshots on or before the month's first day (the start date for
+  the first month), else the nearest later snapshot; share holdings are valued with prices on the snapshot date.
+  `assumptions` lists which months used which snapshot dates, each period row carries `portfolioSnapshot` and
+  `benchmarkSnapshot`, and `snapshots` summarises the runs, the months that used a later snapshot and the history
+  available. Months on a later snapshot add a `decisionContext` reason (so `review`). `byGroup` and contributor weights
+  are the average of the monthly start weights.
 
 Why Python: database queries, aligning price histories, estimating statistics and shaping reports — the parts that
 change most often. The heavy optimization loops go to Java (active) and C++ (tracking, risk).

@@ -28,6 +28,7 @@ struct PaletteView: View {
                             .contextMenu {
                                 Button("Add to Layer \(layer.rawValue)") { editor.add(kind) }
                             }
+                            .quickHelpArea(JobsHelp.paletteKind(kind))
                     }
                 } header: {
                     Text("Layer \(layer.rawValue) · \(layer.title)")
@@ -62,14 +63,18 @@ struct PaletteView: View {
                         Button("About \(service.name)…") { openWindow(id: "services") }
                     }
                     .help(service.purpose + "\n\nDouble-click to add a step; right-click for each endpoint.")
+                    .quickHelpArea(JobsHelp.paletteService(service, running: running[service.id] == true))
                 }
                 Button("Layer 3 Services…") { openWindow(id: "services") }
+                    .quickHelp("Layer 3 Services…", JobsHelp.services.detail, shortcut: "⌥⌘L")
                 Button("New from Sample…") { openWindow(id: "samples") }
+                    .quickHelp("New from Sample…", JobsHelp.samples.detail, shortcut: "⌥⌘N")
             } header: {
                 Text("Layer 3 Services").foregroundStyle(Layer.data.color)
             }
         }
         .listStyle(.sidebar)
+        .quickHelpArea(JobsHelp.palette)
         .task { running = await ServiceCatalog.probeAll() }
     }
 }

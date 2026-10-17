@@ -22,6 +22,8 @@ struct RefreshCategory: Decodable, Identifiable, Hashable {
     var name: String
     var description: String
     var cadence: String
+    /// Run only on request: Refresh All skips it.
+    var optional: Bool?
     var loaders: [RefreshLoader]
     var lastRun: String?
     var dataAsOf: String?
@@ -97,7 +99,7 @@ final class RefreshStore {
     }
 
     func refreshAll() async {
-        for c in categories {
+        for c in categories where c.optional != true {
             await refresh(c.id)
             if results.first?.status == "failed" { break }
         }
@@ -157,7 +159,7 @@ struct DataRefreshView: View {
                 Label("Refresh All", systemImage: "arrow.triangle.2.circlepath")
             }
             .disabled(refresh.running != nil || refresh.categories.isEmpty)
-            .help("Every category in dependency order; stops at the first failure")
+            .help("Every category in dependency order, except the optional ones; stops at the first failure")
             Button {
                 if !AppLink.sample(id: "srm-daily-refresh", portfolio: nil, benchmark: nil).open() {
                     refresh.error = "MxJobsWMS is not installed in Applications."
@@ -264,7 +266,14 @@ private struct CategoryRow: View {
         HStack(alignment: .top, spacing: 12) {
             StateBadge(state: category.state).frame(width: 70, alignment: .leading)
             VStack(alignment: .leading, spacing: 3) {
-                Text(category.name).font(.headline)
+                HStack(spacing: 6) {
+                    Text(category.name).font(.headline)
+                    if category.optional == true {
+                        Text("Optional").font(.caption2)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.secondary.opacity(0.15), in: Capsule())
+                    }
+                }
                 Text(category.description).font(.callout).foregroundStyle(.secondary)
                 HStack(spacing: 10) {
                     if let asOf = category.dataAsOf { Label("Data as of \(asOf)", systemImage: "calendar").font(.caption) }

@@ -17,7 +17,7 @@ SRM/
 ```bash
 cd MxDataHUB/SRM
 ./srm.py migrate          # create / upgrade schema srm on postgres@192.168.0.223/srm
-./srm.py load all         # every loader, in dependency order
+./srm.py load all         # every loader, in dependency order (not the optional portfolio-snapshots)
 ./srm.py status           # migrations, row counts, identifier coverage, benchmarks, recent loads
 ```
 
@@ -55,9 +55,9 @@ security add-generic-password -U -s SRM-api -a openfigi -w
 | Identifiers | `identifier_type`, `security_identifier` — ISIN, CUSIP, SEDOL, FIGI, composite FIGI, share-class FIGI, ticker, FMP symbol, each valid over `[valid_from, valid_to)` with source and load. Two exclusion constraints: a value points to one security at a time, and a security has one current value per type (and venue). A CHECK validates every value's format and check digit. |
 | Classification | `classification_scheme`, `classification_node` (sector → industry), `security_classification` (with history) |
 | Market data | `price` (EOD per listing and source), `security_market_data` (market cap, shares, beta), `corporate_action` (dividends, splits, symbol changes, delistings) |
-| Benchmarks | `benchmark`, `benchmark_weight` (dated snapshots), `benchmark_constituent` (membership over time), `benchmark_level` |
-| Portfolios | `portfolio`, `portfolio_holding` (dated snapshots; shares and/or target weight), `portfolio_transaction` |
-| Views | `v_security` (current identifiers pivoted), `v_identifier_coverage`, `v_benchmark_summary`, `v_load_history` |
+| Benchmarks | `benchmark`, `benchmark_weight` (dated snapshots, one per load), `benchmark_constituent` (membership over time, rebuilt from all snapshots), `benchmark_level` |
+| Portfolios | `portfolio`, `portfolio_holding` (dated snapshots; shares and/or target weight; `load_id` and `drifted_from` when carried forward by `portfolio-snapshots`), `portfolio_transaction` |
+| Views | `v_security` (current identifiers pivoted), `v_identifier_coverage`, `v_benchmark_summary`, `v_load_history`, `v_snapshot_coverage` (weight history per benchmark and portfolio) |
 
 Functions:
 
@@ -66,15 +66,16 @@ Functions:
 - `set_identifier(security, type, value, source, ...)` — idempotent upsert that keeps history
   (`unchanged` / `inserted` / `changed` / `moved` / `conflict:<id>` / `invalid`).
 - `resolve_identifier(text, type, as_of)` — any identifier, `TICKER:MIC`, `TICKER US`, CIK or LEI → securities, best first.
-- `last_price`, `benchmark_weights(benchmark, as_of)`, `apply_benchmark_snapshot` (procedure),
+- `last_price`, `benchmark_weights(benchmark, as_of)`, `apply_benchmark_snapshot` (procedure: rebuilds the benchmark's
+  membership ranges from all its snapshots, so loading a date twice or out of order keeps them right),
   `build_benchmark(code, name, parent, 'equal'|'cap', sector, as_of)`.
 - `add_holding(portfolio, date, identifier, shares, weight, type)`, `portfolio_positions` (from transactions),
   `portfolio_valuation`, `portfolio_validate`, `portfolio_active_weights`.
 
 ## Loaders
 
-`./srm.py load <name>`; `all` runs them in this order. Every run is recorded in `srm.load_run`;
-all writes are upserts, so loaders can be re-run at any time.
+`./srm.py load <name>`; `all` runs them in this order, except the optional `portfolio-snapshots`. Every run is
+recorded in `srm.load_run`; all writes are upserts, so loaders can be re-run at any time.
 
 | Loader | Source | What it loads |
 |---|---|---|
@@ -90,6 +91,7 @@ all writes are upserts, so loaders can be re-run at any time.
 | `fmp-prices` | FMP `historical-price-eod/full` | EOD prices (default 2 years; incremental afterwards) |
 | `fmp-index-levels` | FMP | benchmark levels (^GSPC, ^DJI on the current plan) |
 | `fmp-corporate-actions` | FMP calendars, symbol changes, delistings | dividends, splits, symbol changes, delistings; `--history` adds each security's full dividend / split history |
+| `portfolio-snapshots` (optional) | the security master | each portfolio's latest snapshot carried forward to the latest price date (`--as-of`, `--portfolios`): shares copied, weights drifted by adjusted-close returns; never changes an existing snapshot. Run it daily after `fmp-prices` to build portfolio weight history for attribution |
 
 The per-symbol loaders (FMP, SEC submissions) work on securities that are in a benchmark or a portfolio;
 `--symbols` picks others, `--all-securities` takes every active security (about 13,000 calls, roughly an hour
