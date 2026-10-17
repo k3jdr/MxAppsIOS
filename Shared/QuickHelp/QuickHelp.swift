@@ -1,6 +1,6 @@
 //
 //  QuickHelp.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxDataSQL (MXcodeIDE/Shared/QuickHelp)
+//  Shared by MxDataHUB, MxJobsWMS and MxDataSQL (MXcodeIDE/Shared/QuickHelp; MxDataSQL compiles only this folder of Shared)
 //
 //  Quick Help, as in MxNoteONE (and Logic Pro): a panel that describes what's under the pointer — a
 //  button, a list, a table cell, a node — in a sentence or two, with its shortcut. With the pointer over
@@ -34,7 +34,8 @@ final class QuickHelp {
     static let shared = QuickHelp()
     static let visibleKey = "quickHelpVisible", floatingKey = "quickHelpFloating"
 
-    var visible: Bool = UserDefaults.standard.object(forKey: visibleKey) as? Bool ?? true {
+    /// Shown unless turned off (bool(forKey:) also reads a `-quickHelpVisible NO` launch argument).
+    var visible: Bool = UserDefaults.standard.object(forKey: visibleKey) == nil || UserDefaults.standard.bool(forKey: visibleKey) {
         didSet {
             UserDefaults.standard.set(visible, forKey: Self.visibleKey)
             updateTracking()
@@ -49,6 +50,9 @@ final class QuickHelp {
             QuickHelpWindow.shared.sync()
         }
     }
+
+    /// Docked in the window (shown and not floating).
+    var isDocked: Bool { visible && !floating }
 
     /// A control under the pointer, an AppKit view under it (a grid cell), the areas it's in (innermost
     /// last), what has the keyboard focus, what's selected, and the screen.
@@ -94,11 +98,22 @@ final class QuickHelp {
         }
     }
 
-    /// The front window's screen and selection (each window publishes its own when it becomes key).
-    func publish(name: String?, screen: QuickHelpItem?, selection: QuickHelpItem?) {
+    /// The window whose screen and selection show: the last one that was key.
+    @ObservationIgnored private var owner: UUID?
+
+    /// A window's screen and selection. `claim` (the window became key) makes it the one shown; otherwise
+    /// only the window shown (or the first) updates them, so a window in the back doesn't take over.
+    func publish(from window: UUID, claim: Bool, name: String?, screen: QuickHelpItem?, selection: QuickHelpItem?) {
+        guard claim || owner == nil || owner == window else { return }
+        owner = window
         if screenName != name { screenName = name }
         if self.screen != screen { self.screen = screen }
         if self.selection != selection { self.selection = selection }
+    }
+
+    /// The window closed.
+    func resign(_ window: UUID) {
+        if owner == window { owner = nil }
     }
 
     // MARK: AppKit views under the pointer
@@ -211,9 +226,12 @@ struct QuickHelpPanel: View {
 
     private var header: some View {
         HStack(spacing: 4) {
-            Text("Quick Help").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            // The floating window's title bar already says Quick Help.
+            if !isFloating {
+                Text("Quick Help").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            }
             if let name = help.screenName {
-                Text("· " + name).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+                Text(isFloating ? name : "· " + name).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
             }
             Spacer()
             Button { help.floating.toggle() } label: {
@@ -268,9 +286,10 @@ struct QuickHelpDock: View {
     init(height: CGFloat? = nil) { self.height = height }
 
     var body: some View {
-        if help.visible && !help.floating {
+        if help.isDocked {
             QuickHelpPanel(style: height.map { .fixedHeight($0) } ?? .docked)
-                .background(.background.opacity(0.6))
+                // The sidebar's list scrolls under the panel: blur it rather than let it show through.
+                .background(.regularMaterial)
                 .overlay(alignment: .top) { Divider() }
         }
     }
@@ -337,22 +356,24 @@ private struct QuickHelpScreen: ViewModifier {
     var screen: QuickHelpItem?
     var selection: QuickHelpItem?
     @Environment(\.controlActiveState) private var active
+    @State private var id = UUID()
 
     func body(content: Content) -> some View {
         content
             .onAppear {
-                publish()
+                publish(claim: active == .key)
                 // Quick Help left floating last time floats again.
                 QuickHelpWindow.shared.sync()
             }
-            .onChange(of: screen) { if active != .inactive { publish() } }
-            .onChange(of: selection) { if active != .inactive { publish() } }
-            .onChange(of: name) { if active != .inactive { publish() } }
-            .onChange(of: active) { if active == .key { publish() } }
+            .onChange(of: screen) { publish() }
+            .onChange(of: selection) { publish() }
+            .onChange(of: name) { publish() }
+            .onChange(of: active) { if active == .key { publish(claim: true) } }
+            .onDisappear { QuickHelp.shared.resign(id) }
     }
 
-    private func publish() {
-        QuickHelp.shared.publish(name: name, screen: screen, selection: selection)
+    private func publish(claim: Bool = false) {
+        QuickHelp.shared.publish(from: id, claim: claim, name: name, screen: screen, selection: selection)
     }
 }
 

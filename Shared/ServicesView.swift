@@ -52,12 +52,14 @@ struct ServicesView: View {
                             Label("Check", systemImage: "arrow.clockwise")
                         }
                         .disabled(checking)
+                        .quickHelp("Check", "Checks which services are running on this Mac (each answers on its own port).")
                         if checking { ProgressView().controlSize(.small) }
                         Spacer()
                         let up = running.values.filter { $0 }.count
                         Text("\(up) of \(ServiceCatalog.all.count) running").font(.caption).foregroundStyle(.secondary)
                     }
                     CopyCommand(title: "Start all", command: ServiceCatalog.startCommand)
+                        .quickHelp("Start All", "The Terminal command that starts every Layer 3 service; copy it and run it in Terminal.")
                 }
                 .padding(10)
             }
@@ -102,6 +104,11 @@ private struct ServiceRow: View {
             }
         }
         .padding(.vertical, 2)
+        .quickHelpArea(QuickHelpItem(
+            title: "\(service.name) (\(service.language))",
+            detail: service.purpose + "\n" + (running == nil ? "" : running! ? "Running on port \(service.port). " : "Not running (port \(service.port)). ")
+                + "Select it for when to use it, its endpoints, how to start it and the workflows built on it.",
+            symbol: "server.rack"))
     }
 }
 
@@ -312,5 +319,11 @@ private struct SampleRow: View {
                 .buttonStyle(.borderedProminent)
         }
         .padding(.vertical, 6)
+        .quickHelpArea(QuickHelpItem(
+            title: "\(sample.area): \(sample.title)",
+            detail: sample.summary + "\nUses " + sample.services.compactMap { ServiceCatalog.service($0)?.name }.joined(separator: ", ")
+                + (sample.services.isEmpty ? "no services" : "") + ". \(openTitle) opens it"
+                + (sample.takesPortfolio ? " for a portfolio (DEMO_GROWTH unless it comes from a portfolio in MxDataHUB)." : "."),
+            symbol: "doc.on.doc"))
     }
 }
