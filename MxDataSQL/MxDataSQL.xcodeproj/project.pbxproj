@@ -12,15 +12,15 @@
 
 /* Begin PBXFileReference section */
 		5D1A7E073068647C006E309B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		5D1A7E093068647C006E309B /* MxDataSRM.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MxDataSRM.entitlements; sourceTree = "<group>"; };
+		5D1A7E093068647C006E309B /* MxDataSQL.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MxDataSQL.entitlements; sourceTree = "<group>"; };
 		5D1A7E083068647C006E309B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		5D1A7E143068647C006E309B /* MxDataSRM.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MxDataSRM.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D1A7E143068647C006E309B /* MxDataSQL.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MxDataSQL.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5D1A7E163068647C006E309B /* MxDataSRM */ = {
+		5D1A7E163068647C006E309B /* MxDataSQL */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = MxDataSRM;
+			path = MxDataSQL;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -40,8 +40,8 @@
 			children = (
 				5D1A7E083068647C006E309B /* README.md */,
 				5D1A7E073068647C006E309B /* Info.plist */,
-				5D1A7E093068647C006E309B /* MxDataSRM.entitlements */,
-				5D1A7E163068647C006E309B /* MxDataSRM */,
+				5D1A7E093068647C006E309B /* MxDataSQL.entitlements */,
+				5D1A7E163068647C006E309B /* MxDataSQL */,
 				5D1A7E153068647C006E309B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -49,7 +49,7 @@
 		5D1A7E153068647C006E309B /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5D1A7E143068647C006E309B /* MxDataSRM.app */,
+				5D1A7E143068647C006E309B /* MxDataSQL.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -57,9 +57,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5D1A7E133068647C006E309B /* MxDataSRM */ = {
+		5D1A7E133068647C006E309B /* MxDataSQL */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5D1A7E1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxDataSRM" */;
+			buildConfigurationList = 5D1A7E1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxDataSQL" */;
 			buildPhases = (
 				5D1A7E103068647C006E309B /* Sources */,
 				5D1A7E113068647C006E309B /* Frameworks */,
@@ -68,14 +68,14 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
-				5D1A7E163068647C006E309B /* MxDataSRM */,
+				5D1A7E163068647C006E309B /* MxDataSQL */,
 			);
-			name = MxDataSRM;
+			name = MxDataSQL;
 			packageProductDependencies = (
 				5D1A7E023068647C006E309B /* PostgresNIO */,
 			);
-			productName = MxDataSRM;
-			productReference = 5D1A7E143068647C006E309B /* MxDataSRM.app */;
+			productName = MxDataSQL;
+			productReference = 5D1A7E143068647C006E309B /* MxDataSQL.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -93,7 +93,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 5D1A7E0F3068647C006E309B /* Build configuration list for PBXProject "MxDataSRM" */;
+			buildConfigurationList = 5D1A7E0F3068647C006E309B /* Build configuration list for PBXProject "MxDataSQL" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -110,7 +110,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				5D1A7E133068647C006E309B /* MxDataSRM */,
+				5D1A7E133068647C006E309B /* MxDataSQL */,
 			);
 		};
 /* End PBXProject section */
@@ -132,7 +132,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		5D1A7E1D3068647D006E309B /* Debug configuration for PBXProject "MxDataSRM" */ = {
+		5D1A7E1D3068647D006E309B /* Debug configuration for PBXProject "MxDataSQL" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -196,7 +196,7 @@
 			};
 			name = Debug;
 		};
-		5D1A7E1E3068647D006E309B /* Release configuration for PBXProject "MxDataSRM" */ = {
+		5D1A7E1E3068647D006E309B /* Release configuration for PBXProject "MxDataSQL" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -252,12 +252,12 @@
 			};
 			name = Release;
 		};
-		5D1A7E203068647D006E309B /* Debug configuration for PBXNativeTarget "MxDataSRM" */ = {
+		5D1A7E203068647D006E309B /* Debug configuration for PBXNativeTarget "MxDataSQL" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = MxDataSRM.entitlements;
+				CODE_SIGN_ENTITLEMENTS = MxDataSQL.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -269,7 +269,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = MxDataSRM;
+				INFOPLIST_KEY_CFBundleDisplayName = MxDataSQL;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -277,7 +277,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxDataSRM;
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxDataSQL;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -289,12 +289,12 @@
 			};
 			name = Debug;
 		};
-		5D1A7E213068647D006E309B /* Release configuration for PBXNativeTarget "MxDataSRM" */ = {
+		5D1A7E213068647D006E309B /* Release configuration for PBXNativeTarget "MxDataSQL" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = MxDataSRM.entitlements;
+				CODE_SIGN_ENTITLEMENTS = MxDataSQL.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -306,7 +306,7 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = MxDataSRM;
+				INFOPLIST_KEY_CFBundleDisplayName = MxDataSQL;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -314,7 +314,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxDataSRM;
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxDataSQL;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -329,19 +329,19 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		5D1A7E0F3068647C006E309B /* Build configuration list for PBXProject "MxDataSRM" */ = {
+		5D1A7E0F3068647C006E309B /* Build configuration list for PBXProject "MxDataSQL" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5D1A7E1D3068647D006E309B /* Debug configuration for PBXProject "MxDataSRM" */,
-				5D1A7E1E3068647D006E309B /* Release configuration for PBXProject "MxDataSRM" */,
+				5D1A7E1D3068647D006E309B /* Debug configuration for PBXProject "MxDataSQL" */,
+				5D1A7E1E3068647D006E309B /* Release configuration for PBXProject "MxDataSQL" */,
 			);
 			defaultConfigurationName = Release;
 		};
-		5D1A7E1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxDataSRM" */ = {
+		5D1A7E1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxDataSQL" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5D1A7E203068647D006E309B /* Debug configuration for PBXNativeTarget "MxDataSRM" */,
-				5D1A7E213068647D006E309B /* Release configuration for PBXNativeTarget "MxDataSRM" */,
+				5D1A7E203068647D006E309B /* Debug configuration for PBXNativeTarget "MxDataSQL" */,
+				5D1A7E213068647D006E309B /* Release configuration for PBXNativeTarget "MxDataSQL" */,
 			);
 			defaultConfigurationName = Release;
 		};

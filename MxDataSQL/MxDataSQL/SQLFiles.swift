@@ -1,6 +1,6 @@
 //
 //  SQLFiles.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Saving and recalling .sql files from the SQL box (right-click menu).
 //  SQLLibrary remembers the SQL folder and recently used files for the whole
@@ -41,7 +41,7 @@ final class SQLLibrary {
     func chooseFolder() -> URL? {
         let panel = NSOpenPanel()
         panel.title = "Choose SQL Folder"
-        panel.message = "MxDataSRM lists the .sql files in this folder and opens Save and Open panels there."
+        panel.message = "MxDataSQL lists the .sql files in this folder and opens Save and Open panels there."
         panel.prompt = "Choose"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false

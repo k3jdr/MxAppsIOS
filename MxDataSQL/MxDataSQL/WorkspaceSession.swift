@@ -1,6 +1,6 @@
 //
 //  WorkspaceSession.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Live, unsaved state of one workspace window: the open connection, the
 //  table list, the loaded grid and its pending edits. What should survive

@@ -3,7 +3,7 @@
 //  MxDataHUB
 //
 //  DB Connection: PostgreSQL host, port, user, database, password and SSL mode (the same screen
-//  as MxDataSRM's). The fields are remembered by the app; the password is kept in the Keychain.
+//  as MxDataSQL's). The fields are remembered by the app; the password is kept in the Keychain.
 //
 
 import SwiftUI

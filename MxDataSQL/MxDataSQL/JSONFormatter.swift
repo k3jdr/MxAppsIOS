@@ -1,6 +1,6 @@
 //
 //  JSONFormatter.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  JSON for the grid's "View JSON…" window: formatting like VS Code's
 //  Format Document (each member on its own line, `"key": value`, empty {} and

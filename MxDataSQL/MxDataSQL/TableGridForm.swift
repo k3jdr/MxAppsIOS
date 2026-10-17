@@ -1,6 +1,6 @@
 //
 //  TableGridForm.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Form 3 — DB Table: an SQL box (pre-filled with the statement that loaded
 //  the grid) with a Run SQL button, above the rows in a grid that fills the

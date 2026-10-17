@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  A workspace window: the three forms (DB Connection, DB Table Selection,
 //  DB Table) selected with a segmented control, plus a status bar.
@@ -74,7 +74,7 @@ struct ContentView: View {
         .sheet(isPresented: $session.showUpdateDialog) {
             UpdateDialog(session: session, fetchLimit: document.workspace.view.fetchLimit)
         }
-        .alert("MxDataSRM", isPresented: Binding(
+        .alert("MxDataSQL", isPresented: Binding(
             get: { session.errorMessage != nil },
             set: { if !$0 { session.errorMessage = nil } })
         ) {

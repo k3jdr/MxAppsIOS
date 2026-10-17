@@ -1,6 +1,6 @@
 //
 //  SQLTextView.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Plain-text, monospaced SQL editor. Wraps NSTextView so smart quotes, smart
 //  dashes and autocorrection can be turned off; they would corrupt SQL. Its

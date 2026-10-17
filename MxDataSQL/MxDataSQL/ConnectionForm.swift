@@ -1,6 +1,6 @@
 //
 //  ConnectionForm.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Form 1 — DB Connection: PostgreSQL host, port, user, database, password.
 //

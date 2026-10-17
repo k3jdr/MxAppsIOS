@@ -1,6 +1,6 @@
 //
 //  ViewSettingsDialog.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Table ▸ View…: number of rows and columns shown in the grid viewport,
 //  and how many rows are fetched from the table.

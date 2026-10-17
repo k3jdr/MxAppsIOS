@@ -1,6 +1,6 @@
 //
-//  MxDataSRMApp.swift
-//  MxDataSRM
+//  MxDataSQLApp.swift
+//  MxDataSQL
 //
 //  Document-based app: each window is a workspace (*.mxworkspace).
 //  DocumentGroup provides the File menu (New, Open, Save, ...);
@@ -10,7 +10,7 @@
 import SwiftUI
 
 @main
-struct MxDataSRMApp: App {
+struct MxDataSQLApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: WorkspaceDocument()) { file in
             ContentView(document: file.$document)

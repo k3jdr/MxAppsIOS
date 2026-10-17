@@ -6,14 +6,14 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>MxDataSRM Workspace</string>
+			<string>MxDataSQL Workspace</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>com.k3jdr.mxdatasrm.workspace</string>
+				<string>com.k3jdr.mxdatasql.workspace</string>
 			</array>
 		</dict>
 	</array>
@@ -21,9 +21,9 @@
 	<array>
 		<dict>
 			<key>UTTypeIdentifier</key>
-			<string>com.k3jdr.mxdatasrm.workspace</string>
+			<string>com.k3jdr.mxdatasql.workspace</string>
 			<key>UTTypeDescription</key>
-			<string>MxDataSRM Workspace</string>
+			<string>MxDataSQL Workspace</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.json</string>

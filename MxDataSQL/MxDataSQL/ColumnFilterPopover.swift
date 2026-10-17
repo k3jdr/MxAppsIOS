@@ -1,6 +1,6 @@
 //
 //  ColumnFilterPopover.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  The panel behind a column header's filter button, laid out like Excel's:
 //  sort ascending / descending, then a filter by values (checklist of the

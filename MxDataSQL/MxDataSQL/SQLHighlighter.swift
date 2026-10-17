@@ -1,6 +1,6 @@
 //
 //  SQLHighlighter.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Syntax colouring for the SQL box, in the colours of VS Code's Light+ and
 //  Dark+ themes (they follow the system appearance). A small scanner that

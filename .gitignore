@@ -5,6 +5,6 @@ DerivedData/
 .DS_Store
 xc*serdata/
 
-## MxDataSRM workspaces (connection details)
+## MxDataSQL workspaces (connection details)
 *.mxworkspace
 *.csv

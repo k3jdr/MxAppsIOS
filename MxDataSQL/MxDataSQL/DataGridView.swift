@@ -1,6 +1,6 @@
 //
 //  DataGridView.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Editable data grid backed by NSTableView, with always-visible vertical
 //  and horizontal scroll bars. Edits are recorded in the session as pending

@@ -1,6 +1,6 @@
 //
 //  PostgresService.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  One PostgreSQL connection per open workspace window (PostgresNIO).
 //  All catalog queries select text columns so rows decode uniformly as [String?].
@@ -117,7 +117,7 @@ nonisolated struct UpdateOutcome: Sendable {
 
 actor PostgresService {
     private let connection: PostgresConnection
-    private let logger = Logger(label: "com.k3jdr.MxDataSRM.postgres")
+    private let logger = Logger(label: "com.k3jdr.MxDataSQL.postgres")
     private var preflightCounter = 0
 
     private init(connection: PostgresConnection) {
@@ -141,7 +141,7 @@ actor PostgresService {
             password: password.isEmpty ? nil : password, database: settings.database, tls: tls)
         do {
             let connection = try await PostgresConnection.connect(
-                configuration: configuration, id: 1, logger: Logger(label: "com.k3jdr.MxDataSRM.postgres"))
+                configuration: configuration, id: 1, logger: Logger(label: "com.k3jdr.MxDataSQL.postgres"))
             return PostgresService(connection: connection)
         } catch {
             throw DatabaseError.from(error)

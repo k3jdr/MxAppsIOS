@@ -1,6 +1,6 @@
 //
 //  DatabaseModels.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Value types describing what was read from PostgreSQL: the table list,
 //  a psql-style table description (\d) and the rows shown in the grid.

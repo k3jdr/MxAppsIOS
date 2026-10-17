@@ -1,6 +1,6 @@
 //
 //  TableWindow.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  "Open in New Window" from DB Table Selection: the DB Table form (SQL box,
 //  editable grid, Update, View, Reload) in its own window. Each table window
@@ -89,7 +89,7 @@ struct TableWindowView: View {
         .sheet(isPresented: $session.showUpdateDialog) {
             UpdateDialog(session: session, fetchLimit: view.fetchLimit)
         }
-        .alert("MxDataSRM", isPresented: Binding(
+        .alert("MxDataSQL", isPresented: Binding(
             get: { session.errorMessage != nil },
             set: { if !$0 { session.errorMessage = nil } })
         ) {

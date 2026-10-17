@@ -1,6 +1,6 @@
 //
 //  TableUpdate.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Turns the pending cell edits of the grid into parameterized UPDATE
 //  statements. Values are always sent as text and cast to the column type

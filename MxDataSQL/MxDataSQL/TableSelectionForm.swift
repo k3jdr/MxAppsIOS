@@ -1,6 +1,6 @@
 //
 //  TableSelectionForm.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Form 2 — DB Table Selection: available tables with their row counts,
 //  and a psql `\d`-style summary of the highlighted table.

@@ -1,6 +1,6 @@
 //
 //  CSVExport.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Export CSV…: writes the grid to a CSV file (RFC 4180, UTF-8, CRLF line ends,
 //  header row of column names). NULL is an empty field; an empty string is "".

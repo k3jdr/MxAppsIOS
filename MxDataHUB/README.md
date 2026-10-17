@@ -70,4 +70,4 @@ and `-query AAPL` searches Securities; the connection fields can be given as `-h
 | `Formatting.swift` | Number formatting shared by the screens |
 | `SRM/` | PostgreSQL migrations and the Python loaders |
 
-The SRM screens and `SRM/` were moved here from MxDataSRM, which is again a general PostgreSQL utility.
+The SRM screens and `SRM/` were moved here from MxDataSQL, which is again a general PostgreSQL utility.

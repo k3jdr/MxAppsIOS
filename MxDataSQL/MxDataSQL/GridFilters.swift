@@ -1,6 +1,6 @@
 //
 //  GridFilters.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Excel-style sorting and filtering for the DB Table grid. They run on the
 //  server: the grid's query gets a WHERE and ORDER BY, so paging, row counts,

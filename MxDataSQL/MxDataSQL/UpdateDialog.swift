@@ -1,6 +1,6 @@
 //
 //  UpdateDialog.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  Table ▸ Update…: reviews the pending cell edits, asks how rows are
 //  identified and how the change is applied, previews the SQL, then runs it.

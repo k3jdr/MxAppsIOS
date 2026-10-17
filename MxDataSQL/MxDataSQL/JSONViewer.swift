@@ -1,6 +1,6 @@
 //
 //  JSONViewer.swift
-//  MxDataSRM
+//  MxDataSQL
 //
 //  "View JSON…" from the grid's right-click menu: a resizable sheet with the
 //  cell's JSON formatted and coloured like VS Code. The text can be edited;

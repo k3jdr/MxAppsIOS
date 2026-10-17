@@ -1,9 +1,9 @@
-# MxDataSRM
+# MxDataSQL
 
 A macOS app (SwiftUI and AppKit) for browsing and editing PostgreSQL tables. Each
 document is a **workspace** (`*.mxworkspace`, a small JSON file).
 
-Open `MxDataSRM.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is fetched automatically.
+Open `MxDataSQL.xcodeproj` in Xcode, then Run. The PostgresNIO Swift package is fetched automatically.
 
 ## Workspace forms
 
@@ -100,7 +100,7 @@ Cut / Copy / Paste:
 Under the SQL box, the current file's name is shown, with **— Edited** when it has unsaved changes. Opening
 another file, **New SQL**, or opening a table (which puts that table's SELECT in the box) first asks whether
 to save them. The SQL folder and recent files are remembered across launches for the whole app (as sandbox
-bookmarks, see `MxDataSRM.entitlements`). The current file is per window and is not saved in the workspace.
+bookmarks, see `MxDataSQL.entitlements`). The current file is per window and is not saved in the workspace.
 
 ## Viewing JSON cells
 
@@ -212,7 +212,8 @@ Reload, View… and Update…. The **Table** menu acts on whichever window is in
 
 The connection parameters, the last opened table, the view settings and the column widths you set. The **password is not saved in
 the file**. When "Save password in Keychain" is on, it is kept in the login Keychain under
-`MxDataSRM: user@host:port/database`.
+`MxDataSQL: user@host:port/database` (service `com.k3jdr.MxDataSQL`). A password saved before the app was renamed
+is moved there the first time its workspace needs it; macOS asks once to let MxDataSQL read it.
 
 ## How updates work
 
@@ -234,8 +235,8 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 
 | File | Purpose |
 |------|---------|
-| `MxDataSRMApp.swift` | `DocumentGroup` and the **Table** menu |
-| `WorkspaceDocument.swift` | Workspace file format (`FileDocument`, UTType `com.k3jdr.mxdatasrm.workspace`) |
+| `MxDataSQLApp.swift` | `DocumentGroup` and the **Table** menu |
+| `WorkspaceDocument.swift` | Workspace file format (`FileDocument`, UTType `com.k3jdr.mxdatasql.workspace`) |
 | `WorkspaceSession.swift` | Per-window live state (connection, table list, grid, pending edits) |
 | `PostgresService.swift` | PostgresNIO connection, catalog queries, grid fetch, applying updates |
 | `TableUpdate.swift` | Builds UPDATE statements from the pending edits |

@@ -1,8 +1,8 @@
 //
 //  WorkspaceDocument.swift
-//  MxDataSRM
+//  MxDataSQL
 //
-//  A "workspace" is the document type of MxDataSRM: a small JSON file
+//  A "workspace" is the document type of MxDataSQL: a small JSON file
 //  (*.mxworkspace) that remembers the connection parameters, the selected
 //  table and the grid view settings. The password is never written to the
 //  file; it is kept in the macOS Keychain (see Keychain.swift).
@@ -12,7 +12,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 nonisolated extension UTType {
-    static let mxWorkspace = UTType(exportedAs: "com.k3jdr.mxdatasrm.workspace", conformingTo: .json)
+    static let mxWorkspace = UTType(exportedAs: "com.k3jdr.mxdatasql.workspace", conformingTo: .json)
 }
 
 nonisolated enum SSLMode: String, Codable, CaseIterable, Identifiable, Sendable {
