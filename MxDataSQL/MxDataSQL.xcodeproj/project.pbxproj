@@ -23,6 +23,12 @@
 			path = MxDataSQL;
 			sourceTree = "<group>";
 		};
+		5D1A7E2A3068647D006E309B /* Shared QuickHelp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = "Shared QuickHelp";
+			path = ../Shared/QuickHelp;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -42,6 +48,7 @@
 				5D1A7E073068647C006E309B /* Info.plist */,
 				5D1A7E093068647C006E309B /* MxDataSQL.entitlements */,
 				5D1A7E163068647C006E309B /* MxDataSQL */,
+				5D1A7E2A3068647D006E309B /* Shared QuickHelp */,
 				5D1A7E153068647C006E309B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -69,6 +76,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				5D1A7E163068647C006E309B /* MxDataSQL */,
+				5D1A7E2A3068647D006E309B /* Shared QuickHelp */,
 			);
 			name = MxDataSQL;
 			packageProductDependencies = (

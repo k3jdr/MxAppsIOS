@@ -32,14 +32,17 @@ struct TableSelectionForm: View {
             HStack {
                 TextField("Filter", text: $session.tableFilter)
                     .textFieldStyle(.roundedBorder)
+                    .quickHelp("Filter", "Shows only the tables whose schema or name contains this text.")
                 Button("Refresh", systemImage: "arrow.clockwise") {
                     Task { await session.refreshTables() }
                 }
+                .quickHelp("Refresh", "Lists the tables again, with fresh row estimates and sizes.")
                 Button("Count Rows") {
                     Task { await session.countAllRows() }
                 }
                 .help("Replace the estimated row counts with exact count(*) values")
                 .disabled(session.countingRows)
+                .quickHelp("Count Rows", "Replaces the estimated row counts (~) with exact count(*) values. On big tables this takes a while.")
             }
 
             Table(session.filteredTables, selection: $session.highlightedTableID) {
@@ -59,6 +62,7 @@ struct TableSelectionForm: View {
             } primaryAction: { ids in
                 open(ids.first)
             }
+            .quickHelpArea(SQLHelp.tableList)
 
             HStack {
                 Text("\(session.filteredTables.count) tables")
@@ -67,9 +71,11 @@ struct TableSelectionForm: View {
                 Toggle("Open in New Window", isOn: $session.openInNewWindow)
                     .toggleStyle(.checkbox)
                     .help("Open the table in its own window, with its own connection")
+                    .quickHelp("Open in New Window", "Opens tables in a window of their own, with their own connection, instead of in this workspace's DB Table form.")
                 Button("Open Table") { open(session.highlightedTableID) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(session.highlightedTableID == nil)
+                    .quickHelp("Open Table", "Opens the selected table's rows in DB Table (or its own window), sorted by its primary key.", shortcut: "↩")
             }
         }
         .padding(10)
@@ -91,6 +97,7 @@ struct TableSelectionForm: View {
         }
         .defaultScrollAnchor(.topLeading)
         .background(Color(nsColor: .textBackgroundColor))
+        .quickHelpArea(SQLHelp.describe)
     }
 
     private func open(_ id: TableSummary.ID?) {

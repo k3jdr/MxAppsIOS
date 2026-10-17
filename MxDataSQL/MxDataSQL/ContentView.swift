@@ -16,10 +16,11 @@ struct ContentView: View {
     @State private var widthSink = ColumnWidthSink()
 
     var body: some View {
+        let screen = SQLHelp.screen(session)
         ZStack {
             // Window floor of 760 x 520; unlike .frame(minHeight:), this still lets a form that
             // needs more height (DB Table) raise the window minimum.
-            Color.clear.frame(minWidth: 760, minHeight: 520)
+            Color.clear.frame(minWidth: 760, minHeight: 520 + SQLHelp.dockedHeight)
             VStack(spacing: 0) {
                 HStack(spacing: 14) {
                     if session.isConnected || !session.databases.isEmpty {
@@ -31,6 +32,7 @@ struct ContentView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
+                    .quickHelp("Forms", "DB Connection sets up the server, DB Table Selection lists its tables, DB Table shows a table's rows under an SQL box.")
                 }
                 .padding(10)
 
@@ -57,10 +59,16 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                // Quick Help: what's under the pointer, docked above the status bar. A fixed height,
+                // so the window's minimum size doesn't change with the description.
+                QuickHelpDock(height: SQLHelp.dockHeight)
                 Divider()
                 StatusBar(session: session, settings: document.workspace.connection)
+                    .quickHelpArea("Status", "The connection — user, server, database and PostgreSQL version — and the last action's message.", symbol: "info.circle")
             }
         }
+        .quickHelpScreen(screen.name, screen.item, selection: SQLHelp.selection(session))
+        .onAppear { SQLHelp.install() }
         .focusedSceneValue(\.workspaceSession, session)
         .task { session.loadSavedPassword(for: document.workspace.connection) }
         .onDisappear {
@@ -106,6 +114,7 @@ struct ContentView: View {
         .fixedSize()
         .disabled(!session.isConnected || session.busy || session.runningSQL)
         .help("Database on \(document.workspace.connection.host); choosing another reconnects with the same user and password")
+        .quickHelp("Database", "The database on \(document.workspace.connection.host) this workspace works in. Choosing another reconnects with the same user and password and refreshes the table list.")
     }
 
     /// Opens the DB Table form for `ref` in its own window, with its own connection.

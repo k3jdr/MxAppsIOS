@@ -24,6 +24,7 @@ struct ConnectionForm: View {
                     ForEach(SSLMode.allCases) { Text($0.rawValue).tag($0) }
                 }
                 Toggle("Save password in Keychain", isOn: $settings.savePasswordInKeychain)
+                    .quickHelp("Save Password in Keychain", "Keeps the password in your login Keychain (never in the workspace file) so the workspace can connect without asking. Turning it off removes it.")
                     .onChange(of: settings.savePasswordInKeychain) { _, save in
                         if !save { Keychain.deletePassword(for: settings.keychainAccount) }
                     }
@@ -39,11 +40,13 @@ struct ConnectionForm: View {
                     }
                     .keyboardShortcut(.defaultAction)
                     .disabled(session.status == .connecting || settings.host.isEmpty || settings.user.isEmpty)
+                    .quickHelp(session.isConnected ? "Reconnect" : "Connect", "Connects with these fields, then lists the database's tables in DB Table Selection.", shortcut: "↩")
 
                     Button("Disconnect") {
                         Task { await session.disconnect() }
                     }
                     .disabled(!session.isConnected)
+                    .quickHelp("Disconnect", "Closes this workspace's connection. Table windows opened from it keep their own.")
 
                     Spacer()
                     statusView

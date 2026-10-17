@@ -20,6 +20,7 @@ struct MxDataSQLApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             TableCommands()
+            QuickHelpCommands()
         }
 
         // Tables opened with "Open in New Window". Not restored at launch: they need the

@@ -59,16 +59,20 @@ struct TableWindowView: View {
     @State private var started = false
 
     var body: some View {
+        let screen = SQLHelp.tableWindowScreen(session)
         ZStack {
-            Color.clear.frame(minWidth: 700, minHeight: 420)
+            Color.clear.frame(minWidth: 700, minHeight: 420 + SQLHelp.dockedHeight)
             VStack(spacing: 0) {
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                QuickHelpDock(height: SQLHelp.dockHeight)
                 Divider()
                 StatusBar(session: session, settings: request?.settings ?? ConnectionSettings())
             }
         }
         .navigationTitle(title)
+        .quickHelpScreen(screen.name, screen.item, selection: SQLHelp.selection(session))
+        .onAppear { SQLHelp.install() }
         .focusedSceneValue(\.workspaceSession, session)
         .task { await start() }
         .onChange(of: view.columnWidths) { old, new in

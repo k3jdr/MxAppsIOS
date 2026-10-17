@@ -198,9 +198,20 @@ Reload, View… and Update…. The **Table** menu acts on whichever window is in
 - Table windows are not reopened when the app relaunches. The password is handed to them in memory only
   and is never written to window state.
 
+## Quick Help
+
+**View ▸ Quick Help** (⌥⌘/) shows a panel above the status bar, as in MxNoteONE, telling what's under the pointer in
+a sentence or two, with its shortcut: a form's buttons and fields, the SQL box, a grid cell (its column's type,
+nullability and default, its value or pending edit) or column header (and its sort and filter button), the table
+list and the `\d` description. Over nothing it can describe, it tells about the selected cell or cells, the
+highlighted table or the grid, and then the form or dialog in front. **View ▸ Float Quick Help** (or the panel's
+float button) puts it in a small window of its own; closing that window docks it again. Both choices are
+remembered. While it's docked, the window's minimum height grows by the panel's, so the forms keep their room.
+
 ## Menus
 
 - **File**: New, Open, Save (plus the standard Save As, Duplicate, Revert and Open Recent). Files are workspaces.
+- **View ▸ Quick Help** (⌥⌘/) and **Float / Dock Quick Help**.
 - **Table ▸ View…** (⌥⌘L): columns fitted across the grid, rows guaranteed visible, and how many rows to fetch.
 - **Table ▸ Update…** (⌥⌘U): the same dialog as the **Update…** button on the DB Table form. It:
   - lists every changed cell (old value → new value);
@@ -251,5 +262,7 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `JSONFormatter.swift`, `JSONViewer.swift` | View JSON…: formatting and colouring like VS Code, and the sheet |
 | `SQLHighlighter.swift` | SQL syntax colouring (PostgreSQL-aware scanner, VS Code colours) |
 | `SQLFiles.swift` | SQL files: folder and recent files (bookmarks), open / save / revert, the SQL box's right-click menu |
+| `SQLQuickHelp.swift` | What Quick Help says: the forms and dialogs, the selection, grid cells and column headers |
+| `../Shared/QuickHelp/` | The Quick Help panel, shared with MxDataHUB and MxJobsWMS (the only part of `../Shared` this app compiles) |
 
 The document type is declared in `Info.plist`, which is merged with the Info.plist that Xcode generates.

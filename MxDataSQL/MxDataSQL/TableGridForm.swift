@@ -101,6 +101,7 @@ struct TableGridForm: View {
                     session.sqlMenuItems { Task { await session.runSQL(limit: view.fetchLimit) } }
                 }
                     .frame(height: clampedSQLHeight)
+                    .quickHelpArea(SQLHelp.sqlBox)
                 VStack(spacing: 6) {
                     Button {
                         Task { await session.runSQL(limit: view.fetchLimit) }
@@ -109,6 +110,7 @@ struct TableGridForm: View {
                     }
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(session.runningSQL || session.busy)
+                    .quickHelp("Run SQL", "Runs the SQL box. A query fills the grid (read-only; editable when it's SELECT * from one table or includes its key); a statement that changes data asks first.", shortcut: "⌘↩")
                     if session.runningSQL {
                         ProgressView().controlSize(.small)
                     } else {
@@ -172,6 +174,7 @@ struct TableGridForm: View {
         )
         .onTapGesture(count: 2) { sqlHeight = GridSplit.defaultSQLHeight }
         .help("Drag to give the SQL box more or less room; double-click to reset")
+        .quickHelpArea(SQLHelp.resizeBar)
         .accessibilityLabel("Resize SQL box")
     }
 
@@ -198,17 +201,21 @@ struct TableGridForm: View {
             Button("Reload", systemImage: "arrow.clockwise") {
                 Task { await session.reloadGrid(limit: view.fetchLimit) }
             }
+            .quickHelp("Reload", "Loads this page of rows again from the database.")
             Button("View…") { session.showViewDialog = true }
+                .quickHelp("View", SQLHelp.tableView.detail, shortcut: "⌥⌘L")
             Button("Export CSV…", systemImage: "square.and.arrow.up") {
                 CSVExport.begin(for: session)
             }
             .disabled(session.busy)
+            .quickHelp("Export CSV", "Saves the rows as a CSV file.", shortcut: "⇧⌘E")
             Spacer()
             Button("Previous", systemImage: "chevron.left") {
                 Task { await session.showPage(next: false, limit: view.fetchLimit) }
             }
             .disabled(!grid.hasPreviousPage || session.busy || session.runningSQL)
             .help("Load the previous \(view.fetchLimit.formatted()) rows")
+            .quickHelp("Previous", "Loads the previous \(view.fetchLimit.formatted()) rows (View… sets how many).")
             Button {
                 Task { await session.showPage(next: true, limit: view.fetchLimit) }
             } label: {
@@ -219,10 +226,13 @@ struct TableGridForm: View {
             }
             .disabled(!grid.hasNextPage || session.busy || session.runningSQL)
             .help("Load the next \(view.fetchLimit.formatted()) rows")
+            .quickHelp("Next", "Loads the next \(view.fetchLimit.formatted()) rows (View… sets how many).")
             Button("Discard Edits") { session.discardEdits() }
                 .disabled(session.edits.isEmpty)
+                .quickHelp("Discard Edits", "Drops every pending edit; the cells show the loaded values again.")
             Button("Update…") { session.showUpdateDialog = true }
                 .disabled(session.edits.isEmpty)
+                .quickHelp("Update", "Reviews the pending edits and writes them to the table: " + SQLHelp.update.detail, shortcut: "⌥⌘U")
         }
 
         Text(grid.isEditable
