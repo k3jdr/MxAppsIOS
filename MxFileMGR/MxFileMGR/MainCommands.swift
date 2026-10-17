@@ -109,6 +109,13 @@ struct MainCommands: Commands {
             item("Dropbox") { workspace in
                 if let url = AppSettings.dropboxURLs.first { workspace.go(to: url) } else { Alerts.message("Dropbox isn't set up on this Mac.", info: "Install the Dropbox app and sign in; its folder then appears under Favorites.") }
             }
+            Menu("WebDAV") {
+                ForEach(WebDAVStore.shared.accounts) { account in
+                    item(account.name) { WebDAVStore.shared.connect(account, in: $0) }
+                }
+                if !WebDAVStore.shared.accounts.isEmpty { Divider() }
+                item("Add WebDAV Account…") { $0.addWebDAVAccount() }
+            }
             item("SharePoint") { $0.openSharePoint() }
             item("Microsoft Teams") { $0.openTeams() }
             item("Amazon S3") { $0.openS3() }

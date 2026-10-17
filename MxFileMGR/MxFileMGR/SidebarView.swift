@@ -15,6 +15,7 @@ struct SidebarView: View {
     private var volumes = VolumeMonitor.shared
     private let showPhotos = PhotosModel.libraryExists
     private let showS3 = AWSCLI.isAvailable
+    private var webDAV = WebDAVStore.shared
 
     init(workspace: Workspace) { self.workspace = workspace }
 
@@ -44,6 +45,35 @@ struct SidebarView: View {
                 }
                 windowRow("Azure Blob Storage", icon: "cylinder.split.1x2", help: FileHelp.azure) { workspace.openAzure() }
                 windowRow("Google Cloud Storage", icon: "cloud.circle", help: FileHelp.gcs) { workspace.openGCS() }
+                ForEach(webDAV.accounts) { account in
+                    let mounted = webDAV.mountPoint(for: account) != nil
+                    Button {
+                        WebDAVStore.shared.connect(account, in: workspace)
+                    } label: {
+                        HStack {
+                            Label(account.name, systemImage: mounted ? "globe.americas.fill" : "globe").lineLimit(1)
+                            if webDAV.connecting.contains(account.id) { Spacer(); ProgressView().controlSize(.mini) }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(account.address)
+                    .quickHelp(account.name, FileHelp.webDAVAccount(account, mounted: mounted), symbol: "globe")
+                    .contextMenu {
+                        Button("Connect and Open") { WebDAVStore.shared.connect(account, in: workspace) }
+                        Button("Edit…") { workspace.sheet = .webDAV(account) }
+                        Button("Disconnect") { WebDAVStore.shared.disconnect(account) }.disabled(!mounted)
+                        Divider()
+                        Button("Remove Account…") {
+                            if Alerts.confirm("Remove the WebDAV account “\(account.name)”?",
+                                              info: "Its saved password is removed from the Keychain too. Files on the server aren't touched.",
+                                              ok: "Remove") {
+                                WebDAVStore.shared.remove(account)
+                            }
+                        }
+                    }
+                }
+                .onMove { WebDAVStore.shared.move(from: $0, to: $1) }
+                windowRow("Add WebDAV Account…", icon: "plus.circle", help: FileHelp.addWebDAV) { workspace.addWebDAVAccount() }
                 ForEach(settings.favorites, id: \.self) { path in
                     let url = URL(fileURLWithPath: path)
                     row(title: title(forFavorite: path), icon: icon(forFavorite: path), url: url)

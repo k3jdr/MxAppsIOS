@@ -19,6 +19,7 @@ enum WorkspaceSheet: Identifiable {
     case pattern(select: Bool)
     case properties([URL])
     case connect(prefill: String)
+    case webDAV(WebDAVAccount?)
 
     var id: String {
         switch self {
@@ -27,6 +28,7 @@ enum WorkspaceSheet: Identifiable {
         case .pattern(let select): "pattern-\(select)"
         case .properties(let urls): "properties-\(urls.hashValue)"
         case .connect: "connect"
+        case .webDAV(let account): "webdav-\(account?.id.uuidString ?? "new")"
         }
     }
 }

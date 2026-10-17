@@ -21,6 +21,7 @@ struct WorkspaceSheetView: View {
         case .pattern(let select): PatternSheet(workspace: workspace, select: select)
         case .properties(let urls): PropertiesSheet(urls: urls)
         case .connect(let prefill): ConnectServerSheet(workspace: workspace, address: prefill)
+        case .webDAV(let account): WebDAVSheet(workspace: workspace, account: account)
         }
     }
 }

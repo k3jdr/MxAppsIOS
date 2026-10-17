@@ -395,6 +395,10 @@ extension Workspace {
         }
     }
 
+    func addWebDAVAccount() {
+        sheet = .webDAV(nil)
+    }
+
     /// Opens the Google Cloud Storage browser window.
     func openGCS() {
         openWindow?(id: "gcs")

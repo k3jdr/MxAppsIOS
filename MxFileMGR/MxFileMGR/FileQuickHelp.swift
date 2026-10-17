@@ -66,6 +66,8 @@ enum FileHelp {
                 shortcut: "⌘I", symbol: "info.circle"))
         case .connect:
             return ("Connect to Server", connect)
+        case .webDAV(let account):
+            return (account == nil ? "Add WebDAV Account" : "Edit WebDAV Account", webDAVSheet)
         }
     }
 
@@ -152,6 +154,23 @@ enum FileHelp {
         }
         return "\(name), kept on this Mac by its app at \(url.path). Opens in the active pane like any folder; files stored only online download when opened."
     }
+
+    static let webDAVSheet = QuickHelpItem(
+        title: "WebDAV Account",
+        detail: "A name for the sidebar, the share's http:// or https:// address, and the user. The password is kept in your login Keychain only if Remember is on; "
+            + "left empty, macOS asks for it when connecting. Connect saves the account, mounts the share and opens it; Save just saves it.",
+        symbol: "globe")
+
+    static func webDAVAccount(_ account: WebDAVAccount, mounted: Bool) -> String {
+        "\(account.address)\(account.user.isEmpty ? "" : " as \(account.user)"). "
+            + (mounted ? "Connected: click to open it in the active pane." : "Click to connect (mount) and open it in the active pane.")
+            + " Right-click to edit, disconnect or remove it."
+    }
+
+    static let addWebDAV = QuickHelpItem(
+        title: "Add WebDAV Account",
+        detail: "Saves a WebDAV server (Nextcloud, ownCloud, a NAS, …) in Favorites so one click connects and opens it. The password can be kept in your Keychain.",
+        symbol: "plus.circle")
 
     static let sharePointSetup = QuickHelpItem(
         title: "SharePoint",
