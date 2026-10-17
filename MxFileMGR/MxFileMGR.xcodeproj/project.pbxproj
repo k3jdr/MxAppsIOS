@@ -8,13 +8,13 @@
 
 /* Begin PBXFileReference section */
 		7C3B5F0830A1B2C3004D5E6F /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		7C3B5F1430A1B2C3004D5E6F /* MxDeskMGR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MxDeskMGR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C3B5F1430A1B2C3004D5E6F /* MxFileMGR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MxFileMGR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		7C3B5F1630A1B2C3004D5E6F /* MxDeskMGR */ = {
+		7C3B5F1630A1B2C3004D5E6F /* MxFileMGR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = MxDeskMGR;
+			path = MxFileMGR;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 			isa = PBXGroup;
 			children = (
 				7C3B5F0830A1B2C3004D5E6F /* README.md */,
-				7C3B5F1630A1B2C3004D5E6F /* MxDeskMGR */,
+				7C3B5F1630A1B2C3004D5E6F /* MxFileMGR */,
 				7C3B5F1530A1B2C3004D5E6F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +40,7 @@
 		7C3B5F1530A1B2C3004D5E6F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7C3B5F1430A1B2C3004D5E6F /* MxDeskMGR.app */,
+				7C3B5F1430A1B2C3004D5E6F /* MxFileMGR.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		7C3B5F1330A1B2C3004D5E6F /* MxDeskMGR */ = {
+		7C3B5F1330A1B2C3004D5E6F /* MxFileMGR */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 7C3B5F1F30A1B2C4004D5E6F /* Build configuration list for PBXNativeTarget "MxDeskMGR" */;
+			buildConfigurationList = 7C3B5F1F30A1B2C4004D5E6F /* Build configuration list for PBXNativeTarget "MxFileMGR" */;
 			buildPhases = (
 				7C3B5F1030A1B2C3004D5E6F /* Sources */,
 				7C3B5F1130A1B2C3004D5E6F /* Frameworks */,
@@ -59,11 +59,11 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
-				7C3B5F1630A1B2C3004D5E6F /* MxDeskMGR */,
+				7C3B5F1630A1B2C3004D5E6F /* MxFileMGR */,
 			);
-			name = MxDeskMGR;
-			productName = MxDeskMGR;
-			productReference = 7C3B5F1430A1B2C3004D5E6F /* MxDeskMGR.app */;
+			name = MxFileMGR;
+			productName = MxFileMGR;
+			productReference = 7C3B5F1430A1B2C3004D5E6F /* MxFileMGR.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -81,7 +81,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 7C3B5F0F30A1B2C3004D5E6F /* Build configuration list for PBXProject "MxDeskMGR" */;
+			buildConfigurationList = 7C3B5F0F30A1B2C3004D5E6F /* Build configuration list for PBXProject "MxFileMGR" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -95,7 +95,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				7C3B5F1330A1B2C3004D5E6F /* MxDeskMGR */,
+				7C3B5F1330A1B2C3004D5E6F /* MxFileMGR */,
 			);
 		};
 /* End PBXProject section */
@@ -117,7 +117,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		7C3B5F1D30A1B2C4004D5E6F /* Debug configuration for PBXProject "MxDeskMGR" */ = {
+		7C3B5F1D30A1B2C4004D5E6F /* Debug configuration for PBXProject "MxFileMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -181,7 +181,7 @@
 			};
 			name = Debug;
 		};
-		7C3B5F1E30A1B2C4004D5E6F /* Release configuration for PBXProject "MxDeskMGR" */ = {
+		7C3B5F1E30A1B2C4004D5E6F /* Release configuration for PBXProject "MxFileMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -237,7 +237,7 @@
 			};
 			name = Release;
 		};
-		7C3B5F2030A1B2C4004D5E6F /* Debug configuration for PBXNativeTarget "MxDeskMGR" */ = {
+		7C3B5F2030A1B2C4004D5E6F /* Debug configuration for PBXNativeTarget "MxFileMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -251,16 +251,16 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = MxDeskMGR;
+				INFOPLIST_KEY_CFBundleDisplayName = MxFileMGR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MxDeskMGR shows your iCloud Photos so you can export originals into a folder.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MxFileMGR shows your iCloud Photos so you can export originals into a folder.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxDeskMGR;
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxFileMGR;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -271,7 +271,7 @@
 			};
 			name = Debug;
 		};
-		7C3B5F2130A1B2C4004D5E6F /* Release configuration for PBXNativeTarget "MxDeskMGR" */ = {
+		7C3B5F2130A1B2C4004D5E6F /* Release configuration for PBXNativeTarget "MxFileMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -285,16 +285,16 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = MxDeskMGR;
+				INFOPLIST_KEY_CFBundleDisplayName = MxFileMGR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MxDeskMGR shows your iCloud Photos so you can export originals into a folder.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MxFileMGR shows your iCloud Photos so you can export originals into a folder.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxDeskMGR;
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxFileMGR;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -308,19 +308,19 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		7C3B5F0F30A1B2C3004D5E6F /* Build configuration list for PBXProject "MxDeskMGR" */ = {
+		7C3B5F0F30A1B2C3004D5E6F /* Build configuration list for PBXProject "MxFileMGR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7C3B5F1D30A1B2C4004D5E6F /* Debug configuration for PBXProject "MxDeskMGR" */,
-				7C3B5F1E30A1B2C4004D5E6F /* Release configuration for PBXProject "MxDeskMGR" */,
+				7C3B5F1D30A1B2C4004D5E6F /* Debug configuration for PBXProject "MxFileMGR" */,
+				7C3B5F1E30A1B2C4004D5E6F /* Release configuration for PBXProject "MxFileMGR" */,
 			);
 			defaultConfigurationName = Release;
 		};
-		7C3B5F1F30A1B2C4004D5E6F /* Build configuration list for PBXNativeTarget "MxDeskMGR" */ = {
+		7C3B5F1F30A1B2C4004D5E6F /* Build configuration list for PBXNativeTarget "MxFileMGR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7C3B5F2030A1B2C4004D5E6F /* Debug configuration for PBXNativeTarget "MxDeskMGR" */,
-				7C3B5F2130A1B2C4004D5E6F /* Release configuration for PBXNativeTarget "MxDeskMGR" */,
+				7C3B5F2030A1B2C4004D5E6F /* Debug configuration for PBXNativeTarget "MxFileMGR" */,
+				7C3B5F2130A1B2C4004D5E6F /* Release configuration for PBXNativeTarget "MxFileMGR" */,
 			);
 			defaultConfigurationName = Release;
 		};

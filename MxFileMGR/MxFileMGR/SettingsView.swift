@@ -1,6 +1,6 @@
 //
 //  SettingsView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 
 import AppKit

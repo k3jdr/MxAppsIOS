@@ -1,6 +1,6 @@
 //
 //  Workspace.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  State of one main window: the two panes, which one is active,
 //  the sheet being shown, and the saved session (open tabs).

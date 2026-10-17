@@ -1,6 +1,6 @@
 //
 //  PhotosView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  iCloud Photos browser. The Photos library is not a plain folder (macOS
 //  blocks reading it directly and files inside have coded names), so this
@@ -379,7 +379,7 @@ struct PhotosView: View {
                 ContentUnavailableView {
                     Label("No Access to Photos", systemImage: "lock")
                 } description: {
-                    Text("Allow MxDeskMGR in System Settings ▸ Privacy & Security ▸ Photos, then reopen this window.")
+                    Text("Allow MxFileMGR in System Settings ▸ Privacy & Security ▸ Photos, then reopen this window.")
                 } actions: {
                     Button("Open Privacy Settings") {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Photos")!)

@@ -1,6 +1,6 @@
 //
 //  S3View.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Amazon S3 browser. S3 has no local folder, so this window works through
 //  the installed AWS CLI with the profiles in ~/.aws (including IAM Identity

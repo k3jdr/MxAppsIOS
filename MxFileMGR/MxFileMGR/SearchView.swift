@@ -1,6 +1,6 @@
 //
 //  SearchView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Find Files (Alt-F7 in Total Commander): name wildcards or regex, text
 //  contained in the file, size and date limits, recursive. Results can be

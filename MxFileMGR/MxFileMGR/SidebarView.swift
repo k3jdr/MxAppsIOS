@@ -1,6 +1,6 @@
 //
 //  SidebarView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Favorites (drop folders here to add them), mounted volumes with eject,
 //  and recently used servers.

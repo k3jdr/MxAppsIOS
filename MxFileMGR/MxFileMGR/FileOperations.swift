@@ -1,6 +1,6 @@
 //
 //  FileOperations.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Background file operations (copy, move, trash, delete, archive) with
 //  progress, cancellation and conflict handling. Jobs show in the transfer

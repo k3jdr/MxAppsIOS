@@ -1,6 +1,6 @@
 //
 //  AppSettings.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  User preferences, favorites and recent servers, kept in UserDefaults.
 //
@@ -10,9 +10,9 @@ import Observation
 
 extension Notification.Name {
     /// Hidden files or folder ordering changed: every pane re-lists its folder.
-    static let mxListingOptionsChanged = Notification.Name("MxDeskMGR.listingOptionsChanged")
+    static let mxListingOptionsChanged = Notification.Name("MxFileMGR.listingOptionsChanged")
     /// A file operation finished: panes refresh in case their folder was affected.
-    static let mxFilesChanged = Notification.Name("MxDeskMGR.filesChanged")
+    static let mxFilesChanged = Notification.Name("MxFileMGR.filesChanged")
 }
 
 /// A cloud storage root (iCloud Drive, OneDrive, Google Drive, Dropbox, Box) with the name to show for it.

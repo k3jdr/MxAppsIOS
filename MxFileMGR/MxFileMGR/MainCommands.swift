@@ -1,6 +1,6 @@
 //
 //  MainCommands.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Menu bar. Total Commander function keys (F2–F8) sit alongside the usual
 //  Mac shortcuts; on a Mac keyboard press fn with the F-key unless

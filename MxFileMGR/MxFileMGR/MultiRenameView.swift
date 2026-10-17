@@ -1,6 +1,6 @@
 //
 //  MultiRenameView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Batch rename (Total Commander's Multi-Rename Tool). Name and extension
 //  masks with placeholders, search and replace, case change and a counter,

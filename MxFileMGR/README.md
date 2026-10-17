@@ -1,11 +1,15 @@
-# MxDeskMGR
+# MxFileMGR
 
 A dual-pane file manager for macOS (SwiftUI and AppKit), in the spirit of **ForkLift** and **Total Commander**.
 
-Open `MxDeskMGR.xcodeproj` in Xcode, then Run. There are no package dependencies. The app is **not sandboxed**
+Open `MxFileMGR.xcodeproj` in Xcode, then Run. There are no package dependencies. The app is **not sandboxed**
 because a file manager needs to reach the whole disk. For protected folders (Desktop, Documents, external
 drives) macOS asks for permission the first time; grant **Full Disk Access** in System Settings ▸ Privacy &
 Security to skip those prompts.
+
+The app was called **MxDeskMGR** until 2026-10-16. On its first launch under the new name it copies the old
+preferences (favorites, open tabs, recent servers, S3 profile, column layouts). macOS treats it as a new app for
+privacy permissions, so it asks again for Photos and protected folders.
 
 ## Window
 

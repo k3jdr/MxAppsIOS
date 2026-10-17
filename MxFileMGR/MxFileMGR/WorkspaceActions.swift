@@ -1,6 +1,6 @@
 //
 //  WorkspaceActions.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Commands shared by the menus, the function key bar, the toolbar and
 //  the file lists' context menus. They act on the active pane's tab

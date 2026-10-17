@@ -1,6 +1,6 @@
 //
 //  FileModels.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Directory entries, sorting, wildcard matching and formatting.
 //  Everything here is nonisolated so listings can be built off the main thread.

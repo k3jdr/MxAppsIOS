@@ -1,6 +1,6 @@
 //
 //  SyncView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Synchronize Folders: compares two folder trees (by date and size, or by
 //  content), proposes a copy direction for each difference, lets you change

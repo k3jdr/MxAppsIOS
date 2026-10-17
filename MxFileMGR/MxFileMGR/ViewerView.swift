@@ -1,6 +1,6 @@
 //
 //  ViewerView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  F3 viewer (Total Commander's Lister): Quick Look preview, plain text
 //  with find (⌘F) and wrapping, or a hex dump.

@@ -1,6 +1,6 @@
 //
 //  FileListView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  The file list of a pane: an NSTableView with sortable columns, a ".." row,
 //  keyboard navigation (Return, Backspace, Tab, Space for Quick Look),
@@ -52,7 +52,7 @@ struct FileListView: NSViewRepresentable {
             }
             table.addTableColumn(column)
         }
-        table.autosaveName = "MxDeskMGR.FileList.\(side.rawValue)"
+        table.autosaveName = "MxFileMGR.FileList.\(side.rawValue)"
         table.autosaveTableColumns = true
 
         table.dataSource = coordinator

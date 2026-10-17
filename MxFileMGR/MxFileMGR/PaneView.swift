@@ -1,6 +1,6 @@
 //
 //  PaneView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  One side of the window: tab strip, navigation bar with breadcrumb path
 //  and quick filter, the file list and a status line.

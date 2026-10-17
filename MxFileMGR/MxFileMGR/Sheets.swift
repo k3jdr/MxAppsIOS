@@ -1,6 +1,6 @@
 //
 //  Sheets.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Sheets shown over the main window: copy/move target, name prompts,
 //  select by pattern, properties (permissions and dates) and Connect to Server.

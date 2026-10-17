@@ -1,6 +1,6 @@
 //
 //  CLITool.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Runs command-line tools (the AWS and Azure CLIs) for the cloud storage
 //  browsers: either collecting their output, or as a background job that can

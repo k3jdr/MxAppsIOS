@@ -1,6 +1,6 @@
 //
 //  DirectoryWatcher.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Calls back when entries are added, removed or renamed in a folder,
 //  so panes stay current without pressing Refresh.

@@ -1,6 +1,6 @@
 //
 //  Pane.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  A pane holds tabs; a tab shows one folder with its own history,
 //  sort order, quick filter and selection.

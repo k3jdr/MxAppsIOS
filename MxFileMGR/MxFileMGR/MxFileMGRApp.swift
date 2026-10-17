@@ -1,6 +1,6 @@
 //
-//  MxDeskMGRApp.swift
-//  MxDeskMGR
+//  MxFileMGRApp.swift
+//  MxFileMGR
 //
 //  Dual-pane file manager in the spirit of ForkLift and Total Commander.
 //  Each main window is a Workspace (left and right pane, each with tabs);
@@ -11,9 +11,13 @@
 import SwiftUI
 
 @main
-struct MxDeskMGRApp: App {
+struct MxFileMGRApp: App {
+    init() {
+        LegacySettings.migrate()
+    }
+
     var body: some Scene {
-        WindowGroup("MxDeskMGR", id: "main") {
+        WindowGroup("MxFileMGR", id: "main") {
             MainView()
         }
         .defaultSize(width: 1280, height: 780)
@@ -80,6 +84,27 @@ struct MxDeskMGRApp: App {
 
         Settings {
             SettingsView()
+        }
+    }
+}
+
+/// The app was called MxDeskMGR (bundle com.k3jdr.MxDeskMGR) until 2026-10-16. On the first launch
+/// under the new name, its preferences (favorites, session tabs, recent servers, S3 profile, column
+/// layouts and window frames) are copied over; keys naming the old module are renamed to match.
+enum LegacySettings {
+    static let oldDomain = "com.k3jdr.MxDeskMGR"
+    private static let doneKey = "migratedFromMxDeskMGR"
+
+    static func migrate() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: doneKey) else { return }
+        defer { defaults.set(true, forKey: doneKey) }
+        guard let old = defaults.persistentDomain(forName: oldDomain) else { return }
+        for (key, value) in old {
+            let newKey = key.replacingOccurrences(of: "MxDeskMGR", with: "MxFileMGR")
+            if defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[newKey] == nil {
+                defaults.set(value, forKey: newKey)
+            }
         }
     }
 }

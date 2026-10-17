@@ -1,6 +1,6 @@
 //
 //  MainView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Main window: sidebar, the two panes, the transfer panel and the
 //  function key bar.

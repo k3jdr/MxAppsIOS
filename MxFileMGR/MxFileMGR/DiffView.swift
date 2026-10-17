@@ -1,6 +1,6 @@
 //
 //  DiffView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Compare Files by Content: a line diff of two text files (binary files
 //  are compared byte for byte), with a jump to FileMerge when Xcode is installed.

@@ -1,6 +1,6 @@
 //
 //  AzureView.swift
-//  MxDeskMGR
+//  MxFileMGR
 //
 //  Azure Blob Storage browser. Like the S3 window it works through a CLI,
 //  here the Azure CLI (az) after `az login`, so the app never stores account
