@@ -19,7 +19,7 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Six groups: Start Here, Learn the Why, Active Portfolio (5 steps), Passive Index Portfolio (5 steps), Market Reports, Library. |
+| **Sidebar — the guide** | Seven groups: Start Here, Learn the Why, **My Portfolio** (5 steps, your own account), Active Portfolio (5 steps), Passive Index Portfolio (5 steps), Market Reports, Library. |
 | **Quick Help** (bottom of the sidebar) | The shared MXcodeIDE Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **Account** — the sample (or My Portfolio) every screen works on. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Back / Next** along the guide. |
@@ -34,7 +34,7 @@ gives both.
 
 | Menu | Items |
 | --- | --- |
-| **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
+| **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · My Portfolio steps 1–5 · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize (Active) ⌘R · Build Index Tracker (Passive) ⇧⌘R · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) · Previous Step ⌘[ · Next Step ⌘] |
@@ -52,6 +52,22 @@ gives both.
 * **Why Attribution?** — a two-sector Brinson-Fachler demo with sliders: allocation, selection and interaction recomputed
   as you move the weights and returns.
 * **Active vs Passive** — what fees compound to over 30 years (fee and pre-fee alpha sliders) and a comparison table.
+
+### My Portfolio path
+
+The clear path for your own account, modelled on the two sample paths with the same five steps. Every My Portfolio
+step works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each step shows
+the account and sets **My approach** — *Active* or *Passive index* — its account type, and **Start From a Sample**
+(copy any sample's holdings, lots and benchmark) or reset to the three-fund starter.
+
+1. **My Holdings & Benchmark** — add, edit and remove holdings; choose the benchmark that matches your plan; checks.
+2. **Risk Today** — your account's volatility, tracking error, beta, VaR and where the risk comes from.
+3. **Optimize** (active) or **Build the Tracker** (passive).
+4. **Trades & Taxes** (active) or **Rebalance Bands** (passive).
+5. **Attribution** — read as an active or a passive account, by approach.
+
+Steps 3 and 4 change name and screen with the approach (in the sidebar too). *Copy to My Portfolio* on a sample, the
+Portfolio menu's *Copy Account to My Portfolio* and Choose Your Path's *Start My Portfolio* all lead here.
 
 ### Active Portfolio path
 

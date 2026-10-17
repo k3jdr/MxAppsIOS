@@ -29,6 +29,11 @@ struct MxPortMGRApp: App {
                     ForEach([Screen.whyOptimize, .whyAttribution, .activeVsPassive]) { s in Button(s.title) { store.go(s) } }
                 }
                 Divider()
+                Section("My Portfolio") {
+                    ForEach(Array(Screen.myPath.enumerated()), id: \.element) { i, s in
+                        Button(store.title(s, full: false)) { store.go(s) }
+                    }
+                }
                 Section("Active Portfolio") {
                     ForEach(Array(Screen.activePath.enumerated()), id: \.element) { i, s in
                         Button("\(i + 1). \(s.title)") { store.go(s) }
@@ -72,7 +77,10 @@ struct MxPortMGRApp: App {
                     ForEach(EngineChoice.allCases) { Text($0.rawValue).tag($0) }
                 }
                 Divider()
-                Button("Copy Account to My Portfolio") { store.copyToMine(store.portfolio) }
+                Button("Copy Account to My Portfolio") {
+                    store.copyToMine(store.portfolio)
+                    store.go(.myPortfolio)
+                }
                     .disabled(store.selectedID == "mine")
                 Button("Reset My Portfolio") { store.resetMyPortfolio() }
             }

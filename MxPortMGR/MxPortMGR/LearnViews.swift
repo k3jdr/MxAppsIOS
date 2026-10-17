@@ -30,7 +30,8 @@ struct WelcomeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("The sidebar is the guide: each path has five steps; ⌘] and ⌘[ move to the next and previous step.", systemImage: "sidebar.left")
                     Label("Quick Help, under the sidebar, explains whatever is under the pointer — a number, a column, a button. ⌥⌘/ shows or hides it; its ⧉ button floats it in its own window.", systemImage: "questionmark.bubble")
-                    Label("Pick an account in the toolbar: each sample teaches an edge case. Library ▸ Sample Portfolios describes them all, and My Portfolio is yours to edit.", systemImage: "briefcase")
+                    Label("My Portfolio, in the sidebar after Learn the Why, walks your own account through the same five steps — active or passive, your choice.", systemImage: "person.crop.circle")
+                    Label("Pick a sample account in the toolbar for the Active and Passive paths: each teaches an edge case. Library ▸ Sample Portfolios describes them all.", systemImage: "briefcase")
                     Label("Engine in the toolbar: the built-in optimizers, or the shared Layer 3 services (portfolio-java, portfolio-cpp, analytics) that MxDataHUB and MxJobsWMS use.", systemImage: "cpu")
                 }
                 .font(.callout)
@@ -98,6 +99,19 @@ struct ChoosePathView: View {
             }
             .padding(12)
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.fill").font(.largeTitle).foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Ready to work on your own account?").font(.title3.weight(.semibold))
+                    Text("My Portfolio follows the same five steps with your own holdings: choose Active or Passive index there, and steps 3 and 4 follow your choice. The two paths below use sample accounts, so you can learn on them first.")
+                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button("Start My Portfolio") { store.go(.myPortfolio) }.buttonStyle(.borderedProminent)
+            }
+            .padding(14)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            .quickHelpArea("My Portfolio", "The five steps on your own account: My Holdings & Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
             HStack(spacing: 14) {
                 start("Start the Active Path", "wand.and.stars", "Portfolio & Benchmark → Risk Today → Optimize → Trades & Taxes → Attribution", .activePortfolio, sample: "core-satellite")
                 start("Start the Passive Path", "scope", "Portfolio & Index → Tracking Error & Drift → Build the Tracker → Rebalance Bands → Attribution", .passivePortfolio, sample: "drifted-tracker")

@@ -44,12 +44,19 @@ struct SamplesView: View {
             Spacer(minLength: 0)
             HStack {
                 Button(selected ? "In Use" : "Use") { store.selectedID = p.id }.disabled(selected)
-                Button(p.style == .passive ? "Passive Path" : "Active Path") {
-                    store.selectedID = p.id
-                    store.go(p.style == .passive ? .passivePortfolio : .activePortfolio)
+                if p.id == "mine" {
+                    Button("My Portfolio Path") { store.go(.myPortfolio) }
+                } else {
+                    Button(p.style == .passive ? "Passive Path" : "Active Path") {
+                        store.selectedID = p.id
+                        store.go(p.style == .passive ? .passivePortfolio : .activePortfolio)
+                    }
                 }
                 if p.id != "mine" {
-                    Button("Copy to My Portfolio") { store.copyToMine(p) }
+                    Button("Copy to My Portfolio") {
+                        store.copyToMine(p)
+                        store.go(.myPortfolio)
+                    }
                         .help("Make an editable copy of these holdings as My Portfolio (replaces it)")
                 }
             }

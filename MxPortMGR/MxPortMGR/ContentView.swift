@@ -17,7 +17,7 @@ struct ContentView: View {
                 ForEach(Screen.Group.allCases, id: \.self) { group in
                     Section(group.rawValue) {
                         ForEach(Screen.allCases.filter { $0.group == group }) { screen in
-                            Label(screen == .reportWalkthrough ? store.currentReport.title : screen.step.map { "\($0). \(screen.title)" } ?? screen.title,
+                            Label(sidebarTitle(screen),
                                   systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
@@ -36,7 +36,7 @@ struct ContentView: View {
                 Divider()
                 StatusBar(store: store)
             }
-            .navigationTitle(store.screen.fullTitle)
+            .navigationTitle(store.title(store.screen))
             .navigationSubtitle(store.portfolio.name)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) { accountPicker }
@@ -44,7 +44,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 1180, minHeight: 720)
-        .quickHelpScreen(store.screen.fullTitle, PortHelp.about(store.screen), selection: PortHelp.selection(store))
+        .quickHelpScreen(store.title(store.screen), PortHelp.about(store.screen), selection: PortHelp.selection(store))
         .task { start() }
         .alert("MxPortMGR", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
@@ -64,7 +64,13 @@ struct ContentView: View {
         case .whyOptimize: WhyOptimizeView(store: store)
         case .whyAttribution: WhyAttributionView(store: store)
         case .activeVsPassive: ActiveVsPassiveView(store: store)
-        case .activePortfolio, .passivePortfolio: PortfolioView(store: store)
+        case .activePortfolio, .passivePortfolio, .myPortfolio: PortfolioView(store: store)
+        case .myRisk: RiskView(store: store)
+        case .myImprove:
+            if store.myApproach == .active { OptimizeView(store: store) } else { TrackView(store: store) }
+        case .myTrades:
+            if store.myApproach == .active { TradesView(store: store) } else { BandsView(store: store) }
+        case .myAttribution: AttributionView(store: store)
         case .activeRisk: RiskView(store: store)
         case .activeOptimize: OptimizeView(store: store)
         case .activeTrades: TradesView(store: store)
@@ -82,6 +88,8 @@ struct ContentView: View {
         }
     }
 
+    private func sidebarTitle(_ screen: Screen) -> String { store.title(screen, full: false) }
+
     private var accountPicker: some View {
         Picker(selection: $store.selectedID) {
             ForEach(store.portfolios.filter { $0.id != "mine" }) { p in Text(p.name).tag(p.id) }
@@ -92,7 +100,8 @@ struct ContentView: View {
         }
         .pickerStyle(.menu)
         .fixedSize()
-        .help("The account every screen works on")
+        .disabled(store.screen.group == .mine)
+        .help(store.screen.group == .mine ? "The My Portfolio path always uses My Portfolio" : "The account every screen works on")
         .quickHelpArea(PortHelp.samplePicker)
     }
 

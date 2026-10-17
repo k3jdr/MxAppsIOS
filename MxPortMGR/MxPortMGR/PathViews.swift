@@ -9,7 +9,7 @@
 import Charts
 import SwiftUI
 
-private func isPassive(_ store: PortStore) -> Bool { store.screen.group == .passive }
+private func isPassive(_ store: PortStore) -> Bool { store.passiveContext }
 
 // MARK: - Portfolio & Benchmark / Portfolio & Index
 

@@ -121,7 +121,7 @@ struct StepFooter: View {
 
     private var next: Screen? { store.screen.guideNext }
 
-    private func label(_ s: Screen) -> String { s == .reportWalkthrough ? store.currentReport.title : s.fullTitle }
+    private func label(_ s: Screen) -> String { store.title(s) }
     private var previous: Screen? { store.screen.guidePrevious }
 }
 
@@ -129,7 +129,7 @@ extension Screen {
     /// Within a path, its steps; at a path's end, on to the market reports; from Choose Your Path, the active path.
     var guideNext: Screen? {
         switch self {
-        case .activeAttribution, .passiveAttribution: .reportLibrary
+        case .activeAttribution, .passiveAttribution, .myAttribution: .reportLibrary
         case .choosePath: .activePortfolio
         default: next
         }
@@ -172,9 +172,10 @@ struct StepPage<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title ?? store.screen.fullTitle).font(.largeTitle.weight(.semibold))
+                    Text(title ?? store.title(store.screen)).font(.largeTitle.weight(.semibold))
                     Text(subtitle).font(.title3).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
+                if store.screen.group == .mine { MyPortfolioBar(store: store) }
                 if !lesson.isEmpty {
                     LessonCard(store: store, id: store.screen.rawValue, title: lessonTitle, points: lesson)
                 }
@@ -280,5 +281,47 @@ struct HBars: View {
                 .help("\(row.label): " + zip(series.map(\.name), row.values).map { "\($0) \(String(format: "%.2f", $1))\(unit)" }.joined(separator: ", "))
             }
         }
+    }
+}
+
+
+/// At the top of every My Portfolio step: whose account this is, how it is run, and where to start it from.
+struct MyPortfolioBar: View {
+    @Bindable var store: PortStore
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("My Portfolio").font(.headline)
+                Text("\(store.portfolio.account.rawValue) · \(money(store.portfolio.total)) · \(store.portfolio.holdings.count) holdings · vs \(store.portfolio.benchmark)")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("My approach").font(.callout)
+            Picker("My approach", selection: $store.myApproach) {
+                Text("Active").tag(PortfolioStyle.active)
+                Text("Passive index").tag(PortfolioStyle.passive)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 220)
+            .help("Active: steps 3 and 4 are Optimize and Trades & Taxes. Passive: Build the Tracker and Rebalance Bands.")
+            Picker("Account type", selection: Binding(get: { store.portfolio.account }, set: { var p = store.portfolio; p.account = $0; store.portfolio = p })) {
+                ForEach(AccountType.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .frame(width: 250)
+            .help("Taxable accounts pay tax on realised gains; retirement accounts don't when you trade")
+            Menu("Start From a Sample") {
+                ForEach(Samples.all) { p in Button(p.name) { store.copyToMine(p) } }
+                Divider()
+                Button("Reset to the Three-Fund Starter") { store.resetMyPortfolio() }
+            }
+            .fixedSize()
+            .help("Replace My Portfolio with a copy of a sample's holdings, lots and benchmark")
+        }
+        .padding(10)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .quickHelpArea("My Portfolio", "Your own account in the illustrative universe, remembered between launches. Choose how you run it — active or passive index — and the path's steps 3 and 4 follow. Edit holdings in step 1, change the account type here, or start from a copy of any sample.", symbol: "person.crop.circle")
     }
 }

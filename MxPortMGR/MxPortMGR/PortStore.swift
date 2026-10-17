@@ -13,6 +13,7 @@ import Observation
 enum Screen: String, CaseIterable, Identifiable {
     case welcome, choosePath
     case whyOptimize, whyAttribution, activeVsPassive
+    case myPortfolio, myRisk, myImprove, myTrades, myAttribution
     case activePortfolio, activeRisk, activeOptimize, activeTrades, activeAttribution
     case passivePortfolio, passiveDrift, passiveTrack, passiveBands, passiveAttribution
     case reportLibrary, morningBriefing, reportWalkthrough
@@ -21,7 +22,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     enum Group: String, CaseIterable {
-        case start = "Start Here", learn = "Learn the Why", active = "Active Portfolio", passive = "Passive Index Portfolio"
+        case start = "Start Here", learn = "Learn the Why", mine = "My Portfolio", active = "Active Portfolio", passive = "Passive Index Portfolio"
         case reports = "Market Reports", library = "Library"
     }
 
@@ -29,6 +30,7 @@ enum Screen: String, CaseIterable, Identifiable {
         switch self {
         case .welcome, .choosePath: .start
         case .whyOptimize, .whyAttribution, .activeVsPassive: .learn
+        case .myPortfolio, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution: .active
         case .passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution: .passive
         case .reportLibrary, .morningBriefing, .reportWalkthrough: .reports
@@ -43,6 +45,11 @@ enum Screen: String, CaseIterable, Identifiable {
         case .whyOptimize: "Why Optimize?"
         case .whyAttribution: "Why Attribution?"
         case .activeVsPassive: "Active vs Passive"
+        case .myPortfolio: "My Holdings & Benchmark"
+        case .myRisk: "Risk Today"
+        case .myImprove: "Optimize or Track"
+        case .myTrades: "Trades & Rebalancing"
+        case .myAttribution: "Attribution"
         case .activePortfolio: "Portfolio & Benchmark"
         case .activeRisk: "Risk Today"
         case .activeOptimize: "Optimize"
@@ -64,6 +71,7 @@ enum Screen: String, CaseIterable, Identifiable {
     /// The title with its group where the title alone is ambiguous (window title, Quick Help).
     var fullTitle: String {
         switch group {
+        case .mine: "My Portfolio · \(step!). \(title)"
         case .active: "Active · \(step!). \(title)"
         case .passive: "Passive · \(step!). \(title)"
         default: title
@@ -77,6 +85,11 @@ enum Screen: String, CaseIterable, Identifiable {
         case .whyOptimize: "slider.horizontal.below.square.and.square.filled"
         case .whyAttribution: "chart.bar.xaxis"
         case .activeVsPassive: "scalemass"
+        case .myPortfolio: "person.crop.circle"
+        case .myRisk: "waveform.path.ecg"
+        case .myImprove: "slider.horizontal.3"
+        case .myTrades: "arrow.left.arrow.right"
+        case .myAttribution: "chart.bar.doc.horizontal"
         case .activePortfolio, .passivePortfolio: "briefcase"
         case .activeRisk: "waveform.path.ecg"
         case .activeOptimize: "wand.and.stars"
@@ -95,10 +108,11 @@ enum Screen: String, CaseIterable, Identifiable {
 
     /// The step number on a path.
     var step: Int? {
-        let path = Screen.activePath.firstIndex(of: self) ?? Screen.passivePath.firstIndex(of: self)
+        let path = Screen.myPath.firstIndex(of: self) ?? Screen.activePath.firstIndex(of: self) ?? Screen.passivePath.firstIndex(of: self)
         return path.map { $0 + 1 }
     }
 
+    static let myPath: [Screen] = [.myPortfolio, .myRisk, .myImprove, .myTrades, .myAttribution]
     static let activePath: [Screen] = [.activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution]
     static let passivePath: [Screen] = [.passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution]
 
@@ -145,8 +159,31 @@ nonisolated struct TaxEstimate: Sendable {
 @Observable
 final class PortStore {
     var screen: Screen = .welcome {
-        didSet { UserDefaults.standard.set(screen.rawValue, forKey: "screen") }
+        didSet {
+            UserDefaults.standard.set(screen.rawValue, forKey: "screen")
+            // The My Portfolio path always works on the user's own account.
+            if screen.group == .mine, selectedID != "mine" { selectedID = "mine" }
+        }
     }
+    /// How the user runs My Portfolio: active (optimize, trades & taxes) or passive (track, rebalance bands).
+    var myApproach: PortfolioStyle = UserDefaults.standard.string(forKey: "myApproach") == PortfolioStyle.active.rawValue ? .active : .passive {
+        didSet { UserDefaults.standard.set(myApproach.rawValue, forKey: "myApproach") }
+    }
+    /// The passive reading of a shared screen: the passive path, or My Portfolio run passively.
+    var passiveContext: Bool { screen.group == .passive || (screen.group == .mine && myApproach == .passive) }
+
+    /// A screen's title as shown: My Portfolio's steps 3 and 4 follow the approach; the walkthrough shows its report.
+    func title(_ s: Screen, full: Bool = true) -> String {
+        let short: String
+        switch s {
+        case .myImprove: short = myApproach == .active ? "Optimize" : "Build the Tracker"
+        case .myTrades: short = myApproach == .active ? "Trades & Taxes" : "Rebalance Bands"
+        case .reportWalkthrough: return currentReport.title
+        default: return full ? s.fullTitle : (s.step.map { "\($0). \(s.title)" } ?? s.title)
+        }
+        return full ? "My Portfolio · \(s.step!). \(short)" : "\(s.step!). \(short)"
+    }
+
     var portfolios: [Portfolio]
     var selectedID: String {
         didSet {
