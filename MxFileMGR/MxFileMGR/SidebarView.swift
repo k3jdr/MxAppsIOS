@@ -33,6 +33,9 @@ struct SidebarView: View {
                 if AppSettings.sharePointURLs.isEmpty {
                     windowRow("SharePoint", icon: "building.2", help: FileHelp.sharePointSetup) { workspace.openSharePoint() }
                 }
+                if AppSettings.teamsChatFolders.isEmpty {
+                    windowRow("Microsoft Teams", icon: "bubble.left.and.bubble.right", help: FileHelp.teamsSetup) { workspace.openTeams() }
+                }
                 if showPhotos {
                     windowRow("iCloud Photos", icon: "photo.on.rectangle", help: FileHelp.photos) { workspace.openPhotos() }
                 }

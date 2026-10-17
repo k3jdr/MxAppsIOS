@@ -15,7 +15,7 @@ extension Notification.Name {
     static let mxFilesChanged = Notification.Name("MxFileMGR.filesChanged")
 }
 
-/// A cloud storage root (iCloud Drive, OneDrive, SharePoint, Google Drive, Dropbox, Box) with the name to show for it.
+/// A cloud storage root (iCloud Drive, OneDrive, SharePoint, Teams, Google Drive, Dropbox, Box) with the name to show for it.
 struct CloudLocation: Identifiable {
     let name: String
     let icon: String
@@ -98,6 +98,20 @@ final class AppSettings {
 
     private static let sharePointPrefix = "OneDrive-SharedLibraries"
 
+    /// Files shared in Microsoft Teams chats: the "Microsoft Teams Chat Files" folder Teams keeps in each
+    /// OneDrive account. (Channel files live in the team's SharePoint site and sync as SharePoint libraries.)
+    static var teamsChatFolders: [URL] {
+        oneDriveURLs.map { $0.appendingPathComponent("Microsoft Teams Chat Files") }.filter(FileOps.isRealDirectory)
+    }
+
+    /// "Teams Chat Files", or "Teams Chat Files – Contoso" when several OneDrive accounts have one.
+    static func teamsChatName(_ url: URL, accounts: Int) -> String {
+        guard accounts > 1 else { return "Teams Chat Files" }
+        let account = url.deletingLastPathComponent().lastPathComponent.dropFirst("OneDrive".count)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "- "))
+        return "Teams Chat Files – " + (account.isEmpty ? "OneDrive" : account)
+    }
+
     /// "SharePoint – Contoso" for "OneDrive-SharedLibraries-Contoso".
     static func sharePointName(_ url: URL) -> String {
         let org = url.lastPathComponent.dropFirst(sharePointPrefix.count).trimmingCharacters(in: CharacterSet(charactersIn: "- "))
@@ -176,7 +190,7 @@ final class AppSettings {
         return "Google Drive – " + folder.dropFirst("GoogleDrive-".count)
     }
 
-    /// iCloud Drive, OneDrive, SharePoint, Google Drive, Dropbox and Box accounts present on this Mac, shown at the top of Favorites.
+    /// iCloud Drive, OneDrive, SharePoint, Teams chat files, Google Drive, Dropbox and Box accounts present on this Mac, shown at the top of Favorites.
     /// Re-scanned at most every few seconds (the path bar asks on every redraw).
     static var cloudLocations: [CloudLocation] {
         if let cached = cloudCache, Date().timeIntervalSince(cached.time) < 5 { return cached.list }
@@ -189,6 +203,10 @@ final class AppSettings {
         }
         for url in sharePointURLs {
             list.append(CloudLocation(name: sharePointName(url), icon: "building.2", url: url))
+        }
+        let chats = teamsChatFolders
+        for url in chats {
+            list.append(CloudLocation(name: teamsChatName(url, accounts: chats.count), icon: "bubble.left.and.bubble.right", url: url))
         }
         let google = googleDriveURLs
         for url in google {

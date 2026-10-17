@@ -375,6 +375,26 @@ extension Workspace {
         }
     }
 
+    /// Opens the Teams chat files folder; otherwise explains where Teams files are and offers to open Teams.
+    func openTeams() {
+        if let url = AppSettings.teamsChatFolders.first {
+            go(to: url)
+            return
+        }
+        let info = "Teams keeps files in two places. Chat files are in your OneDrive, in “Microsoft Teams Chat Files”, which appears once a file is shared in a chat. "
+            + "Channel files are in the team's SharePoint site: in Teams open a channel's Files, then Open in SharePoint and Sync (or Add shortcut to OneDrive); "
+            + "they then appear under SharePoint in Favorites."
+            + (AppSettings.sharePointURLs.isEmpty ? "" : " Synced SharePoint libraries are already listed there.")
+        if let teams = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.teams2")
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.teams") {
+            if Alerts.confirm("No Teams files are synced to this Mac yet.", info: info, ok: "Open Teams") {
+                NSWorkspace.shared.openApplication(at: teams, configuration: NSWorkspace.OpenConfiguration())
+            }
+        } else {
+            Alerts.message("No Teams files are synced to this Mac yet.", info: info)
+        }
+    }
+
     /// Opens the Google Cloud Storage browser window.
     func openGCS() {
         openWindow?(id: "gcs")

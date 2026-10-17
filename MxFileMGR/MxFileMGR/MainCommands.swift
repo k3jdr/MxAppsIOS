@@ -110,6 +110,7 @@ struct MainCommands: Commands {
                 if let url = AppSettings.dropboxURLs.first { workspace.go(to: url) } else { Alerts.message("Dropbox isn't set up on this Mac.", info: "Install the Dropbox app and sign in; its folder then appears under Favorites.") }
             }
             item("SharePoint") { $0.openSharePoint() }
+            item("Microsoft Teams") { $0.openTeams() }
             item("Amazon S3") { $0.openS3() }
             item("Azure Blob Storage") { $0.openAzure() }
             item("Google Cloud Storage") { $0.openGCS() }
