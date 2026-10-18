@@ -13,7 +13,7 @@ import Observation
 enum Screen: String, CaseIterable, Identifiable {
     case welcome, choosePath
     case whyOptimize, whyAttribution, activeVsPassive
-    case myPortfolio, myRisk, myImprove, myTrades, myAttribution
+    case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case activePortfolio, activeRisk, activeOptimize, activeTrades, activeAttribution
     case passivePortfolio, passiveDrift, passiveTrack, passiveBands, passiveAttribution
     case reportLibrary, morningBriefing, reportWalkthrough
@@ -30,7 +30,7 @@ enum Screen: String, CaseIterable, Identifiable {
         switch self {
         case .welcome, .choosePath: .start
         case .whyOptimize, .whyAttribution, .activeVsPassive: .learn
-        case .myPortfolio, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
+        case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution: .active
         case .passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution: .passive
         case .reportLibrary, .morningBriefing, .reportWalkthrough: .reports
@@ -45,7 +45,8 @@ enum Screen: String, CaseIterable, Identifiable {
         case .whyOptimize: "Why Optimize?"
         case .whyAttribution: "Why Attribution?"
         case .activeVsPassive: "Active vs Passive"
-        case .myPortfolio: "My Holdings & Benchmark"
+        case .myPortfolio: "My Holdings"
+        case .myBenchmark: "My Benchmark"
         case .myRisk: "Risk Today"
         case .myImprove: "Optimize or Track"
         case .myTrades: "Trades & Rebalancing"
@@ -86,6 +87,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .whyAttribution: "chart.bar.xaxis"
         case .activeVsPassive: "scalemass"
         case .myPortfolio: "person.crop.circle"
+        case .myBenchmark: "target"
         case .myRisk: "waveform.path.ecg"
         case .myImprove: "slider.horizontal.3"
         case .myTrades: "arrow.left.arrow.right"
@@ -115,7 +117,7 @@ enum Screen: String, CaseIterable, Identifiable {
     /// A Model Portfolio step (the active or passive path).
     var isModel: Bool { group == .active || group == .passive }
 
-    static let myPath: [Screen] = [.myPortfolio, .myRisk, .myImprove, .myTrades, .myAttribution]
+    static let myPath: [Screen] = [.myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution]
     static let activePath: [Screen] = [.activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution]
     static let passivePath: [Screen] = [.passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution]
 
@@ -276,9 +278,209 @@ final class PortStore {
             guard let i = portfolios.firstIndex(where: { $0.id == newValue.id }) else { return }
             portfolios[i] = newValue
             if newValue.id == "mine", let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: "myPortfolio")
+                UserDefaults.standard.set(data, forKey: newValue.isSRM ? "myPortfolioSRM" : "myPortfolio")
+                if newValue.isSRM { scheduleSRMSave() }
             }
             clearResults()
+            srmInputs = nil
+        }
+    }
+
+    // MARK: Security master (srm) account
+
+    /// The code of My Portfolio's account in the security master.
+    var srmCode = UserDefaults.standard.string(forKey: "srmAccount") ?? "MY_PORTFOLIO" {
+        didSet { UserDefaults.standard.set(srmCode, forKey: "srmAccount") }
+    }
+    var srmBenchmarks: [SRMBenchmarkInfo] = []
+    var srmAccountCodes: [String] = []
+    var srmStatus: String?
+    var srmBusy = false
+    /// Optimization inputs of the srm account from the analytics service, and what they cover.
+    var srmInputs: OptimizationInputs?
+    var srmInputsNote: String?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+
+    /// Switches My Portfolio between the illustrative universe and the security master; each keeps its own holdings.
+    func setMySource(srm: Bool) async {
+        guard let i = portfolios.firstIndex(where: { $0.id == "mine" }), portfolios[i].isSRM != srm else { return }
+        UserDefaults.standard.set(srm ? "srm" : "illustrative", forKey: "mySource")
+        if srm {
+            await openSRMAccount(srmCode)
+        } else {
+            let data = UserDefaults.standard.data(forKey: "myPortfolio")
+            portfolios[i] = data.flatMap { try? JSONDecoder().decode(Portfolio.self, from: $0) } ?? Samples.myPortfolio
+            clearResults()
+        }
+    }
+
+    /// Loads (or starts) the account `code` from the security master as My Portfolio.
+    func openSRMAccount(_ code: String) async {
+        srmBusy = true
+        defer { srmBusy = false }
+        do {
+            srmBenchmarks = try await AccountsClient.benchmarks()
+            srmAccountCodes = (try? await AccountsClient.accounts()) ?? []
+            var mine = Samples.myPortfolio
+            mine.source = "srm"
+            mine.srmCode = code
+            mine.holdings = []
+            mine.benchmark = srmBenchmarks.first { $0.code == "SP500" }?.code ?? srmBenchmarks.first?.code ?? "MXEQ"
+            mine.lesson = "Your account in the security master (srm on 192.168.0.223): real securities and prices, tax lots, and risk inputs from the analytics service."
+            if srmAccountCodes.contains(where: { $0.caseInsensitiveCompare(code) == .orderedSame }) {
+                let account = try await AccountsClient.account(code)
+                apply(account, to: &mine)
+                srmStatus = "Loaded \(account.code) from the security master: \(account.lots.count) lots, \(money(account.totalValue))."
+            } else {
+                srmStatus = "New account \(code): add securities and it is saved to the security master."
+            }
+            srmCode = code
+            await useSRMBenchmark(mine.benchmark)
+            if let i = portfolios.firstIndex(where: { $0.id == "mine" }) { portfolios[i] = mine }
+            if let data = try? JSONEncoder().encode(mine) { UserDefaults.standard.set(data, forKey: "myPortfolioSRM") }
+            clearResults()
+            srmInputs = nil
+        } catch {
+            errorMessage = error.localizedDescription + " My Portfolio in the security master needs the accounts service: python3 Services/mxservices.py start accounts"
+        }
+    }
+
+    /// Holdings and lots from the service's account.
+    private func apply(_ a: SRMAccount, to p: inout Portfolio) {
+        p.srmCode = a.code
+        p.name = "My Portfolio"
+        p.account = a.accountType == "retirement" ? .retirement : a.accountType == "roth" ? .roth : .taxable
+        if let b = a.benchmark { p.benchmark = b }
+        if a.approach == "active" { myApproach = .active } else if a.approach == "passive" { myApproach = .passive }
+        var byKey: [String: [SRMLot]] = [:]
+        var order: [String] = []
+        for lot in a.lots {
+            let key = SRMRegistry.shared.register(lot.security)
+            if byKey[key] == nil { order.append(key) }
+            byKey[key, default: []].append(lot)
+        }
+        p.holdings = order.map { key in
+            let lots = byKey[key]!
+            let quantity = lots.reduce(0) { $0 + $1.quantity }
+            let price = lots.first?.price
+            let value = price.map { quantity * $0 } ?? lots.reduce(0) { $0 + $1.costBasis }
+            return Holding(ticker: key, value: value,
+                           lots: lots.map { TaxLot(acquired: $0.acquired, share: $0.quantity / max(quantity, 1e-9), costBasis: $0.costBasis) },
+                           unpriced: price == nil, quantity: quantity)
+        }
+        if a.cash > 0 { p.holdings.append(Holding(ticker: "CASH", value: a.cash)) }
+    }
+
+    /// Registers a security-master benchmark's members so sector and look-through views can use it.
+    func useSRMBenchmark(_ code: String) async {
+        guard SRMRegistry.shared.benchmark(code) == nil, srmBenchmarks.contains(where: { $0.code == code }) else { return }
+        do {
+            _ = SRMRegistry.shared.register(benchmark: try await AccountsClient.benchmarkWeights(code))
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Saves My Portfolio to the security master a moment after the last edit.
+    private func scheduleSRMSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            await self?.saveSRMAccount()
+        }
+    }
+
+    func saveSRMAccount() async {
+        guard let mine = portfolios.first(where: { $0.id == "mine" }), mine.isSRM, let code = mine.srmCode else { return }
+        var lots: [[String: Any]] = []
+        let today = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
+        for h in mine.holdings {
+            guard let s = h.security, let id = s.srmID, id > 0 else { continue }
+            let quantity = h.quantity ?? (s.price > 0 ? h.value / s.price : 0)
+            guard quantity > 0 else { continue }
+            let parts = h.lots.isEmpty ? [TaxLot(acquired: today, share: 1, costBasis: h.value)] : h.lots
+            for l in parts where l.share > 0 {
+                lots.append(["securityId": id, "acquired": l.acquired.count == 10 ? l.acquired : today,
+                             "quantity": quantity * l.share, "costBasis": l.costBasis])
+            }
+        }
+        let cash = mine.holdings.filter { $0.ticker == "CASH" }.reduce(0) { $0 + $1.value }
+        let body: [String: Any] = ["name": "My Portfolio", "accountType": mine.account == .retirement ? "retirement" : mine.account == .roth ? "roth" : "taxable",
+                                   "approach": myApproach == .active ? "active" : "passive", "benchmark": mine.benchmark,
+                                   "cash": cash, "lots": lots]
+        srmBusy = true
+        defer { srmBusy = false }
+        do {
+            let saved = try await AccountsClient.save(code, body)
+            let f = DateFormatter(); f.timeStyle = .short
+            srmStatus = "Saved \(saved.code) to the security master at \(f.string(from: Date())): \(saved.lots.count) lots, \(money(saved.totalValue))"
+                + (saved.unpriced.isEmpty ? "." : ". No prices yet for \(saved.unpriced.joined(separator: ", ")).")
+            if !srmAccountCodes.contains(saved.code) { srmAccountCodes.append(saved.code) }
+            srmInputs = nil
+        } catch {
+            srmStatus = "Not saved: \(error.localizedDescription)"
+        }
+    }
+
+    /// Asks the security master to load prices for the account's unpriced holdings, then reloads it.
+    func loadSRMPrices() async {
+        guard let code = portfolio.srmCode else { return }
+        srmBusy = true
+        defer { srmBusy = false }
+        do {
+            await saveSRMAccount()
+            let r = try await AccountsClient.loadPrices(code)
+            if r.status == "failed" {
+                srmStatus = "Prices could not be loaded: \(r.message ?? "the srm-loader reported a failure")."
+            } else {
+                srmStatus = r.loaded.isEmpty ? "Every holding already has prices." : "Loaded prices for \(r.loaded.joined(separator: ", "))."
+                await openSRMAccount(code)
+            }
+        } catch {
+            srmStatus = error.localizedDescription
+        }
+    }
+
+    /// Adds a security-master security to My Portfolio: shares, and a tax lot when a cost is given.
+    func addSRMHolding(_ s: SRMSecurity, quantity: Double, cost: Double?, acquired: Date?) {
+        guard var mine = portfolios.first(where: { $0.id == "mine" }), mine.isSRM, quantity > 0 else { return }
+        let key = SRMRegistry.shared.register(s)
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        let costBasis = cost ?? (s.price.map { $0 * quantity } ?? 0)
+        let lotDate = f.string(from: acquired ?? Date())
+        let value = s.price.map { $0 * quantity } ?? costBasis
+        if let i = mine.holdings.firstIndex(where: { $0.ticker == key }) {
+            var h = mine.holdings[i]
+            let oldQ = h.quantity ?? 0, newQ = oldQ + quantity
+            if h.lots.isEmpty { h.lots = [TaxLot(acquired: lotDate, share: 1, costBasis: h.value)] }
+            h.lots = h.lots.map { var l = $0; l.share *= oldQ / newQ; return l }
+            h.lots.append(TaxLot(acquired: lotDate, share: quantity / newQ, costBasis: costBasis))
+            h.quantity = newQ
+            h.value += value
+            mine.holdings[i] = h
+        } else {
+            mine.holdings.append(Holding(ticker: key, value: value, lots: [TaxLot(acquired: lotDate, share: 1, costBasis: costBasis)],
+                                         unpriced: s.price == nil, quantity: quantity))
+        }
+        portfolio = mine
+    }
+
+    /// Analytics-service inputs for the srm account (saved first, so the service sees the latest lots).
+    func loadSRMInputs() async {
+        let p = portfolio
+        guard p.isSRM, let code = p.srmCode else { return }
+        saveTask?.cancel()
+        await saveSRMAccount()
+        do {
+            let mode = myApproach == .active ? "active" : "tracking"
+            let (inputs, note) = try await ServiceClient.srmInputs(portfolio: code, benchmark: p.benchmark, mode: mode)
+            srmInputs = inputs
+            srmInputsNote = note
+        } catch {
+            srmInputsNote = error.localizedDescription
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -316,6 +518,7 @@ final class PortStore {
 
     func resetMyPortfolio() {
         UserDefaults.standard.removeObject(forKey: "myPortfolio")
+        UserDefaults.standard.set("illustrative", forKey: "mySource")
         if let i = portfolios.firstIndex(where: { $0.id == "mine" }) { portfolios[i] = Samples.myPortfolio }
         clearResults()
     }
@@ -326,6 +529,7 @@ final class PortStore {
         mine.holdings = p.holdings.filter { $0.security != nil }
         mine.benchmark = p.benchmark
         mine.account = p.account
+        UserDefaults.standard.set("illustrative", forKey: "mySource")
         portfolio = mine
         selectedID = "mine"
     }
@@ -338,13 +542,16 @@ final class PortStore {
         for k in reports.keys { reports[k]?.result = nil }
     }
 
-    var inputs: OptimizationInputs { OptimizationInputs(portfolio: portfolio) }
+    /// The optimizers' inputs: the illustrative factor model, or for a security-master account the analytics service's.
+    var inputs: OptimizationInputs { portfolio.isSRM ? srmInputs ?? .empty : OptimizationInputs(portfolio: portfolio) }
 
     func go(_ s: Screen) { screen = s }
 
     // MARK: Runs
 
     func optimize() async {
+        if portfolio.isSRM, srmInputs == nil { await loadSRMInputs() }
+        guard inputs.n > 0 else { return }
         let inputs = inputs, settings = activeSettings
         busy = true
         defer { busy = false }
@@ -361,6 +568,8 @@ final class PortStore {
     }
 
     func buildTracker() async {
+        if portfolio.isSRM, srmInputs == nil { await loadSRMInputs() }
+        guard inputs.n > 0 else { return }
         let inputs = inputs, settings = trackingSettings
         busy = true
         defer { busy = false }
@@ -383,7 +592,11 @@ final class PortStore {
         busy = true
         defer { busy = false }
         do {
-            if attributeMaster {
+            if p.isSRM, let code = p.srmCode {
+                await saveSRMAccount()
+                attribution = try await ServiceClient.attribution(portfolio: code, method: method)
+                message = "Attribution: \(attribution!.engine)"
+            } else if attributeMaster {
                 attribution = try await ServiceClient.attribution(portfolio: masterPortfolio, method: method)
                 message = "Attribution: \(attribution!.engine)"
             } else if engine == .services {

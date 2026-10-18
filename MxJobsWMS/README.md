@@ -18,7 +18,10 @@ tracking, attribution — also saved in `Samples/`.
 
 From MxDataHUB, **Portfolios ▸ Workflows** (Optimize, Track, Attribution), **Benchmarks ▸ Track…** and **Data Refresh
 ▸ Automate in MxJobsWMS…** open the matching sample here, already set to that portfolio or benchmark
-(`mxjobswms://sample/<id>?portfolio=&benchmark=`). **Window ▸ Open MxDataHUB** goes back.
+(`mxjobswms://sample/<id>?portfolio=&benchmark=`). **Window ▸ Open MxDataHUB** goes back; **Window ▸ Open MxPortMGR**
+opens the personal-account IDE (`mxportmgr://my-portfolio`). Personal accounts MxPortMGR keeps in the security master
+(through the **accounts** Layer 3 service, port 8774) are ordinary portfolios to the workflows: pass their code as the
+`portfolio` of Optimize, Track or Attribution.
 
 **Window ▸ Layer 3 Services** (⌥⌘L) lists every service — running or not, its language and why, its use cases and
 when to use them, its endpoints, the start command, and the samples built on it — with **Add Step**, which adds the

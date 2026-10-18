@@ -25,6 +25,17 @@ nonisolated struct OptimizationInputs: Sendable {
     var cov: [Double]
     var n: Int { assets.count }
 
+    init(assets: [String], sectors: [String], benchmark: [Double], current: [Double], alpha: [Double], cov: [Double]) {
+        self.assets = assets
+        self.sectors = sectors
+        self.benchmark = benchmark
+        self.current = current
+        self.alpha = alpha
+        self.cov = cov
+    }
+
+    static let empty = OptimizationInputs(assets: [], sectors: [], benchmark: [], current: [], alpha: [], cov: [])
+
     /// The benchmark's members and the account's look-through holdings (unknown tickers left out).
     init(portfolio: Portfolio) {
         let b = portfolio.benchmarkInfo.weights

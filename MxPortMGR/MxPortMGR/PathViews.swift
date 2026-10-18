@@ -14,59 +14,141 @@ private func isPassive(_ store: PortStore) -> Bool { store.passiveContext }
 // MARK: - Portfolio & Benchmark / Portfolio & Index
 
 struct PortfolioView: View {
+    enum Part { case all, holdings, benchmark }
     @Bindable var store: PortStore
+    var part: Part = .all
 
     var body: some View {
         let p = store.portfolio
         let passive = isPassive(store)
-        StepPage(store: store, subtitle: passive ? "What the account holds, and the index it should follow." : "What the account holds, and the benchmark it is measured against.",
-                 lesson: passive ? [
-                    "A passive account is judged by one thing: how closely it follows its index after costs. So start by naming the index — here \(p.benchmarkInfo.name).",
-                    "Look through funds to what they hold: an index fund plus a few single stocks may already be most of the way there — or doubly exposed to the same names.",
-                    "Fix the data first. An unknown or unpriced holding can't be tracked or rebalanced reliably.",
-                 ] : [
-                    "Active management starts from a benchmark: the portfolio you'd hold with no opinions. Every difference from it is a bet — and a risk.",
-                    "Look through funds to see your real bets: the sector chart compares the account's look-through weights with the benchmark's.",
-                    "Fix the data first. The optimizer can only reason about holdings it knows; the warnings below say what it can't see.",
-                 ]) {
-            HStack(spacing: 10) {
-                MetricTile(title: "Value", value: money(p.total), caption: p.account.rawValue, help: "Market value of the account's holdings.")
-                MetricTile(title: "Holdings", value: "\(p.holdings.count)", caption: "\(p.lookThrough.count) securities by look-through", help: "Positions as held, and the number of different securities once funds are replaced by what they hold.")
-                MetricTile(title: "Weighted fee", value: pct(p.weightedFee, 2), caption: "a year, from fund fees", help: "Fund expense ratios weighted by position size. Single stocks have no fee.")
-                MetricTile(title: "Unrealised gain", value: money(p.holdings.reduce(0) { $0 + $1.unrealizedGain }), caption: p.account.isTaxable ? "taxed when sold" : "no tax in this account type",
-                           tint: Color.signed(p.holdings.reduce(0) { $0 + $1.unrealizedGain }), help: "Value minus cost basis across tax lots. In a taxable account, selling realises it.")
-            }
-            Box(title: "Benchmark", symbol: "target", help: "The portfolio this account is measured against. Choose the one that matches your plan's stock / bond mix.") {
-                Picker("Benchmark", selection: Binding(get: { p.benchmark }, set: { var q = p; q.benchmark = $0; store.portfolio = q })) {
-                    ForEach(Universe.benchmarks) { Text("\($0.code) — \($0.name)").tag($0.code) }
+        StepPage(store: store, subtitle: subtitle, lesson: lesson(p, passive)) {
+            if part != .benchmark {
+                HStack(spacing: 10) {
+                    MetricTile(title: "Value", value: money(p.total), caption: p.account.rawValue, help: "Market value of the account's holdings.")
+                    MetricTile(title: "Holdings", value: "\(p.holdings.count)", caption: "\(p.lookThrough.count) securities by look-through", help: "Positions as held, and the number of different securities once funds are replaced by what they hold.")
+                    MetricTile(title: "Weighted fee", value: pct(p.weightedFee, 2), caption: "a year, from fund fees", help: "Fund expense ratios weighted by position size. Single stocks have no fee.")
+                    MetricTile(title: "Unrealised gain", value: money(p.holdings.reduce(0) { $0 + $1.unrealizedGain }), caption: p.account.isTaxable ? "taxed when sold" : "no tax in this account type",
+                               tint: Color.signed(p.holdings.reduce(0) { $0 + $1.unrealizedGain }), help: "Value minus cost basis across tax lots. In a taxable account, selling realises it.")
                 }
-                .frame(maxWidth: 420)
-                .help("The benchmark the account is compared with")
-                Text(p.benchmarkInfo.summary).font(.callout).foregroundStyle(.secondary)
             }
-            if !p.issues.isEmpty {
+            if part != .holdings { benchmarkBox(p) }
+            if !p.issues.isEmpty && part != .benchmark {
                 Box(title: "Check before you go on", symbol: "checklist", help: "Problems in the account's data and concentration that change what the tools can tell you.") {
                     ForEach(p.issues) { IssueRow(issue: $0) }
                 }
             }
-            HStack(alignment: .top, spacing: 14) {
-                Box(title: "Sectors: account vs benchmark (look-through)", symbol: "chart.bar", help: "Each sector's weight in the account (funds looked through) beside its weight in the benchmark. The gaps are the account's sector bets.") {
-                    SectorChart(account: p.sectorWeights(), benchmark: Portfolio.sectors(of: p.benchmarkInfo.weights))
+            if part == .holdings {
+                if p.id == "mine" { addRow }
+                HoldingsTable(store: store)
+                Box(title: "Asset mix", symbol: "chart.pie", help: "Stocks, bonds and cash by look-through.") {
+                    let mine = p.classWeights()
+                    HBars(series: [.init(name: "Account", color: .accentColor)],
+                          rows: AssetClass.allCases.map { c in .init(label: c.rawValue, values: [(mine[c] ?? 0) * 100]) }, labelWidth: 50)
                 }
-                Box(title: "Asset mix", symbol: "chart.pie", help: "Stocks, bonds and cash by look-through, against the benchmark's mix.") {
-                    let mine = p.classWeights(), bench = Portfolio.classes(of: p.benchmarkInfo.weights)
-                    HBars(series: [.init(name: "Account", color: .accentColor), .init(name: "Benchmark", color: .gray.opacity(0.6))],
-                          rows: AssetClass.allCases.map { c in .init(label: c.rawValue, values: [(mine[c] ?? 0) * 100, (bench[c] ?? 0) * 100]) },
-                          labelWidth: 50)
+            } else {
+                HStack(alignment: .top, spacing: 14) {
+                    Box(title: "Sectors: account vs benchmark (look-through)", symbol: "chart.bar", help: "Each sector's weight in the account (funds looked through) beside its weight in the benchmark. The gaps are the account's sector bets.") {
+                        SectorChart(account: p.sectorWeights(), benchmark: Portfolio.sectors(of: p.benchmarkInfo.weights))
+                    }
+                    Box(title: "Asset mix", symbol: "chart.pie", help: "Stocks, bonds and cash by look-through, against the benchmark's mix.") {
+                        let mine = p.classWeights(), bench = Portfolio.classes(of: p.benchmarkInfo.weights)
+                        HBars(series: [.init(name: "Account", color: .accentColor), .init(name: "Benchmark", color: .gray.opacity(0.6))],
+                              rows: AssetClass.allCases.map { c in .init(label: c.rawValue, values: [(mine[c] ?? 0) * 100, (bench[c] ?? 0) * 100]) },
+                              labelWidth: 50)
+                    }
+                    .frame(width: 340)
                 }
-                .frame(width: 340)
+                if part == .benchmark { constituents(p) } else {
+                    if p.id == "mine" { addRow }
+                    HoldingsTable(store: store)
+                }
             }
-            if p.id == "mine" { addRow }
-            HoldingsTable(store: store)
-            Box(title: "What this account teaches", symbol: p.symbol, help: "The edge case of this sample and what to look for on the next screens.") {
-                Text(p.lesson).fixedSize(horizontal: false, vertical: true)
-                ForEach(p.lookFor, id: \.self) { Label($0, systemImage: "eye").font(.callout) }
+            if part == .all {
+                Box(title: "What this account teaches", symbol: p.symbol, help: "The edge case of this sample and what to look for on the next screens.") {
+                    Text(p.lesson).fixedSize(horizontal: false, vertical: true)
+                    ForEach(p.lookFor, id: \.self) { Label($0, systemImage: "eye").font(.callout) }
+                }
             }
+        }
+        .task(id: p.benchmark) { if p.isSRM { await store.useSRMBenchmark(p.benchmark) } }
+    }
+
+    private var subtitle: String {
+        switch part {
+        case .holdings: store.portfolio.isSRM ? "What the account holds, from the security master: real securities, prices and tax lots." : "What the account holds: positions, values and tax lots."
+        case .benchmark: "The portfolio the account is measured against — choose the one that matches your plan."
+        case .all: isPassive(store) ? "What the account holds, and the index it should follow." : "What the account holds, and the benchmark it is measured against."
+        }
+    }
+
+    private func lesson(_ p: Portfolio, _ passive: Bool) -> [String] {
+        switch part {
+        case .holdings: return [
+            "Start with what you actually own: each position, what it is worth today and what you paid for it (tax lots).",
+            "Look through funds to what they hold — an index fund plus a few single stocks may double up on the same names.",
+            "Fix the data first. A holding without a price can't be valued, tracked or rebalanced reliably.",
+        ]
+        case .benchmark: return [
+            "A benchmark is the portfolio you would hold with no opinions; every difference from it is a bet — and a risk.",
+            "Choose one that matches the plan: an all-stock index for an all-stock account; a blend for an account that also holds bonds and cash. Measured against the wrong one, sensible holdings look like big bets.",
+            passive ? "For a passive account the benchmark is the index to follow; the next steps measure and close the gap." : "For an active account the benchmark is the starting point the optimizer departs from within a risk budget.",
+        ]
+        case .all: return passive ? [
+            "A passive account is judged by one thing: how closely it follows its index after costs. So start by naming the index — here \(p.benchmarkInfo.name).",
+            "Look through funds to what they hold: an index fund plus a few single stocks may already be most of the way there — or doubly exposed to the same names.",
+            "Fix the data first. An unknown or unpriced holding can't be tracked or rebalanced reliably.",
+        ] : [
+            "Active management starts from a benchmark: the portfolio you'd hold with no opinions. Every difference from it is a bet — and a risk.",
+            "Look through funds to see your real bets: the sector chart compares the account's look-through weights with the benchmark's.",
+            "Fix the data first. The optimizer can only reason about holdings it knows; the warnings below say what it can't see.",
+        ]
+        }
+    }
+
+    private func benchmarkBox(_ p: Portfolio) -> some View {
+        Box(title: "Benchmark", symbol: "target", help: "The portfolio this account is measured against. Choose the one that matches your plan's stock / bond mix.") {
+            Picker("Benchmark", selection: Binding(get: { p.benchmark }, set: { var q = p; q.benchmark = $0; store.portfolio = q })) {
+                if p.isSRM {
+                    ForEach(store.srmBenchmarks) { b in Text("\(b.code) — \(b.name)\(b.members.map { " (\($0) members)" } ?? "")").tag(b.code) }
+                } else {
+                    ForEach(Universe.benchmarks) { Text("\($0.code) — \($0.name)").tag($0.code) }
+                }
+            }
+            .frame(maxWidth: 480)
+            .help(p.isSRM ? "Benchmarks loaded in the security master" : "The benchmark the account is compared with")
+            Text(p.benchmarkInfo.code == p.benchmark ? p.benchmarkInfo.summary : "Loading \(p.benchmark) from the security master…")
+                .font(.callout).foregroundStyle(.secondary)
+            if part == .benchmark {
+                let w = p.lookThrough, b = p.benchmarkInfo.weights
+                let overlap = Set(w.keys).union(b.keys).reduce(0) { $0 + min(w[$1] ?? 0, b[$1] ?? 0) }
+                HStack(spacing: 10) {
+                    MetricTile(title: "Members", value: "\(b.count)", help: "Securities in the benchmark.")
+                    MetricTile(title: "Overlap", value: pct(overlap), caption: "weight held in common", help: "The sum over securities of the smaller of the account's and the benchmark's weight.")
+                    MetricTile(title: "Active share", value: pct(1 - overlap), help: PortHelp.terms["Active share"]!)
+                    MetricTile(title: "Names you hold in it", value: "\(w.keys.filter { b[$0] != nil }.count) of \(w.count)", help: "How many of the account's securities are benchmark members.")
+                }
+            }
+        }
+    }
+
+    private func constituents(_ p: Portfolio) -> some View {
+        let w = p.lookThrough
+        let rows = p.benchmarkInfo.weights.sorted { $0.value > $1.value }.prefix(25)
+        return Box(title: "Largest members", symbol: "list.number", help: "The benchmark's 25 largest members with the account's weight in each.") {
+            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 3) {
+                GridRow { Text("Security").bold(); Text("Sector").bold(); Text("Benchmark").bold(); Text("Account").bold(); Text("Active").bold() }
+                ForEach(Array(rows), id: \.key) { k, v in
+                    let s = Universe.security(k)
+                    GridRow {
+                        Text("\(s?.displayTicker ?? k) — \(s?.name ?? "")").lineLimit(1)
+                        Text(s?.sector ?? "").foregroundStyle(.secondary)
+                        Text(pct(v, 2)).monospacedDigit()
+                        Text(pct(w[k] ?? 0, 2)).monospacedDigit()
+                        Text(signedPct((w[k] ?? 0) - v)).monospacedDigit().foregroundStyle(Color.signed((w[k] ?? 0) - v))
+                    }
+                }
+            }
+            .font(.callout)
         }
     }
 
@@ -76,9 +158,9 @@ struct PortfolioView: View {
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .help("Find and add stocks, individual bonds, funds or cash (⇧⌘N)")
-            Text("Edit a value in the table to resize a holding; the trash button removes it.").font(.callout).foregroundStyle(.secondary)
+            Text(store.portfolio.isSRM ? "Edit shares in the table to resize a position (its lots scale); the trash button removes it. Changes are saved to the security master." : "Edit a value in the table to resize a holding; the trash button removes it.").font(.callout).foregroundStyle(.secondary)
             Spacer()
-            Button("Reset My Portfolio") { store.resetMyPortfolio() }
+            if !store.portfolio.isSRM { Button("Reset My Portfolio") { store.resetMyPortfolio() } }
         }
         .sheet(isPresented: $store.addingSecurities) { AddSecuritiesSheet(store: store) }
         .quickHelpArea("Add Securities", "Opens a dialog to find companies, individual bonds (Treasuries, TIPS, corporates, high yield, municipal), funds and cash, see what each is and how it behaves, and add it by amount, shares or face value — with a tax lot for a taxable account.", shortcut: "⇧⌘N", symbol: "plus.circle")
@@ -104,14 +186,34 @@ struct HoldingsTable: View {
         Box(title: "Holdings", symbol: "tablecells", help: "Each position: what it is, its value and weight, and in a taxable account its cost basis, gain and tax lots. In My Portfolio the values can be edited.") {
             Table(p.holdings) {
                 TableColumn("Ticker") { h in
-                    Text(h.ticker).font(.body.monospaced()).foregroundStyle(h.security == nil || h.unpriced ? .red : .primary)
+                    Text(h.security?.displayTicker ?? h.ticker).font(.body.monospaced()).foregroundStyle(h.security == nil || h.unpriced ? .red : .primary)
+                        .help(h.unpriced ? "No price in the security master yet: valued at cost" : h.security?.priceDate.map { "Priced \($0)" } ?? "")
                 }
                 .width(70)
                 TableColumn("Name") { h in Text(h.security?.name ?? "Unknown — not in the security master").foregroundStyle(h.security == nil ? .red : .primary) }
                 TableColumn("Sector / class") { h in Text(h.security.map { $0.lookThrough != nil ? "Fund · \($0.assetClass.rawValue)" : $0.issuer.map { "Bond · \($0)" } ?? $0.sector } ?? "—") }
                     .width(170)
+                TableColumn("Shares") { h in
+                    if p.isSRM, h.ticker != "CASH" {
+                        TextField("", value: Binding(get: { h.quantity ?? 0 }, set: { v in
+                            var q = store.portfolio
+                            if let i = q.holdings.firstIndex(where: { $0.ticker == h.ticker }) {
+                                let old = max(q.holdings[i].quantity ?? 0, 1e-9)
+                                q.holdings[i].value *= max(0, v) / old
+                                q.holdings[i].lots = q.holdings[i].lots.map { var l = $0; l.costBasis *= max(0, v) / old; return l }
+                                q.holdings[i].quantity = max(0, v)
+                            }
+                            q.holdings.removeAll { $0.value <= 0 || ($0.quantity ?? 1) <= 0 }
+                            store.portfolio = q
+                        }), format: .number.precision(.fractionLength(0...4)))
+                        .help("Shares held; changing them scales the lots")
+                    } else {
+                        Text(h.quantity.map { String(format: "%.4g", $0) } ?? "—").monospacedDigit().foregroundStyle(.secondary)
+                    }
+                }
+                .width(80)
                 TableColumn("Value") { h in
-                    if p.id == "mine" {
+                    if p.id == "mine" && (!p.isSRM || h.ticker == "CASH") {
                         TextField("", value: Binding(get: { h.value }, set: { v in
                             var q = store.portfolio
                             if let i = q.holdings.firstIndex(where: { $0.ticker == h.ticker }) { q.holdings[i].value = max(0, v) }
@@ -153,6 +255,14 @@ struct RiskView: View {
     @Bindable var store: PortStore
 
     var body: some View {
+        if store.portfolio.isSRM && store.inputs.n == 0 {
+            SRMInputsPending(store: store)
+        } else {
+            report
+        }
+    }
+
+    @ViewBuilder private var report: some View {
         let inputs = store.inputs
         let r = Engine.risk(inputs, weights: inputs.current)
         let value = store.portfolio.total
@@ -161,6 +271,10 @@ struct RiskView: View {
             "Risk is not shared out like weight. A volatile or concentrated holding can be a small part of the value and a large part of the risk — the contribution chart shows both.",
             "Tracking error is the risk of being different from the benchmark. It is what an active manager spends to try to beat it, and what a passive manager tries to keep near zero.",
         ]) {
+            if store.portfolio.isSRM, let note = store.srmInputsNote {
+                Label("Risk model from the analytics service and the security master's prices: \(note). Cash is not in the risk model.", systemImage: "cylinder.split.1x2")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             HStack(spacing: 10) {
                 MetricTile(title: "Volatility", value: pct(r.volatility), caption: "benchmark \(pct(r.benchmarkVolatility))", help: PortHelp.terms["Volatility"]!)
                     .term("Volatility")
@@ -664,5 +778,24 @@ struct AttributionResultView: View {
                 }
             }
         }
+    }
+}
+
+
+/// Shown while a security-master account's risk inputs come from the analytics service.
+struct SRMInputsPending: View {
+    @Bindable var store: PortStore
+
+    var body: some View {
+        StepPage(store: store, subtitle: "Risk inputs for your account come from the analytics service: a covariance estimated from the security master's prices.", lesson: []) {
+            VStack(spacing: 10) {
+                if store.srmBusy || store.busy { ProgressView("Saving the account and estimating its covariance…") }
+                Text(store.srmInputsNote ?? "The account is saved to the security master, then the analytics service (port 8772) estimates a Ledoit-Wolf covariance from two years of prices for its holdings and its benchmark.")
+                    .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 640)
+                Button("Load Risk Inputs") { Task { await store.loadSRMInputs() } }
+            }
+            .frame(maxWidth: .infinity, minHeight: 260)
+        }
+        .task { if store.srmInputs == nil { await store.loadSRMInputs() } }
     }
 }

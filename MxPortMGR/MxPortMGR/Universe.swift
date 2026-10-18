@@ -40,10 +40,17 @@ nonisolated struct Security: Identifiable, Hashable, Sendable {
     var maturity: String? = nil
     var rating: String? = nil
     var issuer: String? = nil
+    /// A security from the security master (srm): its security_id, plain ticker and latest price date.
+    var srmID: Int? = nil
+    var srmTicker: String? = nil
+    var priceDate: String? = nil
+    var securityType: String? = nil
 
     var isFund: Bool { lookThrough != nil || (assetClass == .bond && coupon == nil) }
     /// Annual volatility under the factor model (base securities only).
-    var volatility: Double? { Universe.baseIndex[ticker].map { Universe.covariance[$0][$0].squareRoot() } }
+    var volatility: Double? { srmID == nil ? Universe.baseIndex[ticker].map { Universe.covariance[$0][$0].squareRoot() } : nil }
+    /// The ticker to show: the security master's own for srm securities (their key may carry a :MIC suffix).
+    var displayTicker: String { srmTicker ?? ticker }
     /// ≈ duration for a bond (the price change for a 1-point move in yields, with the sign flipped).
     var duration: Double { -rateBeta }
 }
@@ -169,7 +176,7 @@ nonisolated enum Universe {
     static let all: [Security] = base + funds
     static let bySymbol: [String: Security] = Dictionary(uniqueKeysWithValues: all.map { ($0.ticker, $0) })
     static let baseIndex: [String: Int] = Dictionary(uniqueKeysWithValues: base.enumerated().map { ($1.ticker, $0) })
-    static func security(_ ticker: String) -> Security? { bySymbol[ticker.uppercased()] }
+    static func security(_ ticker: String) -> Security? { bySymbol[ticker.uppercased()] ?? SRMRegistry.shared.security(ticker) }
 
     static func sectorWeights(_ sector: String) -> [String: Double] {
         let members = base.filter { $0.sector == sector }
@@ -185,7 +192,9 @@ nonisolated enum Universe {
         Benchmark(code: "MX3070", name: "MX Income 30/70", summary: "30% stocks and 70% bonds — a conservative, income-oriented mix.",
                   weights: blend([(equityIndexWeights, 0.3), (bondIndexWeights, 0.7)])),
     ]
-    static func benchmark(_ code: String) -> Benchmark { benchmarks.first { $0.code == code } ?? benchmarks[0] }
+    static func benchmark(_ code: String) -> Benchmark {
+        benchmarks.first { $0.code == code } ?? SRMRegistry.shared.benchmark(code) ?? benchmarks[0]
+    }
 
     static func blend(_ parts: [([String: Double], Double)]) -> [String: Double] {
         var out: [String: Double] = [:]

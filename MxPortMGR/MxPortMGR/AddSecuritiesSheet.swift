@@ -51,6 +51,10 @@ struct AddSecuritiesSheet: View {
     private var selected: Security? { selection.flatMap(Universe.security) }
 
     var body: some View {
+        if store.portfolio.isSRM { SRMAddSecurities(store: store) } else { illustrative }
+    }
+
+    private var illustrative: some View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -225,5 +229,142 @@ struct AddSecuritiesSheet: View {
         case .bond: return "A bond fund: a diversified basket of bonds with a duration of about \(String(format: "%.1f", s.duration)); it never matures, so its price keeps moving with rates."
         case .cash: return "Cash and money-market funds: steady value and today's short-term interest rate; it loses ground to inflation over long periods."
         }
+    }
+}
+
+
+/// Add Securities from the security master: search srm (stocks, funds, bond funds) through the accounts service and
+/// add shares with a tax lot.
+struct SRMAddSecurities: View {
+    @Bindable var store: PortStore
+    @Environment(\.dismiss) private var dismiss
+
+    enum Kind: String, CaseIterable, Identifiable {
+        case all = "All", stocks = "Stocks", funds = "Funds", bonds = "Bond funds"
+        var id: String { rawValue }
+        var query: String { self == .all ? "all" : self == .stocks ? "stocks" : self == .funds ? "funds" : "bonds" }
+    }
+
+    @State private var search = ""
+    @State private var kind: Kind = .all
+    @State private var results: [SRMSecurity] = []
+    @State private var selection: Int?
+    @State private var searching = false
+    @State private var error: String?
+    @State private var shares = 10.0
+    @State private var cost = 0.0
+    @State private var acquired = Date()
+    @State private var added: [String] = []
+
+    private var selected: SRMSecurity? { results.first { $0.securityId == selection } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add Securities from the Security Master").font(.title2.weight(.semibold))
+                    Text("Real securities and prices in MxDataHUB's srm database (192.168.0.223), through the accounts service.").font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+            HStack(spacing: 12) {
+                TextField("Ticker, name, ISIN or CUSIP", text: $search).textFieldStyle(.roundedBorder).frame(width: 280)
+                Picker("Show", selection: $kind) { ForEach(Kind.allCases) { Text($0.rawValue).tag($0) } }
+                    .labelsHidden().pickerStyle(.segmented).fixedSize()
+                if searching { ProgressView().controlSize(.small) }
+                Spacer(minLength: 0)
+                Text(error ?? "\(results.count) found").font(.callout).foregroundStyle(error == nil ? Color.secondary : .red).lineLimit(2)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            Divider()
+            HStack(spacing: 0) {
+                Table(results, selection: $selection) {
+                    TableColumn("Ticker") { s in Text(s.ticker).font(.body.monospaced()) }.width(70)
+                    TableColumn("Name", value: \.name).width(min: 200)
+                    TableColumn("Type") { s in Text(s.kindTitle).foregroundStyle(.secondary) }.width(100)
+                    TableColumn("Sector") { s in Text(s.sector ?? "—").foregroundStyle(.secondary) }.width(120)
+                    TableColumn("Price") { s in Text(s.price.map(money) ?? "no prices").monospacedDigit().foregroundStyle(s.price == nil ? .orange : .primary) }.width(90)
+                    TableColumn("As of") { s in Text(s.priceDate ?? "").foregroundStyle(.secondary) }.width(84)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .quickHelpArea("Security Master", "Securities in srm matching the search, with the latest price. Securities without prices can be added; ask for prices with Load Prices in My Portfolio (the srm-loader loads them from FMP).", symbol: "cylinder.split.1x2")
+                Divider()
+                detail.frame(width: 380).frame(maxHeight: .infinity)
+            }
+            .frame(maxHeight: .infinity)
+            if !added.isEmpty {
+                Divider()
+                HStack {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Text("Added: " + added.joined(separator: " · ")).lineLimit(1).truncationMode(.head)
+                    Spacer()
+                    Text(store.srmStatus ?? "").foregroundStyle(.secondary).lineLimit(1)
+                }
+                .font(.callout).padding(10)
+            }
+        }
+        .frame(width: 1180, height: 700)
+        .task(id: "\(search)|\(kind.rawValue)") {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            searching = true
+            defer { searching = false }
+            do {
+                results = try await AccountsClient.search(search, kind: kind.query)
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+        .onChange(of: selection) { cost = (selected?.price ?? 0) * shares }
+        .onChange(of: shares) { cost = (selected?.price ?? 0) * shares }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        if let s = selected {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(s.name).font(.title3.weight(.semibold))
+                    Text("\(s.ticker)\(s.mic.map { ":" + $0 } ?? "") · \(s.kindTitle)").foregroundStyle(.secondary)
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                        row("Price", s.price.map { "\(money($0)) on \(s.priceDate ?? "")" } ?? "No prices in the security master yet")
+                        if let sector = s.sector { row("Sector", sector + (s.industry.map { " · " + $0 } ?? "")) }
+                        if let b = s.beta { row("Beta", String(format: "%.2f", b)) }
+                        if let m = s.marketCap { row("Market value", money(m)) }
+                        if let isin = s.isin { row("ISIN", isin) }
+                        if let cusip = s.cusip { row("CUSIP", cusip) }
+                        row("Security master id", "\(s.securityId)")
+                    }
+                    .font(.callout)
+                    Text(s.kind == "bond" ? "A bond fund: its price moves with interest rates; the risk model treats it as fixed income."
+                         : s.kind == "fund" ? "A fund: one purchase holds many securities." : "One company's shares.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Divider()
+                    LabeledContent("Shares") { TextField("", value: $shares, format: .number.precision(.fractionLength(0...4))).frame(width: 140) }
+                    if let price = s.price { Text("= \(money(price * shares)) at the latest price").font(.callout).foregroundStyle(.secondary) }
+                    LabeledContent("Cost basis") { TextField("", value: $cost, format: .currency(code: "USD")).frame(width: 140) }
+                        .help("What you paid in total for these shares (the tax lot's cost)")
+                    DatePicker("Bought", selection: $acquired, in: ...Date(), displayedComponents: .date)
+                    Button {
+                        store.addSRMHolding(s, quantity: shares, cost: cost, acquired: acquired)
+                        added.append("\(String(format: "%g", shares)) \(s.ticker)")
+                    } label: { Label("Add to My Portfolio", systemImage: "plus.circle.fill") }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(shares <= 0)
+                    .help("Adds a tax lot; adding a security already held adds to the position. The account is saved to the security master.")
+                }
+                .padding(14)
+            }
+        } else {
+            ContentUnavailableView("Select a Security", systemImage: "magnifyingglass", description: Text("Search the security master and choose a stock, fund or bond fund."))
+        }
+    }
+
+    private func row(_ k: String, _ v: String) -> some View {
+        GridRow { Text(k).foregroundStyle(.secondary); Text(v) }
     }
 }

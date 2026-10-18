@@ -1,6 +1,6 @@
 //
 //  ServiceCatalog.swift
-//  Shared by MxDataHUB and MxJobsWMS (MXcodeIDE/Shared)
+//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MXcodeIDE/Shared)
 //
 //  The Layer 3 services both apps rely on (MXcodeIDE/Services): what each is for, why it is written in its
 //  language, which use cases and samples it serves, and whether it is running now. The built-in entries mirror
@@ -117,6 +117,19 @@ nonisolated enum ServiceCatalog {
                 ServiceEndpoint(method: "GET", path: "/portfolios", summary: "Portfolios with their benchmark and latest snapshot"),
             ],
             samples: ["active-optimization", "passive-tracking", "attribution"], folder: "analytics", developIn: "VS Code or PyCharm"),
+        ServiceInfo(
+            id: "accounts", name: "Personal accounts", language: "Python", port: 8774,
+            purpose: "Keeps MxPortMGR's My Portfolio in the security master: searches securities to add, serves benchmark weights, and stores each personal account — type, approach, benchmark, cash and open tax lots — writing the day's holdings snapshot from the lots, so MxDataHUB ▸ Portfolios and the analytics service see it like any other portfolio.",
+            whyThisLanguage: "Python and psycopg2 are the shortest path from an HTTP request to a PostgreSQL transaction, with srm.py's own connection settings — so MxPortMGR, a sandboxed app, needs no database credentials.",
+            useCases: ["data-quality", "active", "passive"],
+            endpoints: [
+                ServiceEndpoint(method: "GET", path: "/securities?q=&kind=", summary: "Search securities (ticker, name, ISIN, CUSIP) with the latest price"),
+                ServiceEndpoint(method: "GET", path: "/benchmarks/{code}/weights", summary: "A benchmark's latest weights with sectors"),
+                ServiceEndpoint(method: "GET", path: "/accounts/{code}", summary: "A personal account with its open tax lots, valued"),
+                ServiceEndpoint(method: "PUT", path: "/accounts/{code}", summary: "Create or replace an account and its lots; rewrites today's holdings"),
+                ServiceEndpoint(method: "POST", path: "/accounts/{code}/load-prices", summary: "Load prices for unpriced holdings (via srm-loader)"),
+            ],
+            samples: [], folder: "accounts", developIn: "VS Code or PyCharm"),
         ServiceInfo(
             id: "portfolio-java", name: "Active portfolio construction", language: "Java", port: 8766,
             purpose: "Builds active (benchmark-relative) portfolios: maximise alpha for a tracking-error budget, long-only, with per-name, active-weight and sector-band limits, and a trade list against the current holdings. Also absolute max-Sharpe / mean-variance optimization.",

@@ -38,6 +38,8 @@ nonisolated struct Holding: Codable, Hashable, Sendable, Identifiable {
     var lots: [TaxLot] = []
     /// A price is missing for this holding (stale or delisted): it can't be valued reliably.
     var unpriced = false
+    /// Shares (or units) held, when known — always for a security-master account.
+    var quantity: Double? = nil
 
     var security: Security? { Universe.security(ticker) }
     var costBasis: Double { lots.isEmpty ? value : lots.reduce(0) { $0 + $1.costBasis } }
@@ -60,6 +62,10 @@ nonisolated struct Portfolio: Codable, Hashable, Sendable, Identifiable {
     /// Base securities with no returns from the given month on (0-based), for the missing-data case.
     var missingFrom: [String: Int] = [:]
     var symbol: String = "briefcase"
+    /// "srm" when the account lives in the security master (MxPortMGR My Portfolio ▸ Security master), with its code.
+    var source: String? = nil
+    var srmCode: String? = nil
+    var isSRM: Bool { source == "srm" }
 
     var total: Double { holdings.reduce(0) { $0 + $1.value } }
 

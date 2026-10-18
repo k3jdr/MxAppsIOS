@@ -148,7 +148,7 @@ struct TrackView: View {
     }
 
     private var settings: some View {
-        let members = store.inputs.benchmark.filter { $0 > 0 }.count
+        let members = max(store.inputs.benchmark.filter { $0 > 0 }.count, 4)
         return Box(title: "Tracker", symbol: "slider.horizontal.3", help: "How many names, chosen how, and the tracking-error budget.") {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
                 GridRow {

@@ -18,7 +18,8 @@ struct SRMPortfoliosView: View {
     @State private var newSnapshot = false
     @State private var snapshotDay = Date()
     @State private var confirmDelete = false
-    @State private var showBenchmark = false
+    /// 0 holdings, 1 vs benchmark, 2 tax lots (personal accounts).
+    @State private var panel = 0
 
     var body: some View {
         HSplitView {
@@ -79,6 +80,25 @@ struct SRMPortfoliosView: View {
                          + (portfolio.benchmarkCode.isEmpty ? "" : " · benchmark " + portfolio.benchmarkCode))
                         .foregroundStyle(.secondary)
                     Spacer()
+                    if portfolio.isPersonal {
+                        Button("Open in MxPortMGR") {
+                            if !AppLink.myPortfolio(portfolio.code).open() { store.errorMessage = "MxPortMGR is not installed." }
+                        }
+                        .help("Open this account as My Portfolio in MxPortMGR")
+                        .quickHelp("Open in MxPortMGR", "Opens this personal account as My Portfolio in MxPortMGR, where its tax lots are edited and it is analysed, optimized or tracked.")
+                    }
+                }
+                if portfolio.isPersonal {
+                    HStack(spacing: 8) {
+                        Label("Personal account", systemImage: "person.crop.circle").font(.callout.weight(.semibold))
+                        Text([portfolio.accountType.capitalized, portfolio.approach.isEmpty ? "" : portfolio.approach.capitalized + " approach",
+                              portfolio.cash > 0 ? "cash " + numberText(portfolio.cash) : "",
+                              portfolio.managedBy.isEmpty ? "" : "maintained in " + portfolio.managedBy]
+                            .filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.callout).foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .quickHelpArea("Personal Account", "A portfolio with an account type (V011): taxable, retirement or Roth, run actively or passively, with uninvested cash and open tax lots. \(portfolio.managedBy.isEmpty ? "" : "\(portfolio.managedBy) rewrites today's holdings from the lots whenever it saves, so edit the lots there.")", symbol: "person.crop.circle")
                 }
                 HStack {
                     Picker("Holdings on", selection: Binding(
@@ -108,19 +128,22 @@ struct SRMPortfoliosView: View {
                             .frame(width: 260)
                         }
                     Spacer()
-                    Picker("", selection: $showBenchmark) {
-                        Text("Holdings").tag(false)
-                        Text("vs Benchmark").tag(true)
+                    Picker("", selection: $panel) {
+                        Text("Holdings").tag(0)
+                        Text("vs Benchmark").tag(1)
+                        if portfolio.isPersonal { Text("Tax Lots").tag(2) }
                     }
                     .pickerStyle(.segmented)
                     .fixedSize()
-                    .disabled(portfolio.benchmarkID == nil)
-                    .quickHelp("Holdings / vs Benchmark", "The holdings, or each security's weight against the benchmark's (needs a benchmark).")
+                    .quickHelp("Holdings / vs Benchmark / Tax Lots", "The holdings, each security's weight against the benchmark's (needs a benchmark), or — for a personal account — its open tax lots.")
                 }
 
-                if showBenchmark && portfolio.benchmarkID != nil {
+                if panel == 1 && portfolio.benchmarkID != nil {
                     activeWeightsTable
                         .quickHelpArea(HubHelp.activeWeights)
+                } else if panel == 2 && portfolio.isPersonal {
+                    taxLotsTable
+                        .quickHelpArea("Tax Lots", "Open tax lots: shares bought on a date at a cost, valued with the latest price, with the unrealised gain and whether a sale today would be long-term (held over a year).", symbol: "doc.text")
                 } else {
                     holdingsTable
                         .quickHelpArea(HubHelp.holdings)
@@ -216,6 +239,28 @@ struct SRMPortfoliosView: View {
             }
             .foregroundStyle(.secondary)
         }
+    }
+
+    private var taxLotsTable: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Table(store.taxLots) {
+                TableColumn("Ticker", value: \.ticker).width(min: 40, ideal: 60)
+                TableColumn("Name", value: \.name).width(min: 100, ideal: 180)
+                TableColumn("Bought", value: \.acquired).width(min: 70, ideal: 85)
+                TableColumn("Shares") { Text(numberText($0.quantity, digits: 0)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
+                TableColumn("Cost") { Text(numberText($0.costBasis)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
+                TableColumn("Value") { Text(numberText($0.marketValue)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
+                TableColumn("Gain") { row in
+                    Text(numberText(row.gain)).monospacedDigit().foregroundStyle((row.gain ?? 0) >= 0 ? .green : .red)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                TableColumn("Term") { Text($0.longTerm ? "long" : "short").foregroundStyle($0.longTerm ? Color.secondary : .orange) }.width(min: 40, ideal: 50)
+            }
+            let value = store.taxLots.compactMap(\.marketValue).reduce(0, +), cost = store.taxLots.reduce(0) { $0 + $1.costBasis }
+            Text("\(store.taxLots.count) lots · value \(numberText(value)) · cost \(numberText(cost)) · unrealised \(numberText(value - cost))")
+                .foregroundStyle(.secondary)
+        }
+        .task(id: store.selectedPortfolioID) { await store.loadTaxLots() }
     }
 
     private var activeWeightsTable: some View {

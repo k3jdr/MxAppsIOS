@@ -120,6 +120,26 @@ struct PortfolioRow: Identifiable, Hashable {
     var description: String
     var snapshots: Int
     var lastSnapshot: String
+    /// Personal account fields (V011): empty for model portfolios.
+    var accountType = ""
+    var approach = ""
+    var managedBy = ""
+    var cash = 0.0
+    var isPersonal: Bool { !accountType.isEmpty }
+}
+
+/// An open tax lot of a personal account (srm.v_portfolio_tax_lot).
+struct TaxLotRow: Identifiable, Hashable {
+    var id: Int64
+    var ticker: String
+    var name: String
+    var acquired: String
+    var quantity: Double
+    var costBasis: Double
+    var price: Double?
+    var marketValue: Double?
+    var gain: Double?
+    var longTerm: Bool
 }
 
 struct HoldingRow: Identifiable, Hashable {
@@ -541,12 +561,15 @@ final class SRMStore {
                 SELECT p.portfolio_id::text, p.code, p.name, p.base_currency, p.benchmark_id::text, coalesce(b.code, ''),
                        coalesce(p.description, ''),
                        (SELECT count(DISTINCT as_of_date) FROM srm.portfolio_holding h WHERE h.portfolio_id = p.portfolio_id)::text,
-                       coalesce((SELECT max(as_of_date)::text FROM srm.portfolio_holding h WHERE h.portfolio_id = p.portfolio_id), '')
+                       coalesce((SELECT max(as_of_date)::text FROM srm.portfolio_holding h WHERE h.portfolio_id = p.portfolio_id), ''),
+                       coalesce(to_jsonb(p) ->> 'account_type', ''), coalesce(to_jsonb(p) ->> 'approach', ''),
+                       coalesce(to_jsonb(p) ->> 'managed_by', ''), coalesce(to_jsonb(p) ->> 'cash_balance', '0')
                   FROM srm.portfolio p LEFT JOIN srm.benchmark b USING (benchmark_id) ORDER BY p.code
                 """).map {
                 PortfolioRow(id: Int($0[0] ?? "") ?? 0, code: $0[1] ?? "", name: $0[2] ?? "", currency: $0[3] ?? "",
                              benchmarkID: $0[4].flatMap { Int($0) }, benchmarkCode: $0[5] ?? "",
-                             description: $0[6] ?? "", snapshots: Int($0[7] ?? "") ?? 0, lastSnapshot: $0[8] ?? "")
+                             description: $0[6] ?? "", snapshots: Int($0[7] ?? "") ?? 0, lastSnapshot: $0[8] ?? "",
+                             accountType: $0[9] ?? "", approach: $0[10] ?? "", managedBy: $0[11] ?? "", cash: Double($0[12] ?? "") ?? 0)
             }
             if selectedPortfolioID == nil || !portfolios.contains(where: { $0.id == selectedPortfolioID }) {
                 selectedPortfolioID = portfolios.first?.id
@@ -555,6 +578,25 @@ final class SRMStore {
     }
 
     var selectedPortfolio: PortfolioRow? { portfolios.first { $0.id == selectedPortfolioID } }
+
+    var taxLots: [TaxLotRow] = []
+
+    /// The selected personal account's open tax lots (V011's srm.v_portfolio_tax_lot).
+    func loadTaxLots() async {
+        guard let p = selectedPortfolio, p.isPersonal else { taxLots = []; return }
+        await perform {
+            taxLots = try await rows("""
+                SELECT lot_id::text, ticker, coalesce(name, ''), acquired_date::text, quantity::float8::text, cost_basis::float8::text,
+                       price::float8::text, market_value::float8::text, unrealized_gain::float8::text, long_term::text
+                  FROM srm.v_portfolio_tax_lot WHERE portfolio_id = $1::text::int ORDER BY ticker, acquired_date
+                """, [String(p.id)]).map {
+                TaxLotRow(id: Int64($0[0] ?? "") ?? 0, ticker: $0[1] ?? "", name: $0[2] ?? "", acquired: $0[3] ?? "",
+                          quantity: Double($0[4] ?? "") ?? 0, costBasis: Double($0[5] ?? "") ?? 0,
+                          price: $0[6].flatMap { Double($0) }, marketValue: $0[7].flatMap { Double($0) },
+                          gain: $0[8].flatMap { Double($0) }, longTerm: $0[9] == "true")
+            }
+        }
+    }
 
     /// Creates or updates a portfolio; returns its id.
     @discardableResult

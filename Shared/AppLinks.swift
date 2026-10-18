@@ -1,14 +1,16 @@
 //
 //  AppLinks.swift
-//  Shared by MxDataHUB and MxJobsWMS (MXcodeIDE/Shared)
+//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MXcodeIDE/Shared)
 //
-//  How the two apps hand work to each other:
+//  How the apps hand work to each other:
 //
 //    MxDataHUB  — the data: securities, benchmarks, portfolios, and refreshing each category of market data.
 //    MxJobsWMS  — the processes: repeatable, scheduled, approved workflows over that data.
+//    MxPortMGR  — the personal accounts: My Portfolio, kept in the security master with its tax lots.
 //
 //    mxjobswms://sample/<sample id>?portfolio=CODE&benchmark=CODE   new jobspace from a sample, for a portfolio
 //    mxdatahub://portfolio/<CODE>    mxdatahub://benchmark/<CODE>    mxdatahub://data-refresh    mxdatahub://services
+//    mxportmgr://my-portfolio/<CODE>   My Portfolio, opened from the security-master account CODE (no code: as it is)
 //
 
 import AppKit
@@ -21,11 +23,15 @@ nonisolated enum AppLink: Equatable, Sendable {
     case benchmark(String)
     case dataRefresh
     case services
+    /// MxPortMGR: My Portfolio, optionally the security-master account with this code.
+    case myPortfolio(String?)
 
     static let jobsScheme = "mxjobswms"
     static let hubScheme = "mxdatahub"
     static let jobsBundleID = "com.k3jdr.MxJobsWMS"
     static let hubBundleID = "com.k3jdr.MxDataHUB"
+    static let portScheme = "mxportmgr"
+    static let portBundleID = "com.k3jdr.MxPortMGR"
 
     var url: URL {
         var c = URLComponents()
@@ -46,6 +52,9 @@ nonisolated enum AppLink: Equatable, Sendable {
             c.scheme = Self.hubScheme; c.host = "data-refresh"
         case .services:
             c.scheme = Self.hubScheme; c.host = "services"
+        case let .myPortfolio(code):
+            c.scheme = Self.portScheme; c.host = "my-portfolio"
+            if let code, !code.isEmpty { c.path = "/" + code }
         }
         return c.url!
     }
@@ -61,6 +70,7 @@ nonisolated enum AppLink: Equatable, Sendable {
         case (Self.hubScheme, "benchmark") where !value.isEmpty: self = .benchmark(value)
         case (Self.hubScheme, "data-refresh"): self = .dataRefresh
         case (Self.hubScheme, "services"): self = .services
+        case (Self.portScheme, "my-portfolio"): self = .myPortfolio(value.isEmpty ? nil : value)
         default: return nil
         }
     }
@@ -69,6 +79,7 @@ nonisolated enum AppLink: Equatable, Sendable {
     var appName: String {
         switch self {
         case .sample: "MxJobsWMS"
+        case .myPortfolio: "MxPortMGR"
         default: "MxDataHUB"
         }
     }
@@ -76,7 +87,7 @@ nonisolated enum AppLink: Equatable, Sendable {
     /// Opens the link in the other app; returns false when that app is not installed.
     @MainActor @discardableResult
     func open() -> Bool {
-        let bundleID = appName == "MxJobsWMS" ? Self.jobsBundleID : Self.hubBundleID
+        let bundleID = appName == "MxJobsWMS" ? Self.jobsBundleID : appName == "MxPortMGR" ? Self.portBundleID : Self.hubBundleID
         guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
                 || NSWorkspace.shared.urlForApplication(toOpen: url) != nil else { return false }
         return NSWorkspace.shared.open(url)

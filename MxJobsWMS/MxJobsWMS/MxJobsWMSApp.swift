@@ -83,6 +83,11 @@ struct JobspaceCommands: Commands {
                     NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MXcodeIDE/tree/main/MxDataHUB")!)
                 }
             }
+            Button("Open MxPortMGR") {
+                if !AppLink.myPortfolio(nil).open() {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MXcodeIDE/tree/main/MxPortMGR")!)
+                }
+            }
         }
         CommandGroup(after: .importExport) {
             Button("Export Diagram as PNG…") {

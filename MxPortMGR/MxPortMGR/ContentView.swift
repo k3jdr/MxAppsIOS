@@ -47,6 +47,18 @@ struct ContentView: View {
         .frame(minWidth: 1180, minHeight: 720)
         .quickHelpScreen(store.title(store.screen), PortHelp.about(store.screen), selection: PortHelp.selection(store))
         .task { start() }
+        .onOpenURL { url in
+            // mxportmgr://my-portfolio/CODE from MxDataHUB or MxJobsWMS (Shared/AppLinks.swift).
+            if case let .myPortfolio(code)? = AppLink(url: url) {
+                store.go(.myPortfolio)
+                if let code {
+                    store.srmCode = code
+                    Task {
+                        if store.portfolio.isSRM { await store.openSRMAccount(code) } else { await store.setMySource(srm: true) }
+                    }
+                }
+            }
+        }
         .alert("MxPortMGR", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
             if store.engine == .services || store.attributeMaster {
@@ -65,7 +77,9 @@ struct ContentView: View {
         case .whyOptimize: WhyOptimizeView(store: store)
         case .whyAttribution: WhyAttributionView(store: store)
         case .activeVsPassive: ActiveVsPassiveView(store: store)
-        case .activePortfolio, .passivePortfolio, .myPortfolio: PortfolioView(store: store)
+        case .activePortfolio, .passivePortfolio: PortfolioView(store: store)
+        case .myPortfolio: PortfolioView(store: store, part: .holdings)
+        case .myBenchmark: PortfolioView(store: store, part: .benchmark)
         case .myRisk: RiskView(store: store)
         case .myImprove:
             if store.myApproach == .active { OptimizeView(store: store) } else { TrackView(store: store) }
@@ -124,6 +138,7 @@ struct ContentView: View {
         let defaults = UserDefaults.standard
         if let s = defaults.string(forKey: "screen").flatMap(Screen.init(rawValue:)) { store.screen = s }
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
+        if defaults.string(forKey: "mySource") == "srm" { Task { await store.openSRMAccount(store.srmCode) } }
         if defaults.bool(forKey: "addSecurities") { store.go(.myPortfolio); store.addingSecurities = true }
         if store.screen == .reportWalkthrough, defaults.object(forKey: "reportStep") != nil {
             let r = store.currentReport

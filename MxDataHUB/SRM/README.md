@@ -57,7 +57,8 @@ security add-generic-password -U -s SRM-api -a openfigi -w
 | Market data | `price` (EOD per listing and source), `security_market_data` (market cap, shares, beta), `corporate_action` (dividends, splits, symbol changes, delistings) |
 | Benchmarks | `benchmark`, `benchmark_weight` (dated snapshots, one per load), `benchmark_constituent` (membership over time, rebuilt from all snapshots), `benchmark_level` |
 | Portfolios | `portfolio`, `portfolio_holding` (dated snapshots; shares and/or target weight; `load_id` and `drifted_from` when carried forward by `portfolio-snapshots`), `portfolio_transaction` |
-| Views | `v_security` (current identifiers pivoted), `v_identifier_coverage`, `v_benchmark_summary`, `v_load_history`, `v_snapshot_coverage` (weight history per benchmark and portfolio) |
+| Personal accounts (V011) | `portfolio.account_type` (taxable / retirement / roth; NULL for model portfolios), `approach` (active / passive), `managed_by` (e.g. MxPortMGR), `cash_balance`; `portfolio_tax_lot` (open lots: security, purchase date, shares, total cost) |
+| Views | `v_security` (current identifiers pivoted), `v_identifier_coverage`, `v_benchmark_summary`, `v_load_history`, `v_snapshot_coverage` (weight history per benchmark and portfolio), `v_portfolio_tax_lot` (lots valued: price, market value, unrealised gain, long-term), `v_personal_account` (accounts with lots, value and cost) |
 
 Functions:
 
@@ -71,6 +72,10 @@ Functions:
   `build_benchmark(code, name, parent, 'equal'|'cap', sector, as_of)`.
 - `add_holding(portfolio, date, identifier, shares, weight, type)`, `portfolio_positions` (from transactions),
   `portfolio_valuation`, `portfolio_validate`, `portfolio_active_weights`.
+- `sync_holdings_from_lots(portfolio, as_of)` — rewrites a personal account's holdings snapshot on `as_of` from its
+  open tax lots (total shares, average cost), so valuation, the analytics service and `portfolio-snapshots` see it
+  like any other portfolio. MxPortMGR's My Portfolio is kept this way through the accounts service
+  (`Services/accounts`).
 
 ## Loaders
 

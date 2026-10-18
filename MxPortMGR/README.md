@@ -19,7 +19,7 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Six groups: Start Here, Learn the Why, **My Portfolio** (5 steps, your own account), **Model Portfolio** (5 steps on a sample; Active or Passive index), Market Reports, Library. |
+| **Sidebar — the guide** | Six groups: Start Here, Learn the Why, **My Portfolio** (6 steps, your own account), **Model Portfolio** (5 steps on a sample; Active or Passive index), Market Reports, Library. |
 | **Quick Help** (bottom of the sidebar) | The shared MXcodeIDE Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **Account** — the sample (or My Portfolio) every screen works on. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Back / Next** along the guide. |
@@ -34,7 +34,7 @@ gives both.
 
 | Menu | Items |
 | --- | --- |
-| **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · My Portfolio steps 1–5 ⌥⌘1–⌥⌘5 · Model Portfolio steps 1–5 ⌘1–⌘5 and Model Type ▸ Active / Passive Index · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
+| **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Model Portfolio steps 1–5 ⌘1–⌘5 and Model Type ▸ Active / Passive Index · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize (Active) ⌘R · Build Index Tracker (Passive) ⇧⌘R · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) · Previous Step ⌘[ · Next Step ⌘] |
@@ -55,7 +55,7 @@ gives both.
 
 ### My Portfolio path
 
-The clear path for your own account, modelled on the two sample paths with the same five steps. Every My Portfolio
+The clear path for your own account, in six steps. Every My Portfolio
 step works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each step shows
 the account and sets **My approach** — *Active* or *Passive index* — its account type, and **Start From a Sample**
 (copy any sample's holdings, lots and benchmark) or reset to the three-fund starter.
@@ -68,14 +68,41 @@ coupon, maturity, rating, yield, duration, beta, model volatility and expected r
 is). Add it by dollar amount, shares or face value, optionally with a tax lot (cost basis and purchase date); adding a
 security already held adds to the position and its lots. Each holding row has a trash button to remove it.
 
-1. **My Holdings & Benchmark** — add, edit and remove holdings; choose the benchmark that matches your plan; checks.
-2. **Risk Today** — your account's volatility, tracking error, beta, VaR and where the risk comes from.
-3. **Optimize** (active) or **Build the Tracker** (passive).
-4. **Trades & Taxes** (active) or **Rebalance Bands** (passive).
-5. **Attribution** — read as an active or a passive account, by approach.
+1. **My Holdings** — add, edit and remove holdings (shares, values, tax lots); asset mix; checks.
+2. **My Benchmark** — choose the benchmark that matches your plan; sector and asset-mix comparison, overlap, active
+   share, the names you hold in it and its 25 largest members.
+3. **Risk Today** — your account's volatility, tracking error, beta, VaR and where the risk comes from.
+4. **Optimize** (active) or **Build the Tracker** (passive).
+5. **Trades & Taxes** (active) or **Rebalance Bands** (passive).
+6. **Attribution** — read as an active or a passive account, by approach.
 
-Steps 3 and 4 change name and screen with the approach (in the sidebar too). *Copy to My Portfolio* on a sample, the
+Steps 4 and 5 change name and screen with the approach (in the sidebar too). *Copy to My Portfolio* on a sample, the
 Portfolio menu's *Copy Account to My Portfolio* and Choose Your Path's *Start My Portfolio* all lead here.
+
+#### My Portfolio in the security master
+
+The bar's **Data** switch chooses where My Portfolio lives:
+
+* **Illustrative universe** — the made-up market the samples use, remembered on this Mac.
+* **Security master (srm)** — real securities, prices and benchmarks in MxDataHUB's PostgreSQL database (`srm` on
+  192.168.0.223), through the **accounts** Layer 3 service (`Services/accounts`, port 8774; start it with
+  `python3 Services/mxservices.py start`). The account is an `srm.portfolio` with an account type, approach, cash
+  balance and open **tax lots** (`srm.portfolio_tax_lot`, migration V011); every change is saved a moment later (or
+  with **Save**), and the day's holdings snapshot is rewritten from the lots, so MxDataHUB ▸ Portfolios shows it (with
+  a Tax Lots view and *Open in MxPortMGR*) and the analytics service can analyse it. **Account** names the code
+  (default `MY_PORTFOLIO`); **Open** lists the personal accounts already there.
+
+In security-master mode **Add Securities…** searches srm by ticker, name, ISIN or CUSIP (stocks, funds, bond funds),
+shows each security's sector, latest price and date, beta, market value and identifiers, and adds shares with a tax lot
+(cost and purchase date). Holdings without prices are valued at cost and flagged; **Load Prices** asks the srm-loader
+service to load them (`srm.py load fmp-prices --symbols …`, which needs an FMP API key in SRM's configuration). The
+benchmark is any benchmark loaded in srm (S&P 500, Nasdaq-100, Dow, S&P 400 / 600, custom); Risk, Optimize and Build
+the Tracker use the analytics service's Ledoit-Wolf covariance from two years of srm prices (holdings without enough
+price history and cash are left out and listed), and Attribution uses its `/attribution` for the account's code.
+Securities whose tickers clash with the illustrative universe show as `TICKER:MIC` internally.
+
+`mxportmgr://my-portfolio/CODE` (from MxDataHUB or MxJobsWMS ▸ Window ▸ Open MxPortMGR) opens My Portfolio on that
+security-master account.
 
 ### Model Portfolio
 
@@ -236,7 +263,7 @@ service catalog and view). Sandboxed with outgoing network connections (for the 
 configuration is compiled with `-O`: the optimizers and the simulator are numeric loops that are ~75× slower
 unoptimised.
 
-Launch arguments for demos and tests: `-screen activeOptimize` (any `Screen` case), `-sample employer-stock` (a sample
+Launch arguments for demos and tests: `-mySource srm -srmAccount CODE` (My Portfolio from the security master), `-addSecurities YES` (open Add Securities), `-screen activeOptimize` (any `Screen` case), `-sample employer-stock` (a sample
 id), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
 hides Quick Help.
 
@@ -248,6 +275,8 @@ hides Quick Help.
 | `ContentView.swift` | Sidebar guide with Quick Help docked, toolbar pickers, status bar, launch arguments |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
 | `Universe.swift`, `Portfolio.swift`, `Samples.swift` | The illustrative market, accounts and checks, the samples |
+| `SRMData.swift` | Security-master securities and benchmarks registry, the accounts-service client, analytics inputs for srm accounts |
+| `AddSecuritiesSheet.swift` | Add Securities: illustrative universe or security master |
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | Built-in engines and the Layer 3 service client |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing |
