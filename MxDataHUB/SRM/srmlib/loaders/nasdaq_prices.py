@@ -93,6 +93,8 @@ def run(conn, cfg, args):
         work = _work(cur, args)[: args.max or None]
         log(f"  {len(work)} securities, prices since {since}")
         today = datetime.date.today()
+        # Up to date = priced on the last weekday before today (Friday's close on a weekend or Monday morning).
+        last_weekday = today - datetime.timedelta(days={0: 3, 6: 2}.get(today.weekday(), 1))
         empty = 0
         for n, (security_id, ticker, security_type) in enumerate(work, 1):
             cur.execute("""SELECT l.listing_id, l.currency_code,
@@ -104,7 +106,7 @@ def run(conn, cfg, args):
                 run.reject(ticker, "no current listing to attach prices to")
                 continue
             listing_id, currency, last = row
-            if last and last >= today - datetime.timedelta(days=1) and not args.force:
+            if last and last >= last_weekday and not args.force:
                 continue
             start = max(since, (last - datetime.timedelta(days=5)).isoformat()) if last else since
             symbol = ticker.replace(".", "^")             # Nasdaq writes class shares as BRK^B
@@ -133,8 +135,10 @@ def run(conn, cfg, args):
                     continue
                 day = datetime.datetime.strptime(r["date"], "%m/%d/%Y").date().isoformat()
                 vol = _number(r.get("volume"))
-                values.append((day, _number(r.get("open")), _number(r.get("high")), _number(r.get("low")), close,
-                               int(vol) if vol is not None else None))
+                high, low = _number(r.get("high")), _number(r.get("low"))
+                if high is not None and low is not None and high < low:   # Nasdaq.com sometimes swaps or garbles them;
+                    high = low = None                                       # keep the close (srm.price CHECK high >= low)
+                values.append((day, _number(r.get("open")), high, low, close, int(vol) if vol is not None else None))
             run.read += len(values)
             result = _upsert(cur, listing_id, values, src, run.load_id, currency or "USD")
             run.inserted += sum(1 for r in result if r[0])

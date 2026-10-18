@@ -280,6 +280,9 @@ struct QuickHelpPanel: View {
 
 /// The docked panel, where an app puts it (bottom of the sidebar); nothing while hidden or floating.
 struct QuickHelpDock: View {
+    /// Height of Quick Help docked at the bottom of a sidebar.
+    static let sidebarHeight: CGFloat = 140
+
     var height: CGFloat? = nil
     @Bindable private var help = QuickHelp.shared
 
@@ -296,9 +299,11 @@ struct QuickHelpDock: View {
 }
 
 extension View {
-    /// Quick Help docked at the bottom of this view (a sidebar), as in MxNoteONE.
-    func quickHelpDock() -> some View {
-        safeAreaInset(edge: .bottom, spacing: 0) { QuickHelpDock() }
+    /// Quick Help docked at the bottom of this view (a sidebar), as in MxNoteONE. A fixed height that scrolls a long
+    /// description: a dock that grew with its text changed the split view column's minimum size whenever Quick Help
+    /// changed, and AppKit aborted on the update-constraints loop (MxJobsWMS, 2026-10-18).
+    func quickHelpDock(height: CGFloat = QuickHelpDock.sidebarHeight) -> some View {
+        safeAreaInset(edge: .bottom, spacing: 0) { QuickHelpDock(height: height) }
     }
 
     /// Quick Help for a control while the pointer is on it. The control keeps its own tooltip.
