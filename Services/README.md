@@ -65,7 +65,7 @@ Open them in MxJobsWMS (**File ▸ New from Sample…**) or from a portfolio in 
 
 | Use case | Sample | Layer 3 chain | Typical decision |
 | --- | --- | --- | --- |
-| **Data refresh** | SRM Daily Refresh | srm-loader: 12 loaders in dependency order, then status / quality | Approve the report; schedule backfills |
+| **Data refresh** | SRM Daily Refresh | srm-loader: 13 loaders in dependency order, then status / quality | Approve the report; schedule backfills |
 | **Active management** — beat a benchmark within a risk budget | Active Portfolio Optimization | analytics `/inputs` (momentum alpha) → portfolio-java `/optimize/active` (3% tracking error, ±3% per name, ±5% per sector) → portfolio-cpp `/risk` | rebalance / rebalance partially (turnover) / hold |
 | **Passive / index** — match a benchmark with fewer names | Passive Index Tracking | analytics `/inputs` (covariance) → portfolio-cpp `/optimize/tracking` (100 names, stratified) and full replication for comparison | rebalance when drift exceeds the tracking-error budget, else hold |
 | **Attribution** — explain past active return | Performance & Risk Attribution | analytics `/attribution` (sector Brinson-Fachler, monthly, Carino) + analytics `/inputs` → portfolio-cpp `/risk` (ex-ante active risk by sector) | publish, or review when data gaps or residuals appear |

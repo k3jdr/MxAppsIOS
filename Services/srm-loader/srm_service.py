@@ -10,7 +10,7 @@ Endpoints (JSON):
 
     GET  /health                      service status and SRM folder
     GET  /loaders                     loader names in dependency order (srm.py LOADERS)
-    POST /load/<loader>?max=&force=1&since=&months=&history=1&benchmarks=SP500,DJIA&symbols=AAPL,MSFT
+    POST /load/<loader>?max=&force=1&since=&months=&history=1&benchmarks=SP500,DJIA&symbols=AAPL,MSFT&funds=1
                                       &asOf=&portfolios= (portfolio-snapshots)
                                       runs `srm.py load <loader> ...` and returns its srm.load_run rows
     GET  /status                      read-only: migrations, row counts, identifier coverage, benchmarks,
@@ -68,8 +68,12 @@ CATEGORIES = [
      "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members.", "cadence": "daily"},
     {"id": "identifiers", "name": "Identifiers & issuer data", "loaders": ["openfigi", "fmp-profiles", "sec-submissions", "gleif"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
-    {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "fmp-index-levels"],
-     "description": "End-of-day prices and benchmark levels.", "cadence": "daily"},
+    {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "nasdaq-prices", "fmp-index-levels"],
+     "description": "End-of-day prices (FMP for benchmark and portfolio members; Nasdaq.com, free and keyless, for the "
+                    "stock and bond funds held and any security FMP left without a recent price) and benchmark levels.",
+     "cadence": "daily",
+     # FMP needs an API key; when it fails, nasdaq-prices still runs and fills the gaps.
+     "continueAfterFailure": ["fmp-prices"]},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
     {"id": "portfolio-snapshots", "name": "Portfolio snapshots", "loaders": ["portfolio-snapshots"], "optional": True,
@@ -82,7 +86,8 @@ RUN_NAMES = {
     "reference": ["iso10383", "iso4217"], "nasdaqtrader": ["nasdaqtrader"], "sec-tickers": ["sec_company_tickers"],
     "ssga": ["ssga_spy", "ssga_dia", "ssga_mdy", "ssga_spsm"], "nasdaq100": ["nasdaq100"],
     "openfigi": ["openfigi_mapping"], "fmp-profiles": ["fmp_profiles"], "sec-submissions": ["sec_submissions"],
-    "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "fmp-index-levels": ["fmp_index_levels"],
+    "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "nasdaq-prices": ["nasdaq_prices"],
+    "fmp-index-levels": ["fmp_index_levels"],
     "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -164,7 +169,8 @@ class SRM:
             ok, due = limits[cat["cadence"]]
             age = business_days_between(basis, today) if cat["cadence"] == "daily" and basis else ((today - basis).days if basis else None)
             state = "never" if basis is None else "fresh" if age <= ok else "due" if age <= due else "stale"
-            if any(l["status"] == "failed" for l in loaders):
+            tolerated = set(cat.get("continueAfterFailure", []))
+            if any(l["status"] == "failed" and l["loader"] not in tolerated for l in loaders):
                 state = "failed"
             out.append(dict(cat, optional=cat.get("optional", False), loaders=loaders, lastRun=last_run,
                             dataAsOf=data_date, ageDays=age, state=state))
@@ -347,7 +353,8 @@ class Handler(BaseHTTPRequestHandler):
             LOAD_LOCK.release()
 
     def refresh(self, category, q):
-        """Runs every loader of a category in order; stops at the first failure."""
+        """Runs every loader of a category in order; stops at the first failure, except after a loader the category
+        lists in continueAfterFailure (whose failure then counts as partial)."""
         cat = next((c for c in CATEGORIES if c["id"] == category), None)
         if cat is None:
             raise ValueError("unknown category %r; one of %s" % (category, ", ".join(c["id"] for c in CATEGORIES)))
@@ -356,14 +363,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(409, {"error": "another load is running; try again when it finishes"})
         try:
             started, results = time.time(), []
+            tolerated = set(cat.get("continueAfterFailure", []))
             for loader in cat["loaders"]:
                 result = run_loader(loader, q, dry=dry)
                 results.append(result)
-                if result["status"] == "failed":
+                if result["status"] == "failed" and loader not in tolerated:
                     break
+            statuses = ["partial" if r["status"] == "failed" and r.get("loader") in tolerated else r["status"] for r in results]
             return self.send_json(200, {
                 "category": category, "name": cat["name"], "dryRun": dry,
-                "status": worst([r["status"] for r in results]),
+                "status": worst(statuses),
                 "seconds": round(time.time() - started, 1),
                 "loaders": results,
             })
@@ -425,7 +434,7 @@ def options(q):
         dt.date.fromisoformat(q["since"])   # raises ValueError when not YYYY-MM-DD
         out += ["--since", q["since"]]
     for flag, name in (("force", "--force"), ("history", "--history"),
-                       ("allSecurities", "--all-securities"), ("includeOtc", "--include-otc")):
+                       ("allSecurities", "--all-securities"), ("includeOtc", "--include-otc"), ("funds", "--funds")):
         if q.get(flag, "").lower() in ("1", "true", "yes"):
             out.append(name)
     for name in ("symbols", "benchmarks", "portfolios"):

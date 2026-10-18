@@ -14,7 +14,7 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
     PUT  /accounts/<code>                create or replace an account and its lots; rewrites today's holdings
                                          snapshot from the lots (srm.sync_holdings_from_lots)
     POST /accounts/<code>/load-prices    asks the srm-loader service to load prices for the account's unpriced
-                                         securities (srm.py load fmp-prices --symbols ...)
+                                         securities (srm.py load nasdaq-prices --symbols ...: Nasdaq.com, free, no API key)
 
     python3 accounts_service.py                  # http://127.0.0.1:8774
     python3 accounts_service.py --srm-dir ../../MxDataHUB/SRM --port 8774
@@ -324,7 +324,7 @@ def load_prices(conn, code):
     symbols = a["unpriced"]
     if not symbols:
         return {"loaded": [], "message": "every holding already has prices", "account": a}
-    url = "%s/load/fmp-prices?symbols=%s" % (LOADER, ",".join(symbols))
+    url = "%s/load/nasdaq-prices?symbols=%s" % (LOADER, ",".join(symbols))
     req = urllib.request.Request(url, method="POST", data=b"")
     try:
         with urllib.request.urlopen(req, timeout=600) as r:

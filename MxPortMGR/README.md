@@ -99,7 +99,7 @@ and use the **filter row** like a spreadsheet's autofilter: ticker / name contai
 values with their counts (tick several), a price range, and with / without a price; a filtered column's title shows ⏷
 and *Clear Filters* resets. Select a security for its sector, latest price and date, beta, market value and
 identifiers, and add shares with a tax lot (cost and purchase date). Holdings without prices are valued at cost and flagged; **Load Prices** asks the srm-loader
-service to load them (`srm.py load fmp-prices --symbols …`, which needs an FMP API key in SRM's configuration). The
+service to load them (`srm.py load nasdaq-prices --symbols …` — Nasdaq.com's free quote API, no key needed). The
 benchmark is any benchmark loaded in srm (S&P 500, Nasdaq-100, Dow, S&P 400 / 600, custom); Risk, Optimize and Build
 the Tracker use the analytics service's Ledoit-Wolf covariance from two years of srm prices (holdings without enough
 price history and cash are left out and listed), and Attribution uses its `/attribution` for the account's code.

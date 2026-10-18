@@ -127,7 +127,7 @@ nonisolated enum ServiceCatalog {
                 ServiceEndpoint(method: "GET", path: "/benchmarks/{code}/weights", summary: "A benchmark's latest weights with sectors"),
                 ServiceEndpoint(method: "GET", path: "/accounts/{code}", summary: "A personal account with its open tax lots, valued"),
                 ServiceEndpoint(method: "PUT", path: "/accounts/{code}", summary: "Create or replace an account and its lots; rewrites today's holdings"),
-                ServiceEndpoint(method: "POST", path: "/accounts/{code}/load-prices", summary: "Load prices for unpriced holdings (via srm-loader)"),
+                ServiceEndpoint(method: "POST", path: "/accounts/{code}/load-prices", summary: "Load prices for unpriced holdings (srm-loader: nasdaq-prices, no key needed)"),
             ],
             samples: [], folder: "accounts", developIn: "VS Code or PyCharm"),
         ServiceInfo(

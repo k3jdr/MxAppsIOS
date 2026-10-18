@@ -343,7 +343,7 @@ struct MyPortfolioBar: View {
                         .help("Save the account and its tax lots to the security master now (it also saves a moment after every change)")
                     if p.holdings.contains(where: \.unpriced) {
                         Button { Task { await store.loadSRMPrices() } } label: { Label("Load Prices", systemImage: "arrow.down.circle") }
-                            .help("Ask the srm-loader service to load prices for holdings without them (srm.py load fmp-prices)")
+                            .help("Ask the srm-loader service to load prices for holdings without them (srm.py load nasdaq-prices: Nasdaq.com, free, no API key)")
                     }
                     if store.srmBusy { ProgressView().controlSize(.small) }
                     Text(store.srmStatus ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2)

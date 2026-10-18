@@ -212,6 +212,18 @@
       "id" : "B2C2773F-C103-424E-8B33-9FC6C3BE421C",
       "label" : "",
       "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
+    },
+    {
+      "from" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
+      "id" : "455F2C5B-1841-4F9F-97CB-01714B4BB0B0",
+      "label" : "",
+      "to" : "4744CBC5-7261-410C-87E2-53DA88555182"
+    },
+    {
+      "from" : "4744CBC5-7261-410C-87E2-53DA88555182",
+      "id" : "C39BC0B2-4169-435F-B904-9A2FFAFABA80",
+      "label" : "",
+      "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
     }
   ],
   "name" : "SRM Daily Securities Master Refresh",
@@ -540,7 +552,7 @@
         "inputs" : [
 
         ],
-        "instructions" : "Load end-of-day prices, index levels and corporate actions. Note symbols without a price for the last trading day and corporate actions that need attention (splits, delistings).",
+        "instructions" : "Load end-of-day prices (FMP, then Nasdaq.com for funds and gaps), index levels and corporate actions. Note symbols without a price for the last trading day and corporate actions that need attention (splits, delistings).",
         "model" : "",
         "outputFormat" : ""
       },
@@ -573,7 +585,7 @@
         "successStatus" : "200-299"
       },
       "title" : "Market data agent",
-      "x" : 2690,
+      "x" : 2805,
       "y" : 360
     },
     {
@@ -614,7 +626,7 @@
         "successStatus" : "200-299"
       },
       "title" : "Data quality analyst",
-      "x" : 3180,
+      "x" : 3410,
       "y" : 360
     },
     {
@@ -1129,13 +1141,13 @@
         "fallbackValue" : "",
         "maxRetries" : 1,
         "notifyUser" : true,
-        "onFailure" : "escalateToUser",
+        "onFailure" : "skip",
         "retryDelaySeconds" : 60,
         "timeoutSeconds" : 3600
       },
       "id" : "5C5690D6-94C6-4EDC-B393-7A1527A32F8F",
       "kind" : "apiRead",
-      "notes" : "EOD prices, incremental after the first 2 years.",
+      "notes" : "EOD prices, incremental after the first 2 years. Needs an FMP API key; when it fails, the Nasdaq.com step fills the gaps.",
       "outcome" : {
         "assertions" : [
           {
@@ -1155,6 +1167,57 @@
       },
       "title" : "End-of-day prices (FMP)",
       "x" : 2460,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/nasdaq-prices",
+        "query" : [
+
+        ],
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 1,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 3600
+      },
+      "id" : "4744CBC5-7261-410C-87E2-53DA88555182",
+      "kind" : "apiRead",
+      "notes" : "Free, no API key: EOD prices for the stock and bond funds (ETFs, ETNs, closed-end funds) held in portfolios and personal accounts, and for any benchmark or portfolio security FMP left without a recent price.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "147FC60B-24F3-423C-BF32-CAAFB05118F9",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "fundPrices",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Fund & fallback prices (Nasdaq.com)",
+      "x" : 2690,
       "y" : 600
     },
     {
@@ -1205,7 +1268,7 @@
         "successStatus" : "200"
       },
       "title" : "Index levels (FMP)",
-      "x" : 2690,
+      "x" : 2920,
       "y" : 600
     },
     {
@@ -1266,7 +1329,7 @@
         "successStatus" : "200"
       },
       "title" : "Corporate actions (FMP)",
-      "x" : 2920,
+      "x" : 3150,
       "y" : 600
     },
     {
@@ -1319,7 +1382,7 @@
         "successStatus" : "200"
       },
       "title" : "SRM status & data quality",
-      "x" : 3180,
+      "x" : 3410,
       "y" : 600
     }
   ],

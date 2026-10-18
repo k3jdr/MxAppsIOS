@@ -94,6 +94,7 @@ recorded in `srm.load_run`; all writes are upserts, so loaders can be re-run at 
 | `sec-submissions` | SEC submissions | SIC, state of incorporation, EIN, fiscal year end, former names |
 | `gleif` | GLEIF ISIN→LEI file + LEI records API | LEI, legal form, entity status, legal / HQ country |
 | `fmp-prices` | FMP `historical-price-eod/full` | EOD prices (default 2 years; incremental afterwards) |
+| `nasdaq-prices` | Nasdaq.com quote API (free, no key) | EOD prices for the **stock and bond funds** (ETFs, ETNs, closed-end funds) held in portfolios and personal accounts, and for any benchmark or portfolio security without a price in the last 5 days (the fallback when `fmp-prices` can't run); `--funds` every active fund (~6,100, about 2 hours at one request a second), `--symbols`, `--all-securities`; closes, not dividend-adjusted |
 | `fmp-index-levels` | FMP | benchmark levels (^GSPC, ^DJI on the current plan) |
 | `fmp-corporate-actions` | FMP calendars, symbol changes, delistings | dividends, splits, symbol changes, delistings; `--history` adds each security's full dividend / split history |
 | `portfolio-snapshots` (optional) | the security master | each portfolio's latest snapshot carried forward to the latest price date (`--as-of`, `--portfolios`): shares copied, weights drifted by adjusted-close returns; never changes an existing snapshot. Run it daily after `fmp-prices` to build portfolio weight history for attribution |
@@ -106,6 +107,7 @@ at 250 calls/minute), `--max N` caps the calls, `--force` refreshes recent rows.
 
 | Source | Limit / availability |
 |---|---|
+| Nasdaq.com quote API | Free, no key: about two years of daily history per request for stocks, ETFs, closed-end funds (`assetclass=stocks` / `etf`) and mutual funds; closes only (no adjusted close); no dividend history for funds not listed on Nasdaq. Unofficial public endpoint: loaded politely at one request a second. |
 | FMP (this key) | Available: `profile`, `search-isin`, `search-cusip`, stock and ETF lists, EOD history (5,000 rows per call), dividends / splits and their calendars, symbol changes, delisted companies (first page), index history for ^GSPC and ^DJI, full per-symbol dividend / split history. **Not on the plan (402):** dividend / split calendar windows older than about 12 months, S&P 500 / Nasdaq / Dow constituents and their history, `etf/holdings`, `profile-bulk`, `batch-quote`, ^NDX / ^MID / ^SP600 history, later pages of delisted companies. Comma-separated symbols return nothing, so profiles are one call per symbol. |
 | OpenFIGI (this key) | 250 mapping requests per minute, 100 jobs per request. No ISIN lookup by design; mapping uses CUSIP or ticker. Preferreds, warrants and units often return "No identifier found". |
 | SEC EDGAR | ≤ 10 requests/second; User-Agent with contact e-mail required. |

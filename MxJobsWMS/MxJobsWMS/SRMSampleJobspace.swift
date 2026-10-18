@@ -5,7 +5,7 @@
 //  File ▸ New SRM Daily Refresh Sample: MxDataHUB's daily securities-master (SRM) automation
 //  (MxDataHUB/SRM/srm.py load all) as a three-layer jobspace.
 //
-//  Layer 3  the 12 SRM loaders and a read-only status / data-quality read, called through the SRM loader
+//  Layer 3  the 13 SRM loaders and a read-only status / data-quality read, called through the SRM loader
 //           service (Services/srm-loader/srm_service.py, 127.0.0.1:8770), which runs srm.py
 //  Layer 2  one agent per loader stage, in srm.py's dependency order — universe, benchmark constituents,
 //           identifier enrichment, market data — and a data-quality analyst
@@ -99,20 +99,26 @@ nonisolated extension Jobspace {
                            timeout: 1800, onFailure: .skip,
                            note: "ISIN → LEI file and LEI records: legal form, entity status, countries.")
         let prices = loader("fmp-prices", "End-of-day prices (FMP)", x: 2460, output: "prices",
-                            timeout: 3600, onFailure: .escalateToUser, retries: 1,
+                            timeout: 3600, onFailure: .skip, retries: 1,
                             query: [KeyValue("since", "{{since}}")],
                             arguments: [Argument("since", "", type: .date)],
-                            note: "EOD prices, incremental after the first 2 years.")
-        let levels = loader("fmp-index-levels", "Index levels (FMP)", x: 2690, output: "indexLevels",
+                            note: "EOD prices, incremental after the first 2 years. Needs an FMP API key; when it fails, "
+                                + "the Nasdaq.com step fills the gaps.")
+        let fundPrices = loader("nasdaq-prices", "Fund & fallback prices (Nasdaq.com)", x: 2690, output: "fundPrices",
+                                timeout: 3600, onFailure: .escalateToUser, retries: 1,
+                                note: "Free, no API key: EOD prices for the stock and bond funds (ETFs, ETNs, closed-end "
+                                    + "funds) held in portfolios and personal accounts, and for any benchmark or portfolio "
+                                    + "security FMP left without a recent price.")
+        let levels = loader("fmp-index-levels", "Index levels (FMP)", x: 2920, output: "indexLevels",
                             timeout: 600, onFailure: .skip,
                             note: "^GSPC and ^DJI levels on the current plan.")
-        let actions = loader("fmp-corporate-actions", "Corporate actions (FMP)", x: 2920, output: "corporateActions",
+        let actions = loader("fmp-corporate-actions", "Corporate actions (FMP)", x: 3150, output: "corporateActions",
                              timeout: 3600, onFailure: .skip,
                              query: [KeyValue("months", "{{months}}")],
                              arguments: [Argument("months", "", type: .number)],
                              note: "Dividends, splits, symbol changes and delistings from the FMP calendars.")
 
-        var status = JobNode(kind: .apiRead, title: "SRM status & data quality", x: 3180, y: y3)
+        var status = JobNode(kind: .apiRead, title: "SRM status & data quality", x: 3410, y: y3)
         status.api?.subscriptionID = srm.id
         status.api?.path = "/status"
         status.outcome.successStatus = "200"
@@ -141,10 +147,10 @@ nonisolated extension Jobspace {
         let enrichmentAgent = agent(.agentTask, "Identifier enrichment agent", x: 1855, output: "enrichmentStage",
             instructions: "Fill FIGIs, ISINs, CUSIPs, sectors, issuer details and LEIs for benchmark and portfolio "
                 + "members. Summarise identifier conflicts and rejects.")
-        let marketAgent = agent(.agentTask, "Market data agent", x: 2690, output: "marketStage",
-            instructions: "Load end-of-day prices, index levels and corporate actions. Note symbols without a price "
+        let marketAgent = agent(.agentTask, "Market data agent", x: 2805, output: "marketStage",
+            instructions: "Load end-of-day prices (FMP, then Nasdaq.com for funds and gaps), index levels and corporate actions. Note symbols without a price "
                 + "for the last trading day and corporate actions that need attention (splits, delistings).")
-        var analyst = agent(.aggregate, "Data quality analyst", x: 3180, output: "srmDaily",
+        var analyst = agent(.aggregate, "Data quality analyst", x: 3410, output: "srmDaily",
             instructions: "Combine every stage's load results with the status checks. Produce the daily SRM report "
                 + "and a follow-up list: loaders to re-run, and backfills worth their API budget "
                 + "(e.g. fmp-corporate-actions --history, fmp-profiles --all-securities).")
@@ -184,7 +190,7 @@ nonisolated extension Jobspace {
         report.outcome.description = "Loads, counts, rejects, data-quality checks and the follow-ups run"
 
         let loaders = [reference, nasdaqTrader, secTickers, ssga, nasdaq100, openFIGI, profiles, submissions,
-                       gleif, prices, levels, actions]
+                       gleif, prices, fundPrices, levels, actions]
         space.nodes = [trigger, assemble, approve, backfill, report,
                        universeAgent, constituentsAgent, enrichmentAgent, marketAgent, analyst]
             + loaders + [status]
@@ -200,7 +206,7 @@ nonisolated extension Jobspace {
             (universeAgent, [reference, nasdaqTrader, secTickers]),
             (constituentsAgent, [ssga, nasdaq100]),
             (enrichmentAgent, [openFIGI, profiles, submissions, gleif]),
-            (marketAgent, [prices, levels, actions]),
+            (marketAgent, [prices, fundPrices, levels, actions]),
         ]
         for (stage, steps) in stages {
             for step in steps { pairs += [(stage, step), (step, stage)] }   // call down, results back up

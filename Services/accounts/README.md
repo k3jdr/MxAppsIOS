@@ -11,7 +11,7 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 | `GET /accounts` | Personal accounts (`srm.v_personal_account`) |
 | `GET /accounts/<code>` | An account — type, approach, benchmark, cash — with its open tax lots valued at the latest prices |
 | `PUT /accounts/<code>` | Create or replace the account and its lots (`{name, accountType, approach, benchmark, cash, lots: [{securityId, acquired, quantity, costBasis}]}`); rewrites today's holdings snapshot with `srm.sync_holdings_from_lots` |
-| `POST /accounts/<code>/load-prices` | Asks srm-loader (8770) to run `srm.py load fmp-prices --symbols …` for unpriced holdings |
+| `POST /accounts/<code>/load-prices` | Asks srm-loader (8770) to run `srm.py load nasdaq-prices --symbols …` (Nasdaq.com, free, no key) for unpriced holdings |
 
 ```bash
 python3 Services/mxservices.py start accounts     # or: python3 accounts_service.py --port 8774

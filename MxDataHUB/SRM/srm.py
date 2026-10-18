@@ -17,7 +17,7 @@ import sys
 
 from srmlib import migrate
 from srmlib.common import Config, log
-from srmlib.loaders import fmp, gleif, nasdaq100, nasdaqtrader, openfigi, portfolios, reference, sec, ssga
+from srmlib.loaders import fmp, gleif, nasdaq100, nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, sec, ssga
 
 # Dependency order: venues and the listed universe first, then constituents, then the
 # per-security enrichment that works on the benchmark / portfolio securities.
@@ -32,6 +32,7 @@ LOADERS = {
     "sec-submissions": sec.load_submissions,    # SIC, incorporation, EIN, former names
     "gleif": gleif.run,                         # LEIs and legal entity data
     "fmp-prices": fmp.load_prices,              # end-of-day prices
+    "nasdaq-prices": nasdaq_prices.run,         # fund prices (ETFs, ETNs, closed-end funds) and gaps, no key needed
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
     "fmp-corporate-actions": fmp.load_corporate_actions,
     "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
@@ -86,6 +87,8 @@ def main():
     load.add_argument("--symbols", nargs="*", help="FMP loaders: only these symbols / identifiers")
     load.add_argument("--all-securities", action="store_true",
                       help="FMP loaders: every active security instead of benchmark / portfolio members (~13k calls)")
+    load.add_argument("--funds", action="store_true",
+                      help="nasdaq-prices: every active fund (ETF, ETN, closed-end fund; ~6,100 requests at 1/second)")
     load.add_argument("--benchmarks", nargs="*", help="ssga: only these benchmark codes (SP500 DJIA SP400 SP600)")
     load.add_argument("--include-otc", action="store_true", help="sec-tickers: also create OTC securities")
     load.add_argument("--as-of", help="portfolio-snapshots: snapshot date (default: the latest price date)")
