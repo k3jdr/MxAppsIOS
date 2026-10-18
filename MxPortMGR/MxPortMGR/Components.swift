@@ -416,3 +416,42 @@ struct ModelPortfolioBar: View {
         .quickHelpArea("Model Portfolio", "Learn the tools on sample accounts. Choose the model type — Active (beat a benchmark within a risk budget) or Passive index (match an index cheaply) — and steps 2 to 4 follow it. Choose the sample here or in the toolbar; Copy to My Portfolio continues with your own editable copy.", symbol: "square.stack.3d.up")
     }
 }
+
+
+/// A boxed section whose content folds away under its title, remembered per id (like the lesson cards).
+struct CollapsibleBox<Content: View>: View {
+    @Bindable var store: PortStore
+    var id: String
+    var title: String
+    var summary: String = ""
+    var symbol: String
+    var help: String
+    @ViewBuilder var content: Content
+
+    private var collapsed: Bool { store.collapsedLessons.contains(id) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                if collapsed { store.collapsedLessons.remove(id) } else { store.collapsedLessons.insert(id) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary).frame(width: 12)
+                    Image(systemName: symbol).foregroundStyle(.secondary)
+                    Text(title).font(.headline)
+                    if !summary.isEmpty { Text(summary).font(.callout).foregroundStyle(.secondary) }
+                    Spacer()
+                    Text(collapsed ? "Show" : "Hide").font(.caption).foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(collapsed ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
+            if !collapsed { content }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .quickHelpArea(QuickHelpItem(title: title, detail: help, symbol: symbol))
+    }
+}

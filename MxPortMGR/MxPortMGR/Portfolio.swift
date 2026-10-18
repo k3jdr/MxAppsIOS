@@ -173,6 +173,7 @@ nonisolated func signedPct(_ x: Double, _ digits: Int = 2) -> String {
 }
 
 nonisolated func money(_ x: Double) -> String {
+    let x = abs(x) < 0.005 ? 0 : x   // no "-$0.00" from rounding
     let f = NumberFormatter()
     f.numberStyle = .currency
     f.currencyCode = "USD"

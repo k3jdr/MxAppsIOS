@@ -22,6 +22,11 @@ struct PortfolioView: View {
         let p = store.portfolio
         let passive = isPassive(store)
         StepPage(store: store, subtitle: subtitle, lesson: lesson(p, passive)) {
+            if part == .holdings {
+                // The account's holdings first, as tall as they need.
+                if p.id == "mine" { addRow }
+                HoldingsTable(store: store, tall: true)
+            }
             if part != .benchmark {
                 HStack(spacing: 10) {
                     MetricTile(title: "Value", value: money(p.total), caption: p.account.rawValue, help: "Market value of the account's holdings.")
@@ -33,13 +38,13 @@ struct PortfolioView: View {
             }
             if part != .holdings { benchmarkBox(p) }
             if !p.issues.isEmpty && part != .benchmark {
-                Box(title: "Check before you go on", symbol: "checklist", help: "Problems in the account's data and concentration that change what the tools can tell you.") {
+                CollapsibleBox(store: store, id: "checks-\(store.screen.rawValue)", title: "Check before you go on",
+                               summary: issueSummary(p.issues), symbol: "checklist",
+                               help: "Problems in the account's data and concentration that change what the tools can tell you. Click the title to show or hide them.") {
                     ForEach(p.issues) { IssueRow(issue: $0) }
                 }
             }
             if part == .holdings {
-                if p.id == "mine" { addRow }
-                HoldingsTable(store: store)
                 Box(title: "Asset mix", symbol: "chart.pie", help: "Stocks, bonds and cash by look-through.") {
                     let mine = p.classWeights()
                     HBars(series: [.init(name: "Account", color: .accentColor)],
@@ -71,6 +76,14 @@ struct PortfolioView: View {
             }
         }
         .task(id: p.benchmark) { if p.isSRM { await store.useSRMBenchmark(p.benchmark) } }
+    }
+
+    private func issueSummary(_ issues: [Portfolio.Issue]) -> String {
+        let counts = [(Portfolio.Issue.Level.error, "error"), (.warning, "warning"), (.note, "note")].compactMap { level, name -> String? in
+            let n = issues.filter { $0.level == level }.count
+            return n == 0 ? nil : "\(n) \(name)\(n == 1 ? "" : "s")"
+        }
+        return counts.joined(separator: " · ")
     }
 
     private var subtitle: String {
@@ -180,6 +193,8 @@ struct SectorChart: View {
 
 struct HoldingsTable: View {
     @Bindable var store: PortStore
+    /// My Holdings: every row visible (up to 40) rather than the first 14.
+    var tall = false
 
     var body: some View {
         let p = store.portfolio
@@ -244,7 +259,7 @@ struct HoldingsTable: View {
                 }
                 .width(28)
             }
-            .frame(minHeight: CGFloat(min(p.holdings.count, 14)) * 26 + 34)
+            .frame(minHeight: CGFloat(max(min(p.holdings.count, tall ? 40 : 14), tall ? 6 : 1)) * 26 + 34)
         }
     }
 }
