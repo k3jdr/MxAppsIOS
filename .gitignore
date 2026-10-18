@@ -8,3 +8,7 @@ xc*serdata/
 ## MxDataSQL workspaces (connection details)
 *.mxworkspace
 *.csv
+
+## Python virtual environments
+.venv/
+__pycache__/
