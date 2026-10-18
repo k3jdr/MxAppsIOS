@@ -5,7 +5,7 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 
 | Endpoint | What it does |
 | --- | --- |
-| `GET /securities?q=&kind=&limit=` | Search by ticker, name, ISIN or CUSIP; `kind` = `all`, `stocks`, `funds`, `bonds` (bond and other fixed-income funds); with the latest price, beta and market cap |
+| `GET /securities?q=&kind=&offset=&limit=&sort=&dir=&facets=` | Search by ticker, name, ISIN or CUSIP; `kind` = `all`, `stocks`, `funds`, `bonds` (bond and other fixed-income funds); a page at a time (`limit` ≤ 500) with the `total`; `sort` = `relevance` (default), `ticker`, `name`, `type`, `sector`, `exchange`, `price`, `asOf`, `marketCap` and `dir` = `asc` / `desc`; column filters `ticker`, `name` (contains), `type`, `sector`, `exchange` (comma-separated, `(none)` for blanks), `priceMin`, `priceMax`, `priced` (1 / 0); `facets=1` adds each filterable column's values with counts |
 | `GET /benchmarks` | Benchmarks with members and snapshot date |
 | `GET /benchmarks/<code>/weights` | The latest weights with ticker, name, sector and asset class |
 | `GET /accounts` | Personal accounts (`srm.v_personal_account`) |

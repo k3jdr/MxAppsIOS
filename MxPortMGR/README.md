@@ -92,9 +92,13 @@ The bar's **Data** switch chooses where My Portfolio lives:
   a Tax Lots view and *Open in MxPortMGR*) and the analytics service can analyse it. **Account** names the code
   (default `MY_PORTFOLIO`); **Open** lists the personal accounts already there.
 
-In security-master mode **Add Securities…** searches srm by ticker, name, ISIN or CUSIP (stocks, funds, bond funds),
-shows each security's sector, latest price and date, beta, market value and identifiers, and adds shares with a tax lot
-(cost and purchase date). Holdings without prices are valued at cost and flagged; **Load Prices** asks the srm-loader
+In security-master mode **Add Securities…** searches srm by ticker, name, ISIN or CUSIP (stocks, funds, bond funds)
+across all 13,000-odd active securities, 200 at a time (*Show More*), largest companies first. Click any column header
+(Ticker, Name, Type, Sector, Exchange, Price, As of, Market value) to sort by it — in the database, across every match —
+and use the **filter row** like a spreadsheet's autofilter: ticker / name contains, Type, Sector and Exchange menus of
+values with their counts (tick several), a price range, and with / without a price; a filtered column's title shows ⏷
+and *Clear Filters* resets. Select a security for its sector, latest price and date, beta, market value and
+identifiers, and add shares with a tax lot (cost and purchase date). Holdings without prices are valued at cost and flagged; **Load Prices** asks the srm-loader
 service to load them (`srm.py load fmp-prices --symbols …`, which needs an FMP API key in SRM's configuration). The
 benchmark is any benchmark loaded in srm (S&P 500, Nasdaq-100, Dow, S&P 400 / 600, custom); Risk, Optimize and Build
 the Tracker use the analytics service's Ledoit-Wolf covariance from two years of srm prices (holdings without enough

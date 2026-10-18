@@ -4,8 +4,9 @@
 Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V011) and serves:
 
     GET  /health, /describe              status; what this service is for (shown in MxJobsWMS and MxDataHUB)
-    GET  /securities?q=&kind=&limit=     search securities by ticker, name, ISIN or CUSIP; kind = all | stocks |
-                                         funds | bonds (bond and other fixed-income funds); with the latest price
+    GET  /securities?q=&kind=&priced=&offset=&limit=   search securities by ticker, name, ISIN or CUSIP; kind = all |
+                                         stocks | funds | bonds (fixed-income funds); priced=1 only those with prices;
+                                         best first, a page at a time (limit ≤ 500) with the total that match
     GET  /benchmarks                     benchmarks with members and snapshot date
     GET  /benchmarks/<code>/weights      a benchmark's latest weights with ticker, name, sector and asset class
     GET  /accounts                       personal accounts (srm.v_personal_account)
@@ -108,38 +109,106 @@ def security_out(r):
             "price": r["price"], "priceDate": r["price_date"], "beta": r["beta"], "marketCap": r["market_cap"]}
 
 
+SORTS = {
+    "relevance": None,
+    "ticker": "b.ticker", "name": "b.name", "type": "b.security_type", "sector": "b.sector", "exchange": "b.mic",
+    "price": "b.price", "asOf": "b.price_date", "marketCap": "b.market_cap",
+}
+
+
 def search(conn, q):
+    """Matching securities, a page at a time (`offset`, `limit` ≤ 500), with the total that match, sorted by any column
+    (`sort`, `dir`) or by relevance — an exact ticker, ticker and name prefixes, then those with prices, by market value —
+    and filtered by column like a spreadsheet's autofilter: `ticker` / `name` (contains), `type` / `sector` / `exchange`
+    (comma-separated values; `(none)` for blanks), `priceMin` / `priceMax`, `priced` (1 with prices, 0 without).
+    `facets=1` adds each filterable column's values with their counts."""
     text = (q.get("q") or "").strip()
     kind = q.get("kind", "all")
-    limit = max(1, min(int(q.get("limit", 60)), 200))
-    where = ["v.is_active"]
-    params = []
+    limit = max(1, min(int(q.get("limit", 100)), 500))
+    offset = max(0, int(q.get("offset", 0)))
+    sort = q.get("sort", "relevance")
+    if sort not in SORTS:
+        raise ValueError("sort must be one of " + ", ".join(SORTS))
+    direction = "DESC" if q.get("dir", "asc").lower() == "desc" else "ASC"
+
+    where, params = ["v.is_active"], []
     if text:
         where.append("(v.ticker ILIKE %s OR v.name ILIKE %s OR v.isin = upper(%s) OR v.cusip = upper(%s) OR v.fmp_symbol ILIKE %s)")
         params += [text + "%", "%" + text + "%", text, text, text + "%"]
+    fund = "(v.asset_class = 'Fund' OR v.security_type IN ('ETF', 'ETN', 'Closed-End Fund'))"
     if kind == "stocks":
-        where.append("coalesce(v.asset_class, '') <> 'Fund' AND v.security_type IN ('Common Stock', 'ADR', 'REIT', 'Preferred Stock')")
+        where.append(f"NOT {fund} AND v.security_type IN ('Common Stock', 'ADR', 'REIT', 'Preferred Stock')")
     elif kind == "funds":
-        where.append(f"(v.asset_class = 'Fund' OR v.security_type IN ('ETF', 'ETN', 'Closed-End Fund')) AND v.name !~* '{BOND_NAME}'")
+        where.append(f"{fund} AND v.name !~* '{BOND_NAME}'")
     elif kind == "bonds":
-        where.append(f"(v.asset_class = 'Fund' OR v.security_type IN ('ETF', 'ETN', 'Closed-End Fund')) AND v.name ~* '{BOND_NAME}'")
+        where.append(f"{fund} AND v.name ~* '{BOND_NAME}'")
     elif kind != "all":
         raise ValueError("kind must be all, stocks, funds or bonds")
-    order = ["(v.ticker = upper(%s)) DESC"] if text else []
-    params_order = [text] if text else []
-    order_by = ", ".join(order + ["(EXISTS (SELECT 1 FROM srm.listing l JOIN srm.price p USING (listing_id) WHERE l.security_id = v.security_id)) DESC",
-                                  "length(coalesce(v.ticker, v.fmp_symbol, ''))", "v.ticker"])
-    sql = f"""
-        WITH m AS (
-            SELECT v.* FROM srm.v_security v WHERE {' AND '.join(where)}
-             ORDER BY {order_by}
-             LIMIT %s)
-        SELECT {SECURITY_COLUMNS}
-          FROM m v LEFT JOIN LATERAL srm.last_price(v.security_id) lp ON true"""
-    rows = fetch(conn, sql, params + params_order + [limit])
-    out = [security_out(r) for r in rows]
-    if text:
-        out.sort(key=lambda s: (s["ticker"].upper() != text.upper(), s["price"] is None, len(s["ticker"] or "")))
+
+    filters, fparams = [], []
+    for col, field in (("ticker", "b.ticker"), ("name", "b.name")):
+        if q.get(col):
+            filters.append(f"{field} ILIKE %s")
+            fparams.append("%" + q[col] + "%")
+    for col, field in (("type", "b.security_type"), ("sector", "b.sector"), ("exchange", "b.mic")):
+        if q.get(col):
+            values = [x for x in q[col].split(",") if x]
+            parts = []
+            if "(none)" in values:
+                parts.append(f"{field} IS NULL")
+            named = [x for x in values if x != "(none)"]
+            if named:
+                parts.append(f"{field} = ANY(%s)")
+                fparams.append(named)
+            filters.append("(" + " OR ".join(parts) + ")")
+    for col, op in (("priceMin", ">="), ("priceMax", "<=")):
+        if q.get(col):
+            filters.append(f"b.price {op} %s")
+            fparams.append(float(q[col]))
+    if q.get("priced") in ("1", "true", "yes"):
+        filters.append("b.price IS NOT NULL")
+    elif q.get("priced") in ("0", "false", "no"):
+        filters.append("b.price IS NULL")
+
+    relevance = ("(upper(b.ticker) = upper(%s)) DESC, (b.ticker ILIKE %s) DESC, (b.name ILIKE %s) DESC, "
+                 "(b.price IS NOT NULL) DESC, b.market_cap DESC NULLS LAST, length(coalesce(b.ticker, '')), b.ticker")
+    rparams = [text, text + "%" if text else "", text + "%" if text else ""]
+    if SORTS[sort]:
+        order = f"{SORTS[sort]} {direction} NULLS LAST, {relevance}"
+    else:
+        order = relevance
+    base = f"""
+        WITH px AS (SELECT DISTINCT ON (l.security_id) l.security_id, p.close, p.price_date
+                      FROM srm.price p JOIN srm.listing l USING (listing_id)
+                     ORDER BY l.security_id, p.price_date DESC),
+             cap AS (SELECT DISTINCT ON (security_id) security_id, market_cap FROM srm.security_market_data
+                      WHERE market_cap IS NOT NULL ORDER BY security_id, as_of_date DESC),
+             b AS (SELECT v.security_id, coalesce(v.ticker, v.fmp_symbol, v.security_id::text) AS ticker, v.mic, v.name,
+                          v.security_type, v.asset_class, v.sector, v.industry, v.isin, v.cusip,
+                          (v.name ~* '{BOND_NAME}') AS is_bond, px.close AS price, px.price_date, c.market_cap
+                     FROM srm.v_security v
+                     LEFT JOIN px ON px.security_id = v.security_id
+                     LEFT JOIN cap c ON c.security_id = v.security_id
+                    WHERE {' AND '.join(where)})"""
+    sql = base + f"""
+        SELECT b.*, count(*) OVER () AS total,
+               (SELECT md.beta FROM srm.security_market_data md WHERE md.security_id = b.security_id AND md.beta IS NOT NULL
+                 ORDER BY md.as_of_date DESC LIMIT 1) AS beta
+          FROM b WHERE {' AND '.join(filters) or 'true'}
+         ORDER BY {order}
+         LIMIT %s OFFSET %s"""
+    rows = fetch(conn, sql, params + fparams + rparams + [limit, offset])
+    out = {"securities": [security_out(r) for r in rows], "total": int(rows[0]["total"]) if rows else 0, "offset": offset}
+    if q.get("facets") in ("1", "true", "yes"):
+        facet_rows = fetch(conn, base + """
+            SELECT 'type' AS col, coalesce(security_type, '(none)') AS value, count(*) AS n FROM b GROUP BY 2
+            UNION ALL SELECT 'sector', coalesce(sector, '(none)'), count(*) FROM b GROUP BY 2
+            UNION ALL SELECT 'exchange', coalesce(mic, '(none)'), count(*) FROM b GROUP BY 2
+            ORDER BY 1, 3 DESC""", params)
+        facets = {}
+        for r in facet_rows:
+            facets.setdefault(r["col"], []).append({"value": r["value"], "count": int(r["n"])})
+        out["facets"] = facets
     return out
 
 
@@ -310,7 +379,7 @@ class Handler(BaseHTTPRequestHandler):
             conn = Handler.srm.connect()
             try:
                 if parts == ["securities"] and method == "GET":
-                    out = {"securities": search(conn, q)}
+                    out = search(conn, q)
                 elif parts == ["benchmarks"] and method == "GET":
                     out = {"benchmarks": benchmarks(conn)}
                 elif len(parts) == 3 and parts[0] == "benchmarks" and parts[2] == "weights" and method == "GET":

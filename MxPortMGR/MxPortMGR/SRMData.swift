@@ -32,6 +32,14 @@ nonisolated struct SRMSecurity: Codable, Hashable, Sendable, Identifiable {
     var marketCap: Double?
     var weight: Double?
 
+    // Non-optional sort keys for the table's sortable columns (the service does the sorting).
+    var typeKey: String { securityType ?? "" }
+    var sectorKey: String { sector ?? "" }
+    var micKey: String { mic ?? "" }
+    var priceKey: Double { price ?? -1 }
+    var asOfKey: String { priceDate ?? "" }
+    var marketCapKey: Double { marketCap ?? -1 }
+
     var kindTitle: String {
         switch kind {
         case "bond": "Bond fund"
@@ -208,14 +216,33 @@ nonisolated enum AccountsClient {
         }
     }
 
-    private struct Securities: Decodable { var securities: [SRMSecurity] }
+    private struct Securities: Decodable { var securities: [SRMSecurity]; var total: Int?; var facets: [String: [Facet]]? }
+    struct Facet: Decodable, Hashable { var value: String; var count: Int }
+
+    /// A search request: text, kind, column filters (the service's parameter names), sort column and order.
+    struct Search: Equatable {
+        var text = ""
+        var kind = "all"
+        var filters: [String: String] = [:]
+        var sort = "relevance"
+        var descending = false
+    }
     private struct Benchmarks: Decodable { var benchmarks: [SRMBenchmarkInfo] }
     private struct Accounts: Decodable { var accounts: [Row]; struct Row: Decodable { var code: String; var name: String } }
     struct PriceLoad: Decodable { var loaded: [String]; var status: String?; var message: String?; var account: SRMAccount }
 
-    static func search(_ text: String, kind: String) async throws -> [SRMSecurity] {
-        let q = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        return try await request("GET", "/securities?q=\(q)&kind=\(kind)&limit=80", as: Securities.self).securities
+    /// One page of matching securities, how many match in all, and (with `facets`) each filterable column's values.
+    static func search(_ s: Search, offset: Int = 0, limit: Int = 200, facets: Bool = false) async throws
+        -> (securities: [SRMSecurity], total: Int, facets: [String: [Facet]]?) {
+        var c = URLComponents()
+        c.queryItems = [URLQueryItem(name: "q", value: s.text), URLQueryItem(name: "kind", value: s.kind),
+                        URLQueryItem(name: "sort", value: s.sort), URLQueryItem(name: "dir", value: s.descending ? "desc" : "asc"),
+                        URLQueryItem(name: "offset", value: String(offset)), URLQueryItem(name: "limit", value: String(limit))]
+            + s.filters.filter { !$0.value.isEmpty }.map { URLQueryItem(name: $0.key, value: $0.value) }
+            + (facets ? [URLQueryItem(name: "facets", value: "1")] : [])
+        let query = (c.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B")
+        let r = try await request("GET", "/securities?" + query, as: Securities.self)
+        return (r.securities, r.total ?? r.securities.count, r.facets)
     }
 
     static func benchmarks() async throws -> [SRMBenchmarkInfo] {
