@@ -48,12 +48,31 @@ struct MainView: View {
         .navigationSubtitle(store.appLocked ? "Locked" : store.windowSubtitle)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
-                Button { store.goBack() } label: { Label("Back", systemImage: "chevron.left") }
-                    .disabled(!store.canGoBack)
-                    .help("Back (⌘[)")
-                Button { store.goForward() } label: { Label("Forward", systemImage: "chevron.right") }
-                    .disabled(!store.canGoForward)
-                    .help("Forward (⌘])")
+                // Click to go back or forward a page; hold for the pages before or after (as in Safari).
+                Menu {
+                    ForEach(Array(store.backHistory.prefix(15).enumerated()), id: \.offset) { i, ref in
+                        Button(store.historyTitle(ref)) { store.goBack(steps: i + 1) }
+                    }
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                } primaryAction: {
+                    store.goBack()
+                }
+                .menuIndicator(.hidden)
+                .disabled(!store.canGoBack)
+                .help("Back (⌃← or ⌘[) — hold for the pages before")
+                Menu {
+                    ForEach(Array(store.forwardHistory.prefix(15).enumerated()), id: \.offset) { i, ref in
+                        Button(store.historyTitle(ref)) { store.goForward(steps: i + 1) }
+                    }
+                } label: {
+                    Label("Forward", systemImage: "chevron.right")
+                } primaryAction: {
+                    store.goForward()
+                }
+                .menuIndicator(.hidden)
+                .disabled(!store.canGoForward)
+                .help("Forward (⌃→ or ⌘]) — hold for the pages after")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { store.showFullPage.toggle() } label: {

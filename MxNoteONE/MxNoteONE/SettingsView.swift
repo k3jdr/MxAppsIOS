@@ -91,6 +91,28 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Section("Page Navigation") {
+                LabeledContent("Back:", value: "⌃←  or  ⌘[  or a mouse's back button")
+                LabeledContent("Forward:", value: "⌃→  or  ⌘]  or a mouse's forward button")
+                if NotebookStore.shared.navigationKeysTaken {
+                    HStack {
+                        Label("⌃← and ⌃→ are Mission Control's (Move left / right a space) until you turn those off.", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Keyboard Settings") { NavigationKeys.openKeyboardSettings() }
+                    }
+                    Text("System Settings ▸ Keyboard ▸ Keyboard Shortcuts… ▸ Mission Control: turn off “Move left a space” and “Move right a space”, or give them other keys. MxNoteONE notices when you come back.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Every page you open joins the history, as in a browser. Hold the Back or Forward button (or use Go ▸ History) to jump several pages.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .onAppear { NotebookStore.shared.refreshNavigationKeys() }
             Section("Diagrams (draw.io)") {
                 Picker("Editor:", selection: $drawioOffline) {
                     Text("Online (embed.diagrams.net)").tag(false)

@@ -130,6 +130,10 @@ final class NotebookStore {
     var reloadToken = 0
     private(set) var canGoBack = false
     private(set) var canGoForward = false
+    /// Bumped whenever the Back / Forward lists change (their menus redraw).
+    private(set) var historyVersion = 0
+    /// ⌃← / ⌃→ are Mission Control's "Move left / right a space" (macOS keeps them from every app).
+    private(set) var navigationKeysTaken = NavigationKeys.takenByMissionControl
     /// Notebook shown when the Recycle Bin window opens.
     var recycleBinNotebookID: UUID?
     let editor = EditorState()
@@ -540,6 +544,26 @@ final class NotebookStore {
     private func updateHistoryFlags() {
         canGoBack = !backStack.isEmpty
         canGoForward = !forwardStack.isEmpty
+        historyVersion += 1
+    }
+
+    /// The pages Back goes to, the nearest first (the Back button's menu, Go ▸ History).
+    var backHistory: [PageRef] {
+        _ = historyVersion
+        return backStack.reversed().compactMap(relocate)
+    }
+
+    /// The pages Forward goes to, the nearest first.
+    var forwardHistory: [PageRef] {
+        _ = historyVersion
+        return forwardStack.reversed().compactMap(relocate)
+    }
+
+    /// "Page — Section" for the history menus.
+    func historyTitle(_ ref: PageRef) -> String {
+        let page = meta(ref)?.displayTitle ?? "Untitled Page"
+        guard let section = notebook(ref.notebookID)?.manifest.sections.find(ref.sectionID)?.name else { return page }
+        return "\(page) — \(section)"
     }
 
     /// The page's current location (it may have moved to another section).
@@ -548,26 +572,33 @@ final class NotebookStore {
         return findPage(ref.pageID, in: ref.notebookID)
     }
 
-    func goBack() {
-        while let ref = backStack.popLast() {
-            guard let target = relocate(ref) else { continue }
-            if let current = historyCurrent { forwardStack.append(current) }
-            historyCurrent = target
-            navigate(to: target)
-            break
+    /// Back one page (⌃←, ⌘[, the mouse's back button), or several (the Back button's menu).
+    func goBack(steps: Int = 1) { travel(back: true, steps: steps) }
+
+    /// Forward one page (⌃→, ⌘], the mouse's forward button), or several.
+    func goForward(steps: Int = 1) { travel(back: false, steps: steps) }
+
+    /// Moves through the history like a browser: pages passed go onto the other list; pages since deleted are skipped.
+    private func travel(back: Bool, steps: Int) {
+        var target: PageRef?
+        var moved = 0
+        while moved < steps, let ref = back ? backStack.popLast() : forwardStack.popLast() {
+            guard let found = relocate(ref) else { continue }
+            if let current = historyCurrent {
+                if back { forwardStack.append(current) } else { backStack.append(current) }
+            }
+            historyCurrent = found
+            target = found
+            moved += 1
         }
+        if let target { navigate(to: target) }
         updateHistoryFlags()
     }
 
-    func goForward() {
-        while let ref = forwardStack.popLast() {
-            guard let target = relocate(ref) else { continue }
-            if let current = historyCurrent { backStack.append(current) }
-            historyCurrent = target
-            navigate(to: target)
-            break
-        }
-        updateHistoryFlags()
+    /// Looks again whether Mission Control has ⌃← / ⌃→ (after a visit to System Settings).
+    func refreshNavigationKeys() {
+        let taken = NavigationKeys.takenByMissionControl
+        if taken != navigationKeysTaken { navigationKeysTaken = taken }
     }
 
     /// Next or previous page in the current section.
@@ -1212,6 +1243,7 @@ final class NotebookStore {
 
     func appDidBecomeActive() {
         autoLockTask?.cancel()
+        refreshNavigationKeys()
     }
 
     /// Re-writes a section's page list, pages, assets and recycled pages with another key.

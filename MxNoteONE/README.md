@@ -487,6 +487,19 @@ links clicked in text boxes and table cells, Open Link on the right-click menu, 
 hover card says which browser it will open in. Email links still open in Mail and page links stay in MxNoteONE. If
 the chosen browser is removed, links go back to the Mac's default.
 
+## Page navigation
+
+MxNoteONE keeps a history of the pages you open, as a browser does. **Back** (**⌃←**) returns to the page before and
+**Forward** (**⌃→**) goes on again; **⌘[** / **⌘]** (as in Safari and Finder) and a mouse's back and forward side
+buttons do the same. Hold the toolbar's Back or Forward button — or open **Go ▸ History** — to jump straight to a
+page several steps away. Opening a different page after going back starts a new path (Forward is cleared); pages
+moved to another section are followed there, and deleted pages are skipped.
+
+macOS gives **⌃←** and **⌃→** to Mission Control ("Move left a space" / "Move right a space") and keeps them from
+every app while those shortcuts are on. **Settings ▸ General ▸ Page Navigation** and **Go ▸ Free ⌃← ⌃→ from Mission
+Control…** say when that's the case and open System Settings ▸ Keyboard: under Keyboard Shortcuts… ▸ Mission Control,
+turn off (or rebind) the two "Move … a space" shortcuts. MxNoteONE notices the change when you switch back to it.
+
 ## Spelling
 
 Misspelled words are underlined in text boxes, page titles and table cells. Right-click one for suggestions,
@@ -518,7 +531,7 @@ Ignore and Learn; F7 again goes on to the next one. When there are none, a messa
 | Link…                                                  | ⌘K                                        |
 | Date / Time / Date & Time                               | ⌥⇧D / ⌥⇧T / ⌥⇧F                      |
 | Insert Table / Picture / Screen Clipping / Record Audio | ⌃⌘T / ⌃⌘P / ⌃⇧⌘S / ⌃⌘R            |
-| Back / Forward                                          | ⌘[ / ⌘]                                  |
+| Back / Forward (pages visited)                          | ⌃← / ⌃→, or ⌘[ / ⌘]                    |
 | Previous / Next Page                                    | ⌥⌘↑ / ⌥⌘↓                            |
 | Previous / Next Section                                 | ⌥⌘← / ⌥⌘→                            |
 | Make Subpage / Promote Subpage                          | ⌥⌘] / ⌥⌘[                              |

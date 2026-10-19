@@ -297,10 +297,7 @@ struct MainCommands: Commands {
 
         // Go
         CommandMenu("Go") {
-            Button("Back") { store.goBack() }
-                .keyboardShortcut("[")
-            Button("Forward") { store.goForward() }
-                .keyboardShortcut("]")
+            GoHistoryItems()
             Divider()
             Button("Previous Page") { store.selectAdjacentPage(-1) }
                 .keyboardShortcut(.upArrow, modifiers: [.command, .option])
@@ -370,6 +367,35 @@ struct MainCommands: Commands {
             Button("Show Notebook in Finder") {
                 if let nb = store.currentNotebook { store.showInFinder(nb.id) }
             }
+        }
+    }
+}
+
+/// Go ▸ Back, Forward and History — a view of their own, so they follow the history as it changes.
+private struct GoHistoryItems: View {
+    private var store: NotebookStore { .shared }
+
+    var body: some View {
+        // ⌃← / ⌃→; ⌘[ / ⌘] and a mouse's side buttons also work (PageNavigation).
+        Button("Back") { store.goBack() }
+            .keyboardShortcut(.leftArrow, modifiers: .control)
+        Button("Forward") { store.goForward() }
+            .keyboardShortcut(.rightArrow, modifiers: .control)
+        Menu("History") {
+            let back = store.backHistory.prefix(15)
+            let forward = store.forwardHistory.prefix(15)
+            ForEach(Array(forward.enumerated()).reversed(), id: \.offset) { i, ref in
+                Button(store.historyTitle(ref)) { store.goForward(steps: i + 1) }
+            }
+            if let current = store.currentPageRef {
+                Toggle(store.historyTitle(current), isOn: .constant(true)).disabled(true)
+            }
+            ForEach(Array(back.enumerated()), id: \.offset) { i, ref in
+                Button(store.historyTitle(ref)) { store.goBack(steps: i + 1) }
+            }
+        }
+        if store.navigationKeysTaken {
+            Button("Free ⌃← ⌃→ from Mission Control…") { NavigationKeys.explain() }
         }
     }
 }
