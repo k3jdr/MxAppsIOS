@@ -52,6 +52,7 @@ extension TableData {
         }
         if shading != nil { shading = Self.padded(shading, rows: rows.count, columns: columns) }
         if rich != nil { rich = Self.padded(rich, rows: rows.count, columns: columns) }
+        if align != nil { align = Self.padded(align, rows: rows.count, columns: columns) }
         if columnWidths.count != columns {
             let average = columnWidths.isEmpty ? 120 : columnWidths.reduce(0, +) / Double(columnWidths.count)
             columnWidths = Array(columnWidths.prefix(columns))
@@ -81,6 +82,7 @@ extension TableData {
         shiftRows(at: i, by: 1)
         shading?.insert(Array(repeating: nil, count: columns), at: i)
         rich?.insert(Array(repeating: nil, count: columns), at: i)
+        align?.insert(Array(repeating: nil, count: columns), at: i)
         merges = merges?.map { span in
             var s = span
             if s.row >= i { s.row += 1 } else if i < s.row + s.rows { s.rows += 1 }
@@ -102,6 +104,10 @@ extension TableData {
             }
         }
         if rich != nil { for r in rich!.indices { rich![r].insert(nil, at: i) } }
+        // A new column is aligned like the one beside it.
+        if align != nil {
+            for r in align!.indices { align![r].insert(align![r].indices.contains(neighbor) ? align![r][neighbor] : nil, at: i) }
+        }
         let average = columnWidths.isEmpty ? 120 : columnWidths.reduce(0, +) / Double(columnWidths.count)
         columnWidths.insert(average, at: min(i, columnWidths.count))
         merges = merges?.map { span in
@@ -118,12 +124,14 @@ extension TableData {
         for span in merges ?? [] where span.row == index && span.rows > 1 {
             rows[index + 1][span.column] = rows[index][span.column]
             if rich != nil { rich![index + 1][span.column] = rich![index][span.column] }
+            if align != nil { align![index + 1][span.column] = align![index][span.column] }
             if shading != nil { shading![index + 1][span.column] = shading![index][span.column] }
         }
         rows.remove(at: index)
         shiftRows(at: index, by: -1)
         _ = shading?.remove(at: index)
         _ = rich?.remove(at: index)
+        _ = align?.remove(at: index)
         merges = merges?.compactMap { span in
             var s = span
             if s.row > index { s.row -= 1 } else if index < s.row + s.rows { s.rows -= 1 }
@@ -138,6 +146,7 @@ extension TableData {
         for span in merges ?? [] where span.column == index && span.columns > 1 {
             rows[span.row][index + 1] = rows[span.row][index]
             if rich != nil { rich![span.row][index + 1] = rich![span.row][index] }
+            if align != nil { align![span.row][index + 1] = align![span.row][index] }
             if shading != nil { shading![span.row][index + 1] = shading![span.row][index] }
         }
         for r in rows.indices { rows[r].remove(at: index) }
@@ -150,6 +159,7 @@ extension TableData {
         if merges?.isEmpty == true { merges = nil }
         if shading != nil { for r in shading!.indices { shading![r].remove(at: index) } }
         if rich != nil { for r in rich!.indices { rich![r].remove(at: index) } }
+        if align != nil { for r in align!.indices { align![r].remove(at: index) } }
         columnWidths.remove(at: index)
     }
 
@@ -176,6 +186,7 @@ extension TableData {
         rows = order.map { rows[$0] }
         if let shading { self.shading = order.map { shading[$0] } }
         if let rich { self.rich = order.map { rich[$0] } }
+        if let align { self.align = order.map { align[$0] } }
         var newIndex = Array(repeating: 0, count: order.count)
         for (new, old) in order.enumerated() { newIndex[old] = new }
         remapRows(newIndex)
@@ -287,7 +298,33 @@ final class TableModel {
 
     /// Attributes for new text in the cell.
     func typingAttributes(_ cell: CellRef) -> [NSAttributedString.Key: Any] {
-        [.font: baseFont(cell.row), .foregroundColor: autoColor(cell), .mxAutoColor: true]
+        var attrs: [NSAttributedString.Key: Any] = [.font: baseFont(cell.row), .foregroundColor: autoColor(cell), .mxAutoColor: true]
+        // Text typed into the cell takes the cell's own alignment.
+        if let a = cellAlign(cell), a != .left {
+            let style = NSMutableParagraphStyle()
+            style.alignment = a
+            attrs[.paragraphStyle] = style
+        }
+        return attrs
+    }
+
+    // MARK: Cell alignment
+
+    static let alignNames: [(String, NSTextAlignment)] = [("left", .left), ("center", .center), ("right", .right), ("justified", .justified)]
+
+    /// The cell's own alignment (nil: never set).
+    func cellAlign(_ cell: CellRef) -> NSTextAlignment? {
+        guard let a = data.align, a.indices.contains(cell.row), a[cell.row].indices.contains(cell.column), let name = a[cell.row][cell.column] else { return nil }
+        return Self.alignNames.first { $0.0 == name }?.1
+    }
+
+    /// Sets cells' own alignment (left clears it).
+    func setCellAlign(_ alignment: NSTextAlignment, _ cells: Set<CellRef>) {
+        let name = alignment == .left || alignment == .natural ? nil : Self.alignNames.first { $0.1 == alignment }?.0
+        guard name != nil || data.align != nil else { return }
+        data.align = TableData.padded(data.align, rows: rowCount, columns: columnCount)
+        for cell in cells where contains(cell) { data.align![cell.row][cell.column] = name }
+        if data.align!.allSatisfy({ $0.allSatisfy { $0 == nil } }) { data.align = nil }
     }
 
     /// The cell's text as saved (no automatic colour).
@@ -420,6 +457,11 @@ final class TableModel {
             }
         }
         data.rows[cell.row][cell.column] = text.string
+        // The cell remembers its text's alignment (an emptied cell keeps it, for what's typed next).
+        if text.length > 0 {
+            let style = text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+            setCellAlign(style?.alignment ?? .left, [cell])
+        }
         let rtf = Self.isPlain(text, header: isHeader(cell.row)) ? nil : TableData.cellData(text)
         if rtf != nil || data.rich != nil {
             data.rich = TableData.padded(data.rich, rows: rowCount, columns: columnCount)
@@ -1663,6 +1705,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         unhide.isEnabled = model.hasHiddenColumns
         menu.addItem(unhide)
         menu.addItem(.separator())
+        menu.addItem(alignmentMenuItem())
         let numbers = NSMenuItem(title: "Number Format", action: nil, keyEquivalent: "")
         numbers.submenu = numberFormatMenu()
         menu.addItem(numbers)
@@ -3641,6 +3684,50 @@ final class TableGridView: NSView, NSTextViewDelegate {
         return item
     }
 
+    // MARK: Alignment
+
+    /// The alignment the cells share (left for cells never aligned), or nil when they differ.
+    var cellAlignment: NSTextAlignment? {
+        let values = Set(targetCells.map { cell -> Int in
+            let text = model.editingText(cell)
+            let a = text.length > 0 ? (text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.alignment ?? .natural
+                                    : model.cellAlign(cell) ?? .left
+            return (a == .natural ? NSTextAlignment.left : a).rawValue
+        })
+        return values.count == 1 ? values.first.flatMap(NSTextAlignment.init(rawValue:)) : nil
+    }
+
+    /// Right-click ▸ Alignment: the selected cells' text (all of it) to the left, centre or right — one undo step.
+    func alignCells(_ alignment: NSTextAlignment) {
+        let cells = targetCells
+        guard !cells.isEmpty else { return NSSound.beep() }
+        // A cell being typed in is aligned as a whole, like the others.
+        if editing != nil {
+            endEditing()
+            if selection.isEmpty { selection = cells }
+        }
+        becameActive()
+        // Empty cells keep it for what's typed into them; the text of the others is aligned (one undo step).
+        model.setCellAlign(alignment, cells)
+        TextFormatter.setAlignment(alignment)
+        needsDisplay = true
+    }
+
+    /// The Alignment submenu: Left, Center, Right (the cells' own alignment ticked).
+    func alignmentMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Alignment", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        let current = cellAlignment
+        for (title, alignment, symbol) in [("Left", NSTextAlignment.left, "text.alignleft"), ("Center", .center, "text.aligncenter"),
+                                           ("Right", .right, "text.alignright")] {
+            let option = ClosureMenuItem(title, state: current == alignment) { [weak self] in self?.alignCells(alignment) }
+            option.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+            sub.addItem(option)
+        }
+        item.submenu = sub
+        return item
+    }
+
     func tableMenu(for cell: CellRef) -> NSMenu {
         let menu = NSMenu()
         if editing == nil, let owner, let ref = owner.controller?.ref {
@@ -3656,6 +3743,7 @@ final class TableGridView: NSView, NSTextViewDelegate {
         let formulas = NSMenuItem(title: "Formulas", action: nil, keyEquivalent: "")
         formulas.submenu = formulasMenu()
         menu.addItem(formulas)
+        menu.addItem(alignmentMenuItem())
         let numbers = NSMenuItem(title: "Number Format", action: nil, keyEquivalent: "")
         numbers.submenu = numberFormatMenu()
         menu.addItem(numbers)

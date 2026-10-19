@@ -102,6 +102,10 @@ Section and New Section Group. Right-click a page for its own menu.
   - References follow inserted and deleted rows and columns (a deleted cell becomes #REF!, a range just shrinks).
     Sorting and moving rows take a formula's relative row references with it; rows of totals (formulas over a range)
     stay in place when sorting. Sorting, filters, auto-fit and copying use the results.
+- **Alignment** (right-click ▸ Alignment on a cell, or on a column letter for whole columns): Left, Center or Right
+  for the selected cells' text — all of it, even in a cell being typed in; the cells' own alignment is ticked. A cell
+  keeps its alignment when it's emptied, and text typed into it takes it; a new column is aligned like the one beside
+  it. One undo step.
 - **Number formats** (Table ribbon's Number menu, Currency / Percent / Increase / Decrease Decimal buttons, or
   right-click ▸ Number Format on a cell or column letter): General, Number (1,234.50), Currency ($ € £ ¥ — $1,234.50,
   -$5.00), Percent (12.5%), with decimal places and a thousands separator. They apply to numbers and formula results

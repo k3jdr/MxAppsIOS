@@ -293,6 +293,9 @@ struct TableData: Codable, Hashable {
     var shading: [[RGBA?]]?
     /// Formatted text (RTF) of cells that have formatting, row by row; nil = plain text in `rows`.
     var rich: [[Data?]]?
+    /// Each cell's own alignment ("center", "right"; nil = left), row by row — kept when the cell is emptied, and
+    /// taken by text typed into it.
+    var align: [[String?]]?
     /// Table borders hidden (OneNote: Hide Borders).
     var hideBorders: Bool?
     /// Merged cells: each span is drawn as one cell, its text kept in the top-left cell.
