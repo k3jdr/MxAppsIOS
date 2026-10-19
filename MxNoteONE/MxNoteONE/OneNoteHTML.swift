@@ -69,6 +69,14 @@ enum OneNoteHTML {
                     body += "</tr>"
                 }
                 body += "</table></div>\n"
+            case .model:
+                // OneNote has no 3D models: its picture.
+                guard let model = element.cad else { continue }
+                let height = max(element.height - grip, 10)
+                guard let png = CADElementView.picture(of: model, size: NSSize(width: max(element.width, 40), height: height))?.pngData else { continue }
+                let name = "img\(parts.count)"
+                parts.append(GraphClient.Part(name: name, contentType: "image/png", data: png))
+                body += "<img style=\"position:absolute;left:\(x)px;top:\(y)px\" width=\"\(w)\" height=\"\(Int(height.rounded()))\" src=\"name:\(name)\" />\n"
             case .score:
                 // OneNote has no scores: its title, signatures and notes in letter names.
                 guard let score = element.score else { continue }

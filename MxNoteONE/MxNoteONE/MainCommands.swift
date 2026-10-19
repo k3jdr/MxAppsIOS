@@ -217,6 +217,12 @@ struct MainCommands: Commands {
             Button("Diagram from Template…") { canvas?.newDiagram(template: true) }
             Button("Diagram File (.drawio.svg)…") { canvas?.chooseDiagramFile(link: false) }
             Button("Link Diagram File…") { canvas?.chooseDiagramFile(link: true) }
+            Divider()
+            Button("3D Model") { canvas?.insertModel() }
+                .keyboardShortcut("3", modifiers: [.command, .control])
+            Button("3D Model (Sample Bracket)") { canvas?.insertModel(sample: true) }
+            Button("3D Model from STL / OBJ…") { canvas?.importModel() }
+            Divider()
             Button("Music Score from MusicXML…") { canvas?.chooseMusicXML() }
             Button("Picture…") { canvas?.choosePictures() }
                 .keyboardShortcut("p", modifiers: [.command, .control])

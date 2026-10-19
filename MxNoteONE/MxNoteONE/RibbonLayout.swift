@@ -37,7 +37,7 @@ final class RibbonLayout {
     /// Every tab's sections, in order (as the ribbon shows them).
     static let sections: [(RibbonTab, [String])] = [
         (.home, ["Font", "Format", "Paragraph", "Styles", "Tags"]),
-        (.insert, ["Tables", "Music", "Files", "Recording", "Links", "Time Stamp", "Pages"]),
+        (.insert, ["Tables", "Music", "3D", "Files", "Recording", "Links", "Time Stamp", "Pages"]),
         (.draw, ["Diagram", "Selected Diagram", "Editor", "Ink"]),
         (.view, ["Page Setup", "Zoom", "Views"]),
         (.table, ["Automation", "Insert", "Merge", "Delete", "Shading", "Cell Text", "Table"]),

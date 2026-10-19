@@ -418,6 +418,47 @@ MusicXML…** saves it as MusicXML 4.0 with all of that: a piano grand staff as 
 staff as a part of its own.
 A tie carries its note's accidental across the bar line.
 
+## 3D models (CAD)
+
+**Insert ▸ 3D Model** (⌃⌘3, or the Insert tab's 3D group) puts a parametric 3D model on the page and opens the
+**3D editor**; **Sample** inserts a bracket to start from, and **STL / OBJ** brings in a mesh. On the page the model
+is live: drag to orbit, ⇧-drag to pan, pinch (or scroll, once clicked) to zoom, right-click for standard views,
+display style and STL / OBJ export; double-click opens the editor. Printed and exported pages (PDF, Markdown — with
+an STL beside it — and OneNote) carry its picture.
+
+**The editor** has a toolbar, the feature tree, the Metal viewport and an inspector:
+
+- **Create** — box (with an edge radius for rounded edges), cylinder, cone or frustum, sphere, torus, wedge, prism.
+- **Sketch** — Extrude or Revolve on the top, front or right plane opens the sketcher: lines (click point to point,
+  back to the first to close), three-point arcs, circles, rectangles and polygons, snapping to ends, corners and
+  centres and to the grid, with lengths and radii shown as you draw; drag handles to change a shape. Closed outlines
+  are shaded — an outline inside another is a hole. **Finish Sketch** (⌘↩) extrudes or revolves it.
+- **Combine** — Union, Subtract and Intersect of the selected bodies (⇧-click to select several; the first is the
+  one cut or joined). The tree nests the bodies a feature is built from.
+- **Pattern** — linear, circular (round Z) and mirror.
+- **Parameters** — named values; every dimension, position, turn and sketch offset is an expression of them
+  (`width / 2 + 3`, `sqrt(2) * 10`, `1in`), so changing one rebuilds the part. Renaming a parameter renames it where
+  it's used.
+- **Inspector** — the selected feature's dimensions, placement (X Y Z, turns about X Y Z), sketch plane and offset,
+  colour, hidden, and its volume, surface area and size; the status bar measures the selection (or everything).
+- **View** — fit, front / back / right / left / top / bottom / isometric, perspective or orthographic, Shaded with
+  Edges, Shaded or Hidden Line, the ground grid; drag to orbit, ⇧-drag or right-drag to pan, scroll or pinch to zoom;
+  click to select (hovering highlights); double-click a sketched body to edit its sketch.
+- **File** — import STL (binary or text) and OBJ as bodies (they can be cut and joined too); export the selected bodies
+  (or all) as STL or OBJ, in millimetres.
+
+Every change is one undo step (⌘Z / ⇧⌘Z in the editor) and goes straight back to the page.
+
+**How it's built** — as the macOS CAD architecture of SwiftUI + AppKit + Metal + an Objective-C++ bridge + a C++
+kernel: the editor's views are SwiftUI in an AppKit window; `CADDocument` is the command / undo / selection layer;
+`CADModel` the parametric document (features rebuilt in order, unchanged ones taken from a cache); the geometry kernel
+(`MxCADKernel.cpp`, C++) keeps solids as closed sets of planar polygons tagged by face, with primitives, extrude and
+revolve of profiles, BSP-tree booleans, transforms, meshing and mass properties, reached from Swift through
+`MXSolid` (`MxCADBridge.mm`, Objective-C++); and the renderer (`CADRenderer`, Metal) draws a lit scene pass and a face-
+number buffer, then a composite pass that draws feature edges where faces meet. The kernel sits behind the bridge, so
+a B-rep kernel such as OpenCascade (for STEP / IGES, fillets on any edge, exact curved surfaces) could take its place.
+Curved surfaces are faceted (Smoothness in the inspector sets how finely).
+
 ## Microsoft Office fonts
 
 Office for Mac keeps its fonts (Calibri, Consolas, Cambria, Aptos, Segoe UI…) inside the Office apps, so other apps
@@ -583,6 +624,7 @@ Ignore and Learn; F7 again goes on to the next one. When there are none, a messa
 | Link…                                                  | ⌘K                                        |
 | Date / Time / Date & Time                               | ⌥⇧D / ⌥⇧T / ⌥⇧F                      |
 | Insert Table / Picture / Screen Clipping / Record Audio | ⌃⌘T / ⌃⌘P / ⌃⇧⌘S / ⌃⌘R            |
+| Insert 3D Model                                         | ⌃⌘3                                      |
 | Back / Forward (pages visited)                          | ⌃← / ⌃→, or ⌘[ / ⌘]                    |
 | Previous / Next Page                                    | ⌥⌘↑ / ⌥⌘↓                            |
 | Previous / Next Section                                 | ⌥⌘← / ⌥⌘→                            |

@@ -171,6 +171,22 @@ enum PageExporter {
                     let values = chart.series.map { s in i < s.values.count ? s.values[i].map(Formula.format) ?? "" : "" }
                     lines.append("| \(category) | " + values.joined(separator: " | ") + " |")
                 }
+            case .model:
+                // A 3D model: its picture, and an STL of it beside the Markdown.
+                guard let model = element.cad else { continue }
+                let base = model.name + "-" + String(element.id.uuidString.prefix(4))
+                try? FileManager.default.createDirectory(at: assetsFolder, withIntermediateDirectories: true)
+                let size = NSSize(width: max(200, element.width), height: max(120, element.width * 0.62))
+                if let png = CADElementView.picture(of: model, size: size)?.pngData {
+                    try? png.write(to: assetsFolder.appending(path: base + ".png"))
+                    let link = (assetsName + "/" + base + ".png").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? base
+                    lines.append("![\(model.name)](\(link))")
+                }
+                let bodies = CADBuilder().build(model).bodies
+                try? CADExchange.stl(bodies, name: model.name).write(to: assetsFolder.appending(path: base + ".stl"))
+                let stl = (assetsName + "/" + base + ".stl").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? base
+                lines.append("")
+                lines.append("*3D model: \(model.name) — [\(base).stl](\(stl))*")
             }
             lines.append("")
         }

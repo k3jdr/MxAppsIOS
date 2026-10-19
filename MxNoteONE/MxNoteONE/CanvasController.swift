@@ -771,6 +771,8 @@ final class CanvasController: NSObject {
         case .diagram:
             if let tiff = (view as? DiagramElementView)?.picture.image?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
             if let data = clip.assetData { item.setData(data, forType: NSPasteboard.PasteboardType("public.svg-image")) }
+        case .model:
+            if let tiff = (view as? CADElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
         }
         let pb = NSPasteboard.general
         pb.clearContents()

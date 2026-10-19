@@ -451,6 +451,11 @@ struct InsertRibbon: View {
             RibbonButton("Lead Sheet", "music.note.list", large: true) { canvas?.insertScore(leadSheet: true) }
             RibbonButton("MusicXML", "square.and.arrow.down", large: true) { canvas?.chooseMusicXML() }
         }
+        RibbonGroup("3D") {
+            RibbonButton("3D Model", "cube", large: true) { canvas?.insertModel() }
+            RibbonButton("Sample", "cube.transparent", large: true) { canvas?.insertModel(sample: true) }
+            RibbonButton("STL / OBJ", "square.and.arrow.down.on.square", large: true) { canvas?.importModel() }
+        }
         RibbonGroup("Files") {
             RibbonButton("Picture", "photo", large: true) { canvas?.choosePictures() }
             RibbonButton("File", "paperclip", large: true) { canvas?.chooseAttachments() }
