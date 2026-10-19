@@ -20,9 +20,10 @@ struct ContentView: View {
         let screen = JobsHelp.screen(document.space, editor: editor, problems: issues.count)
         NavigationSplitView {
             PaletteView(editor: editor)
-                .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
                 // Quick Help: what's under the pointer, at the bottom of the palette.
                 .quickHelpDock()
+                .fixedColumnMinimum(width: 210, height: 300)
+                .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
         } detail: {
             VStack(spacing: 0) {
                 RunBar(settings: $document.space.run, editor: editor)
@@ -46,8 +47,12 @@ struct ContentView: View {
                     }
                 }
             }
+            // The run bar's status, the console's height and a run prompt all change while a run goes;
+            // none of them may change the column's minimum size (see fixedColumnMinimum).
+            .fixedColumnMinimum(width: 480, height: 400)
             .inspector(isPresented: $editor.showInspector) {
                     InspectorView(space: $document.space, editor: editor, issues: issues)
+                        .fixedColumnMinimum(width: 300, height: 300)
                         .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
                 }
         }
@@ -105,5 +110,17 @@ struct ContentView: View {
         .onChange(of: activeState) { if activeState == .key { EditorState.lastActive = editor } }
         .frame(minWidth: 1000, minHeight: 620)
         .quickHelpScreen(screen.name, screen.item, selection: JobsHelp.selection(document.space, editor: editor))
+    }
+}
+
+extension View {
+    /// Gives a split-view column a constant minimum size. NavigationSplitView / .inspector columns take their
+    /// minimum from their content; when that minimum changes during AppKit's constraint pass (run status text,
+    /// console height, a prompt appearing, an inspector section) the split view re-invalidates layout, and AppKit
+    /// aborts with "more Update Constraints in Window passes than there are views in the window". A flexible frame
+    /// with explicit minimums reports the same minimum whatever the content does; content that needs more is clipped.
+    func fixedColumnMinimum(width: CGFloat, height: CGFloat) -> some View {
+        frame(minWidth: width, maxWidth: .infinity, minHeight: height, maxHeight: .infinity, alignment: .top)
+            .clipped()
     }
 }
