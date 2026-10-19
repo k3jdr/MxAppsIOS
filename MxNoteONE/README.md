@@ -279,6 +279,9 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Transpose: a half step, an octave, an interval, steps in the key, to a key, or Transpose… | | Score tab ▸ Transpose, right-click ▸ Transpose |
 | Cross-staff: the selected notes onto the staff below / above, or back | **⇧⌘↓ / ⇧⌘↑** | Score tab ▸ Staves ▸ Cross-Staff, right-click ▸ Cross-Staff |
 | Ottava lines (8va, 15ma, 8vb, 15mb) over the selected notes | | Score tab ▸ Expression ▸ Ottava, right-click ▸ Ottava |
+| Figured bass under the notes (Space for the next note) | **⌃F** | Score tab ▸ Analysis, right-click ▸ Analysis |
+| Roman numerals under the notes (Space for the next note) | **⌃R** | Score tab ▸ Analysis, right-click ▸ Analysis |
+| Roman numerals / figured bass worked out from the music | | Score tab ▸ Analysis ▸ Analyze |
 | The staff's instrument (B♭ clarinet, E♭ alto sax, F horn…) / Concert Pitch | | Score tab ▸ Instrument / Concert Pitch, right-click |
 
 Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
@@ -350,6 +353,20 @@ chart comps itself. **1st / 2nd / 3rd endings** bracket their bars — the 1st i
 after it. **Bars per Line** (2, 3, 4, 5, 6 or 8, or as many as fit) puts that many bars on each line, squeezing the spacing a little
 if need be. MusicXML keeps all of it (slash noteheads, endings, the composer, line breaks).
 
+**Figured bass and Roman numeral analysis** — **⌃F** types figured bass under a note: `6`, `64` or `6/4` (a
+slash stacks figures, top first), `7/#`, `#6`, `4 3`; `#` `b` `n` are ♯ ♭ ♮, a lone accidental is the 3rd's, `+` and `\`
+raise a figure, and `_` holds one on to the next note. **⌃R** types a Roman numeral: `I`, `V7`, `ii6`, `I64`, `V65/V`,
+`viio7` (° — `ø` or `%` for half-diminished, `+` augmented), `bVI`, `N6`, and `G:` before one for a key. Space goes on to
+the next note, Return finishes. They're drawn as an analysis prints them — figures stacked under the bass, numerals
+centred under the notes with their inversion figures stacked beside them (V⁶₅/V), the key to the left — clear of low
+notes and their stems. **Analyze** works them out from the music, under the lowest staff: at each of its notes, the
+notes sounding on every staff (in concert pitch) are named as a chord — root, quality, inversion — in the key, major or
+minor (from how the music ends and begins, and its raised leading tone), labelled at the start and at each key change
+("C:", "a:"). Secondary dominants and leading-tone chords (V/V, V7/IV, vii°7/V), the Neapolitan (N6) and borrowed
+chords (♭VI, ♭VII, iv) are named as such, and a chord held from note to note is named once. Figured bass comes from the
+intervals over the bass (none for 5/3, then 6, 6/4, 7, 6/5, 4/3, 4/2), with the accidentals the key doesn't give
+(V7 in A minor is 7/♯). MusicXML keeps both: `<figured-bass>`, and the numerals as harmony functions.
+
 **Cross-staff beaming** — on a piano grand staff (or any two staves), **⇧⌘↓** moves the selected notes onto the
 staff below and **⇧⌘↑** onto the staff above, as in MuseScore; the opposite move (or Back to Own Staff) brings them
 home. They're placed by that staff's clef, with its ledger lines, but still belong to their own staff: they count in
@@ -395,7 +412,7 @@ play together. While you write in one voice the other is shown in grey; clicking
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score — every part and staff (a piano part's two staves become a grand staff; other parts each a staff, named) —
 with title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, 1st and 2nd endings, slash notation, transposing instruments, cross-staff notes, ottava lines, the composer, line breaks, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
+strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, 1st and 2nd endings, slash notation, transposing instruments, cross-staff notes, ottava lines, figured bass, Roman numerals, the composer, line breaks, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
 voices, staves beyond a part's first two, cue notes) is listed. Right-click a score (or the Score tab) ▸ **Export
 MusicXML…** saves it as MusicXML 4.0 with all of that: a piano grand staff as one part with two staves, every other
 staff as a part of its own.

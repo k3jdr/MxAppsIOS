@@ -77,6 +77,10 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var chordSymbol: String?
     /// A syllable under the note (ending in "-" when the word goes on).
     var lyric: String?
+    /// Figured bass under the note, top figure first ("6/4", "7/♯", "♯6"; "64" works too).
+    var figures: String?
+    /// A Roman numeral under the note ("V7", "ii6", "V65/V", "G: I").
+    var numeral: String?
     /// The guitar string for the TAB staff (0 = low E … 5 = high E); nil = chosen automatically.
     var tabString: Int?
     /// A triplet note: three in the time of two.
@@ -1142,6 +1146,14 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         return space * 2.6 + (st.chordDiagrams == true ? GuitarChords.size(space: space).height + space * 0.4 : 0)
     }
     private func lyricBand(_ st: ScoreData) -> CGFloat { st.hasLyrics ? space * 2.8 : 0 }
+    /// Figured bass (as many rows as the deepest stack) and Roman numerals, under the lyrics.
+    private func figureBand(_ st: ScoreData) -> CGFloat {
+        let rows = st.figureRows
+        return rows == 0 ? 0 : CGFloat(rows) * FiguredBass.rowHeight + space * 1.0
+    }
+    private func numeralBand(_ st: ScoreData) -> CGFloat { st.hasNumerals ? space * 3.6 : 0 }
+    /// Room for figures and numerals pushed down by low notes.
+    private func analysisRoom(_ st: ScoreData) -> CGFloat { st.hasFigures || st.hasNumerals ? space * 2.2 : 0 }
     private func tabBand(_ st: ScoreData) -> CGFloat { st.showTab == true ? space * 10 : 0 }
     private func dynamicBand(_ st: ScoreData) -> CGFloat { st.hasDynamics ? space * 3 : 0 }
     private func markBandAbove(_ st: ScoreData) -> CGFloat {
@@ -1177,7 +1189,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         for i in 0..<fullScore.staffCount {
             let st = shownStaff(i)
             let above = space * 4.5 + chordBand(st) + markBandAbove(st)
-            let below = space * 4.5 + lyricBand(st) + tabBand(st) + dynamicBand(st) + markBandBelow(st)
+            let below = space * 4.5 + lyricBand(st) + figureBand(st) + numeralBand(st) + analysisRoom(st) + tabBand(st) + dynamicBand(st) + markBandBelow(st)
             // Staves after the first sit a little closer (a grand staff's two hands most of all).
             let tighten: CGFloat = i == 0 ? 0 : (fullScore.grandStaff == true && i == 1 ? space * 2.2 : space * 1.2)
             offsets.append(y + above - tighten)
@@ -1455,7 +1467,31 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func dynamicY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.6 + markBandBelow }
 
     /// The TAB staff's top line (high E).
-    private func tabTop(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 4.2 + lyricBand + dynamicBand + markBandBelow }
+    private func tabTop(_ system: Int) -> CGFloat {
+        staffTop(system) + space * 4 + space * 4.2 + lyricBand + figureBand(score) + numeralBand(score) + analysisRoom(score) + dynamicBand + markBandBelow
+    }
+
+    /// The top of the figured bass under the staff (under any lyrics, and clear of low notes and their stems),
+    /// and of the Roman numerals under that.
+    private func figureTop(_ system: Int) -> CGFloat {
+        let base = staffTop(system) + space * 4 + space * 3.0 + dynamicBand + markBandBelow + lyricBand
+        guard lyricBand == 0, let lowest = lowestOnStaff[drawingStaff]?[system] else { return base }
+        return min(max(base, lowest + space * 1.0), base + space * 2.2)
+    }
+
+    /// How far down each system's notes and stems reach, by staff (from the last drawing).
+    private var lowestOnStaff: [Int: [Int: CGFloat]] = [:]
+
+    private func measureLowest() {
+        var lowest: [Int: CGFloat] = [:]
+        for p in placed {
+            guard let shape = shapes[NoteRef(voice: p.voice, index: p.index)] else { continue }
+            let bottom = shape.up ? shape.low : shape.low + space * 3.5
+            lowest[p.system] = max(lowest[p.system] ?? 0, bottom)
+        }
+        lowestOnStaff[drawingStaff] = lowest
+    }
+    private func numeralTop(_ system: Int) -> CGFloat { figureTop(system) + figureBand(score) + space * 0.6 }
 
     /// Half-spaces up from the bottom line of the staff a note is drawn on (an ottava draws it an octave or two
     /// nearer the staff; a cross-staff note sits on the staff above or below).
@@ -2094,6 +2130,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// Chord symbols above the staff, lyrics under it (with hyphens between syllables).
     private func drawWords(ink: NSColor) {
         let placed = self.placed.filter { $0.voice == 0 }
+        measureLowest()
         for (k, p) in placed.enumerated() {
             let note = score.notes[p.index]
             let color = colorFor(NoteRef(voice: 0, index: p.index), ink: ink)
@@ -2105,6 +2142,14 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 if score.chordDiagrams == true, let diagram = GuitarChords.diagram(for: symbol, capo: score.capo ?? 0) {
                     GuitarChords.draw(diagram.shape, at: NSPoint(x: p.x - space * 0.9, y: top + space * 2.2), space: space, color: color)
                 }
+            }
+            // Figured bass, stacked under the note; the Roman numeral under that.
+            if let figures = note.figures, !figures.isEmpty {
+                let next = k + 1 < placed.count && placed[k + 1].system == p.system ? placed[k + 1].x + space * 0.62 : nil
+                FiguredBass.draw(figures, centre: p.x + space * 0.62, top: figureTop(p.system), next: next, color: color)
+            }
+            if let numeral = note.numeral, !numeral.isEmpty {
+                RomanNumeral.draw(numeral, centre: p.x + space * 0.62, top: numeralTop(p.system), color: color)
             }
             guard let lyric = note.lyric, !lyric.isEmpty else { continue }
             let attrs: [NSAttributedString.Key: Any] = [.font: Self.lyricFont, .foregroundColor: color]
@@ -2992,25 +3037,25 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     // MARK: Lyrics and chord symbols (typed under / above the notes)
 
-    enum WordKind { case lyric, chordSymbol }
+    enum WordKind { case lyric, chordSymbol, figures, numeral }
     private var field: NSTextField?
     private var fieldKind: WordKind = .lyric
     private var fieldIndex = 0
 
     /// ⌃L lyrics / ⌃K chord symbols, starting at the selected (or just-typed, or first) note.
     func beginWords(_ kind: WordKind) {
-        // Lyrics and chord symbols go with voice 1.
+        // Lyrics, chord symbols, figures and numerals go with voice 1.
         if voice != 0 { setVoice(0) }
         guard !cur.notes.isEmpty else { return NSSound.beep() }
         var index = target ?? (cursor > 0 ? cursor - 1 : 0)
-        if kind == .lyric, cur.notes[index].rest, let next = nextNote(after: index, kind: kind) { index = next }
+        if kind != .chordSymbol, cur.notes[index].rest, let next = nextNote(after: index, kind: kind) { index = next }
         openField(kind, at: index)
     }
 
     private func nextNote(after index: Int, kind: WordKind, backwards: Bool = false) -> Int? {
         var i = index + (backwards ? -1 : 1)
         while cur.notes.indices.contains(i) {
-            // Lyrics skip rests; chord symbols can go on any note or rest.
+            // Lyrics, figures and numerals skip rests; chord symbols can go on any note or rest.
             if kind == .chordSymbol || !cur.notes[i].rest { return i }
             i += backwards ? -1 : 1
         }
@@ -3026,17 +3071,25 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         selected = index
         lastEntered = nil
         cursor = index + 1
-        let font = kind == .lyric ? Self.lyricFont : Self.chordFont
-        let text = (kind == .lyric ? cur.notes[index].lyric : cur.notes[index].chordSymbol) ?? ""
+        let font = kind == .lyric ? Self.lyricFont : kind == .chordSymbol ? Self.chordFont : kind == .figures ? FiguredBass.font : RomanNumeral.smallFont.withSize(14)
+        let text = words(kind, of: cur.notes[index]) ?? ""
         let f = NSTextField(string: text)
         f.font = font
         f.isBordered = true
         f.focusRingType = .none
         f.delegate = self
-        f.alignment = kind == .lyric ? .center : .left
+        f.alignment = kind == .lyric || kind == .figures ? .center : .left
+        f.placeholderString = kind == .figures ? "6/4" : kind == .numeral ? "V7" : nil
         let width = max(space * 7, (text as NSString).size(withAttributes: [.font: font]).width + space * 3)
-        let yTop = kind == .lyric ? lyricY(p.system) - 2 : staffTop(p.system) - space * 2.2 - max(chordBand, space * 2.4) + space * 0.2
-        f.frame = NSRect(x: kind == .lyric ? p.x + space * 0.62 - width / 2 : p.x - space * 0.4, y: yTop, width: width, height: font.pointSize + 8)
+        let yTop: CGFloat
+        switch kind {
+        case .lyric: yTop = lyricY(p.system) - 2
+        case .chordSymbol: yTop = staffTop(p.system) - space * 2.2 - max(chordBand, space * 2.4) + space * 0.2
+        case .figures: yTop = figureTop(p.system) - 2
+        case .numeral: yTop = numeralTop(p.system) - 2
+        }
+        let centred = kind == .lyric || kind == .figures
+        f.frame = NSRect(x: centred ? p.x + space * 0.62 - width / 2 : p.x - space * 0.4, y: yTop, width: width, height: font.pointSize + 8)
         addSubview(f)
         field = f
         window?.makeFirstResponder(f)
@@ -3050,10 +3103,26 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let text = f.stringValue.trimmingCharacters(in: .whitespaces)
         let i = fieldIndex, kind = fieldKind
         guard cur.notes.indices.contains(i) else { return }
-        let old = kind == .lyric ? cur.notes[i].lyric : cur.notes[i].chordSymbol
-        guard (old ?? "") != text else { return }
-        editVoice(kind == .lyric ? "Lyrics" : "Chord Symbol") { data in
-            if kind == .lyric { data.notes[i].lyric = text.isEmpty ? nil : text } else { data.notes[i].chordSymbol = text.isEmpty ? nil : text }
+        guard (words(kind, of: cur.notes[i]) ?? "") != text else { return }
+        let names: [WordKind: String] = [.lyric: "Lyrics", .chordSymbol: "Chord Symbol", .figures: "Figured Bass", .numeral: "Roman Numeral"]
+        editVoice(names[kind] ?? "Words") { data in
+            let value = text.isEmpty ? nil : text
+            switch kind {
+            case .lyric: data.notes[i].lyric = value
+            case .chordSymbol: data.notes[i].chordSymbol = value
+            case .figures: data.notes[i].figures = value
+            case .numeral: data.notes[i].numeral = value
+            }
+        }
+    }
+
+    /// A note's words of a kind.
+    private func words(_ kind: WordKind, of note: ScoreNote) -> String? {
+        switch kind {
+        case .lyric: note.lyric
+        case .chordSymbol: note.chordSymbol
+        case .figures: note.figures
+        case .numeral: note.numeral
         }
     }
 
@@ -3679,6 +3748,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             switch chars {
             case "k": return beginWords(.chordSymbol)
             case "l": return beginWords(.lyric)
+            case "f": return beginWords(.figures)
+            case "r": return beginWords(.numeral)
             case "2", "3", "4", "5", "6", "7", "9":
                 if let kind = ScoreData.tupletKinds.first(where: { "\($0.0[0])" == chars }) { return toggleTuplet(kind.0) }
                 return super.keyDown(with: event)
@@ -4058,6 +4129,19 @@ final class ScoreElementView: ElementView {
             crossItem.submenu = cMenu
             menu.addItem(crossItem)
         }
+        // Figured bass and Roman numerals.
+        let analysisItem = NSMenuItem(title: "Analysis", action: nil, keyEquivalent: "")
+        let aMenu = NSMenu()
+        aMenu.addItem(ClosureMenuItem("Figured Bass… (⌃F)") { [weak self] in self?.staff.beginWords(.figures) })
+        aMenu.addItem(ClosureMenuItem("Roman Numeral… (⌃R)") { [weak self] in self?.staff.beginWords(.numeral) })
+        aMenu.addItem(.separator())
+        aMenu.addItem(ClosureMenuItem("Analyze Roman Numerals") { [weak self] in self?.staff.addRomanNumerals() })
+        aMenu.addItem(ClosureMenuItem("Analyze Figured Bass") { [weak self] in self?.staff.addFiguredBass() })
+        aMenu.addItem(.separator())
+        aMenu.addItem(ClosureMenuItem("Clear Roman Numerals") { [weak self] in self?.staff.clearAnalysis(numerals: true, figures: false) })
+        aMenu.addItem(ClosureMenuItem("Clear Figured Bass") { [weak self] in self?.staff.clearAnalysis(numerals: false, figures: true) })
+        analysisItem.submenu = aMenu
+        menu.addItem(analysisItem)
         let key = NSMenuItem(title: "Key Signature", action: nil, keyEquivalent: "")
         let keys = NSMenu()
         for (fifths, name) in ScoreData.keyNames {

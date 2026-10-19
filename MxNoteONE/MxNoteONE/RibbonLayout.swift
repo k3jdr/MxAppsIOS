@@ -41,7 +41,7 @@ final class RibbonLayout {
         (.draw, ["Diagram", "Selected Diagram", "Editor", "Ink"]),
         (.view, ["Page Setup", "Zoom", "Views"]),
         (.table, ["Automation", "Insert", "Merge", "Delete", "Shading", "Cell Text", "Table"]),
-        (.score, ["Notes", "Expression", "Articulation", "Staves", "Transpose", "Lead Sheet", "Bars", "Voice", "Add", "Selected Note", "Chords & Lyrics", "Score"]),
+        (.score, ["Notes", "Expression", "Articulation", "Staves", "Transpose", "Lead Sheet", "Bars", "Voice", "Add", "Selected Note", "Chords & Lyrics", "Analysis", "Score"]),
     ]
 
     static func key(_ tab: RibbonTab, _ title: String) -> String { tab.rawValue + "/" + title }

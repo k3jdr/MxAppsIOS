@@ -193,6 +193,10 @@ enum MusicXML {
                 let frame = score.chordDiagrams == true ? GuitarChords.diagram(for: symbol, capo: score.capo ?? 0)?.shape : nil
                 out += "      " + harmony(symbol, frame: frame) + "\n"
             }
+            // A Roman numeral: harmony as a function (I, V7, V65/V), under the staff.
+            if let numeral = note.numeral, !numeral.isEmpty {
+                out += "      <harmony placement=\"below\"><function>\(escape(numeral))</function><kind text=\"\">none</kind>\(staffTag)</harmony>\n"
+            }
             if let d = note.dynamic, ScoreData.dynamics.contains(d) {
                 let level = ScoreData.dynamicLevels[d] ?? (d == "sfz" ? 120 : 100)
                 out += "      <direction placement=\"below\"><direction-type><dynamics><\(d)/></dynamics></direction-type>"
@@ -260,6 +264,8 @@ enum MusicXML {
             let shift = score.clef == .treble ? 12 : 0
             func spot(_ midi: Int) -> (string: Int, fret: Int)? { tab.first { ScoreData.tuning[$0.string] + $0.fret == midi - shift } }
             let mainMidi = score.midi(i)
+            // Figured bass goes just before its note.
+            if let figures = note.figures, !figures.isEmpty { out += "      " + figuredBassXML(figures) + "\n" }
             out += noteXML(chord: false, step: note.step, octave: note.octave, alter: note.rest ? 0 : score.soundingAlter(i),
                            accidental: score.showsAccidental(i) ? note.alter : nil, main: true,
                            tabSpot: score.clef == .percussion ? nil : mainMidi.flatMap(spot), drum: DrumKit.instrument(note.drum))
@@ -279,6 +285,32 @@ enum MusicXML {
         }
         return out
     }
+    /// Figured bass as MusicXML: its figures top to bottom, each with its prefix, number and suffix.
+    static func figuredBassXML(_ text: String) -> String {
+        func accidental(_ s: String) -> String? {
+            switch s {
+            case "♯": "sharp"
+            case "♭": "flat"
+            case "♮": "natural"
+            case "+": "cross"
+            case "\\": "back-slash"
+            case "♯♯": "double-sharp"
+            case "♭♭": "flat-flat"
+            default: nil
+            }
+        }
+        var x = "<figured-bass>"
+        for row in FiguredBass.rows(text) {
+            x += "<figure>"
+            if row.extends { x += "<extend/></figure>"; continue }
+            if let p = accidental(row.prefix) { x += "<prefix>\(p)</prefix>" }
+            if !row.number.isEmpty { x += "<figure-number>\(row.number)</figure-number>" }
+            if let s = accidental(row.suffix) { x += "<suffix>\(s)</suffix>" }
+            x += "</figure>"
+        }
+        return x + "</figured-bass>"
+    }
+
     private static let articulationXML = ["staccato": "<staccato/>", "staccatissimo": "<staccatissimo/>", "tenuto": "<tenuto/>",
                                           "accent": "<accent/>", "marcato": "<strong-accent type=\"up\"/>"]
     private static let ornamentXML = ["trill": "<trill-mark/>", "mordent": "<mordent/>", "prall": "<inverted-mordent/>", "turn": "<turn/>"]
@@ -407,6 +439,8 @@ enum MusicXML {
             var divisions = 1.0
             var seenAttributes = false
             var pendingSymbol: String?
+            // A Roman numeral (harmony as a function) and figured bass for the next note.
+            var pendingNumeral: String?, pendingFigures: String?
             // Dynamics and hairpins for the next note (by voice), slurs on the notes.
             var pendingDynamic: [Bool: String] = [:], pendingHairpin: [Bool: Int] = [:]
             // The bar being read and its key (a key change sets a new one from that bar).
@@ -559,8 +593,30 @@ enum MusicXML {
                         default: break
                         }
                     case "harmony":
-                        if (text(e, "staff") ?? "1") == mine { pendingSymbol = symbol(from: e) }
+                        if (text(e, "staff") ?? "1") == mine {
+                            if let function = text(e, "function"), !function.isEmpty {
+                                pendingNumeral = function
+                            } else if let numeral = e.elements(forName: "numeral").first {
+                                // MusicXML 4's numeral: its written form, else the degree as a numeral.
+                                let root = numeral.elements(forName: "numeral-root").first
+                                let degree = root?.stringValue.flatMap { Int($0.trimmingCharacters(in: .whitespaces)) } ?? 1
+                                let alter = text(numeral, "numeral-alter").flatMap(Double.init).map { $0 > 0 ? "♯" : $0 < 0 ? "♭" : "" } ?? ""
+                                let shown = root?.attribute(forName: "text")?.stringValue ?? ["I", "II", "III", "IV", "V", "VI", "VII"][max(0, min(6, degree - 1))]
+                                pendingNumeral = alter + shown + (e.elements(forName: "kind").first?.attribute(forName: "text")?.stringValue ?? "")
+                            } else {
+                                pendingSymbol = symbol(from: e)
+                            }
+                        }
                         if shared, e.elements(forName: "frame").first != nil { score.chordDiagrams = true }
+                    case "figured-bass":
+                        // Figures top to bottom (they go with the note that follows).
+                        let names: [String: String] = ["sharp": "♯", "flat": "♭", "natural": "♮", "cross": "+", "back-slash": "\\", "slash": "\\",
+                                                       "double-sharp": "♯♯", "sharp-sharp": "♯♯", "flat-flat": "♭♭"]
+                        let rows = e.elements(forName: "figure").map { f -> String in
+                            if f.elements(forName: "extend").first != nil, text(f, "figure-number") == nil { return "_" }
+                            return (text(f, "prefix").flatMap { names[$0] } ?? "") + (text(f, "figure-number") ?? "") + (text(f, "suffix").flatMap { names[$0] } ?? "")
+                        }.filter { !$0.isEmpty }
+                        pendingFigures = rows.isEmpty ? nil : rows.joined(separator: "/")
                     case "note":
                         if e.elements(forName: "cue").first != nil { skippedGrace += 1; continue }
                         let graceElement = e.elements(forName: "grace").first
@@ -569,7 +625,11 @@ enum MusicXML {
                         // Only this staff's notes (the other staff of a piano part is read on its own) — including those of
                         // its voices written across on the other staff.
                         let noteStaff = text(e, "staff") ?? "1"
-                        if (home[text(e, "voice") ?? "1"] ?? noteStaff) != mine { time += length; continue }
+                        if (home[text(e, "voice") ?? "1"] ?? noteStaff) != mine {
+                            if !isChord { pendingFigures = nil }
+                            time += length
+                            continue
+                        }
                         let across = noteStaff != mine ? (Int(noteStaff) ?? staffNumber) - staffNumber : nil
                         // The staff's first voice, and one more as voice 2.
                         let voiceID = text(e, "voice") ?? "1"
@@ -696,6 +756,14 @@ enum MusicXML {
                         if let symbol = pendingSymbol {
                             note.chordSymbol = symbol
                             pendingSymbol = nil
+                        }
+                        if let numeral = pendingNumeral {
+                            note.numeral = numeral
+                            pendingNumeral = nil
+                        }
+                        if let figures = pendingFigures {
+                            note.figures = figures
+                            pendingFigures = nil
                         }
                         score.notes.append(note)
                     default:

@@ -268,6 +268,7 @@ extension QuickHelp {
         "Score/Add": "Add notes A–G or a rest after the cursor.",
         "Score/Selected Note": "Move, alter, tie, swap or delete the selected note.",
         "Score/Chords & Lyrics": "Chord notes, chord symbols, lyrics and the guitar TAB staff.",
+        "Score/Analysis": "Figured bass and Roman numeral analysis: typed under the notes, or worked out from the music.",
         "Score/Score": "Play, clef, key, time, tempo, title and MusicXML export.",
     ]
 
@@ -408,6 +409,9 @@ extension QuickHelp {
         "Endings": "1st and 2nd endings over the selected note's bar: the 1st plays the first time through the repeat, the 2nd after it.",
         "Bars per Line": "So many bars on each line — lead sheets usually have four.",
         "Composer": "The composer (or arranger…) under the title, at the right.",
+        "Figured Bass": "Figures under the notes (⌃F): type 6, 64 or 6/4, 7/#, #6 — / stacks them, # b n are ♯ ♭ ♮, _ holds one on; Space goes to the next note.",
+        "Roman Numerals": "A Roman numeral under the note (⌃R): I, V7, ii6, V65/V, viio7, bVI, N6 — o ø + for diminished, half-diminished, augmented, \"G: \" for a key; Space goes to the next note.",
+        "Analyze": "Works out Roman numerals and figured bass from the notes sounding on every staff (in concert pitch), under the lowest staff: inversions, secondary dominants, the Neapolitan, borrowed chords, and the key — major or minor — with each key change.",
         "Ottava": "An 8va or 15ma line over the selected notes (8vb or 15mb under them): written an octave or two nearer the staff, sounding where they are.",
         "Cross-Staff": "Moves the selected notes onto the staff below (⇧⌘↓) or above (⇧⌘↑): still counted and played with their own staff, beamed between the staves.",
         "Transpose": "Moves the music up or down — a half step, an octave, an interval, steps in the key, or to another key — with its chord symbols and key signatures. Two or more selected notes: only those; otherwise the whole score.",
@@ -506,6 +510,8 @@ extension ScoreView {
             facts.append("under \(abs(o) == 2 ? (o > 0 ? "15ma" : "15mb") : (o > 0 ? "8va" : "8vb")) (written \(abs(o) == 2 ? "two octaves" : "an octave") \(o > 0 ? "lower" : "higher"))")
         }
         if let c = n.crossStaff, c != 0 { facts.append("written on the staff \(c > 0 ? "below" : "above")") }
+        if let f = n.figures, !f.isEmpty { facts.append("figured \(FiguredBass.glyphs(f))") }
+        if let r = n.numeral, !r.isEmpty { facts.append(r) }
         if let chord = n.chord, !chord.isEmpty { facts.append("chord of \(chord.count + 1)") }
         if let d = n.dynamic { facts.append(d) }
         let marks = (n.articulations ?? []) + [n.ornament].compactMap { $0 } + (n.fermata == true ? ["fermata"] : [])

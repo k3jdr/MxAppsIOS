@@ -853,6 +853,21 @@ struct ScoreRibbon: View {
             RibbonButton("String Up (⌥↑)", "arrow.up.circle") { act { $0.moveString(by: 1) } }
             RibbonButton("String Down (⌥↓)", "arrow.down.circle") { act { $0.moveString(by: -1) } }
         }
+        RibbonGroup("Analysis") {
+            RibbonButton("Figured Bass (⌃F)", "textformat.123", large: true) { staff?.beginWords(.figures) }
+            RibbonButton("Roman Numerals (⌃R)", "character.textbox", large: true) { staff?.beginWords(.numeral) }
+            RibbonMenu("Analyze", "wand.and.stars") {
+                Section("From the music (under the lowest staff)") {
+                    Button("Roman Numerals") { act { $0.addRomanNumerals() } }
+                    Button("Figured Bass") { act { $0.addFiguredBass() } }
+                    Button("Both") { act { $0.addRomanNumerals(); $0.addFiguredBass() } }
+                }
+                Divider()
+                Button("Clear Roman Numerals") { act { $0.clearAnalysis(numerals: true, figures: false) } }
+                Button("Clear Figured Bass") { act { $0.clearAnalysis(numerals: false, figures: true) } }
+            }
+            .tip("Analyze", "Works out Roman numerals (with inversions, secondary dominants, the Neapolitan, borrowed chords) and figured bass from the notes sounding on every staff, under the lowest staff.")
+        }
         RibbonGroup("Score") {
             RibbonButton(editor.scorePlaying ? "Stop" : "Play (Space)", editor.scorePlaying ? "stop.fill" : "play.fill", large: true,
                          active: editor.scorePlaying) { act { $0.togglePlay() } }
