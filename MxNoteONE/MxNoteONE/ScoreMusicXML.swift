@@ -204,6 +204,12 @@ enum MusicXML {
             }
             let tiedFrom = i > 0 && score.notes[i - 1].tie && !note.rest
             let tab = score.showTab == true ? score.tab(i) : []
+            // An ottava line starts here (MusicXML keeps the sounding pitch; 8va shows the notes shifted down).
+            if let o = note.ottava, o != 0, i == 0 || score.notes[i - 1].ottava != o {
+                out += "      <direction placement=\"\(o > 0 ? "above" : "below")\"><direction-type><octave-shift type=\"\(o > 0 ? "down" : "up")\" size=\"\(abs(o) == 2 ? 15 : 8)\" number=\"1\"/></direction-type>\(staffTag)</direction>\n"
+            }
+            // A cross-staff note says which staff of the part it's drawn on.
+            let noteStaffTag = staff.map { own in "<staff>\(note.crossStaff.map { max(1, min(2, own + $0)) } ?? own)</staff>" } ?? ""
             func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?,
                          drum: DrumInstrument? = nil) -> String {
                 var x = "      <note>"
@@ -232,7 +238,7 @@ enum MusicXML {
                 if let drum, !note.rest, drum.head != .normal {
                     x += "<notehead>\(drum.head == .x ? "x" : drum.head == .circleX ? "circle-x" : "diamond")</notehead>"
                 }
-                x += staffTag
+                x += noteStaffTag
                 var notations = ""
                 if main, note.tupletActual != nil, starts.contains(i) { notations += "<tuplet type=\"start\" bracket=\"\(note.duration.rawValue >= 8 ? "no" : "yes")\"/>" }
                 if main, note.tupletActual != nil, stops.contains(i) { notations += "<tuplet type=\"stop\"/>" }
@@ -266,6 +272,9 @@ enum MusicXML {
             }
             if note.hairpinEnd == true {
                 out += "      <direction placement=\"below\"><direction-type><wedge type=\"stop\"/></direction-type><voice>\(voice)</voice>\(staffTag)</direction>\n"
+            }
+            if let o = note.ottava, o != 0, i == score.notes.count - 1 || score.notes[i + 1].ottava != o {
+                out += "      <direction><direction-type><octave-shift type=\"stop\" size=\"\(abs(o) == 2 ? 15 : 8)\" number=\"1\"/></direction-type>\(staffTag)</direction>\n"
             }
         }
         return out
@@ -411,6 +420,16 @@ enum MusicXML {
             var time = 0.0, v2: [ScoreNote] = [], v2pos = 0.0, v2Bars: [[ScoreNote]] = [], secondVoice: String?, firstVoice: String?
             var seenClef = false
             let mine = "\(staffNumber)"
+            // Each voice's own staff (where most of its notes are): a note of it on the other staff is cross-staff.
+            var counts: [String: [String: Int]] = [:]
+            for m in part.elements(forName: "measure") {
+                for n in m.elements(forName: "note") where n.elements(forName: "chord").isEmpty {
+                    counts[text(n, "voice") ?? "1", default: [:]][text(n, "staff") ?? "1", default: 0] += 1
+                }
+            }
+            let home = counts.mapValues { c in c.max { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) }?.key ?? "1" }
+            // An ottava line in force on this staff (1 8va, 2 15ma, −1 8vb, −2 15mb).
+            var ottava: Int?
             for measure in part.elements(forName: "measure") {
                 barIndex += 1
                 if shared, let ending = openEnding { score.setMark(barIndex) { $0.ending = ending } }
@@ -465,6 +484,15 @@ enum MusicXML {
                         let second = firstVoice != nil && directionVoice != firstVoice && (secondVoice == nil || secondVoice == directionVoice)
                         // Dynamics and hairpins belong to their staff; tempo marks are read once, with the first staff.
                         let ownStaff = (text(e, "staff") ?? "1") == mine
+                        if ownStaff, let shift = e.elements(forName: "direction-type").flatMap({ $0.elements(forName: "octave-shift") }).first {
+                            let size = Int(shift.attribute(forName: "size")?.stringValue ?? "8") ?? 8
+                            switch shift.attribute(forName: "type")?.stringValue {
+                            case "down": ottava = size >= 15 ? 2 : 1
+                            case "up": ottava = size >= 15 ? -2 : -1
+                            case "stop": ottava = nil
+                            default: break
+                            }
+                        }
                         if ownStaff, let marks = e.elements(forName: "direction-type").first?.elements(forName: "dynamics").first,
                            let name = (marks.children ?? []).compactMap({ ($0 as? XMLElement)?.name }).first(where: { ScoreData.dynamics.contains($0) || $0 == "sf" || $0 == "sffz" }) {
                             pendingDynamic[second] = name == "sf" || name == "sffz" ? "sfz" : name
@@ -538,8 +566,11 @@ enum MusicXML {
                         let graceElement = e.elements(forName: "grace").first
                         let isChord = e.elements(forName: "chord").first != nil
                         let length = isChord ? 0 : (text(e, "duration").flatMap(Double.init) ?? 0) / divisions
-                        // Only this staff's notes (the other staff of a piano part is read on its own).
-                        if (text(e, "staff") ?? "1") != mine { time += length; continue }
+                        // Only this staff's notes (the other staff of a piano part is read on its own) — including those of
+                        // its voices written across on the other staff.
+                        let noteStaff = text(e, "staff") ?? "1"
+                        if (home[text(e, "voice") ?? "1"] ?? noteStaff) != mine { time += length; continue }
+                        let across = noteStaff != mine ? (Int(noteStaff) ?? staffNumber) - staffNumber : nil
                         // The staff's first voice, and one more as voice 2.
                         let voiceID = text(e, "voice") ?? "1"
                         if firstVoice == nil { firstVoice = voiceID }
@@ -607,6 +638,8 @@ enum MusicXML {
                             note.alter = hasAccidental || alter != ScoreData.keyAlter(step, fifths: key) ? alter : nil
                         }
                         note.tie = e.elements(forName: "tie").contains { $0.attribute(forName: "type")?.stringValue == "start" }
+                        note.ottava = ottava
+                        if !note.rest, across != 0 { note.crossStaff = across }
                         if let actual = text(e, "time-modification/actual-notes").flatMap(Int.init),
                            let normal = text(e, "time-modification/normal-notes").flatMap(Int.init), actual > 1, normal > 0, actual != normal {
                             note.tuplet = true

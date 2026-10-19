@@ -258,9 +258,9 @@ extension QuickHelp {
         "Table/Cell Text": "Number formats, decimals and alignment for the selected cells.",
         "Table/Table": "Header row, banded rows, borders, freezing, sorting, filtering, validation, pivots and charts.",
         "Score/Notes": "The length of the next notes (or the selected one), dots, tuplets and grace notes.",
-        "Score/Expression": "Dynamics (pp … ff), slurs, crescendo and diminuendo hairpins.",
+        "Score/Expression": "Dynamics (pp … ff), slurs, crescendo and diminuendo hairpins, and 8va / 8vb ottava lines.",
         "Score/Articulation": "Staccato, tenuto, accent, marcato, fermata and ornaments on the selected notes.",
-        "Score/Staves": "Several staves: add a treble, bass or percussion (drum) staff, make a piano grand staff, move between staves (⌥⌘↑ ⌥⌘↓), rename or remove one.",
+        "Score/Staves": "Several staves: add a treble, bass or percussion (drum) staff, make a piano grand staff, move between staves (⌥⌘↑ ⌥⌘↓), rename or remove one, and cross-staff notes (⇧⌘↑ ⇧⌘↓).",
         "Score/Transpose": "Transpose the music (the whole score, or the selected notes); transposing instruments and concert pitch.",
         "Score/Lead Sheet": "Lead sheets and chord charts: slash notation, 1st and 2nd endings, bars per line, the composer.",
                 "Score/Bars": "Key changes and repeat signs at the selected note's bar.",
@@ -408,6 +408,8 @@ extension QuickHelp {
         "Endings": "1st and 2nd endings over the selected note's bar: the 1st plays the first time through the repeat, the 2nd after it.",
         "Bars per Line": "So many bars on each line — lead sheets usually have four.",
         "Composer": "The composer (or arranger…) under the title, at the right.",
+        "Ottava": "An 8va or 15ma line over the selected notes (8vb or 15mb under them): written an octave or two nearer the staff, sounding where they are.",
+        "Cross-Staff": "Moves the selected notes onto the staff below (⇧⌘↓) or above (⇧⌘↑): still counted and played with their own staff, beamed between the staves.",
         "Transpose": "Moves the music up or down — a half step, an octave, an interval, steps in the key, or to another key — with its chord symbols and key signatures. Two or more selected notes: only those; otherwise the whole score.",
         "Instrument": "A transposing instrument for the staff (B♭ clarinet or trumpet, E♭ alto sax, F horn…): written where its player reads it, in its own key, and played at the pitch it sounds.",
         "Concert Pitch": "Every staff as it sounds — transposing instruments too — in the score's key. Off: each instrument as its player reads it.",
@@ -500,6 +502,10 @@ extension ScoreView {
             let other = names[ScoreData.mod7(d)] + (a > 0 ? "♯" : a < 0 ? "♭" : "") + "\(ScoreData.floor7(d))"
             facts.append(concert ? "written \(other)" : "sounds \(other)")
         }
+        if let o = n.ottava, o != 0 {
+            facts.append("under \(abs(o) == 2 ? (o > 0 ? "15ma" : "15mb") : (o > 0 ? "8va" : "8vb")) (written \(abs(o) == 2 ? "two octaves" : "an octave") \(o > 0 ? "lower" : "higher"))")
+        }
+        if let c = n.crossStaff, c != 0 { facts.append("written on the staff \(c > 0 ? "below" : "above")") }
         if let chord = n.chord, !chord.isEmpty { facts.append("chord of \(chord.count + 1)") }
         if let d = n.dynamic { facts.append(d) }
         let marks = (n.articulations ?? []) + [n.ornament].compactMap { $0 } + (n.fermata == true ? ["fermata"] : [])

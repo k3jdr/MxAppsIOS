@@ -632,6 +632,15 @@ struct ScoreRibbon: View {
             RibbonButton("Slur (S)", "point.topleft.down.to.point.bottomright.curvepath", active: staff?.slurHere == true) { act { $0.toggleSlur() } }
             RibbonButton("Crescendo (<)", "lessthan", active: staff?.hairpinHere == 1) { act { $0.toggleHairpin(1) } }
             RibbonButton("Diminuendo (>)", "greaterthan", active: staff?.hairpinHere == -1) { act { $0.toggleHairpin(-1) } }
+            RibbonMenu("Ottava", "8.square") {
+                Button("8va — an octave higher") { act { $0.setOttava(1) } }
+                Button("15ma — two octaves higher") { act { $0.setOttava(2) } }
+                Button("8vb — an octave lower") { act { $0.setOttava(-1) } }
+                Button("15mb — two octaves lower") { act { $0.setOttava(-2) } }
+                Divider()
+                Button("Remove Ottava") { act { $0.setOttava(nil) } }
+            }
+            .tip("Ottava", "An 8va or 15ma line over the selected notes (8vb, 15mb under them): they're written an octave or two nearer the staff and sound where they are.")
         }
         RibbonGroup("Articulation") {
             Button { act { $0.toggleArticulation("staccato") } } label: { Text("•").font(.system(size: 15, weight: .bold)).frame(width: 22) }
@@ -676,6 +685,13 @@ struct ScoreRibbon: View {
                 }
             }
             RibbonButton("Piano Staff", "pianokeys", active: staff?.fullScore.grandStaff == true) { act { $0.makeGrandStaff() } }
+            RibbonMenu("Cross-Staff", "arrow.up.arrow.down.square") {
+                Button("Move to Staff Below (⇧⌘↓)") { act { $0.moveToStaff(1) } }
+                Button("Move to Staff Above (⇧⌘↑)") { act { $0.moveToStaff(-1) } }
+                Button("Back to Own Staff") { act { $0.moveToStaff(0) } }
+            }
+            .disabled(count < 2)
+            .tip("Cross-Staff", "The selected notes drawn on the staff below or above — a piano passage shared between the hands — still counted and played with their own staff; beams between the staves join them.")
         }
         RibbonGroup("Transpose") {
             RibbonMenu("Transpose", "arrow.up.arrow.down") {

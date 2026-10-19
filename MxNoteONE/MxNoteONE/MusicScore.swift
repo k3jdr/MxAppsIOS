@@ -105,6 +105,12 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     var fermata: Bool?
     /// An ornament: trill, mordent, prall (inverted mordent) or turn.
     var ornament: String?
+    /// Under an ottava line: 8va (1) or 15ma (2) over the staff, 8vb (−1) or 15mb (−2) under it. The note is kept
+    /// (and plays) where it sounds, and is drawn an octave (two) nearer the staff.
+    var ottava: Int?
+    /// Cross-staff: drawn on the staff below (1) or above (−1) — a piano's hands sharing a passage — while still
+    /// counted, beamed and played with its own staff.
+    var crossStaff: Int?
 
     /// Length in quarter notes.
     var beats: Double {
@@ -1140,10 +1146,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func dynamicBand(_ st: ScoreData) -> CGFloat { st.hasDynamics ? space * 3 : 0 }
     private func markBandAbove(_ st: ScoreData) -> CGFloat {
         let endings = (st.barMarks ?? [:]).values.contains { $0.ending != nil } ? space * 2.2 : 0
-        return endings + (st.notes.contains { $0.fermata == true || $0.ornament != nil || (st.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0)
+        let ottava = (st.notes + st.line(1)).contains { ($0.ottava ?? 0) > 0 } ? space * 2.4 : 0
+        return endings + ottava + (st.notes.contains { $0.fermata == true || $0.ornament != nil || (st.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0)
     }
     private func markBandBelow(_ st: ScoreData) -> CGFloat {
-        st.hasSecondVoice && st.line(1).contains { $0.fermata == true || $0.ornament != nil || $0.articulations != nil } ? space * 3.4 : 0
+        let ottava = (st.notes + st.line(1)).contains { ($0.ottava ?? 0) < 0 } ? space * 2.4 : 0
+        return ottava + (st.hasSecondVoice && st.line(1).contains { $0.fermata == true || $0.ornament != nil || $0.articulations != nil } ? space * 3.4 : 0)
     }
     private var chordBand: CGFloat { chordBand(score) }
     private var lyricBand: CGFloat { lyricBand(score) }
@@ -1165,6 +1173,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func measureStaves() {
         var y = tempoBand
         var offsets: [CGFloat] = []
+        staffClefs = (0..<fullScore.staffCount).map { fullScore.forStaff($0).clef }
         for i in 0..<fullScore.staffCount {
             let st = shownStaff(i)
             let above = space * 4.5 + chordBand(st) + markBandAbove(st)
@@ -1448,11 +1457,42 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// The TAB staff's top line (high E).
     private func tabTop(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 4.2 + lyricBand + dynamicBand + markBandBelow }
 
-    /// Half-spaces up from the bottom line.
-    private func position(_ note: ScoreNote) -> Int { note.diatonic - score.clef.bottomLine }
+    /// Half-spaces up from the bottom line of the staff a note is drawn on (an ottava draws it an octave or two
+    /// nearer the staff; a cross-staff note sits on the staff above or below).
+    private func position(_ note: ScoreNote) -> Int { position(note.diatonic, of: note) }
+
+    /// The same for a chord note of `note` (or any line or space it's drawn against).
+    private func position(_ diatonic: Int, of note: ScoreNote) -> Int {
+        let st = drawnStaff(note)
+        let clef = staffClefs.indices.contains(st) ? staffClefs[st] : score.clef
+        return diatonic - (note.ottava ?? 0) * 7 - clef.bottomLine
+    }
 
     private func y(position: Int, system: Int) -> CGFloat {
         staffTop(system) + space * 4 - CGFloat(position) * space / 2
+    }
+
+    /// A position on the staff a note is drawn on.
+    private func y(position: Int, system: Int, of note: ScoreNote) -> CGFloat {
+        staffTop(system, staff: drawnStaff(note)) + space * 4 - CGFloat(position) * space / 2
+    }
+
+    /// The top line of any staff in a system.
+    private func staffTop(_ system: Int, staff: Int) -> CGFloat {
+        titleHeight + CGFloat(system) * systemHeight
+            + (staffOffsets.indices.contains(staff) ? staffOffsets[staff] : tempoBand + space * 4.5)
+    }
+
+    /// Every staff's clef (cross-staff notes are placed by the clef of the staff they're drawn on).
+    private var staffClefs: [ScoreData.Clef] = []
+
+    /// The staff a note is drawn on: its own, or the one above or below for a cross-staff note.
+    private func drawnStaff(_ note: ScoreNote) -> Int {
+        guard let c = note.crossStaff, c != 0 else { return drawingStaff }
+        let t = drawingStaff + c
+        guard staffClefs.indices.contains(t), staffClefs[t] != .percussion, staffClefs.indices.contains(drawingStaff),
+              staffClefs[drawingStaff] != .percussion else { return drawingStaff }
+        return t
     }
 
     // MARK: Drawing
@@ -1503,6 +1543,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 drawKeySignature(change.to, cancelling: change.from, x: change.x + space * 0.5, system: change.system, ink: ink)
             }
             drawNotes(ink: ink)
+            drawOttavas(ink: ink)
             drawSlurs(ink: ink)
             drawMarks(ink: ink)
             drawDynamics(ink: ink)
@@ -1559,6 +1600,59 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 }
             }
         }
+    }
+
+    // MARK: Ottava lines
+
+    static let ottavaFont = NSFont(name: "Georgia-BoldItalic", size: 11) ?? .boldSystemFont(ofSize: 11)
+
+    /// 8va, 15ma (over the staff) and 8vb, 15mb (under it): the sign at the first note, a dashed line to the last
+    /// and a hook at its end — on each line of music the passage runs through.
+    private func drawOttavas(ink: NSColor) {
+        for v in 0..<ScoreData.voiceCount {
+            let line = score.line(v)
+            guard line.contains(where: { $0.ottava != nil }) else { continue }
+            let spots = placed.filter { $0.voice == v }
+            var i = 0
+            while i < line.count {
+                guard let o = line[i].ottava, o != 0 else { i += 1; continue }
+                var j = i
+                while j + 1 < line.count, line[j + 1].ottava == o { j += 1 }
+                let run = Array(i...j)
+                for system in Set(run.compactMap { k in spots.first { $0.index == k }?.system }).sorted() {
+                    let here = run.compactMap { k in spots.first { $0.index == k && $0.system == system } }
+                    guard let first = here.first, let last = here.last else { continue }
+                    let continues = last.index < j
+                    drawOttava(o, from: first.x - space * 0.3, to: last.x + space * (continues ? 2.4 : 1.6), system: system,
+                               notes: here.map { NoteRef(voice: v, index: $0.index) }, hook: !continues,
+                               continued: first.index > i, color: colorFor(NoteRef(voice: v, index: first.index), ink: ink))
+                }
+                i = j + 1
+            }
+        }
+    }
+
+    private func drawOttava(_ o: Int, from x1: CGFloat, to x2: CGFloat, system: Int, notes: [NoteRef], hook: Bool, continued: Bool, color: NSColor) {
+        let above = o > 0
+        let staffTopY = staffTop(system), staffBottomY = staffTop(system) + space * 4
+        // Clear of the notes' heads and stems.
+        let tops = notes.compactMap { shapes[$0].map { $0.up ? $0.high - space * 3.5 : $0.high } }
+        let bottoms = notes.compactMap { shapes[$0].map { $0.up ? $0.low : $0.low + space * 3.5 } }
+        let y = above ? min(staffTopY - space * 1.8, (tops.min() ?? staffTopY) - space * 1.3)
+                      : max(staffBottomY + space * 1.8, (bottoms.max() ?? staffBottomY) + space * 1.3)
+        let label = (abs(o) == 2 ? (above ? "15ma" : "15mb") : (above ? "8va" : "8vb"))
+        let text = (continued ? "(\(label))" : label) as NSString
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.ottavaFont, .foregroundColor: color]
+        let size = text.size(withAttributes: attrs)
+        text.draw(at: NSPoint(x: x1, y: y - size.height / 2), withAttributes: attrs)
+        color.setStroke()
+        let dash = NSBezierPath()
+        dash.move(to: NSPoint(x: x1 + size.width + 3, y: y))
+        dash.line(to: NSPoint(x: max(x1 + size.width + 6, x2), y: y))
+        if hook { dash.line(to: NSPoint(x: max(x1 + size.width + 6, x2), y: y + (above ? 1 : -1) * space * 0.9)) }
+        dash.lineWidth = 1
+        dash.setLineDash([4, 3], count: 2, phase: 0)
+        dash.stroke()
     }
 
     // MARK: Transposing instruments
@@ -2168,7 +2262,16 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         stemSpans = [:]
         let groups = beamGroups(score, placed)
         var beamed: [Int: (group: [Int], up: Bool)] = [:]
+        // Groups across two staves (cross-staff notes): the beam goes between them, stems down from the upper
+        // staff's notes and up from the lower's.
+        var crossGroups: [[Int]: (upper: Int, lower: Int)] = [:]
         for g in groups {
+            let staves = Set(g.map { drawnStaff(score.notes[$0]) })
+            if staves.count > 1, let upper = staves.min(), let lower = staves.max() {
+                crossGroups[g] = (upper, lower)
+                for i in g { beamed[i] = (g, drawnStaff(score.notes[i]) != upper) }
+                continue
+            }
             let average = g.reduce(0) { $0 + position(score.notes[$1]) } / g.count
             for i in g { beamed[i] = (g, forcedUp ?? (average < 4)) }
         }
@@ -2185,11 +2288,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 continue
             }
             let pos = position(note)
-            let cy = y(position: pos, system: p.system)
+            let cy = y(position: pos, system: p.system, of: note)
             // Ledger lines.
             color.setFill()
-            if pos <= -2 { for l in stride(from: -2, through: pos, by: -2) { ledger(x: p.x, y: y(position: l, system: p.system)) } }
-            if pos >= 10 { for l in stride(from: 10, through: pos, by: 2) { ledger(x: p.x, y: y(position: l, system: p.system)) } }
+            if pos <= -2 { for l in stride(from: -2, through: pos, by: -2) { ledger(x: p.x, y: y(position: l, system: p.system, of: note)) } }
+            if pos >= 10 { for l in stride(from: 10, through: pos, by: 2) { ledger(x: p.x, y: y(position: l, system: p.system, of: note)) } }
             if score.showsAccidental(p.index) { drawAccidental(note.alter ?? 0, x: p.x - space * 1.35, y: cy, ink: color) }
             // Head.
             let w = note.duration == .whole ? space * 1.5 : space * 1.25, h = space * 0.95
@@ -2212,7 +2315,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             }
             // Chord notes: more heads on the same stem (a step apart: side by side).
             let tones = note.chord ?? []
-            let allPositions = ([pos] + tones.map { $0.diatonic - score.clef.bottomLine }).sorted()
+            let allPositions = ([pos] + tones.map { position($0.diatonic, of: note) }).sorted()
             let up = beamed[p.index]?.up ?? forcedUp ?? (allPositions.reduce(0, +) / allPositions.count < 4)
             if !tones.isEmpty {
                 var shifted = Set<Int>()
@@ -2220,12 +2323,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                     shifted.insert(up ? tp : allPositions[k - 1])
                 }
                 for tone in tones {
-                    let tp = tone.diatonic - score.clef.bottomLine
+                    let tp = position(tone.diatonic, of: note)
                     let tx = shifted.contains(tp) ? (up ? p.x + w - 1 : p.x - w + 1) : p.x
-                    let ty = y(position: tp, system: p.system)
+                    let ty = y(position: tp, system: p.system, of: note)
                     color.setFill()
-                    if tp <= -2 { for l in stride(from: -2, through: tp, by: -2) { ledger(x: tx, y: y(position: l, system: p.system)) } }
-                    if tp >= 10 { for l in stride(from: 10, through: tp, by: 2) { ledger(x: tx, y: y(position: l, system: p.system)) } }
+                    if tp <= -2 { for l in stride(from: -2, through: tp, by: -2) { ledger(x: tx, y: y(position: l, system: p.system, of: note)) } }
+                    if tp >= 10 { for l in stride(from: 10, through: tp, by: 2) { ledger(x: tx, y: y(position: l, system: p.system, of: note)) } }
                     if let alter = tone.alter, alter != score.keyAlter(tone.step, at: p.index) {
                         drawAccidental(alter, x: p.x - space * 1.35 - (score.showsAccidental(p.index) ? space * 1.2 : 0), y: ty, ink: color)
                     }
@@ -2251,7 +2354,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 }
             }
             // The stem runs from the far head to past the near one.
-            let lowY = y(position: allPositions.first!, system: p.system), highY = y(position: allPositions.last!, system: p.system)
+            let lowY = y(position: allPositions.first!, system: p.system, of: note), highY = y(position: allPositions.last!, system: p.system, of: note)
             stemSpans[p.index] = (lowY, highY)
             shapes[NoteRef(voice: v, index: p.index)] = (up, lowY, highY)
             // Stem and flags (beamed notes get their stems with the beam).
@@ -2293,11 +2396,15 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
         // Beams.
         for g in groups {
+            if let across = crossGroups[g] {
+                drawCrossStaffBeam(g, across: across, score: score, placed: placed, beamed: beamed, v: v, ink: ink)
+                continue
+            }
             guard let up = beamed[g[0]]?.up else { continue }
             let points = g.compactMap { i -> (x: CGFloat, y: CGFloat, i: Int)? in
                 guard let p = placed.first(where: { $0.index == i }) else { return nil }
                 let w = space * 1.25
-                return (up ? p.x + w - 0.6 : p.x + 0.6, y(position: position(score.notes[i]), system: p.system), i)
+                return (up ? p.x + w - 0.6 : p.x + 0.6, y(position: position(score.notes[i]), system: p.system, of: score.notes[i]), i)
             }
             guard let first = points.first, let last = points.last else { continue }
             // A gentle slope, stems at least 3 spaces.
@@ -2343,6 +2450,47 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
     }
 
+    /// A beam between two staves: level with the middle of the gap, stems down to it from the upper staff's notes
+    /// and up to it from the lower's.
+    private func drawCrossStaffBeam(_ g: [Int], across: (upper: Int, lower: Int), score: ScoreData, placed: [Placed],
+                                    beamed: [Int: (group: [Int], up: Bool)], v: Int, ink: NSColor) {
+        let spots = g.compactMap { i in placed.first { $0.index == i }.map { (i, $0) } }
+        guard let system = spots.first?.1.system else { return }
+        let gapTop = staffTop(system, staff: across.upper) + space * 4, gapBottom = staffTop(system, staff: across.lower)
+        let thickness = space * 0.5
+        let levels = g.contains { score.notes[$0].duration == .sixteenth } ? 2 : 1
+        // The beams' top edge, the stack centred in the gap.
+        let top = (gapTop + gapBottom) / 2 - (thickness + CGFloat(levels - 1) * space * 0.75) / 2
+        let w = space * 1.25
+        var points: [(x: CGFloat, i: Int)] = []
+        for (i, p) in spots {
+            let up = beamed[i]?.up ?? false
+            let x = up ? p.x + w - 0.6 : p.x + 0.6
+            let span = stemSpans[i] ?? (gapTop, gapTop)
+            // Down from the upper staff's highest head to the beams' far edge; up from the lower staff's lowest head.
+            let from = up ? span.low : span.high
+            let end = up ? top : top + thickness + CGFloat(levels - 1) * space * 0.75
+            colorFor(NoteRef(voice: v, index: i), ink: ink).setFill()
+            NSRect(x: x - 0.6, y: min(from, end), width: 1.2, height: abs(end - from)).fill()
+            points.append((x, i))
+        }
+        ink.setFill()
+        for level in 0..<levels {
+            var runStart: Int?
+            for (k, pt) in points.enumerated() {
+                let needs = level == 0 || score.notes[pt.i].duration == .sixteenth
+                if needs, runStart == nil { runStart = k }
+                if (!needs || k == points.count - 1), let s = runStart {
+                    let e = needs ? k : k - 1
+                    let x1 = points[s].x, x2 = e > s ? points[e].x : points[s].x + (s > 0 ? -space : space)
+                    let y = top + CGFloat(level) * space * 0.75
+                    NSRect(x: min(x1, x2), y: y, width: abs(x2 - x1) + 0.6, height: thickness).fill()
+                    runStart = nil
+                }
+            }
+        }
+    }
+
     private func colorFor(_ ref: NoteRef, ink: NSColor) -> NSColor {
         let ref = NoteRef(voice: ref.voice, index: ref.index, staff: drawingStaff)
         if playing.contains(ref) { return .systemOrange }
@@ -2364,7 +2512,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 guard let first = spots.first, let last = spots.last, first.system == last.system else { continue }
                 let positions = group.map { score.notes[$0].rest ? 4 : position(score.notes[$0]) }
                 let up = forcedUp ?? (positions.reduce(0, +) / max(1, positions.count) < 4)
-                let ys = group.map { score.notes[$0].rest ? staffTop(first.system) + space * 2 : y(position: position(score.notes[$0]), system: first.system) }
+                let ys = group.map { score.notes[$0].rest ? staffTop(first.system) + space * 2 : y(position: position(score.notes[$0]), system: first.system, of: score.notes[$0]) }
                 let x1 = first.x - space * 0.2, x2 = last.x + space * 1.45
                 let yLine = up ? min(ys.min()! - space * 4.4, staffTop(first.system) - space * 1.2) : max(ys.max()! + space * 4.4, staffTop(first.system) + space * 5.2)
                 let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: colorFor(NoteRef(voice: v, index: group[0]), ink: ink)]
@@ -2394,10 +2542,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func drawGrace(_ note: ScoreNote, _ p: Placed, v: Int, in score: ScoreData, color: NSColor, up: Bool) {
         let scale: CGFloat = 0.66
         let pos = position(note)
-        let cy = y(position: pos, system: p.system)
+        let cy = y(position: pos, system: p.system, of: note)
         color.setFill()
-        if pos <= -2 { for l in stride(from: -2, through: pos, by: -2) { NSRect(x: p.x - space * 0.3, y: y(position: l, system: p.system) - 0.5, width: space * 1.5, height: 1).fill() } }
-        if pos >= 10 { for l in stride(from: 10, through: pos, by: 2) { NSRect(x: p.x - space * 0.3, y: y(position: l, system: p.system) - 0.5, width: space * 1.5, height: 1).fill() } }
+        if pos <= -2 { for l in stride(from: -2, through: pos, by: -2) { NSRect(x: p.x - space * 0.3, y: y(position: l, system: p.system, of: note) - 0.5, width: space * 1.5, height: 1).fill() } }
+        if pos >= 10 { for l in stride(from: 10, through: pos, by: 2) { NSRect(x: p.x - space * 0.3, y: y(position: l, system: p.system, of: note) - 0.5, width: space * 1.5, height: 1).fill() } }
         if score.showsAccidental(p.index) { drawAccidental(note.alter ?? 0, x: p.x - space * 1.15, y: cy, ink: color) }
         let w = space * 1.25 * scale, h = space * 0.95 * scale
         let head = NSBezierPath(ovalIn: NSRect(x: -w / 2, y: -h / 2, width: w, height: h))
@@ -2696,6 +2844,8 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             note.alter = nil
         }
         let at = min(cursor, cur.notes.count)
+        // Between two notes of an ottava passage, the new note joins it.
+        note.ottava = ottava(joining: at)
         editVoice(step == nil ? "Add Rest" : "Add Note") { $0.notes.insert(note, at: at) }
         // Keep entering after it.
         selected = nil
@@ -3242,6 +3392,58 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         return target.map { [$0] } ?? []
     }
 
+    // MARK: Ottavas and cross-staff notes
+
+    /// The ottava a note put in at `index` joins: the one it's in the middle of.
+    private func ottava(joining index: Int) -> Int? {
+        let line = cur.notes
+        guard index > 0, index < line.count, let o = line[index - 1].ottava, line[index].ottava == o else { return nil }
+        return o
+    }
+
+    /// The ottava over the selected notes (nil when they differ).
+    var ottavaHere: Int? {
+        let values = Set(markTargets.compactMap { cur.notes.indices.contains($0) ? cur.notes[$0].ottava : nil })
+        return values.count == 1 ? values.first : nil
+    }
+
+    /// 8va (1), 15ma (2), 8vb (−1) or 15mb (−2) over the selected notes, or none (nil): they sound where they are,
+    /// and are drawn an octave (two) nearer the staff under the line.
+    func setOttava(_ value: Int?) {
+        let notes = markTargets
+        guard !notes.isEmpty, cur.clef != .percussion else { return NSSound.beep() }
+        let name = value.map { ["15mb", "8vb", "", "8va", "15ma"][$0 + 2] } ?? "Remove Ottava"
+        editVoice(name) { s in for i in notes where s.notes.indices.contains(i) { s.notes[i].ottava = value == 0 ? nil : value } }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Whether the selected notes can go across to the staff above (−1) or below (1).
+    func canMoveToStaff(_ delta: Int) -> Bool {
+        let t = staffIndex + delta
+        return (0..<fullScore.staffCount).contains(t) && fullScore.forStaff(t).clef != .percussion && cur.clef != .percussion
+    }
+
+    /// Cross-staff: the selected notes drawn on the staff below (1) or above (−1) — they still belong, beam and play
+    /// with their own staff. Moving them back the other way puts them home; 0 puts them home at once.
+    func moveToStaff(_ delta: Int) {
+        let notes = markTargets.filter { cur.notes.indices.contains($0) && !cur.notes[$0].rest }
+        guard !notes.isEmpty else { return NSSound.beep() }
+        if delta != 0 {
+            let now = cur.notes[notes[0]].crossStaff ?? 0
+            let next = max(-1, min(1, now + delta))
+            guard next == 0 || canMoveToStaff(next) else { return NSSound.beep() }
+            editVoice(next == 0 ? "Back to Own Staff" : next > 0 ? "Cross to Staff Below" : "Cross to Staff Above") { s in
+                for i in notes { s.notes[i].crossStaff = next == 0 ? nil : next }
+            }
+        } else {
+            editVoice("Back to Own Staff") { s in for i in notes { s.notes[i].crossStaff = nil } }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Where the selected note is drawn: its own staff (0), or across below (1) or above (−1).
+    var crossStaffHere: Int { target.flatMap { cur.notes.indices.contains($0) ? cur.notes[$0].crossStaff : nil } ?? 0 }
+
     /// Adds an articulation to the notes (or takes it off when they all have it). Staccato and staccatissimo
     /// replace each other, as do accent and marcato.
     func toggleArticulation(_ mark: String) {
@@ -3448,6 +3650,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         case 124: return moveCursor(by: 1)
         case 126 where event.modifierFlags.contains([.option, .command]): return setStaff(staffIndex - 1)
         case 125 where event.modifierFlags.contains([.option, .command]): return setStaff(staffIndex + 1)
+        // ⇧⌘↑ / ⇧⌘↓: the selected notes onto the staff above or below (cross-staff), as in MuseScore.
+        case 126 where event.modifierFlags.contains([.shift, .command]): return moveToStaff(-1)
+        case 125 where event.modifierFlags.contains([.shift, .command]): return moveToStaff(1)
         case 126 where event.modifierFlags.contains(.option): return moveString(by: 1)
         case 125 where event.modifierFlags.contains(.option): return moveString(by: -1)
         case 126: return moveSelected(steps: command ? 7 : 1)
@@ -3538,7 +3743,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 let ordered = placed.filter { $0.voice == voice || st != staffIndex } + placed.filter { $0.voice != voice && st == staffIndex }
                 return ordered.first { pl in
                     let note = score.forVoice(pl.voice).notes[pl.index]
-                    let cy = note.rest ? staffTop(pl.system) + space * 2 : y(position: position(note), system: pl.system)
+                    let cy = note.rest ? staffTop(pl.system) + space * 2 : y(position: position(note), system: pl.system, of: note)
                     return NSRect(x: pl.x - space * 0.4, y: cy - space * 1.2, width: space * 2.2, height: space * 2.4).contains(p)
                 }.map { NoteRef(voice: $0.voice, index: $0.index, staff: st) }
             }
@@ -3593,8 +3798,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             // Double-click on the staff: a note at that pitch.
             let s = system(at: p.y)
             let pos = Int(((staffTop(s) + space * 4 - p.y) / (space / 2)).rounded())
-            let d = max(0, min(9 * 7, score.clef.bottomLine + pos))
             cursor = gap(at: p)
+            // Under an ottava the note sounds an octave (two) from where it's drawn.
+            let d = max(0, min(9 * 7, score.clef.bottomLine + pos + (ottava(joining: cursor) ?? 0) * 7))
             selected = nil
             insert(step: d % 7, octave: d / 7)
             return
@@ -3827,6 +4033,31 @@ final class ScoreElementView: ElementView {
         instrumentItem.submenu = iMenu
         menu.addItem(instrumentItem)
         menu.addItem(ClosureMenuItem("Concert Pitch", state: score.concertPitch == true) { [weak self] in self?.staff.toggleConcertPitch() })
+        // Ottava lines and cross-staff notes, for the notes right-clicked (or selected).
+        let ottavaItem = NSMenuItem(title: "Ottava", action: nil, keyEquivalent: "")
+        let oMenu = NSMenu()
+        let ottavaNow = staff.ottavaHere
+        for (value, name) in [(1, "8va (an octave higher)"), (2, "15ma (two octaves higher)"), (-1, "8vb (an octave lower)"), (-2, "15mb (two octaves lower)")] {
+            oMenu.addItem(ClosureMenuItem(name, state: ottavaNow == value) { [weak self] in self?.staff.setOttava(value) })
+        }
+        oMenu.addItem(.separator())
+        oMenu.addItem(ClosureMenuItem("Remove Ottava") { [weak self] in self?.staff.setOttava(nil) })
+        ottavaItem.submenu = oMenu
+        menu.addItem(ottavaItem)
+        if score.staffCount > 1 {
+            let crossItem = NSMenuItem(title: "Cross-Staff", action: nil, keyEquivalent: "")
+            let cMenu = NSMenu()
+            cMenu.autoenablesItems = false
+            let below = ClosureMenuItem("Move to Staff Below (⇧⌘↓)", state: staff.crossStaffHere == 1) { [weak self] in self?.staff.moveToStaff(1) }
+            below.isEnabled = staff.canMoveToStaff(1) || staff.crossStaffHere == -1
+            let aboveItem = ClosureMenuItem("Move to Staff Above (⇧⌘↑)", state: staff.crossStaffHere == -1) { [weak self] in self?.staff.moveToStaff(-1) }
+            aboveItem.isEnabled = staff.canMoveToStaff(-1) || staff.crossStaffHere == 1
+            cMenu.addItem(below)
+            cMenu.addItem(aboveItem)
+            cMenu.addItem(ClosureMenuItem("Back to Own Staff") { [weak self] in self?.staff.moveToStaff(0) })
+            crossItem.submenu = cMenu
+            menu.addItem(crossItem)
+        }
         let key = NSMenuItem(title: "Key Signature", action: nil, keyEquivalent: "")
         let keys = NSMenu()
         for (fifths, name) in ScoreData.keyNames {

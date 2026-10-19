@@ -277,6 +277,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Slashes for the selection or bar (beat or rhythmic), Slash Entry | | Score tab ▸ Lead Sheet ▸ Slashes, right-click ▸ Lead Sheet |
 | 1st / 2nd / 3rd endings, bars per line, composer | | Score tab ▸ Lead Sheet, right-click ▸ Lead Sheet |
 | Transpose: a half step, an octave, an interval, steps in the key, to a key, or Transpose… | | Score tab ▸ Transpose, right-click ▸ Transpose |
+| Cross-staff: the selected notes onto the staff below / above, or back | **⇧⌘↓ / ⇧⌘↑** | Score tab ▸ Staves ▸ Cross-Staff, right-click ▸ Cross-Staff |
+| Ottava lines (8va, 15ma, 8vb, 15mb) over the selected notes | | Score tab ▸ Expression ▸ Ottava, right-click ▸ Ottava |
 | The staff's instrument (B♭ clarinet, E♭ alto sax, F horn…) / Concert Pitch | | Score tab ▸ Instrument / Concert Pitch, right-click |
 
 Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
@@ -348,6 +350,19 @@ chart comps itself. **1st / 2nd / 3rd endings** bracket their bars — the 1st i
 after it. **Bars per Line** (2, 3, 4, 5, 6 or 8, or as many as fit) puts that many bars on each line, squeezing the spacing a little
 if need be. MusicXML keeps all of it (slash noteheads, endings, the composer, line breaks).
 
+**Cross-staff beaming** — on a piano grand staff (or any two staves), **⇧⌘↓** moves the selected notes onto the
+staff below and **⇧⌘↑** onto the staff above, as in MuseScore; the opposite move (or Back to Own Staff) brings them
+home. They're placed by that staff's clef, with its ledger lines, but still belong to their own staff: they count in
+its bars, keep its voice and play with it. A beam whose notes are on both staves runs level between them, stems down
+from the upper staff's notes and up from the lower's (double beams for sixteenths), so a run can pass from one hand to
+the other. MusicXML writes them as the voice's notes on the part's other `<staff>`, and reads them back.
+
+**Ottava lines** — **8va** and **15ma** over the selected notes (**8vb** and **15mb** under them) draw them an octave or
+two nearer the staff, with the sign at the first note, a dashed line and a hook at the last (and "(8va)" again on each
+new line of music). The notes keep — and play — the pitch they sound; a note typed in the middle of the passage joins
+it, and a double-click on the staff there puts in the pitch the line means. MusicXML keeps them as `<octave-shift>`
+(the sounding pitch in the notes).
+
 **Transposition and concert pitch** — **Transpose** moves the music: up or down a half step or an octave, by any
 interval from a minor 2nd to an octave, so many steps in the key (a 3rd up in C major: C → E, D → F, keeping sharps and
 flats against the key), or to another key (the closer way, or up or down, in the Transpose… dialog). With two or more
@@ -380,7 +395,7 @@ play together. While you write in one voice the other is shown in grey; clicking
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score — every part and staff (a piano part's two staves become a grand staff; other parts each a staff, named) —
 with title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, 1st and 2nd endings, slash notation, transposing instruments, the composer, line breaks, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
+strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, 1st and 2nd endings, slash notation, transposing instruments, cross-staff notes, ottava lines, the composer, line breaks, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
 voices, staves beyond a part's first two, cue notes) is listed. Right-click a score (or the Score tab) ▸ **Export
 MusicXML…** saves it as MusicXML 4.0 with all of that: a piano grand staff as one part with two staves, every other
 staff as a part of its own.
