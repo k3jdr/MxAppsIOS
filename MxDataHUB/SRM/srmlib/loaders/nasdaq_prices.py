@@ -1,8 +1,9 @@
-"""End-of-day prices from Nasdaq.com's quote API (free, no API key): ETFs, ETNs and closed-end funds — the stock and
-bond funds FMP doesn't reach without a key or outside the benchmarks — and any other US-listed security.
+"""End-of-day prices from Nasdaq.com's quote API (free, no API key): ETFs, ETNs, closed-end and mutual funds — the stock
+and bond funds FMP doesn't reach without a key or outside the benchmarks — and any other US-listed security.
+Collective investment trusts have no public prices; trust-navs prices them from statements and a proxy fund.
 
 Work set, unless --symbols names securities:
-  * every fund (ETF, ETN, closed-end fund) held in a portfolio or a personal account's tax lots,
+  * every fund (ETF, ETN, closed-end or mutual fund) held in a portfolio or a personal account's tax lots,
   * every benchmark or portfolio security without a price in the last 5 days from any source (a fallback when
     fmp-prices could not run, e.g. no FMP key),
   * with --funds, every active fund in the listed universe (about 6,100; roughly 2 hours at 1 request a second),
@@ -22,7 +23,8 @@ from ..model import source_id
 URL = "https://api.nasdaq.com/api/quote/{symbol}/historical?assetclass={asset}&fromdate={start}&todate={end}&limit=9999"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 Chrome/130 Safari/537.36",
            "Accept": "application/json"}
-FUND_TYPES = ("ETF", "ETN", "Closed-End Fund")
+FUND_TYPES = ("ETF", "ETN", "Closed-End Fund", "Mutual Fund")
+NO_FEED = "Collective Investment Trust"     # priced by trust-navs (statement unit values and a proxy fund)
 
 
 def _number(text):
@@ -48,12 +50,14 @@ def _work(cur, args):
                 out.append(row)
         return out
     if getattr(args, "all_securities", False):
-        cur.execute("SELECT security_id, ticker, security_type FROM srm.v_security WHERE is_active AND ticker IS NOT NULL ORDER BY ticker")
+        cur.execute("""SELECT security_id, ticker, security_type FROM srm.v_security
+                        WHERE is_active AND ticker IS NOT NULL AND security_type <> %s ORDER BY ticker""", (NO_FEED,))
         return cur.fetchall()
     if getattr(args, "funds", False):
         cur.execute("""SELECT security_id, ticker, security_type FROM srm.v_security
                         WHERE is_active AND ticker IS NOT NULL AND (asset_class = 'Fund' OR security_type = ANY(%s))
-                        ORDER BY ticker""", (list(FUND_TYPES),))
+                          AND security_type <> %s
+                        ORDER BY ticker""", (list(FUND_TYPES), NO_FEED))
         return cur.fetchall()
     cur.execute("""
         WITH held AS (
@@ -65,9 +69,9 @@ def _work(cur, args):
              WHERE p.price_date >= current_date - 5)
         SELECT v.security_id, v.ticker, v.security_type
           FROM srm.v_security v JOIN held h USING (security_id)
-         WHERE v.is_active AND v.ticker IS NOT NULL
+         WHERE v.is_active AND v.ticker IS NOT NULL AND v.security_type <> %s
            AND ((v.asset_class = 'Fund' OR v.security_type = ANY(%s)) OR v.security_id NOT IN (SELECT security_id FROM fresh))
-         ORDER BY v.ticker""", (list(FUND_TYPES),))
+         ORDER BY v.ticker""", (NO_FEED, list(FUND_TYPES)))
     return cur.fetchall()
 
 
@@ -97,6 +101,9 @@ def run(conn, cfg, args):
         last_weekday = today - datetime.timedelta(days={0: 3, 6: 2}.get(today.weekday(), 1))
         empty = 0
         for n, (security_id, ticker, security_type) in enumerate(work, 1):
+            if security_type == NO_FEED:
+                run.reject(ticker, "a collective investment trust has no public prices: srm.py load trust-navs")
+                continue
             cur.execute("""SELECT l.listing_id, l.currency_code,
                                   (SELECT max(price_date) FROM srm.price p WHERE p.listing_id = l.listing_id AND p.source_id = %s)
                              FROM srm.listing l WHERE l.security_id = %s AND current_date < l.valid_to
@@ -110,7 +117,7 @@ def run(conn, cfg, args):
                 continue
             start = max(since, (last - datetime.timedelta(days=5)).isoformat()) if last else since
             symbol = ticker.replace(".", "^")             # Nasdaq writes class shares as BRK^B
-            asset = "etf" if security_type in ("ETF", "ETN") else "stocks"
+            asset = "etf" if security_type in ("ETF", "ETN") else "mutualfunds" if security_type == "Mutual Fund" else "stocks"
             url = URL.format(symbol=symbol, asset=asset, start=start, end=today.isoformat())
             try:
                 data = http(url, headers=HEADERS, limiter=limiter, retries=2)

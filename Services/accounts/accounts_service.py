@@ -6,7 +6,8 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
     GET  /health, /describe              status; what this service is for (shown in MxJobsWMS and MxDataHUB)
     GET  /securities?q=&kind=&priced=&offset=&limit=   search securities by ticker, name, ISIN or CUSIP; kind = all |
                                          stocks | funds | bonds (fixed-income funds); priced=1 only those with prices;
-                                         best first, a page at a time (limit ≤ 500) with the total that match
+                                         best first, a page at a time (limit ≤ 500) with the total that match; mutual
+                                         funds not yet in the security master are added from Nasdaq.com on a miss
     GET  /benchmarks                     benchmarks with members and snapshot date
     GET  /benchmarks/<code>/weights      a benchmark's latest weights with ticker, name, sector and asset class
     GET  /accounts                       personal accounts (srm.v_personal_account)
@@ -30,6 +31,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -116,7 +118,45 @@ SORTS = {
 }
 
 
+_DISCOVERED = set()   # search texts already looked up on Nasdaq.com in this process
+
+
 def search(conn, q):
+    """`find`, plus mutual funds from Nasdaq.com: when a search finds nothing — or, for kind funds / bonds, no mutual
+    fund — the funds Nasdaq.com's symbol search finds for the text are added to the security master (srm.py's
+    mutual-funds loader), their prices are queued with the srm-loader service, and the search runs again. Collective
+    trusts (no public prices) come from trusts.local.json instead (srm.py load trust-navs)."""
+    out = find(conn, q)
+    text = (q.get("q") or "").strip()
+    kind = q.get("kind", "all")
+    wants_funds = kind in ("funds", "bonds") and not any(r["securityType"] == "Mutual Fund" for r in out["securities"])
+    if (len(text) >= 4 and int(q.get("offset", 0) or 0) == 0 and (out["total"] == 0 or wants_funds)
+            and text.lower() not in _DISCOVERED):
+        _DISCOVERED.add(text.lower())
+        from srmlib.loaders import mutual_funds   # SRM's folder is on sys.path (class SRM)
+        try:
+            created = mutual_funds.discover(conn, text)
+        except Exception as e:                    # Nasdaq.com unreachable: answer with what the security master has
+            out["discoveryError"] = str(e)[:300]
+            return out
+        if created:
+            threading.Thread(target=queue_prices, args=(created,), daemon=True).start()
+            out = find(conn, q)
+            out["discovered"] = created
+    return out
+
+
+def queue_prices(symbols):
+    """Asks the srm-loader service to load Nasdaq.com prices for newly added funds (in the background)."""
+    url = "%s/load/nasdaq-prices?symbols=%s" % (LOADER, ",".join(symbols))
+    headers = {"Authorization": "Bearer " + Handler.token} if Handler.token else {}
+    try:
+        urllib.request.urlopen(urllib.request.Request(url, method="POST", data=b"", headers=headers), timeout=900).read()
+    except Exception as e:
+        sys.stderr.write("price load for %s failed: %s\n" % (",".join(symbols), e))
+
+
+def find(conn, q):
     """Matching securities, a page at a time (`offset`, `limit` ≤ 500), with the total that match, sorted by any column
     (`sort`, `dir`) or by relevance — an exact ticker, ticker and name prefixes, then those with prices, by market value —
     and filtered by column like a spreadsheet's autofilter: `ticker` / `name` (contains), `type` / `sector` / `exchange`
@@ -135,7 +175,7 @@ def search(conn, q):
     if text:
         where.append("(v.ticker ILIKE %s OR v.name ILIKE %s OR v.isin = upper(%s) OR v.cusip = upper(%s) OR v.fmp_symbol ILIKE %s)")
         params += [text + "%", "%" + text + "%", text, text, text + "%"]
-    fund = "(v.asset_class = 'Fund' OR v.security_type IN ('ETF', 'ETN', 'Closed-End Fund'))"
+    fund = "(v.asset_class = 'Fund' OR v.security_type IN ('ETF', 'ETN', 'Closed-End Fund', 'Mutual Fund'))"
     if kind == "stocks":
         where.append(f"NOT {fund} AND v.security_type IN ('Common Stock', 'ADR', 'REIT', 'Preferred Stock')")
     elif kind == "funds":

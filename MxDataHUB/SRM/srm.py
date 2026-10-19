@@ -5,6 +5,9 @@
     ./srm.py status                  migrations, row counts, identifier coverage, recent loads
     ./srm.py load all                run every loader in dependency order (not the OPTIONAL ones)
     ./srm.py load <name> [options]   one loader (see LOADERS)
+    ./srm.py load mutual-funds --symbols VTIFX ... | --search "fund name"
+                                     add mutual funds from Nasdaq.com and load their prices
+    ./srm.py load trust-navs [--file F] collective trusts: statement NAVs + proxy-fund pricing (trusts.local.json)
     ./srm.py load portfolio-snapshots [--as-of DATE] [--portfolios CODE ...]
                                      carry portfolios' latest holdings forward (weight history)
 
@@ -17,7 +20,8 @@ import sys
 
 from srmlib import migrate
 from srmlib.common import Config, log
-from srmlib.loaders import fmp, gleif, nasdaq100, nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, sec, ssga
+from srmlib.loaders import (fmp, gleif, mutual_funds, nasdaq100, nasdaq_prices, nasdaqtrader, openfigi, portfolios,
+                             reference, sec, ssga, trust_navs)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
 # per-security enrichment that works on the benchmark / portfolio securities.
@@ -32,13 +36,15 @@ LOADERS = {
     "sec-submissions": sec.load_submissions,    # SIC, incorporation, EIN, former names
     "gleif": gleif.run,                         # LEIs and legal entity data
     "fmp-prices": fmp.load_prices,              # end-of-day prices
-    "nasdaq-prices": nasdaq_prices.run,         # fund prices (ETFs, ETNs, closed-end funds) and gaps, no key needed
+    "nasdaq-prices": nasdaq_prices.run,         # fund prices (ETFs, ETNs, closed-end and mutual funds) and gaps, no key
+    "trust-navs": trust_navs.run,               # collective trusts: statement NAVs carried by a proxy fund's returns
+    "mutual-funds": mutual_funds.run,           # add mutual funds from Nasdaq.com (--symbols / --search), with prices
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
     "fmp-corporate-actions": fmp.load_corporate_actions,
     "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
 }
 # Not run by `load all`: name them to run them.
-OPTIONAL = {"portfolio-snapshots"}
+OPTIONAL = {"portfolio-snapshots", "mutual-funds"}
 
 
 def status(conn):
@@ -93,6 +99,8 @@ def main():
     load.add_argument("--include-otc", action="store_true", help="sec-tickers: also create OTC securities")
     load.add_argument("--as-of", help="portfolio-snapshots: snapshot date (default: the latest price date)")
     load.add_argument("--portfolios", nargs="*", help="portfolio-snapshots: only these portfolio codes")
+    load.add_argument("--search", help="mutual-funds: add the funds a Nasdaq.com name search finds")
+    load.add_argument("--file", help="trust-navs: the trusts file (default trusts.local.json)")
     args = parser.parse_args()
 
     cfg = Config(args)

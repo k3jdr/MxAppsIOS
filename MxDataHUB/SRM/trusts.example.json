@@ -1,0 +1,7 @@
+{
+  "_help": "Copy to trusts.local.json (kept out of git). For each collective investment trust: a code you choose (A-Z, 0-9, - or .), the name on your statement, an index fund tracking the same index as its proxy, and the unit values (NAV per unit) from your plan statements as \"YYYY-MM-DD\": value. Then: python3 srm.py load trust-navs (also part of Data Refresh > Prices).",
+  "trusts": [
+    {"code": "VTSM-CIT", "name": "Vanguard Inst Total Stock Market Index Trust Unit A", "proxy": "VITSX",
+     "navs": {"2026-09-30": 100.00}}
+  ]
+}

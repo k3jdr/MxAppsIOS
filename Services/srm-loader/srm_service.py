@@ -68,9 +68,10 @@ CATEGORIES = [
      "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members.", "cadence": "daily"},
     {"id": "identifiers", "name": "Identifiers & issuer data", "loaders": ["openfigi", "fmp-profiles", "sec-submissions", "gleif"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
-    {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "nasdaq-prices", "fmp-index-levels"],
+    {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "nasdaq-prices", "trust-navs", "fmp-index-levels"],
      "description": "End-of-day prices (FMP for benchmark and portfolio members; Nasdaq.com, free and keyless, for the "
-                    "stock and bond funds held and any security FMP left without a recent price) and benchmark levels.",
+                    "stock, bond and mutual funds held and any security FMP left without a recent price), collective "
+                    "trusts from statement NAVs and their proxy funds, and benchmark levels.",
      "cadence": "daily",
      # FMP needs an API key; when it fails, nasdaq-prices still runs and fills the gaps.
      "continueAfterFailure": ["fmp-prices"]},
@@ -87,7 +88,7 @@ RUN_NAMES = {
     "ssga": ["ssga_spy", "ssga_dia", "ssga_mdy", "ssga_spsm"], "nasdaq100": ["nasdaq100"],
     "openfigi": ["openfigi_mapping"], "fmp-profiles": ["fmp_profiles"], "sec-submissions": ["sec_submissions"],
     "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "nasdaq-prices": ["nasdaq_prices"],
-    "fmp-index-levels": ["fmp_index_levels"],
+    "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "mutual-funds": ["mutual_funds"],
     "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
