@@ -29,6 +29,13 @@ enum MusicXML {
 
     private static func duration(_ note: ScoreNote) -> Int { Int((note.beats * Double(divisions)).rounded()) }
 
+    /// A transposing part's <transpose>: what's added to the written pitch for the sounding one (octaves apart).
+    static func transposeXML(_ t: ScoreInterval) -> String {
+        let octaves = t.semitones / 12
+        let steps = t.steps - octaves * 7, semitones = t.semitones - octaves * 12
+        return "<transpose><diatonic>\(steps)</diatonic><chromatic>\(semitones)</chromatic>" + (octaves != 0 ? "<octave-change>\(octaves)</octave-change>" : "") + "</transpose>"
+    }
+
     static func export(_ score: ScoreData) -> String {
         var out = """
         <?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -49,6 +56,7 @@ enum MusicXML {
             if group.count == 2 { return score.staffName ?? "Piano" }
             let st = staffScores[group[0]]
             if let name = st.staffName, !name.isEmpty { return name }
+            if st.transposition != nil, let instrument = ScoreInstrument.find(st.instrument) { return instrument.name }
             if st.clef == .percussion { return "Drums" }
             return count == 1 ? (score.showTab == true ? "Guitar" : "Music") : "Staff \(group[0] + 1)"
         }
@@ -87,15 +95,18 @@ enum MusicXML {
                         + (endingStarts ? "<ending number=\"\(mark.ending!)\" type=\"start\">\(mark.ending!).</ending>" : "")
                         + (mark.repeatStart == true ? "<repeat direction=\"forward\"/>" : "") + "</barline>\n"
                 }
-                if m > 0, let fifths = mark.keyFifths {
+                // Keys as the part reads them (a transposing instrument's own key).
+                let partStaff = staffScores[group[0]]
+                if m > 0, let fifths = partStaff.mark(m).keyFifths {
                     out += "      <attributes><key><fifths>\(fifths)</fifths></key></attributes>\n"
                 }
                 if m == 0 {
-                    out += "      <attributes><divisions>\(divisions)</divisions><key><fifths>\(score.keyFifths)</fifths></key>"
+                    out += "      <attributes><divisions>\(divisions)</divisions><key><fifths>\(partStaff.keyFifths)</fifths></key>"
                     out += "<time><beats>\(score.beats)</beats><beat-type>\(score.beatUnit)</beat-type></time>"
                     if group.count == 2 { out += "<staves>2</staves>" }
                     for (k, st) in group.enumerated() { out += clefXML(staffScores[st].clef, number: group.count == 2 ? k + 1 : nil) }
                     if p == 0, let capo = score.capo, capo > 0 { out += "<staff-details><capo>\(capo)</capo></staff-details>" }
+                    if group.count == 1, let t = partStaff.transposition { out += transposeXML(t) }
                     out += "</attributes>\n"
                     if p == 0 { out += tempoXML(score, bar: 0) }
                 } else if p == 0, mark.tempo != nil || !(mark.tempoText ?? "").isEmpty {
@@ -374,11 +385,16 @@ enum MusicXML {
         if let composer = (try? rootElement.nodes(forXPath: "identification/creator[@type='composer']"))?.first?.stringValue?
             .trimmingCharacters(in: .whitespacesAndNewlines), !composer.isEmpty { score.composer = composer }
         var skippedGrace = 0, extraVoices = 0
+        // The keys the staff just read was written in, by bar (a transposing part has its own).
+        var readKeys: [Int: Int] = [:]
         /// One staff of one part (`shared`: the first, which also gives the key changes, tempo and repeats).
         func readStaff(_ part: XMLElement, staff staffNumber: Int, shared: Bool, into base: ScoreData) -> ScoreData {
             var score = base
             score.notes = []
             score.voices = nil
+            score.transpose = nil
+            score.instrument = nil
+            readKeys = [:]
             var divisions = 1.0
             var seenAttributes = false
             var pendingSymbol: String?
@@ -419,6 +435,15 @@ enum MusicXML {
                                 score.setMark(barIndex) { $0.keyFifths = f }
                             }
                             key = f
+                            readKeys[max(0, barIndex)] = f
+                        }
+                        // A transposing instrument: what's added to the written pitch for the sounding one.
+                        if let tr = e.elements(forName: "transpose").first(where: { ($0.attribute(forName: "number")?.stringValue ?? mine) == mine }),
+                           let chromatic = text(tr, "chromatic").flatMap(Double.init).map({ Int($0.rounded()) }) {
+                            let diatonic = text(tr, "diatonic").flatMap(Int.init) ?? Int((Double(chromatic) * 7 / 12).rounded())
+                            let octaves = text(tr, "octave-change").flatMap(Int.init) ?? 0
+                            let t = [diatonic + 7 * octaves, chromatic + 12 * octaves]
+                            score.transpose = t == [0, 0] ? nil : t
                         }
                         if !seenAttributes {
                             if let b = text(e, "time/beats").flatMap(Int.init), let u = text(e, "time/beat-type").flatMap(Int.init) {
@@ -671,6 +696,7 @@ enum MusicXML {
         let partNames: [String: String] = Dictionary(uniqueKeysWithValues: ((try? rootElement.nodes(forXPath: "part-list/score-part")) ?? [])
             .compactMap { $0 as? XMLElement }.compactMap { el in el.attribute(forName: "id")?.stringValue.map { ($0, text(el, "part-name") ?? "") } })
         var staves: [ScoreData] = []
+        var staffKeys: [[Int: Int]] = []
         var grand = false
         for (p, part) in parts.enumerated() {
             let count = part.elements(forName: "measure").first?.elements(forName: "attributes").compactMap { text($0, "staves").flatMap(Int.init) }.first ?? 1
@@ -681,7 +707,9 @@ enum MusicXML {
                 if parts.count > 1 || count > 1 {
                     staff.staffName = count > 1 ? nil : (name.isEmpty ? nil : name)
                 }
+                if let t = staff.transposition { staff.instrument = ScoreInstrument.guess(name: name, sounds: t)?.id }
                 staves.append(staff)
+                staffKeys.append(readKeys)
             }
             if p == 0, count >= 2 { grand = true; if !name.isEmpty, parts.count > 1 { score.staffName = name } }
         }
@@ -690,10 +718,45 @@ enum MusicXML {
         if grand { score.staffName = pianoName }
         for i in 1..<max(1, staves.count) { score.setStaff(i, staves[i]) }
         score.grandStaff = grand ? true : nil
+        if staves.contains(where: { $0.transposition != nil }) { keepWritten(&score, readKeys: staffKeys) }
         guard (0..<score.staffCount).contains(where: { !score.forStaff($0).notes.isEmpty }) else { throw ImportError.noPart }
         if extraVoices > 0 { notes.append("\(extraVoices) note\(extraVoices == 1 ? "" : "s") in a third or later voice left out (a score has two voices).") }
         if skippedGrace > 0 { notes.append("\(skippedGrace) cue note\(skippedGrace == 1 ? "" : "s") left out.") }
         return Imported(score: score, notes: notes)
+    }
+
+    /// Transposing parts: the score keeps concert keys (the first part's, put into concert pitch if it transposes),
+    /// and each transposing staff's notes stay as written — respelt if its key comes out the other way round
+    /// (a part in C♯ major is kept in D♭ major).
+    private static func keepWritten(_ score: inout ScoreData, readKeys: [[Int: Int]]) {
+        if let t = score.forStaff(0).transposition {
+            score.keyFifths = ScoreData.concertKey(score.keyFifths, t)
+            score.barMarks = score.barMarks?.mapValues { mark in
+                var m = mark
+                if let k = m.keyFifths { m.keyFifths = ScoreData.concertKey(k, t) }
+                return m
+            }
+        }
+        for i in 0..<min(score.staffCount, readKeys.count) {
+            let target = score.forStaff(i)
+            guard target.transposition != nil else { continue }
+            // The staff in the keys its part was written in.
+            var source = target
+            let keys = readKeys[i]
+            source.keyFifths = keys[0] ?? source.keyFifths
+            var marks = (source.barMarks ?? [:]).mapValues { mark -> ScoreBarMark in var m = mark; m.keyFifths = nil; return m }
+            var previous = source.keyFifths
+            for bar in keys.keys.sorted() where bar > 0 {
+                guard let k = keys[bar], k != previous else { continue }
+                marks[bar, default: ScoreBarMark()].keyFifths = k
+                previous = k
+            }
+            source.barMarks = marks.filter { !$0.value.isEmpty }
+            let moved = source.respelledStaff(into: target) { bar in
+                ScoreData.interval(semitones: 0, from: source.fifths(inBar: bar), to: target.fifths(inBar: bar))
+            }
+            score.setStaff(i, moved)
+        }
     }
 
     /// A chord symbol from MusicXML harmony: root, kind (its text, or a name for it) and bass.

@@ -276,6 +276,8 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Capo (fret 1–9) | | Score tab ▸ Capo, right-click ▸ Capo |
 | Slashes for the selection or bar (beat or rhythmic), Slash Entry | | Score tab ▸ Lead Sheet ▸ Slashes, right-click ▸ Lead Sheet |
 | 1st / 2nd / 3rd endings, bars per line, composer | | Score tab ▸ Lead Sheet, right-click ▸ Lead Sheet |
+| Transpose: a half step, an octave, an interval, steps in the key, to a key, or Transpose… | | Score tab ▸ Transpose, right-click ▸ Transpose |
+| The staff's instrument (B♭ clarinet, E♭ alto sax, F horn…) / Concert Pitch | | Score tab ▸ Instrument / Concert Pitch, right-click |
 
 Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
 and the bar don't already give them, and last to the end of the bar; ledger lines, ties and a final bar line are
@@ -346,6 +348,24 @@ chart comps itself. **1st / 2nd / 3rd endings** bracket their bars — the 1st i
 after it. **Bars per Line** (2, 3, 4, 5, 6 or 8, or as many as fit) puts that many bars on each line, squeezing the spacing a little
 if need be. MusicXML keeps all of it (slash noteheads, endings, the composer, line breaks).
 
+**Transposition and concert pitch** — **Transpose** moves the music: up or down a half step or an octave, by any
+interval from a minor 2nd to an octave, so many steps in the key (a 3rd up in C major: C → E, D → F, keeping sharps and
+flats against the key), or to another key (the closer way, or up or down, in the Transpose… dialog). With two or more
+notes selected it moves only those; otherwise the whole score — every staff and voice, chord tones, chord symbols
+(F♯m7/C♯ → G♯m7/D♯) and key signatures (or, with Transpose Key Signatures off, the keys stay and accidentals are
+written). Notes are spelt for the new key — accidentals only where the key and the bar don't give them, no double
+sharps or flats, and a key beyond six sharps or flats written the other way (B♭ major up a half step is B major).
+**Instrument** makes a staff a transposing instrument — B♭ clarinet, trumpet, soprano and tenor sax, E♭ alto and
+baritone sax, A and E♭ clarinet, F horn, English horn, bass clarinet, piccolo, glockenspiel, guitar, bass guitar or
+double bass. Its notes are written where its player reads them, in its own key (a B♭ clarinet reads D major when the
+score is in concert C; an alto sax in concert B major reads A♭ major), its short name ("B♭ Cl.") stands beside the
+staff, and it plays at the pitch it sounds; the music doesn't change sound when you choose an instrument. **Concert
+Pitch** shows every staff as it sounds, in the score's key ("Concert Pitch" over the music) — notes typed, moved or
+given sharps there go back to where the instrument reads them. A key chosen while a transposing staff is shown as
+written is its written key. Quick Help gives a transposing note's other pitch ("sounds C5"). MusicXML keeps it all:
+each part in its written key with its `<transpose>` (octaves too), the instrument's name, and on import the score's
+key in concert pitch.
+
 **Tuplets beyond triplets** — 2 in the time of 3 (a duplet in 6/8), 4:3, 5:4, 6:4, 7:4 and 9:8 — are numbered and
 bracketed like triplets, fill their bar correctly and play in time. **Grace notes** sit small before their note and take
 no time in the bar: an **acciaccatura** (slashed) is crushed in just before the beat; an **appoggiatura** takes half of
@@ -360,7 +380,7 @@ play together. While you write in one voice the other is shown in grey; clicking
 MusicXML…** (or the Insert ribbon's MusicXML button, or drop a `.musicxml` / `.mxl` file on the page) brings in a
 score — every part and staff (a piano part's two staves become a grand staff; other parts each a staff, named) —
 with title, key, time, clef, tempo, notes, rests, dots, ties, accidentals, chords, chord symbols, lyrics and guitar
-strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, 1st and 2nd endings, slash notation, the composer, line breaks, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
+strings, grace notes, tuplets of any kind, tempo changes (words, metronome marks, rit. / accel.), dynamics, hairpins, slurs, articulations, ornaments, fermatas, key changes, repeat signs, 1st and 2nd endings, slash notation, transposing instruments, the composer, line breaks, triplets and a second voice on each staff (rests fill where it's silent) — anything left out (third and later
 voices, staves beyond a part's first two, cue notes) is listed. Right-click a score (or the Score tab) ▸ **Export
 MusicXML…** saves it as MusicXML 4.0 with all of that: a piano grand staff as one part with two staves, every other
 staff as a part of its own.

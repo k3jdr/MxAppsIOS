@@ -136,6 +136,9 @@ struct ScoreStaff: Codable, Hashable {
     var clef: ScoreData.Clef = .treble
     var notes: [ScoreNote] = []
     var voices: [[ScoreNote]]?
+    /// A transposing instrument's interval ([steps, semitones]: sounding = written + it) and which instrument it is.
+    var transpose: [Int]?
+    var instrument: String?
 }
 
 /// What happens at a bar: a new key from it, a repeat starting there, or ending at its end.
@@ -202,23 +205,35 @@ struct ScoreData: Codable, Hashable {
     var staffName: String?
     /// The first two staves joined by a brace, as for piano (bar lines run through both).
     var grandStaff: Bool?
+    /// The first staff's transposing instrument: [steps, semitones] from where it's written to where it sounds (a
+    /// B♭ clarinet is [-1, -2], as MusicXML's <transpose>), and which instrument (ScoreInstrument id). Its notes are
+    /// kept as written; the score's keys are concert pitch.
+    var transpose: [Int]?
+    var instrument: String?
+    /// Every staff shown as it sounds (transposing instruments in concert pitch).
+    var concertPitch: Bool?
 
     // MARK: Staves
 
     var staffCount: Int { 1 + (staves?.count ?? 0) }
 
-    /// One staff as a score of its own (its clef, notes and voices; the shared key, time, tempo and bars).
+    /// One staff as a score of its own (its clef, notes and voices; the shared key, time, tempo and bars). A
+    /// transposing instrument's staff has the keys it's written in (a B♭ clarinet's D major for concert C major).
     func forStaff(_ i: Int) -> ScoreData {
         var copy = self
         copy.staves = nil
         copy.grandStaff = nil
-        guard i > 0, let more = staves, more.indices.contains(i - 1) else { return copy }
-        let staff = more[i - 1]
-        copy.clef = staff.clef
-        copy.notes = staff.notes
-        copy.voices = staff.voices
-        copy.staffName = staff.name
-        copy.showTab = nil
+        if i > 0, let more = staves, more.indices.contains(i - 1) {
+            let staff = more[i - 1]
+            copy.clef = staff.clef
+            copy.notes = staff.notes
+            copy.voices = staff.voices
+            copy.staffName = staff.name
+            copy.showTab = nil
+            copy.transpose = staff.transpose
+            copy.instrument = staff.instrument
+        }
+        if let t = copy.transposition { copy.useWrittenKeys(for: t) }
         return copy
     }
 
@@ -229,11 +244,14 @@ struct ScoreData: Codable, Hashable {
             notes = view.notes
             voices = view.voices
             staffName = view.staffName
+            transpose = view.transpose
+            instrument = view.instrument
             return
         }
         var more = staves ?? []
         while more.count < i { more.append(ScoreStaff()) }
-        more[i - 1] = ScoreStaff(name: view.staffName, clef: view.clef, notes: view.notes, voices: view.voices)
+        more[i - 1] = ScoreStaff(name: view.staffName, clef: view.clef, notes: view.notes, voices: view.voices,
+                                 transpose: view.transpose, instrument: view.instrument)
         staves = more
     }
 
@@ -524,7 +542,7 @@ struct ScoreData: Codable, Hashable {
         if let drum = DrumKit.instrument(note.drum) { return drum.midi }
         // A slash plays its chord (its first note stands for it).
         if note.slash != nil { return midis(index).first }
-        return Self.midi(step: note.step, octave: note.octave, alter: soundingAlter(index))
+        return Self.midi(step: note.step, octave: note.octave, alter: soundingAlter(index)) + soundingShift
     }
 
     static func midi(step: Int, octave: Int, alter: Int) -> Int {
@@ -563,11 +581,11 @@ struct ScoreData: Codable, Hashable {
     /// Every pitch a note sounds (the note and its chord tones), as MIDI numbers.
     func midis(_ index: Int) -> [Int] {
         if notes[index].slash != nil, !notes[index].rest {
-            return chordSymbol(at: index).map(Self.voicing) ?? []
+            return chordSymbol(at: index).map { Self.voicing($0).map { $0 + soundingShift } } ?? []
         }
         guard let main = midi(index) else { return [] }
         let tones = (notes[index].chord ?? []).map {
-            DrumKit.instrument($0.drum)?.midi ?? Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step, at: index))
+            DrumKit.instrument($0.drum)?.midi ?? Self.midi(step: $0.step, octave: $0.octave, alter: $0.alter ?? keyAlter($0.step, at: index)) + soundingShift
         }
         return [main] + tones
     }
@@ -577,8 +595,9 @@ struct ScoreData: Codable, Hashable {
 
     /// Each pitch's string and fret for the TAB staff (guitar sounds an octave below treble-clef notation).
     func tab(_ index: Int) -> [(string: Int, fret: Int)] {
-        // Guitar sounds an octave below treble-clef notation; with a capo, frets count from it.
-        let shift = (clef == .treble ? 12 : 0) + (capo ?? 0)
+        // Guitar sounds an octave below treble-clef notation (the pitches include a transposing staff's shift); with
+        // a capo, frets count from it.
+        let shift = (clef == .treble ? 12 : 0) + soundingShift + (capo ?? 0)
         guard notes[index].slash == nil else { return [] }
         let pitches = midis(index).map { $0 - shift }
         guard !pitches.isEmpty else { return [] }
@@ -617,7 +636,7 @@ struct ScoreData: Codable, Hashable {
         guard !note.rest else { return nil }
         let d = note.diatonic + direction
         let step = ((d % 7) + 7) % 7, octave = d / 7
-        return Self.midi(step: step, octave: octave, alter: keyAlter(step, at: index))
+        return Self.midi(step: step, octave: octave, alter: keyAlter(step, at: index)) + soundingShift
     }
 
     // MARK: Dynamics, hairpins and slurs
@@ -1045,8 +1064,22 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     weak var owner: ScoreElementView?
     /// The whole score (every staff).
     var fullScore: ScoreData { owner?.score ?? ScoreData() }
-    /// The staff being drawn (or, between drawing, the one being written) as a score of its own.
-    var score: ScoreData { fullScore.forStaff(drawingStaff) }
+    /// The staff being drawn (or, between drawing, the one being written) as a score of its own — as it's shown
+    /// (with Concert Pitch on, a transposing instrument's staff as it sounds).
+    var score: ScoreData { shownStaff(drawingStaff) }
+    /// Staves in concert pitch, worked out once for each change to the score.
+    private var shownCache: (revision: Int, staves: [Int: ScoreData]) = (-1, [:])
+
+    /// A staff as it's shown (as written, or in concert pitch).
+    func shownStaff(_ i: Int) -> ScoreData {
+        let full = fullScore
+        guard full.concertPitch == true, let owner else { return full.forStaff(i) }
+        if shownCache.revision != owner.revision { shownCache = (owner.revision, [:]) }
+        if let cached = shownCache.staves[i] { return cached }
+        let st = full.shown(i)
+        shownCache.staves[i] = st
+        return st
+    }
     var isExport = false
     /// The staff being written (0 = the top one).
     private(set) var staffIndex = 0
@@ -1073,7 +1106,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// The voice being written (0 = voice 1, stems up; 1 = voice 2, stems down).
     private(set) var voice = 0
     /// The score as the current voice sees it.
-    private var cur: ScoreData { score.forVoice(voice) }
+    var cur: ScoreData { score.forVoice(voice) }
 
     /// The length, dot and triplet for new notes (shared with the Score ribbon tab).
     static var inputDuration: ScoreNote.Duration = .quarter
@@ -1094,7 +1127,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// Room for the title (and the composer under it, at the right).
     private var titleHeight: CGFloat {
         let full = fullScore
-        if full.title.isEmpty && (full.composer ?? "").isEmpty { return 0 }
+        if full.title.isEmpty && (full.composer ?? "").isEmpty { return showsConcertLabel ? 18 : 0 }
         return 26 + ((full.composer ?? "").isEmpty ? 0 : 14)
     }
     // Room around a staff (for the staff being drawn; the functions take any staff's score).
@@ -1133,7 +1166,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         var y = tempoBand
         var offsets: [CGFloat] = []
         for i in 0..<fullScore.staffCount {
-            let st = fullScore.forStaff(i)
+            let st = shownStaff(i)
             let above = space * 4.5 + chordBand(st) + markBandAbove(st)
             let below = space * 4.5 + lyricBand(st) + tabBand(st) + dynamicBand(st) + markBandBelow(st)
             // Staves after the first sit a little closer (a grand staff's two hands most of all).
@@ -1145,8 +1178,23 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         cachedSystemHeight = y
     }
 
-    /// Room at the left for a brace or bracket when there are several staves.
-    private var staffLeft: CGFloat { fullScore.staffCount > 1 ? space * 2.8 : space }
+    /// Room at the left for a brace or bracket when there are several staves, and for transposing instruments' names.
+    private var staffLeft: CGFloat { (fullScore.staffCount > 1 ? space * 2.8 : space) + labelRoom }
+
+    static let labelFont = NSFont.systemFont(ofSize: 9.5)
+    /// The names beside transposing instruments' staves ("B♭ Cl."), by staff.
+    private var instrumentLabels: [Int: String] {
+        let full = fullScore
+        var labels: [Int: String] = [:]
+        for i in 0..<full.staffCount { if let label = full.forStaff(i).instrumentLabel { labels[i] = label } }
+        return labels
+    }
+    private var labelRoom: CGFloat {
+        let widths = instrumentLabels.values.map { ($0 as NSString).size(withAttributes: [.font: Self.labelFont]).width }
+        return widths.max().map { $0 + space * 0.8 } ?? 0
+    }
+    /// "Concert Pitch" over the music when transposing staves are shown as they sound.
+    private var showsConcertLabel: Bool { fullScore.concertPitch == true && fullScore.hasTransposingStaff }
 
     /// Draws (or measures) as the given staff.
     private func useStaff(_ i: Int) {
@@ -1260,7 +1308,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         let usable = max(bounds.width - space - staffLeft, space * 20)
         // Every staff's voices (bars and beats line up across all of them).
         let parts: [(staff: Int, voice: Int)] = (0..<fullScore.staffCount).flatMap { st in (0..<ScoreData.voiceCount).map { (st, $0) } }
-        let staffScores = (0..<fullScore.staffCount).map { fullScore.forStaff($0) }
+        let staffScores = (0..<fullScore.staffCount).map { shownStaff($0) }
         let lines = parts.map { staffScores[$0.staff].forVoice($0.voice) }
         let mineLine = parts.firstIndex { $0.staff == staffIndex && $0.voice == voice } ?? 0
         let barsByVoice = lines.map { $0.notes.isEmpty ? [] : $0.measures }
@@ -1462,6 +1510,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             if score.showTab == true { drawTab(ink: ink) }
         }
         drawStaffGroups(ink: ink)
+        drawInstrumentLabels(ink: ink)
         useStaff(0)
         drawEndings(ink: ink)
         drawTempos(ink: ink)
@@ -1507,6 +1556,30 @@ final class ScoreView: NSView, NSTextFieldDelegate {
                 // The 1st ending closes over its last bar line; the last one stays open.
                 if s == endBar?.system, run.number < highest {
                     NSRect(x: to - 1.2, y: y, width: 1.2, height: space * 1.6).fill()
+                }
+            }
+        }
+    }
+
+    // MARK: Transposing instruments
+
+    /// The instrument's name beside each transposing staff ("B♭ Cl."), and "Concert Pitch" over the music when
+    /// they're shown as they sound.
+    private func drawInstrumentLabels(ink: NSColor) {
+        let labels = instrumentLabels
+        if showsConcertLabel {
+            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5, weight: .medium), .foregroundColor: ink]
+            ("Concert Pitch" as NSString).draw(at: NSPoint(x: space, y: 5), withAttributes: attrs)
+        }
+        guard !labels.isEmpty else { return }
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.labelFont, .foregroundColor: ink]
+        // Right-aligned before the staff (and before a brace or bracket).
+        let right = staffLeft - (fullScore.staffCount > 1 ? space * 2.2 : space * 0.5)
+        for (i, label) in labels {
+            let size = (label as NSString).size(withAttributes: attrs)
+            withStaff(i) {
+                for system in 0..<systemCount {
+                    (label as NSString).draw(at: NSPoint(x: right - size.width, y: staffTop(system) + space * 2 - size.height / 2), withAttributes: attrs)
                 }
             }
         }
@@ -2428,22 +2501,35 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     // MARK: Editing
 
-    private func edit(_ name: String, _ change: (inout ScoreData) -> Void) {
+    func edit(_ name: String, _ change: (inout ScoreData) -> Void) {
         owner?.update(change, actionName: name)
         needsDisplay = true
     }
 
-    /// Changes the current voice's notes (the change sees that voice as the score's notes).
-    /// Changes the current staff's current voice (the change sees that voice as the score's notes).
-    private func editVoice(_ name: String, _ change: (inout ScoreData) -> Void) {
+    /// Changes the current staff's current voice (the change sees that voice, as it's shown, as the score's notes;
+    /// in concert pitch, what's written goes back to where the instrument reads it).
+    func editVoice(_ name: String, _ change: (inout ScoreData) -> Void) {
         let v = voice, st = staffIndex
         edit(name) { full in
-            var staff = full.forStaff(st)
-            var view = staff.forVoice(v)
+            var view = full.shown(st).forVoice(v)
             change(&view)
-            staff.setLine(v, view.notes)
-            full.setStaff(st, staff)
+            full.setShownLine(st, voice: v, view.notes)
         }
+    }
+
+    /// A key chosen while looking at this staff, as the score keeps it: a transposing staff's written key (shown
+    /// when Concert Pitch is off) is turned into the concert key.
+    func concertKey(_ shownKey: Int) -> Int {
+        let full = fullScore
+        guard full.concertPitch != true, let t = full.forStaff(staffIndex).transposition else { return shownKey }
+        return ScoreData.concertKey(shownKey, t)
+    }
+
+    /// The key signature at the start, as chosen on this staff.
+    func setKey(_ fifths: Int) {
+        let key = concertKey(fifths)
+        edit("Key Signature") { $0.keyFifths = key }
+        NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
     // MARK: Staves
@@ -2493,7 +2579,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             var all = (0..<full.staffCount).map { full.forStaff($0) }
             all.remove(at: i)
             full.setStaff(0, all[0])
-            full.staves = all.count > 1 ? all.dropFirst().map { ScoreStaff(name: $0.staffName, clef: $0.clef, notes: $0.notes, voices: $0.voices) } : nil
+            full.staves = all.count > 1 ? all.dropFirst().map {
+                ScoreStaff(name: $0.staffName, clef: $0.clef, notes: $0.notes, voices: $0.voices, transpose: $0.transpose, instrument: $0.instrument)
+            } : nil
             if full.staffCount < 2 || i < 2 { full.grandStaff = nil }
         }
         setStaff(max(0, i - 1))
@@ -3310,11 +3398,12 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     func setKeyChange(_ fifths: Int?) {
         let bar = currentBar
         let before = bar > 0 ? score.fifths(inBar: bar - 1) : 0
+        let key = fifths.map(concertKey)
         edit(bar == 0 ? "Key Signature" : "Key Change") { s in
             if bar == 0 {
-                s.keyFifths = fifths ?? 0
+                s.keyFifths = key ?? 0
             } else {
-                s.setMark(bar) { $0.keyFifths = fifths == before ? nil : fifths }
+                s.setMark(bar) { $0.keyFifths = fifths == before ? nil : key }
             }
         }
         NotebookStore.shared.editor.scoreInputChanged += 1
@@ -3567,7 +3656,9 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 // MARK: - Container
 
 final class ScoreElementView: ElementView {
-    private(set) var score: ScoreData
+    private(set) var score: ScoreData { didSet { revision &+= 1 } }
+    /// Counts changes to the score (the staff view keeps what it works out until the next one).
+    private(set) var revision = 0
     let staff = ScoreView()
 
     override init(element: PageElement) {
@@ -3693,12 +3784,53 @@ final class ScoreElementView: ElementView {
         }
         staves.submenu = staffMenu
         menu.addItem(staves)
+        // Transpose, the staff's instrument, concert pitch.
+        let transpose = NSMenuItem(title: "Transpose", action: nil, keyEquivalent: "")
+        let tMenu = NSMenu()
+        let scopeItem = NSMenuItem(title: staff.transposeScope, action: nil, keyEquivalent: "")
+        scopeItem.isEnabled = false
+        tMenu.addItem(scopeItem)
+        tMenu.addItem(ClosureMenuItem("Up a Half Step") { [weak self] in self?.staff.transposeHalfStep(up: true) })
+        tMenu.addItem(ClosureMenuItem("Down a Half Step") { [weak self] in self?.staff.transposeHalfStep(up: false) })
+        tMenu.addItem(ClosureMenuItem("Up an Octave") { [weak self] in self?.staff.transpose(by: ScoreInterval(steps: 7, semitones: 12)) })
+        tMenu.addItem(ClosureMenuItem("Down an Octave") { [weak self] in self?.staff.transpose(by: ScoreInterval(steps: -7, semitones: -12)) })
+        for (title, sign) in [("Up by Interval", 1), ("Down by Interval", -1)] {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let sub = NSMenu()
+            for (name, interval) in ScoreInterval.named {
+                sub.addItem(ClosureMenuItem(name) { [weak self] in self?.staff.transpose(by: sign > 0 ? interval : interval.inverse) })
+            }
+            item.submenu = sub
+            tMenu.addItem(item)
+        }
+        if staff.transposeRange == nil {
+            let toKey = NSMenuItem(title: "To Key", action: nil, keyEquivalent: "")
+            let sub = NSMenu()
+            for (fifths, name) in ScoreData.keyNames {
+                sub.addItem(ClosureMenuItem(name, state: staff.score.keyFifths == fifths) { [weak self] in self?.staff.transpose(toKey: fifths, direction: 0) })
+            }
+            toKey.submenu = sub
+            tMenu.addItem(toKey)
+        }
+        tMenu.addItem(.separator())
+        tMenu.addItem(ClosureMenuItem("Transpose…") { [weak self] in self?.staff.showTransposeDialog() })
+        transpose.submenu = tMenu
+        menu.addItem(transpose)
+        let instrumentItem = NSMenuItem(title: "Instrument", action: nil, keyEquivalent: "")
+        let iMenu = NSMenu()
+        let staffInstrument = staff.currentInstrument, transposes = score.forStaff(staff.currentStaff).transposition != nil
+        iMenu.addItem(ClosureMenuItem("In C (as it sounds)", state: !transposes) { [weak self] in self?.staff.setInstrument(nil) })
+        iMenu.addItem(.separator())
+        for instrument in ScoreInstrument.all {
+            iMenu.addItem(ClosureMenuItem(instrument.name, state: staffInstrument == instrument) { [weak self] in self?.staff.setInstrument(instrument) })
+        }
+        instrumentItem.submenu = iMenu
+        menu.addItem(instrumentItem)
+        menu.addItem(ClosureMenuItem("Concert Pitch", state: score.concertPitch == true) { [weak self] in self?.staff.toggleConcertPitch() })
         let key = NSMenuItem(title: "Key Signature", action: nil, keyEquivalent: "")
         let keys = NSMenu()
         for (fifths, name) in ScoreData.keyNames {
-            keys.addItem(ClosureMenuItem(name, state: score.keyFifths == fifths) { [weak self] in
-                self?.update({ $0.keyFifths = fifths }, actionName: "Key Signature")
-            })
+            keys.addItem(ClosureMenuItem(name, state: staff.score.keyFifths == fifths) { [weak self] in self?.staff.setKey(fifths) })
         }
         key.submenu = keys
         menu.addItem(key)

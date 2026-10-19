@@ -261,6 +261,7 @@ extension QuickHelp {
         "Score/Expression": "Dynamics (pp … ff), slurs, crescendo and diminuendo hairpins.",
         "Score/Articulation": "Staccato, tenuto, accent, marcato, fermata and ornaments on the selected notes.",
         "Score/Staves": "Several staves: add a treble, bass or percussion (drum) staff, make a piano grand staff, move between staves (⌥⌘↑ ⌥⌘↓), rename or remove one.",
+        "Score/Transpose": "Transpose the music (the whole score, or the selected notes); transposing instruments and concert pitch.",
         "Score/Lead Sheet": "Lead sheets and chord charts: slash notation, 1st and 2nd endings, bars per line, the composer.",
                 "Score/Bars": "Key changes and repeat signs at the selected note's bar.",
         "Score/Voice": "Which voice you're writing: voice 1 (stems up) or voice 2 (stems down).",
@@ -407,6 +408,9 @@ extension QuickHelp {
         "Endings": "1st and 2nd endings over the selected note's bar: the 1st plays the first time through the repeat, the 2nd after it.",
         "Bars per Line": "So many bars on each line — lead sheets usually have four.",
         "Composer": "The composer (or arranger…) under the title, at the right.",
+        "Transpose": "Moves the music up or down — a half step, an octave, an interval, steps in the key, or to another key — with its chord symbols and key signatures. Two or more selected notes: only those; otherwise the whole score.",
+        "Instrument": "A transposing instrument for the staff (B♭ clarinet or trumpet, E♭ alto sax, F horn…): written where its player reads it, in its own key, and played at the pitch it sounds.",
+        "Concert Pitch": "Every staff as it sounds — transposing instruments too — in the score's key. Off: each instrument as its player reads it.",
         "Lead Sheet": "Inserts a lead sheet: title, composer, \"Medium Swing\" tempo, four bars a line — add the melody, chord symbols (⌃K) and lyrics (⌃L).",
                 "Key Change": "A new key from the selected note's bar: a double bar, cancelling naturals, the new key.",
         "Start Repeat |:": "The repeated passage starts at the selected note's bar.",
@@ -469,7 +473,7 @@ extension ScoreView {
     }
 
     private func describe(_ ref: NoteRef) -> QuickHelpItem {
-        let line = fullScore.forStaff(ref.staff).forVoice(ref.voice)
+        let line = shownStaff(ref.staff).forVoice(ref.voice)
         guard line.notes.indices.contains(ref.index) else { return QuickHelpItem(title: "Note", detail: "", shortcut: nil) }
         let n = line.notes[ref.index]
         let names = ["C", "D", "E", "F", "G", "A", "B"]
@@ -489,6 +493,13 @@ extension ScoreView {
         }
         var facts: [String] = ["Bar \(line.bar(of: ref.index) + 1)" + (fullScore.staffCount > 1 ? ", \(fullScore.staffTitle(ref.staff))" : "")
                                + (fullScore.forStaff(ref.staff).hasSecondVoice ? ", voice \(ref.voice + 1)" : "")]
+        // A transposing instrument's note: where it sounds (or, in concert pitch, where it's written).
+        if let t = fullScore.forStaff(ref.staff).transposition, !n.rest, n.drum == nil, n.slash == nil {
+            let concert = fullScore.concertPitch == true
+            let (d, a) = ScoreData.moved(n.diatonic, line.soundingAlter(ref.index), by: concert ? t.inverse : t)
+            let other = names[ScoreData.mod7(d)] + (a > 0 ? "♯" : a < 0 ? "♭" : "") + "\(ScoreData.floor7(d))"
+            facts.append(concert ? "written \(other)" : "sounds \(other)")
+        }
         if let chord = n.chord, !chord.isEmpty { facts.append("chord of \(chord.count + 1)") }
         if let d = n.dynamic { facts.append(d) }
         let marks = (n.articulations ?? []) + [n.ornament].compactMap { $0 } + (n.fermata == true ? ["fermata"] : [])

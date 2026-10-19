@@ -677,6 +677,54 @@ struct ScoreRibbon: View {
             }
             RibbonButton("Piano Staff", "pianokeys", active: staff?.fullScore.grandStaff == true) { act { $0.makeGrandStaff() } }
         }
+        RibbonGroup("Transpose") {
+            RibbonMenu("Transpose", "arrow.up.arrow.down") {
+                Section(staff?.transposeScope ?? "") {
+                    Button("Up a Half Step") { act { $0.transposeHalfStep(up: true) } }
+                    Button("Down a Half Step") { act { $0.transposeHalfStep(up: false) } }
+                    Button("Up an Octave") { act { $0.transpose(by: ScoreInterval(steps: 7, semitones: 12)) } }
+                    Button("Down an Octave") { act { $0.transpose(by: ScoreInterval(steps: -7, semitones: -12)) } }
+                }
+                Menu("Up by Interval") {
+                    ForEach(ScoreInterval.named, id: \.0) { name, interval in Button(name) { act { $0.transpose(by: interval) } } }
+                }
+                Menu("Down by Interval") {
+                    ForEach(ScoreInterval.named, id: \.0) { name, interval in Button(name) { act { $0.transpose(by: interval.inverse) } } }
+                }
+                Menu("In the Key") {
+                    ForEach(Array(["a 2nd", "a 3rd", "a 4th", "a 5th", "a 6th", "a 7th"].enumerated()), id: \.offset) { i, name in
+                        Button("Up \(name)") { act { $0.transposeInKey(steps: i + 1) } }
+                    }
+                    Divider()
+                    ForEach(Array(["a 2nd", "a 3rd", "a 4th", "a 5th", "a 6th", "a 7th"].enumerated()), id: \.offset) { i, name in
+                        Button("Down \(name)") { act { $0.transposeInKey(steps: -(i + 1)) } }
+                    }
+                }
+                Menu("To Key") {
+                    ForEach(ScoreData.keyNames, id: \.0) { fifths, name in
+                        Button(name) { act { $0.transpose(toKey: fifths, direction: 0) } }
+                    }
+                }
+                .disabled(staff?.transposeRange != nil)
+                Divider()
+                Toggle("Transpose Key Signatures", isOn: Binding(get: { TransposeOptions.keys }, set: { TransposeOptions.keys = $0; editor.scoreInputChanged += 1 }))
+                Toggle("Transpose Chord Symbols", isOn: Binding(get: { TransposeOptions.chordSymbols }, set: { TransposeOptions.chordSymbols = $0; editor.scoreInputChanged += 1 }))
+                Divider()
+                Button("Transpose…") { staff?.showTransposeDialog() }
+            }
+            .tip("Transpose", "Moves the music up or down — a half step, an octave, an interval, steps in the key, or to another key — with its chord symbols and key signatures. Two or more selected notes: only those; otherwise the whole score.")
+            RibbonMenu(staff?.currentInstrument?.name ?? "Instrument", "music.mic") {
+                Section("This staff's instrument") {
+                    Toggle("In C (as it sounds)", isOn: Binding(get: { staff?.fullScore.forStaff(staff?.currentStaff ?? 0).transposition == nil }, set: { _ in act { $0.setInstrument(nil) } }))
+                }
+                ForEach(ScoreInstrument.all) { instrument in
+                    Toggle(instrument.name, isOn: Binding(get: { staff?.currentInstrument == instrument }, set: { _ in act { $0.setInstrument(instrument) } }))
+                }
+            }
+            .tip("Instrument", "A transposing instrument for the staff (B♭ clarinet or trumpet, E♭ alto sax, F horn…): its notes are written where its player reads them, in its own key, and play at the pitch they sound.")
+            RibbonButton("Concert Pitch", "c.circle", active: staff?.fullScore.concertPitch == true) { act { $0.toggleConcertPitch() } }
+                .tip("Concert Pitch", "Shows every staff as it sounds — transposing instruments too — in the score's key. Off: each instrument as its player reads it. Notes written either way go to the right place.")
+        }
         RibbonGroup("Lead Sheet") {
             RibbonMenu("Slashes", "line.diagonal") {
                 Button("Fill Bar with Slashes") { act { $0.fillWithSlashes() } }
@@ -799,7 +847,7 @@ struct ScoreRibbon: View {
             }
             RibbonMenu("Key", "number") {
                 ForEach(ScoreData.keyNames, id: \.0) { fifths, name in
-                    Button(name) { act { s in s.owner?.update({ $0.keyFifths = fifths }, actionName: "Key Signature") } }
+                    Button(name) { act { $0.setKey(fifths) } }
                 }
             }
             RibbonMenu("Time", "metronome") {
