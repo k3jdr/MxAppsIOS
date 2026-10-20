@@ -390,6 +390,9 @@ struct FileListView: NSViewRepresentable {
                 menu.addItem(ActionMenuItem("Rename…") { workspace.rename() })
                 menu.addItem(ActionMenuItem("Duplicate") { workspace.duplicate() })
                 menu.addItem(ActionMenuItem("Compress") { workspace.compress() })
+                if marked.count == 1, !marked[0].isDirectory, FFmpegTool.supports(marked[0].url) {
+                    menu.addItem(ActionMenuItem("ffmpeg Meta-data…") { workspace.editMediaMetadata() })
+                }
                 if urls.contains(where: FileOps.isArchive) {
                     menu.addItem(ActionMenuItem("Extract to Other Pane") { workspace.extract() })
                 }

@@ -21,6 +21,7 @@ enum WorkspaceSheet: Identifiable {
     case connect(prefill: String)
     case webDAV(WebDAVAccount?)
     case sftp(SFTPAccount?)
+    case mediaMetadata(URL)
 
     var id: String {
         switch self {
@@ -31,6 +32,7 @@ enum WorkspaceSheet: Identifiable {
         case .connect: "connect"
         case .webDAV(let account): "webdav-\(account?.id.uuidString ?? "new")"
         case .sftp(let account): "sftp-\(account?.id.uuidString ?? "new")"
+        case .mediaMetadata(let url): "media-\(url.path)"
         }
     }
 }

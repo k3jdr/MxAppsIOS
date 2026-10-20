@@ -66,6 +66,10 @@ enum FileHelp {
                 shortcut: "⌘I", symbol: "info.circle"))
         case .connect:
             return ("Connect to Server", connect)
+        case .mediaMetadata(let url):
+            return ("ffmpeg Meta-data", QuickHelpItem(
+                title: "ffmpeg Meta-data — \(url.lastPathComponent)",
+                detail: mediaMetadataDetail, symbol: "film"))
         case .sftp(let account):
             return (account == nil ? "Add SFTP Account" : "Edit SFTP Account", sftpSheet)
         case .webDAV(let account):
@@ -168,6 +172,10 @@ enum FileHelp {
             + (mounted ? "Connected: click to open it in the active pane." : "Click to connect (mount) and open it in the active pane.")
             + " Right-click to edit, disconnect or remove it."
     }
+
+    static let mediaMetadataDetail = "Edits the Title and Description tags of this MP4 or WebM file with ffmpeg, copying every stream without re-encoding "
+        + "(-map 0 -c copy); the other tags are kept and an empty field removes its tag. Apply replaces the original once the new copy is written, "
+        + "or saves a new file. Progress shows in the transfer panel; Command shows the equivalent ffmpeg command."
 
     static let sftpSheet = QuickHelpItem(
         title: "SFTP Account",

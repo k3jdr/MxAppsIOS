@@ -395,6 +395,13 @@ extension Workspace {
         }
     }
 
+    /// ffmpeg Meta-data… for the one marked MP4 or WebM file.
+    func editMediaMetadata() {
+        guard let item = activeTab.selectedItems.first, activeTab.selectedItems.count == 1,
+              !item.isDirectory, FFmpegTool.supports(item.url) else { NSSound.beep(); return }
+        sheet = .mediaMetadata(item.url)
+    }
+
     func addSFTPAccount() {
         sheet = .sftp(nil)
     }
