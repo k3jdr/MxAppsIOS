@@ -332,6 +332,27 @@ final class NoteTextView: NSTextView {
         super.paste(sender)
     }
 
+    // MARK: Code typed as written
+
+    /// Smart dashes and quotes, text replacements and autocorrection stay out of code blocks: in SQL, "--" starts a
+    /// comment (it isn't a dash), and 'quotes' must stay straight.
+    override func handleTextCheckingResults(_ results: [NSTextCheckingResult], forRange range: NSRange,
+                                            types checkingTypes: NSTextCheckingTypes, options: [NSSpellChecker.OptionKey: Any],
+                                            orthography: NSOrthography, wordCount: Int) {
+        let rewrites: NSTextCheckingResult.CheckingType = [.dash, .quote, .replacement, .correction]
+        let kept = results.filter { !(rewrites.contains($0.resultType) && isCode($0.range)) }
+        super.handleTextCheckingResults(kept, forRange: range, types: checkingTypes, options: options,
+                                        orthography: orthography, wordCount: wordCount)
+    }
+
+    /// Whether text in a range (or what's typed there) is in a code block.
+    private func isCode(_ range: NSRange) -> Bool {
+        guard let storage = textStorage, storage.length > 0, range.location < storage.length else {
+            return CodeHighlighter.isCode(typingAttributes)
+        }
+        return CodeHighlighter.isCode(storage.attributes(at: range.location, effectiveRange: nil))
+    }
+
     // MARK: Pointing hand over links
 
     override func updateTrackingAreas() {

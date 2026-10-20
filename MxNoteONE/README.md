@@ -650,6 +650,8 @@ C#, C / C++, Go, Rust, SQL, JSON, HTML / XML, CSS, Shell, YAML), or pick one fro
 switches between Dark+ and Light+ (the block at the caret changes; new blocks use the theme).
 
 - The block re-colours as you type.
+- Code is typed as written: the Mac's smart dashes and quotes, text replacements, autocorrection and capitalization
+  stay out of code blocks (in text boxes and table cells), so SQL's `--` comment and `'strings'` keep their characters.
 - Enter keeps the indent and adds a level after `{ [ ( :`; Enter on an empty last line leaves the block.
 - Tab types four spaces and ⇧Tab removes them. Backspace in leading spaces steps back to the previous four-space stop.
 - Clear Formatting (⇧⌘N) turns a block back into normal text.
