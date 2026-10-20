@@ -340,7 +340,12 @@ final class NoteTextView: NSTextView {
                                             types checkingTypes: NSTextCheckingTypes, options: [NSSpellChecker.OptionKey: Any],
                                             orthography: NSOrthography, wordCount: Int) {
         let rewrites: NSTextCheckingResult.CheckingType = [.dash, .quote, .replacement, .correction]
-        let kept = results.filter { !(rewrites.contains($0.resultType) && isCode($0.range)) }
+        // The results' ranges count from the start of the checked text (the paragraph just typed in).
+        let kept = results.filter { result in
+            let r = result.range
+            let at = NSMaxRange(r) <= range.length ? NSRange(location: range.location + r.location, length: r.length) : r
+            return !(rewrites.contains(result.resultType) && isCode(at))
+        }
         super.handleTextCheckingResults(kept, forRange: range, types: checkingTypes, options: options,
                                         orthography: orthography, wordCount: wordCount)
     }
