@@ -173,7 +173,7 @@ enum FileHelp {
             + " Right-click to edit, disconnect or remove it."
     }
 
-    static let mediaMetadataDetail = "Edits the Title and Description tags of this MP4, M4V, MOV, WebM, MKV or AVI file (AVI: Description goes in the comment tag) with ffmpeg, copying every stream without re-encoding "
+    static let mediaMetadataDetail = "Edits the Title and Description tags of this MP4, M4V, MOV, WebM, MKV, AVI, MP3 or M4A file (AVI: Description goes in the comment tag; MP3: in a TXXX frame) with ffmpeg, copying every stream without re-encoding "
         + "(-map 0 -c copy); the other tags are kept and an empty field removes its tag. Apply replaces the original once the new copy is written, "
         + "or saves a new file. Progress shows in the transfer panel; Command shows the equivalent ffmpeg command."
 

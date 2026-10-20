@@ -395,7 +395,7 @@ extension Workspace {
         }
     }
 
-    /// ffmpeg Meta-data… for the one marked MP4, M4V, MOV, WebM, MKV or AVI file.
+    /// ffmpeg Meta-data… for the one marked video or audio file (FFmpegTool.extensions).
     func editMediaMetadata() {
         guard let item = activeTab.selectedItems.first, activeTab.selectedItems.count == 1,
               !item.isDirectory, FFmpegTool.supports(item.url) else { NSSound.beep(); return }

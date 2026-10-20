@@ -2,7 +2,7 @@
 //  MediaMetadata.swift
 //  MxFileMGR
 //
-//  ffmpeg Meta-data… for MP4, M4V, MOV, WebM, MKV and AVI files (file list right-click menu): edit the Title and Description
+//  ffmpeg Meta-data… for MP4, M4V, MOV, WebM, MKV, AVI, MP3 and M4A files (file list right-click menu): edit the Title and Description
 //  tags with ffmpeg, without re-encoding —
 //
 //      ffmpeg -i input.mp4 -map 0 -map_metadata 0 -c copy -ignore_unknown \
@@ -20,13 +20,17 @@
 //  AVI: its INFO tags have no description either (ffmpeg drops it), so for .avi the Description is written to
 //  and read from the comment tag (ICMT).
 //
+//  MP3: the title is ID3 TIT2 and the description a user-defined frame (TXXX:description), which ffmpeg reads
+//  back but music players don't show. -id3v2_version 3 keeps the widely read ID3v2.3 (ffmpeg would write 2.4)
+//  and -write_id3v1 1 keeps ID3v1 tags (ffmpeg would drop them). M4A keeps description natively, like MP4.
+//
 
 import AppKit
 import SwiftUI
 
 nonisolated enum FFmpegTool {
     /// File types the menu offers ffmpeg Meta-data… for.
-    static let extensions: Set<String> = ["mp4", "m4v", "mov", "webm", "mkv", "avi"]
+    static let extensions: Set<String> = ["mp4", "m4v", "mov", "webm", "mkv", "avi", "mp3", "m4a"]
 
     static func supports(_ url: URL) -> Bool { extensions.contains(url.pathExtension.lowercased()) }
 
@@ -74,11 +78,26 @@ nonisolated enum FFmpegTool {
         return info
     }
 
-    /// Extra options for QuickTime files, so the description is kept (see the header).
+    /// Extra options per container (see the header): QuickTime keeps the description, MP3 keeps its tag versions.
     static func containerOptions(for url: URL) -> [String] {
-        guard url.pathExtension.lowercased() == "mov" else { return [] }
-        return ["-movflags", "use_metadata_tags",
-                "-metadata", "major_brand=", "-metadata", "minor_version=", "-metadata", "compatible_brands="]
+        switch url.pathExtension.lowercased() {
+        case "mov":
+            return ["-movflags", "use_metadata_tags",
+                    "-metadata", "major_brand=", "-metadata", "minor_version=", "-metadata", "compatible_brands="]
+        case "mp3":
+            return ["-id3v2_version", "3", "-write_id3v1", "1"]
+        default:
+            return []
+        }
+    }
+
+    /// The note under the fields: where this format keeps the description.
+    static func fieldNote(for url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "avi": "AVI has no description tag, so Description is stored as the comment (ICMT). An empty field removes that tag."
+        case "mp3": "MP3 has no standard description: it is stored as a custom ID3 frame (TXXX:description), which music players don't show. An empty field removes that tag."
+        default: "An empty field removes that tag."
+        }
     }
 
     static func arguments(input: URL, output: URL, title: String, description: String, progress: Bool) -> [String] {
@@ -203,9 +222,7 @@ struct MediaMetadataSheet: View {
                 }
                 GridRow {
                     Text("")
-                    Text(FFmpegTool.descriptionKey(for: url) == "comment"
-                         ? "AVI has no description tag, so Description is stored as the comment (ICMT). An empty field removes that tag."
-                         : "An empty field removes that tag.")
+                    Text(FFmpegTool.fieldNote(for: url))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
