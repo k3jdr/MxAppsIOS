@@ -89,12 +89,13 @@ always asks and can't be undone.
 **Compress** makes `name.zip` (or `Archive.zip` for several items) in the same folder. **Extract** unpacks zip,
 tar, tgz, tbz, txz, 7z, rar, cpio, xar and iso archives into a new folder in the other pane.
 
-**ffmpeg Meta-data…** (right-click a single `.mp4` or `.webm` file) edits its **Title** and **Description** tags with
+**ffmpeg Meta-data…** (right-click a single `.mp4`, `.mov`, `.webm` or `.mkv` file) edits its **Title** and **Description** tags with
 [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`), filled in with the current values read by `ffprobe`. **Apply** runs
 `ffmpeg -i in -map 0 -map_metadata 0 -c copy -ignore_unknown -metadata title=… -metadata description=… out`: every stream
 is copied without re-encoding, the other tags are kept, and an empty field removes its tag. The original is replaced once
 the new copy is written (or choose **Save as a new file**); progress shows in the transfer panel, and **Command** shows the
-equivalent command.
+equivalent command. For `.mov` it adds `-movflags use_metadata_tags` (QuickTime's standard tags have no description) and blanks the
+duplicated `major_brand` / `minor_version` / `compatible_brands` tags that option would otherwise accumulate.
 
 **Properties (⌘I)** shows the kind, total size, dates and owner, and lets you change the permission bits
 (optionally for everything inside a folder) and the modification date.

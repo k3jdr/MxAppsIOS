@@ -2,7 +2,7 @@
 //  MediaMetadata.swift
 //  MxFileMGR
 //
-//  ffmpeg Meta-data… for MP4 and WebM files (file list right-click menu): edit the Title and Description
+//  ffmpeg Meta-data… for MP4, MOV, WebM and MKV files (file list right-click menu): edit the Title and Description
 //  tags with ffmpeg, without re-encoding —
 //
 //      ffmpeg -i input.mp4 -map 0 -map_metadata 0 -c copy -ignore_unknown \
@@ -12,13 +12,18 @@
 //  -ignore_unknown skips data streams the container can't take, and an empty value removes the tag. By default
 //  the result replaces the original (written to a temporary file next to it first); it can be saved as a new file.
 //
+//  MOV: QuickTime's standard tags have no description, so ffmpeg would drop it. For .mov the command adds
+//  -movflags use_metadata_tags (keys written as mdta metadata) and blanks major_brand, minor_version and
+//  compatible_brands in that copy — otherwise each edit appends them again ("qt ;qt "); the file-type header is
+//  unaffected. MP4, WebM and MKV keep description natively (WebM / MKV as DESCRIPTION).
+//
 
 import AppKit
 import SwiftUI
 
 nonisolated enum FFmpegTool {
     /// File types the menu offers ffmpeg Meta-data… for.
-    static let extensions: Set<String> = ["mp4", "webm"]
+    static let extensions: Set<String> = ["mp4", "mov", "webm", "mkv"]
 
     static func supports(_ url: URL) -> Bool { extensions.contains(url.pathExtension.lowercased()) }
 
@@ -59,10 +64,18 @@ nonisolated enum FFmpegTool {
         return info
     }
 
+    /// Extra options for QuickTime files, so the description is kept (see the header).
+    static func containerOptions(for url: URL) -> [String] {
+        guard url.pathExtension.lowercased() == "mov" else { return [] }
+        return ["-movflags", "use_metadata_tags",
+                "-metadata", "major_brand=", "-metadata", "minor_version=", "-metadata", "compatible_brands="]
+    }
+
     static func arguments(input: URL, output: URL, title: String, description: String, progress: Bool) -> [String] {
         ["-nostdin", "-v", "error", "-y", "-i", input.path,
-         "-map", "0", "-map_metadata", "0", "-c", "copy", "-ignore_unknown",
-         "-metadata", "title=\(title)", "-metadata", "description=\(description)"]
+         "-map", "0", "-map_metadata", "0", "-c", "copy", "-ignore_unknown"]
+            + containerOptions(for: input)
+            + ["-metadata", "title=\(title)", "-metadata", "description=\(description)"]
             + (progress ? ["-progress", "pipe:1", "-nostats"] : [])
             + [output.path]
     }
@@ -70,7 +83,9 @@ nonisolated enum FFmpegTool {
     /// The command as you would type it in Terminal (shown in the dialog).
     static func commandLine(input: URL, output: URL, title: String, description: String) -> String {
         func q(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let extra = containerOptions(for: input).joined(separator: " ")
         return "ffmpeg -i \(q(input.lastPathComponent)) -map 0 -map_metadata 0 -c copy -ignore_unknown \\\n"
+            + (extra.isEmpty ? "" : "  \(extra) \\\n")
             + "  -metadata title=\(q(title)) \\\n  -metadata description=\(q(description)) \\\n  \(q(output.lastPathComponent))"
     }
 
