@@ -227,6 +227,17 @@ private struct SubscriptionForm: View {
                         .controlSize(.small)
                     }
                 }
+                if let base = guide.baseURL, !ProviderGuide.sameBase(subscription.baseURL, base) {
+                    HStack {
+                        Label("\(guide.name)'s base URL is \(base) — endpoint paths and parameters go on each API Data Read step",
+                              systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Use It") { subscription.baseURL = base }
+                            .controlSize(.small)
+                    }
+                }
             } header: {
                 HStack {
                     Text("API Key")

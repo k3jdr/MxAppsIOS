@@ -24,6 +24,8 @@ struct ProviderGuide: Identifiable {
     var steps: [String]
     var limits: String
     var notes: [String]
+    /// The base URL calls start from, when the provider has one (endpoint paths and parameters go on each step).
+    var baseURL: String? = nil
 
     static let all: [ProviderGuide] = [
         ProviderGuide(
@@ -59,6 +61,28 @@ struct ProviderGuide: Identifiable {
             ],
             limits: "Free tier: 60 calls a minute; some endpoints need a paid plan.",
             notes: ["MxJobsWMS sends the key in the X-Finnhub-Token header."]),
+        ProviderGuide(
+            id: "fmp", name: "Financial Modeling Prep", hosts: ["financialmodelingprep.com"],
+            signupURL: URL(string: "https://site.financialmodelingprep.com/developer/docs/dashboard"),
+            docsURL: URL(string: "https://site.financialmodelingprep.com/developer/docs/stable"),
+            needsKey: true, auth: .queryParameter, keyName: "apikey",
+            steps: [
+                "Sign in at Financial Modeling Prep; your API key is on the dashboard (Get a Key…). Copy it.",
+                "Set Base URL to https://financialmodelingprep.com/stable — only the address every call starts with. "
+                    + "Each API Data Read step adds its own path and parameters, e.g. /search-name with query=apple, "
+                    + "/historical-price-eod/full with symbol=AAPL and from=2026-01-01, or /quote with symbol=AAPL.",
+                "Paste the key into API key, press Save Key, then Test Key (it reads Apple's profile).",
+                "For the security master's price loads (SRM Daily Refresh ▸ End-of-day prices, Index levels, Profiles, "
+                    + "Corporate actions) the key must also be in SRM's own Keychain item: in Terminal run "
+                    + "security add-generic-password -s SRM-api -a fmp -w and paste it. Those steps call the srm-loader "
+                    + "service on this Mac, which runs srm.py — they don't use this subscription's key.",
+            ],
+            limits: "Depends on your plan (calls a minute and which endpoints); endpoints outside it answer HTTP 402.",
+            notes: [
+                "MxJobsWMS sends the key as the apikey query parameter (masked in Test Call).",
+                "Use the stable API (/stable/…); the older /api/v3/… paths answer only for legacy plans.",
+            ],
+            baseURL: "https://financialmodelingprep.com/stable"),
         ProviderGuide(
             id: "edgar", name: "SEC EDGAR", hosts: ["sec.gov"],
             signupURL: nil,
@@ -103,6 +127,12 @@ struct ProviderGuide: Identifiable {
         limits: "See the provider's plan.",
         notes: [])
 
+    /// Whether two base URLs are the same apart from a trailing slash and letter case.
+    static func sameBase(_ a: String, _ b: String) -> Bool {
+        func norm(_ s: String) -> String { s.trimmingCharacters(in: .whitespaces).lowercased().replacingOccurrences(of: "/+$", with: "", options: .regularExpression) }
+        return norm(a) == norm(b)
+    }
+
     /// The guide matching a subscription's base URL.
     static func matching(_ sub: ApiSubscription) -> ProviderGuide {
         let host = URL(string: sub.baseURL)?.host()?.lowercased() ?? ""
@@ -140,6 +170,7 @@ struct KeyTestResult {
 enum KeyTester {
     /// Calls the provider once with `key` (the stored key when nil) and says whether it was accepted.
     static func test(_ sub: ApiSubscription, key explicitKey: String? = nil) async -> KeyTestResult {
+        var sub = sub
         let key = explicitKey ?? Keychain.secret(for: sub.keychainAccount)
         if sub.auth.requiresKey, key == nil {
             return KeyTestResult(verdict: .invalid, message: "No key stored yet.")
@@ -153,6 +184,10 @@ enum KeyTester {
             node.api?.query = [KeyValue("function", "GLOBAL_QUOTE"), KeyValue("symbol", "MSFT")]
         case "finnhub":
             node.api?.path = "/quote"
+            node.api?.query = [KeyValue("symbol", "AAPL")]
+        case "fmp":
+            sub.baseURL = ProviderGuide.matching(sub).baseURL ?? sub.baseURL   // test the key, not a mistyped base URL
+            node.api?.path = "/profile"
             node.api?.query = [KeyValue("symbol", "AAPL")]
         case "local":
             node.api?.path = "/health"

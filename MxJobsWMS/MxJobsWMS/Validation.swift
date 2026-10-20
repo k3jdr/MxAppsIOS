@@ -99,8 +99,16 @@ enum Validator {
             }
         }
 
-        for sub in space.subscriptions where URL(string: sub.baseURL)?.host() == nil {
-            issues.append(.init(severity: .error, message: "Subscription “\(sub.name)” has no valid base URL.", subscriptionID: sub.id))
+        for sub in space.subscriptions {
+            guard URL(string: sub.baseURL)?.host() != nil else {
+                issues.append(.init(severity: .error, message: "Subscription “\(sub.name)” has no valid base URL.", subscriptionID: sub.id))
+                continue
+            }
+            if let base = ProviderGuide.matching(sub).baseURL, !ProviderGuide.sameBase(sub.baseURL, base) {
+                issues.append(.init(severity: .warning, message: "Subscription “\(sub.name)”: the base URL should be \(base); put the endpoint and its parameters on each API Data Read step.", subscriptionID: sub.id))
+            } else if sub.baseURL.contains("?") {
+                issues.append(.init(severity: .warning, message: "Subscription “\(sub.name)”: the base URL has parameters (?…); put them on each API Data Read step instead.", subscriptionID: sub.id))
+            }
         }
         return issues.sorted { $0.severity > $1.severity }
     }
