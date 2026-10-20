@@ -16,11 +16,7 @@ struct SidebarView: View {
         List(selection: Binding(get: { store.sidebarSelection }, set: { store.selectSidebar($0) })) {
             ForEach(store.notebooks) { notebook in
                 Section(isExpanded: expandedBinding(notebook.id)) {
-                    OutlineGroup(notebook.manifest.sections, children: \.children) { node in
-                        let ref = SectionRef(notebookID: notebook.id, sectionID: node.id)
-                        SectionRow(notebook: notebook, node: node)
-                            .tag(node.isGroup ? SidebarItem.group(ref) : SidebarItem.section(ref))
-                    }
+                    SectionTree(notebook: notebook)
                 } header: {
                     NotebookHeader(notebook: notebook)
                 }
@@ -76,6 +72,45 @@ struct SidebarView: View {
             set: { expanded in
                 if expanded { store.expandedNotebooks.insert(id) } else { store.expandedNotebooks.remove(id) }
             })
+    }
+}
+
+/// A notebook's sections and section groups as one flat run of rows, indented, with our own
+/// disclosure chevrons. Not OutlineGroup / DisclosureGroup: the sidebar's outline view reloads
+/// a group's whole subtree whenever its children change (Move to Group, deleting a group),
+/// which collapses sibling groups and discards row views mid-animation, leaving a faded copy
+/// of a moved row drawn over the row now in its place. A flat list only ever inserts, removes
+/// and moves rows, each keeping its identity.
+struct SectionTree: View {
+    let notebook: Notebook
+    @Bindable private var store = NotebookStore.shared
+
+    var body: some View {
+        ForEach(notebook.manifest.sections.visibleRows(expanded: store.expandedGroups), id: \.node.id) { row in
+            let ref = SectionRef(notebookID: notebook.id, sectionID: row.node.id)
+            HStack(spacing: 4) {
+                if row.node.isGroup {
+                    let open = store.expandedGroups.contains(row.node.id)
+                    Button {
+                        if open { store.expandedGroups.remove(row.node.id) } else { store.expandedGroups.insert(row.node.id) }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                            .frame(width: 12, height: 16)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(open ? "Collapse \(row.node.name)" : "Expand \(row.node.name)")
+                } else {
+                    Color.clear.frame(width: 12, height: 1)
+                }
+                SectionRow(notebook: notebook, node: row.node)
+            }
+            .padding(.leading, CGFloat(row.depth) * 14)
+            .tag(row.node.isGroup ? SidebarItem.group(ref) : SidebarItem.section(ref))
+        }
     }
 }
 

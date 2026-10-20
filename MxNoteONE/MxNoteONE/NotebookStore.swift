@@ -120,6 +120,8 @@ final class NotebookStore {
     private(set) var selectedPageID: UUID?
     var searchText = ""
     var expandedNotebooks: Set<UUID> = []
+    /// Section groups open in the sidebar.
+    var expandedGroups: Set<UUID> = []
     var alert: AlertInfo?
     var sheet: ActiveSheet?
     var showFullPage = false

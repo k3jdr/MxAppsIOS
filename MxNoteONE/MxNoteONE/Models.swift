@@ -543,6 +543,14 @@ extension Array where Element == SectionNode {
         flatMap { $0.isGroup ? [$0] + ($0.children ?? []).flattenedGroups : [] }
     }
 
+    /// Sections and groups as the sidebar shows them: depth-first, skipping the insides of closed groups.
+    func visibleRows(expanded: Set<UUID>, depth: Int = 0) -> [(node: SectionNode, depth: Int)] {
+        flatMap { node -> [(node: SectionNode, depth: Int)] in
+            guard let children = node.children, expanded.contains(node.id) else { return [(node, depth)] }
+            return [(node, depth)] + children.visibleRows(expanded: expanded, depth: depth + 1)
+        }
+    }
+
     @discardableResult
     mutating func moveSibling(_ id: UUID, by delta: Int) -> Bool {
         if let i = firstIndex(where: { $0.id == id }) {
