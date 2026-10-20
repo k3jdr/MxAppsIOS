@@ -384,8 +384,8 @@
         "successStatus" : "200-299"
       },
       "title" : "Market data agent",
-      "x" : 540,
-      "y" : 360
+      "x" : 400,
+      "y" : 290
     },
     {
       "agent" : {
@@ -425,8 +425,8 @@
         "successStatus" : "200-299"
       },
       "title" : "News & filings agent",
-      "x" : 1020,
-      "y" : 360
+      "x" : 1040,
+      "y" : 410
     },
     {
       "agent" : {
@@ -468,7 +468,7 @@
       },
       "title" : "Portfolio analyst",
       "x" : 1320,
-      "y" : 360
+      "y" : 410
     },
     {
       "agent" : {
@@ -509,8 +509,8 @@
         "successStatus" : "200-299"
       },
       "title" : "Choose next step",
-      "x" : 2120,
-      "y" : 360
+      "x" : 2110,
+      "y" : 430
     },
     {
       "api" : {
@@ -569,8 +569,8 @@
         "successStatus" : "200-299"
       },
       "title" : "Global quote",
-      "x" : 320,
-      "y" : 600
+      "x" : 290,
+      "y" : 670
     },
     {
       "api" : {
@@ -624,7 +624,7 @@
       },
       "title" : "USD FX rates",
       "x" : 800,
-      "y" : 600
+      "y" : 670
     },
     {
       "api" : {
@@ -689,7 +689,7 @@
       },
       "title" : "Company news",
       "x" : 1040,
-      "y" : 600
+      "y" : 670
     },
     {
       "api" : {
@@ -739,8 +739,8 @@
         "successStatus" : "200-299"
       },
       "title" : "Recent filings",
-      "x" : 1280,
-      "y" : 600
+      "x" : 1260,
+      "y" : 670
     },
     {
       "arguments" : [
@@ -786,8 +786,8 @@
           }
         ]
       },
-      "x" : 560,
-      "y" : 600
+      "x" : 530,
+      "y" : 670
     },
     {
       "api" : {
@@ -854,8 +854,8 @@
         "successStatus" : "200-299"
       },
       "title" : "Indicators (local Python)",
-      "x" : 1520,
-      "y" : 600
+      "x" : 1490,
+      "y" : 670
     },
     {
       "arguments" : [
@@ -905,7 +905,7 @@
       },
       "title" : "Score signals (Python)",
       "x" : 1760,
-      "y" : 600
+      "y" : 670
     },
     {
       "api" : {
@@ -981,8 +981,8 @@
         "successStatus" : "200"
       },
       "title" : "Optimize portfolio (Java)",
-      "x" : 2000,
-      "y" : 600
+      "x" : 2030,
+      "y" : 660
     },
     {
       "api" : {
@@ -1051,8 +1051,8 @@
         "successStatus" : "200"
       },
       "title" : "Portfolio risk (C++)",
-      "x" : 2240,
-      "y" : 600
+      "x" : 2230,
+      "y" : 660
     }
   ],
   "run" : {
@@ -1185,6 +1185,23 @@
       "plan" : "",
       "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp",
       "provider" : "This Mac",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "header",
+      "baseURL" : "https://financialmodelingprep.com/stable/search-symbol?query=AAPL",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "535A44A7-C7F4-42F4-B7CB-3CC254BEB053",
+      "ide" : "vscode",
+      "keyName" : "apikey",
+      "name" : "FMP  Data API",
+      "notes" : "",
+      "plan" : "",
+      "projectFolder" : "",
+      "provider" : "",
       "rateLimitPerMinute" : 0
     }
   ]

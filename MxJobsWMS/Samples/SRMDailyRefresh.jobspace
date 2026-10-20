@@ -1415,6 +1415,23 @@
       "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxDataHUB/SRM",
       "provider" : "MxDataHUB/SRM (srm.py) on this Mac",
       "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "header",
+      "baseURL" : "https://financialmodelingprep.com/stable/search-name?query=",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "EB8FB104-0136-43D0-8846-DCD38A09CCDA",
+      "ide" : "vscode",
+      "keyName" : "apikey",
+      "name" : "FMP By Name",
+      "notes" : "",
+      "plan" : "Starter",
+      "projectFolder" : "",
+      "provider" : "",
+      "rateLimitPerMinute" : 300
     }
   ]
 }
