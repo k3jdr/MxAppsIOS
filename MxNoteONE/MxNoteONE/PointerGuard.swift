@@ -14,11 +14,13 @@ import AppKit
 /// A view that sets the pointer itself (the guard leaves the pointer to it).
 protocol SetsOwnPointer: AnyObject {}
 
-extension NSTextView {
-    /// Whether an event's pointer is over the part of the text view that shows.
+extension NSView {
+    /// Whether an event's pointer is over the part of the view that shows. (Views don't clip to their bounds, so
+    /// the visible rect alone can reach past them — over the whole page for a text box on it.)
     func pointerInside(_ event: NSEvent) -> Bool {
         guard event.window === window else { return false }
-        return visibleRect.contains(convert(event.locationInWindow, from: nil))
+        let p = convert(event.locationInWindow, from: nil)
+        return bounds.contains(p) && visibleRect.contains(p)
     }
 }
 

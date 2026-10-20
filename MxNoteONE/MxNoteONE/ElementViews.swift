@@ -37,7 +37,7 @@ class ElementView: NSView {
     weak var canvas: PageCanvasView?
     var element: PageElement
     var isSelected = false { didSet { refreshChrome() } }
-    var isHovered = false { didSet { refreshChrome() } }
+    var isHovered = false { didSet { if oldValue != isHovered { refreshChrome() } } }
     var isEditing = false { didSet { refreshChrome() } }
     let grip = GripView()
     let resizeHandle = ResizeHandleView()
@@ -127,18 +127,29 @@ class ElementView: NSView {
         needsDisplay = true
         grip.needsDisplay = true
         resizeHandle.needsDisplay = true
+        // The bar's and the edge's pointers go with the frame.
+        window?.invalidateCursorRects(for: grip)
+        window?.invalidateCursorRects(for: resizeHandle)
     }
+
+    /// Where the pointer shows the container's frame: all of it (a text box: over its text — not its blank side).
+    var hoverRegion: NSRect { bounds }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
                                   owner: self, userInfo: nil)
         addTrackingArea(area)
         tracking = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    private func updateHover(_ event: NSEvent) {
+        isHovered = hoverRegion.contains(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { updateHover(event) }
+    override func mouseMoved(with event: NSEvent) { updateHover(event) }
     override func mouseExited(with event: NSEvent) { isHovered = false }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -240,8 +251,14 @@ final class GripView: NSView {
         }
     }
 
+    /// The part of the bar that's the container's to drag by: all of it with the frame showing, else over its contents.
+    private var activeRect: NSRect {
+        guard let owner else { return .zero }
+        return owner.showsChrome ? bounds : bounds.intersection(owner.hoverRegion)
+    }
+
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .openHand)
+        addCursorRect(activeRect, cursor: .openHand)
     }
 
     override func updateTrackingAreas() {
@@ -251,7 +268,7 @@ final class GripView: NSView {
     }
 
     override func cursorUpdate(with event: NSEvent) {
-        NSCursor.openHand.set()
+        if activeRect.contains(convert(event.locationInWindow, from: nil)) { NSCursor.openHand.set() }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -276,7 +293,7 @@ final class ResizeHandleView: NSView {
     }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .resizeLeftRight)
+        if owner?.showsChrome == true { addCursorRect(bounds, cursor: .resizeLeftRight) }
     }
 
     override func updateTrackingAreas() {
@@ -286,7 +303,7 @@ final class ResizeHandleView: NSView {
     }
 
     override func cursorUpdate(with event: NSEvent) {
-        NSCursor.resizeLeftRight.set()
+        if owner?.showsChrome == true { NSCursor.resizeLeftRight.set() }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -343,8 +360,9 @@ final class NoteTextView: NSTextView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        // The window sends every move to the text view being typed in; outside it, the pointer isn't its to set.
-        guard pointerInside(event) else { hoverLink(event); return }
+        // The window sends every move to the text view being typed in; outside it, neither the pointer nor the
+        // link card is its business (another text box under the pointer looks after both).
+        guard pointerInside(event) else { return }
         super.mouseMoved(with: event)
         showLinkCursor(event)
         hoverLink(event)
@@ -492,6 +510,21 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         if !adjusting { fitHeight() }
     }
 
+    /// Nothing in it: only spaces and empty lines, no pictures.
+    var isBlank: Bool {
+        guard let storage = textView.textStorage else { return true }
+        return storage.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !storage.containsAttachments(in: NSRange(location: 0, length: storage.length))
+    }
+
+    /// The frame shows when the pointer is over the text (or the box is being edited or selected): a short line
+    /// leaves the rest of the box's width looking like the empty page it is.
+    override var hoverRegion: NSRect {
+        guard !isEditing, !isSelected, let lm = textView.layoutManager, let tc = textView.textContainer else { return bounds }
+        let right = textView.frame.minX + textView.textContainerOrigin.x + lm.usedRect(for: tc).maxX + 16
+        return NSRect(x: 0, y: 0, width: min(bounds.width, max(40, right)), height: bounds.height)
+    }
+
     private func fitHeight() {
         let height = Self.gripHeight + textView.frame.height
         guard abs(frame.height - height) > 0.5 else { return }
@@ -550,10 +583,7 @@ final class TextElementView: ElementView, NSTextViewDelegate {
     }
 
     func textDidEndEditing(_ notification: Notification) {
-        guard let canvas, canvas.selectedElement !== self, let storage = textView.textStorage else { return }
-        let empty = storage.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !storage.containsAttachments(in: NSRange(location: 0, length: storage.length))
-        guard empty else { return }
+        guard let canvas, canvas.selectedElement !== self, isBlank else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.superview != nil, self.window?.firstResponder !== self.textView,
                   self.canvas?.selectedElement !== self,

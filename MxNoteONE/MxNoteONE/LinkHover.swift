@@ -110,6 +110,8 @@ final class LinkHover {
         popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
         // The card doesn't take the keyboard: typing goes on where it was.
         if wasKey { view.window?.makeKey() }
+        // Opening the card sets the arrow; the pointer is still on the link (checkPointer keeps it so).
+        NSCursor.pointingHand.set()
         self.popover = popover
         self.actions = actions
         outsideSince = nil
@@ -136,6 +138,8 @@ final class LinkHover {
         let bridge = NSRect(x: linkOnScreen.minX, y: low, width: linkOnScreen.width, height: high - low)
         if linkOnScreen.contains(mouse) || cardOnScreen.contains(mouse) || bridge.contains(mouse) {
             outsideSince = nil
+            // The card's own view sets the arrow as it opens: over the link, it's the pointing hand.
+            if linkOnScreen.insetBy(dx: 2, dy: 2).contains(mouse), NSCursor.current != .pointingHand { NSCursor.pointingHand.set() }
         } else if let since = outsideSince {
             if Date().timeIntervalSince(since) > 0.3 { close() }
         } else {

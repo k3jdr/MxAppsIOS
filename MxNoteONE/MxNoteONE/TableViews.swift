@@ -1393,7 +1393,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         guard !isExport, NotebookStore.shared.editor.tool == .type, event.window === window else { return }
         let p = convert(event.locationInWindow, from: nil)
         // As the first responder it hears every move in the window: outside the table the pointer isn't its to set.
-        guard visibleRect.contains(p) else { return }
+        guard bounds.contains(p), visibleRect.contains(p) else { return }
         // A formula cell shows its formula as a tip.
         if let cell = cell(at: p), cell != editing, Formula.isFormula(model.text(cell)) {
             if toolTip != model.text(cell) { toolTip = model.text(cell) }

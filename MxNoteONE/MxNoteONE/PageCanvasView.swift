@@ -202,7 +202,10 @@ final class PageCanvasView: NSView {
         titleField.stringValue = page.title
         showDates(created: page.created, updated: nil)
         for element in page.elements {
-            if let view = makeView(for: element) { addElementView(view) }
+            guard let view = makeView(for: element) else { continue }
+            // A text box left with nothing in it isn't kept (it would only show as a frame under the pointer).
+            if let text = view as? TextElementView, text.isBlank { continue }
+            addElementView(view)
         }
         inkView.strokes = page.strokes
         // Printing draws the title itself (an NSTextField clips its glyphs when printed).
@@ -274,8 +277,9 @@ final class PageCanvasView: NSView {
         titleField.stringValue = ""
     }
 
+    /// The containers to keep (a text box with nothing typed in it isn't one).
     func snapshotElements() -> [PageElement] {
-        elementViews.map { $0.makeElement() }
+        elementViews.filter { !(($0 as? TextElementView)?.isBlank ?? false) }.map { $0.makeElement() }
     }
 
     /// Text of every container, for search and tags.
