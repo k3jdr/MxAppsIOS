@@ -320,6 +320,10 @@ final class NoteTextView: NSTextView {
     private var linkTracking: NSTrackingArea?
     /// Handles Paste instead of the text view when it returns true (table cells paste copied cells into the table).
     var pasteHandler: (() -> Bool)?
+    /// A pointer that replaces the text cursor at a point (table cells: resize pointers on a picture's edges).
+    var cursorHandler: ((NSEvent) -> NSCursor?)?
+    /// Handles a click instead of the text view when it returns true (table cells: dragging a picture's edge).
+    var mouseDownHandler: ((NSEvent) -> Bool)?
 
     override func paste(_ sender: Any?) {
         if pasteHandler?() == true { return }
@@ -364,12 +368,14 @@ final class NoteTextView: NSTextView {
         // link card is its business (another text box under the pointer looks after both).
         guard pointerInside(event) else { return }
         super.mouseMoved(with: event)
+        if let cursor = cursorHandler?(event) { return cursor.set() }
         showLinkCursor(event)
         hoverLink(event)
     }
 
     override func cursorUpdate(with event: NSEvent) {
         guard pointerInside(event) else { return }
+        if let cursor = cursorHandler?(event) { return cursor.set() }
         if !showLinkCursor(event) { super.cursorUpdate(with: event) }
     }
 
@@ -406,6 +412,7 @@ final class NoteTextView: NSTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if mouseDownHandler?(event) == true { return }
         if toggleCheckbox(at: event) { return }
         super.mouseDown(with: event)
     }

@@ -559,6 +559,11 @@ extension TableGridView {
     /// The cell under the pointer, in words.
     func quickHelp(at p: NSPoint) -> QuickHelpItem? {
         guard let cell = cellRef(at: p) else { return nil }
+        if picture(at: p) != nil {
+            return QuickHelpItem(title: "Picture in Cell \(TableData.columnName(cell.column))\(cell.row + 1)",
+                                 detail: "Drag a side or corner to resize it; it keeps its proportions, and the column widens for a bigger picture. A picture on a line of its own follows its column and row as you resize them.",
+                                 shortcut: nil, symbol: "photo")
+        }
         return describe(cell)
     }
 

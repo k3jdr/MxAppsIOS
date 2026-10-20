@@ -6,7 +6,8 @@
 //  written in the Edit Link dialog and shown on the link's hover card. It's
 //  kept on the link's words as an attribute, and saved with the text — RTF
 //  has no place for it, so the saved text carries the tips in its document
-//  comment (where each tip's range and formatted text are listed).
+//  comment (where each tip's range and formatted text are listed). The
+//  comment also keeps the size each picture is drawn at, which RTFD drops.
 //
 
 import AppKit
@@ -18,8 +19,10 @@ extension NSAttributedString.Key {
 
 enum NoteRichText {
     private static let marker = "MxNoteONE-link-tips:"
+    /// Tips and picture sizes together ({"tips": [...], "sizes": [...]}); only tips use the older marker.
+    private static let richMarker = "MxNoteONE-rich:"
 
-    /// Text as RTFD, with its links' hover texts.
+    /// Text as RTFD, with its links' hover texts and its pictures' sizes.
     static func data(_ text: NSAttributedString) -> Data? {
         let all = NSRange(location: 0, length: text.length)
         var tips: [[String: Any]] = []
@@ -28,27 +31,50 @@ enum NoteRichText {
                   let rtf = tip.rtf(from: NSRange(location: 0, length: tip.length), documentAttributes: [:]) else { return }
             tips.append(["at": range.location, "length": range.length, "rtf": rtf.base64EncodedString()])
         }
+        // A picture drawn at a chosen size (one shown at its own size has no bounds).
+        var sizes: [[String: Any]] = []
+        text.enumerateAttribute(.attachment, in: all) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment, attachment.bounds.width > 0, attachment.bounds.height > 0 else { return }
+            sizes.append(["at": range.location, "w": Double(attachment.bounds.width), "h": Double(attachment.bounds.height)])
+        }
         var attributes: [NSAttributedString.DocumentAttributeKey: Any] = [:]
-        if !tips.isEmpty, let json = try? JSONSerialization.data(withJSONObject: tips), let string = String(data: json, encoding: .utf8) {
-            attributes[.comment] = marker + string
+        let comment: (String, Any)? = !sizes.isEmpty ? (richMarker, ["tips": tips, "sizes": sizes])
+            : !tips.isEmpty ? (marker, tips) : nil
+        if let (prefix, object) = comment, let json = try? JSONSerialization.data(withJSONObject: object),
+           let string = String(data: json, encoding: .utf8) {
+            attributes[.comment] = prefix + string
         }
         return text.rtfd(from: all, documentAttributes: attributes)
     }
 
-    /// Text from RTFD (or RTF), with its links' hover texts back on them.
+    /// Text from RTFD (or RTF), with its links' hover texts back on them and its pictures at their sizes.
     static func text(_ data: Data) -> NSAttributedString? {
         var info: NSDictionary?
         guard let text = NSAttributedString(rtfd: data, documentAttributes: &info)
                 ?? NSAttributedString(rtf: data, documentAttributes: &info) else { return nil }
-        guard let comment = info?[NSAttributedString.DocumentAttributeKey.comment] as? String, comment.hasPrefix(marker),
-              let json = comment.dropFirst(marker.count).data(using: .utf8),
-              let tips = (try? JSONSerialization.jsonObject(with: json)) as? [[String: Any]] else { return text }
+        guard let comment = info?[NSAttributedString.DocumentAttributeKey.comment] as? String else { return text }
+        var tips: [[String: Any]] = [], sizes: [[String: Any]] = []
+        if comment.hasPrefix(richMarker), let json = comment.dropFirst(richMarker.count).data(using: .utf8),
+           let object = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any] {
+            tips = object["tips"] as? [[String: Any]] ?? []
+            sizes = object["sizes"] as? [[String: Any]] ?? []
+        } else if comment.hasPrefix(marker), let json = comment.dropFirst(marker.count).data(using: .utf8),
+                  let list = (try? JSONSerialization.jsonObject(with: json)) as? [[String: Any]] {
+            tips = list
+        }
+        guard !tips.isEmpty || !sizes.isEmpty else { return text }
         let result = NSMutableAttributedString(attributedString: text)
         for tip in tips {
             guard let at = tip["at"] as? Int, let length = tip["length"] as? Int, at >= 0, length > 0, at + length <= result.length,
                   let rtf = (tip["rtf"] as? String).flatMap({ Data(base64Encoded: $0) }),
                   let value = NSAttributedString(rtf: rtf, documentAttributes: nil) else { continue }
             result.addAttribute(.linkTip, value: value, range: NSRange(location: at, length: length))
+        }
+        for size in sizes {
+            guard let at = size["at"] as? Int, at >= 0, at < result.length,
+                  let w = (size["w"] as? NSNumber)?.doubleValue, let h = (size["h"] as? NSNumber)?.doubleValue, w > 0, h > 0,
+                  let attachment = result.attribute(.attachment, at: at, effectiveRange: nil) as? NSTextAttachment else { continue }
+            OneNoteImport.resize(attachment, to: NSSize(width: w, height: h))
         }
         return result
     }

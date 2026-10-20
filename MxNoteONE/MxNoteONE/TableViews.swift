@@ -12,7 +12,8 @@
 //  end), ⌘Return insert row, ⌥Return new line in the cell, Backspace in an
 //  empty extra column / row removes it, Escape selects the cell.
 //  Mouse: click to type, drag / ⇧-click / ⌘-click to select cells, drag a
-//  column border to resize. Right-click or the Table ribbon tab: shading
+//  column border to resize, drag a picture's side or corner to resize it
+//  (pictures on a line of their own follow the cell). Right-click or the Table ribbon tab: shading
 //  for cells, rows, columns, banded rows, header row, insert / delete,
 //  sort, borders.
 //
@@ -23,6 +24,114 @@ import SwiftUI
 extension NSAttributedString.Key {
     /// Marks text whose colour was chosen automatically for the cell's shading (never saved).
     static let mxAutoColor = NSAttributedString.Key("MxAutoColor")
+    /// On a picture shown smaller to fit its cell: the saved picture it stands for (never saved).
+    static let mxShownPicture = NSAttributedString.Key("MxShownPicture")
+}
+
+/// Pictures in cells. A picture wider than its cell is shown as a scaled copy, so the saved
+/// picture keeps the size it was given (and grows back when the cell gets wider).
+enum CellPictures {
+    /// Decoded pictures, by their file (decoded once, not on every draw).
+    private static let images = NSMapTable<FileWrapper, NSImage>(keyOptions: [.weakMemory, .objectPointerPersonality],
+                                                                  valueOptions: .strongMemory)
+    /// The scaled copy last made of each picture.
+    private static let copies = NSMapTable<NSTextAttachment, NSTextAttachment>(keyOptions: [.weakMemory, .objectPointerPersonality],
+                                                                               valueOptions: .strongMemory)
+
+    private static func image(_ attachment: NSTextAttachment) -> NSImage? {
+        guard let wrapper = attachment.fileWrapper else { return (attachment.attachmentCell as? NSTextAttachmentCell)?.image }
+        if let image = images.object(forKey: wrapper) { return image }
+        guard let data = wrapper.regularFileContents, let image = NSImage(data: data) else { return nil }
+        images.setObject(image, forKey: wrapper)
+        return image
+    }
+
+    /// True for a picture (not a file shown as an icon).
+    static func isPicture(_ attachment: NSTextAttachment) -> Bool { image(attachment) != nil }
+
+    /// The picture's own height over width (sizes are rounded to points; resizing keeps to this, not to them).
+    static func aspect(_ attachment: NSTextAttachment) -> CGFloat {
+        let own = image(attachment).flatMap { image -> NSSize? in
+            let pixels = image.representations.first.map { NSSize(width: $0.pixelsWide, height: $0.pixelsHigh) }
+            return pixels.flatMap { $0.width > 0 && $0.height > 0 ? $0 : nil } ?? image.size
+        }
+        let size = own ?? OneNoteImport.displaySize(attachment)
+        return size.width > 0 && size.height > 0 ? size.height / size.width : 1
+    }
+
+    /// Draws the picture at a new size (the saved picture: it keeps this size).
+    static func resize(_ attachment: NSTextAttachment, to size: NSSize) {
+        draw(attachment, from: attachment, at: size)
+    }
+
+    private static func draw(_ attachment: NSTextAttachment, from picture: NSTextAttachment, at size: NSSize) {
+        if let image = image(picture)?.copy() as? NSImage {
+            image.size = size
+            attachment.attachmentCell = NSTextAttachmentCell(imageCell: image)
+        }
+        attachment.bounds = CGRect(origin: .zero, size: size)
+    }
+
+    /// A copy of the picture drawn at another size (the same picture file).
+    private static func copy(_ attachment: NSTextAttachment, size: NSSize) -> NSTextAttachment {
+        if let copy = copies.object(forKey: attachment), copy.fileWrapper === attachment.fileWrapper,
+           abs(copy.bounds.width - size.width) < 0.25, abs(copy.bounds.height - size.height) < 0.25 { return copy }
+        let copy = NSTextAttachment(fileWrapper: attachment.fileWrapper)
+        draw(copy, from: attachment, at: size)
+        copies.setObject(copy, forKey: attachment)
+        return copy
+    }
+
+    /// Text with pictures wider than `width` swapped for scaled copies. Marked copies (for typing in the
+    /// cell) carry the saved picture, which `restore` puts back.
+    static func fitted(_ text: NSAttributedString, width: CGFloat, marking: Bool = false) -> NSAttributedString {
+        let all = NSRange(location: 0, length: text.length)
+        guard width > 10, text.containsAttachments(in: all) else { return text }
+        var result: NSMutableAttributedString?
+        text.enumerateAttribute(.attachment, in: all) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment, isPicture(attachment) else { return }
+            let size = OneNoteImport.displaySize(attachment)
+            guard size.width > width + 0.5, size.width > 0 else { return }
+            let shown = copy(attachment, size: NSSize(width: width, height: (size.height * width / size.width).rounded()))
+            if result == nil { result = NSMutableAttributedString(attributedString: text) }
+            result!.addAttribute(.attachment, value: shown, range: range)
+            if marking { result!.addAttribute(.mxShownPicture, value: attachment, range: range) }
+        }
+        return result ?? text
+    }
+
+    /// Puts the saved pictures back in place of their scaled copies (text typed in a cell, before it's saved).
+    static func restore(_ text: NSMutableAttributedString) {
+        let all = NSRange(location: 0, length: text.length)
+        text.enumerateAttribute(.mxShownPicture, in: all) { value, range, _ in
+            guard let original = value as? NSTextAttachment else { return }
+            for i in range.location..<NSMaxRange(range) {
+                if let shown = text.attribute(.attachment, at: i, effectiveRange: nil) as? NSTextAttachment,
+                   shown.fileWrapper === original.fileWrapper {
+                    text.addAttribute(.attachment, value: original, range: NSRange(location: i, length: 1))
+                }
+            }
+        }
+        text.removeAttribute(.mxShownPicture, range: all)
+    }
+
+    /// The pictures on a line of their own (they follow the cell's width as its column is resized).
+    static func ownLinePictures(_ text: NSAttributedString) -> [(index: Int, attachment: NSTextAttachment)] {
+        let string = text.string as NSString
+        var found: [(Int, NSTextAttachment)] = []
+        text.enumerateAttribute(.attachment, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment, isPicture(attachment), range.length == 1 else { return }
+            let line = string.substring(with: string.paragraphRange(for: range)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if line == "\u{FFFC}" { found.append((range.location, attachment)) }
+        }
+        return found
+    }
+
+    /// The cell's only content, when that is one picture.
+    static func onlyPicture(_ text: NSAttributedString) -> NSTextAttachment? {
+        guard text.string.trimmingCharacters(in: .whitespacesAndNewlines) == "\u{FFFC}" else { return nil }
+        return ownLinePictures(text).first?.attachment
+    }
 }
 
 /// A table cell (row, column).
@@ -430,25 +539,16 @@ final class TableModel {
         return text
     }
 
-    /// Display text with pictures scaled down to fit the cell's width.
+    /// Display text with pictures scaled down to fit the cell's width (shown smaller; saved at their size).
     func displayText(_ cell: CellRef, fitting width: CGFloat) -> NSAttributedString {
-        let text = displayText(cell)
-        guard text.containsAttachments(in: NSRange(location: 0, length: text.length)) else { return text }
-        let fitted = NSMutableAttributedString(attributedString: text)
-        fitted.enumerateAttribute(.attachment, in: NSRange(location: 0, length: fitted.length)) { value, _, _ in
-            guard let attachment = value as? NSTextAttachment else { return }
-            let size = OneNoteImport.displaySize(attachment)
-            if size.width > width + 0.5, width > 10 {
-                OneNoteImport.resize(attachment, to: NSSize(width: width, height: size.height * width / size.width))
-            }
-        }
-        return fitted
+        CellPictures.fitted(displayText(cell), width: width)
     }
 
     /// Saves edited cell text: automatic colours are dropped; rich text is kept only when there is formatting.
     func store(_ edited: NSAttributedString, in cell: CellRef) {
         guard contains(cell) else { return }
         let text = NSMutableAttributedString(attributedString: edited)
+        CellPictures.restore(text)
         let all = NSRange(location: 0, length: text.length)
         text.enumerateAttribute(.mxAutoColor, in: all) { value, range, _ in
             if value != nil {
@@ -956,6 +1056,16 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         editor.focusRingType = .none
         editor.delegate = self
         editor.pasteHandler = { [weak self] in self?.pasteWhileTyping() ?? false }
+        // A picture's edges resize it in the cell being typed in too.
+        editor.cursorHandler = { [weak self] event in
+            guard let self, let edge = self.picture(at: self.convert(event.locationInWindow, from: nil))?.edge else { return nil }
+            return Self.cursor(for: edge)
+        }
+        editor.mouseDownHandler = { [weak self] event in
+            guard let self, let hit = self.picture(at: self.convert(event.locationInWindow, from: nil)), hit.edge != nil else { return false }
+            self.resizePicture(hit, from: event)
+            return true
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -1217,7 +1327,8 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let cursorTracking { removeTrackingArea(cursorTracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .mouseEnteredAndExited,
+                                                         .activeInKeyWindow, .inVisibleRect],
                                   owner: self, userInfo: nil)
         addTrackingArea(area)
         cursorTracking = area
@@ -1384,6 +1495,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         if columnBorder(at: p) != nil { return .resizeLeftRight }
         if rowBorder(at: p) != nil { return .resizeUpDown }
         if onOuterEdge(p) { return .openHand }
+        if let edge = picture(at: p)?.edge { return Self.cursor(for: edge) }
         if selectedWholeRows != nil, let cell = cell(at: p), selection.contains(cell) { return .openHand }
         if link(at: p) != nil { return .pointingHand }
         return .iBeam
@@ -1393,7 +1505,9 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         guard !isExport, NotebookStore.shared.editor.tool == .type, event.window === window else { return }
         let p = convert(event.locationInWindow, from: nil)
         // As the first responder it hears every move in the window: outside the table the pointer isn't its to set.
-        guard bounds.contains(p), visibleRect.contains(p) else { return }
+        guard bounds.contains(p), visibleRect.contains(p) else { hoveredPicture = nil; return }
+        hoveredPicture = picture(at: p)
+        if let edge = hoveredPicture?.edge, !onOuterEdge(p) { return Self.cursor(for: edge).set() }
         // A formula cell shows its formula as a tip.
         if let cell = cell(at: p), cell != editing, Formula.isFormula(model.text(cell)) {
             if toolTip != model.text(cell) { toolTip = model.text(cell) }
@@ -1449,6 +1563,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
 
     override func mouseMoved(with event: NSEvent) { updateCursor(event) }
     override func cursorUpdate(with event: NSEvent) { updateCursor(event) }
+    override func mouseExited(with event: NSEvent) { hoveredPicture = nil }
 
     private func open(_ url: URL) {
         if url.scheme == NotebookStore.linkScheme {
@@ -1473,6 +1588,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         for cell in visible { grid.appendRect(cellRect(cell)) }
         defer { drawStickyHeader() }
         defer { drawFrozenColumn(showSelection) }
+        defer { drawPictureFrame() }
         if hideBorders {
             guard !isExport, editing != nil || !selection.isEmpty else { return drawSelectionOutline(showSelection) }
             grid.lineWidth = 0.5
@@ -2052,9 +2168,12 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         anchor = cell
         extent = nil
         editorUndo = UndoManager()
-        editor.textStorage?.setAttributedString(model.editingText(cell))
+        // Pictures wider than the cell are typed around as scaled copies (the saved ones keep their size).
+        editor.textStorage?.setAttributedString(CellPictures.fitted(model.editingText(cell),
+                                                                    width: cellRect(cell).width - 2 * Self.padX, marking: true))
         editor.typingAttributes = editor.textStorage?.length ?? 0 > 0
             ? editor.textStorage!.attributes(at: 0, effectiveRange: nil) : model.typingAttributes(cell)
+        editor.typingAttributes[.mxShownPicture] = nil
         editor.insertionPointColor = model.autoColor(cell)
         if editor.superview !== self { addSubview(editor) }
         becameActive()
@@ -2299,6 +2418,10 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             owner.beginMove(with: event)
             return
         }
+        if let hit = picture(at: p), hit.edge != nil {
+            resizePicture(hit, from: event)
+            return
+        }
         // A click on a link follows it (⌥-click to type in the cell instead).
         if !event.modifierFlags.contains(.option), !event.modifierFlags.contains(.shift),
            !event.modifierFlags.contains(.command), let url = link(at: p) {
@@ -2352,6 +2475,327 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             editor.setSelectedRange(NSRange(location: index, length: 0))
         } else {
             beginEditing(start, at: p)
+        }
+    }
+
+    // MARK: Pictures in cells
+
+    /// A picture's side or corner, where a handle resizes it.
+    enum PictureEdge: CaseIterable {
+        case left, right, top, bottom, topLeft, topRight, bottomLeft, bottomRight
+
+        /// -1 on the left, 1 on the right, 0 on neither.
+        var x: CGFloat {
+            switch self {
+            case .left, .topLeft, .bottomLeft: -1
+            case .right, .topRight, .bottomRight: 1
+            case .top, .bottom: 0
+            }
+        }
+        /// -1 at the top, 1 at the bottom, 0 at neither.
+        var y: CGFloat {
+            switch self {
+            case .top, .topLeft, .topRight: -1
+            case .bottom, .bottomLeft, .bottomRight: 1
+            case .left, .right: 0
+            }
+        }
+
+        static func at(x: CGFloat, y: CGFloat) -> PictureEdge? { allCases.first { $0.x == x && $0.y == y } }
+
+        var position: NSCursor.FrameResizePosition {
+            switch self {
+            case .left: .left
+            case .right: .right
+            case .top: .top
+            case .bottom: .bottom
+            case .topLeft: .topLeft
+            case .topRight: .topRight
+            case .bottomLeft: .bottomLeft
+            case .bottomRight: .bottomRight
+            }
+        }
+    }
+
+    /// A picture in a cell: its character in the cell's text, where it's drawn, and the edge under the pointer.
+    struct PictureHit: Equatable {
+        var cell: CellRef
+        var index: Int
+        var rect: NSRect
+        var edge: PictureEdge?
+    }
+
+    /// The picture under the pointer (its frame and handles are drawn), or the one being resized.
+    private var hoveredPicture: PictureHit? {
+        didSet {
+            guard oldValue != hoveredPicture else { return }
+            for hit in [oldValue, hoveredPicture].compactMap({ $0 }) { setNeedsDisplay(cellRect(hit.cell).insetBy(dx: -2, dy: -2)) }
+        }
+    }
+    /// The size shown while a picture's edge is dragged.
+    private var pictureSizeLabel: String?
+
+    static func cursor(for edge: PictureEdge) -> NSCursor {
+        .frameResize(position: edge.position, directions: .all)
+    }
+
+    /// Where a cell's text is drawn (left of its filter or list button).
+    private func textRect(_ cell: CellRef) -> NSRect {
+        var rect = cellRect(cell).insetBy(dx: Self.padX, dy: Self.padY)
+        if hasFilterButton(cell) || hasDropdown(cell) { rect.size.width -= Self.filterButtonSize }
+        return rect
+    }
+
+    /// The width a cell's text has, from the column widths (also mid-drag, before the grid is laid out again).
+    private func textWidth(_ cell: CellRef) -> CGFloat {
+        blockWidth(cell) - 2 * Self.padX - (hasFilterButton(cell) || hasDropdown(cell) ? Self.filterButtonSize : 0)
+    }
+
+    /// Where a cell's pictures are drawn (in this view), with their characters in the cell's text.
+    private func pictureFrames(_ cell: CellRef) -> [(index: Int, rect: NSRect)] {
+        let area = textRect(cell)
+        let text = model.displayText(cell, fitting: area.width)
+        let all = NSRange(location: 0, length: text.length)
+        guard text.length > 0, text.containsAttachments(in: all) else { return [] }
+        let (storage, layout, container) = layout(text, width: area.width)
+        var frames: [(index: Int, rect: NSRect)] = []
+        withExtendedLifetime(storage) {
+            layout.ensureLayout(for: container)
+            text.enumerateAttribute(.attachment, in: all) { value, range, _ in
+                guard let attachment = value as? NSTextAttachment, CellPictures.isPicture(attachment) else { return }
+                for index in range.location..<NSMaxRange(range) {
+                    let glyph = layout.glyphIndexForCharacter(at: index)
+                    guard glyph < layout.numberOfGlyphs else { continue }
+                    let size = layout.attachmentSize(forGlyphAt: glyph)
+                    guard size.width > 0, size.height > 0 else { continue }
+                    // The picture sits on the line's baseline.
+                    let line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+                    let at = layout.location(forGlyphAt: glyph)
+                    frames.append((index, NSRect(x: area.minX + line.minX + at.x, y: area.minY + line.minY + at.y - size.height,
+                                                 width: size.width, height: size.height)))
+                }
+            }
+        }
+        return frames
+    }
+
+    /// The picture under a point, and the side or corner it's on (where it's resized).
+    func picture(at p: NSPoint) -> PictureHit? {
+        guard !isExport, NotebookStore.shared.editor.tool == .type else { return nil }
+        // Not where the pinned header row or the frozen column is drawn over the cells.
+        if let band = pinnedHeaderBand, p.y >= band.y, p.y < band.y + band.height { return nil }
+        if stickyColumnActive, p.x >= stickyLeft, p.x < stickyLeft + frozenWidth { return nil }
+        guard let cell = cell(at: p) else { return nil }
+        let clip = cellRect(cell)
+        let reach: CGFloat = 4
+        for (index, rect) in pictureFrames(cell).reversed() {
+            let shown = rect.intersection(clip)
+            guard !shown.isEmpty, shown.insetBy(dx: -reach, dy: -reach).contains(p) else { continue }
+            // A bottom cut off by a row of fixed height can't be dragged.
+            let x: CGFloat = abs(p.x - rect.maxX) <= reach ? 1 : abs(p.x - rect.minX) <= reach ? -1 : 0
+            let y: CGFloat = abs(p.y - rect.maxY) <= reach && rect.maxY <= clip.maxY + 0.5 ? 1
+                : abs(p.y - rect.minY) <= reach && rect.minY >= clip.minY - 0.5 ? -1 : 0
+            let edge = PictureEdge.at(x: x, y: y)
+            guard edge != nil || shown.contains(p) else { continue }
+            return PictureHit(cell: cell, index: index, rect: rect, edge: edge)
+        }
+        return nil
+    }
+
+    /// The hovered picture's frame, with handles where it can be resized (and its size while it's dragged).
+    private func drawPictureFrame() {
+        guard let hit = hoveredPicture, !isExport, model.contains(hit.cell) else { return }
+        let clip = cellRect(hit.cell)
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        clip.clip()
+        let accent = NSColor.controlAccentColor
+        let frame = NSBezierPath(rect: hit.rect.insetBy(dx: -0.5, dy: -0.5))
+        frame.lineWidth = 1
+        accent.setStroke()
+        frame.stroke()
+        let shown = hit.rect.intersection(clip)
+        // A handle on each side and corner (none along a bottom cut off by the row).
+        let bottomShown = hit.rect.maxY <= clip.maxY + 0.5
+        let handles = PictureEdge.allCases.compactMap { edge -> NSPoint? in
+            guard edge.y != 1 || bottomShown else { return nil }
+            return NSPoint(x: edge.x < 0 ? hit.rect.minX : edge.x > 0 ? hit.rect.maxX : hit.rect.midX,
+                           y: edge.y < 0 ? hit.rect.minY : edge.y > 0 ? hit.rect.maxY : shown.midY)
+        }
+        for center in handles {
+            let handle = NSRect(x: center.x - 3.5, y: center.y - 3.5, width: 7, height: 7)
+            NSColor.white.setFill()
+            handle.fill()
+            accent.setFill()
+            handle.frame(withWidth: 1)
+        }
+        guard let label = pictureSizeLabel else { return }
+        let text = NSAttributedString(string: label, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white])
+        let size = text.size()
+        var box = NSRect(x: shown.maxX - size.width - 18, y: shown.maxY - size.height - 14,
+                         width: size.width + 10, height: size.height + 4)
+        box.origin.x = max(shown.minX + 2, box.minX)
+        box.origin.y = max(shown.minY + 2, box.minY)
+        NSColor(white: 0, alpha: 0.65).setFill()
+        NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
+        text.draw(at: NSPoint(x: box.minX + 5, y: box.minY + 2))
+    }
+
+    /// Dragging a picture's side or corner resizes it, keeping its proportions (it stays in its place in the
+    /// text: a left or top handle grows it as it's dragged out). A picture wider than its cell widens the
+    /// column; a row of fixed height grows to show it.
+    private func resizePicture(_ hit: PictureHit, from event: NSEvent) {
+        guard let window else { return }
+        endEditing()
+        let cell = model.master(hit.cell)
+        let stored = model.storedText(cell)
+        guard hit.index < stored.length,
+              let saved = stored.attribute(.attachment, at: hit.index, effectiveRange: nil) as? NSTextAttachment else { return }
+        let widthBefore = model.width
+        model.freezeColumnWidths()
+        let block = model.span(cell)
+        let column = (block.column..<(block.column + block.columns)).last { !model.isColumnHidden($0) } ?? block.column
+        let startColumn = model.data.columnWidths[column]
+        let startRoom = textWidth(cell)
+        let start = hit.rect.size
+        let aspect = CellPictures.aspect(saved)
+        let origin = convert(event.locationInWindow, from: nil)
+        let rows = fixedRows([cell])
+        let startSize = OneNoteImport.displaySize(saved)
+        var resized = false
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
+                           mode: .eventTracking) { ev, stop in
+            guard let ev, ev.type == .leftMouseDragged else {
+                stop.pointee = true
+                return
+            }
+            let p = self.convert(ev.locationInWindow, from: nil)
+            let dx = p.x - origin.x, dy = p.y - origin.y
+            guard let edge = hit.edge else { return }
+            // Across, down, or (at a corner) whichever way the pointer has moved the picture more.
+            let across = start.width + edge.x * dx, down = (start.height + edge.y * dy) / aspect
+            var width = edge.y == 0 ? across : edge.x == 0 ? down
+                : abs(across - start.width) >= abs(down - start.width) ? across : down
+            width = max(16, width).rounded()
+            let size = NSSize(width: width, height: max(1, (width * aspect).rounded()))
+            CellPictures.resize(saved, to: size)
+            resized = true
+            // Wider than the cell: the column widens (and narrows back, no narrower than it was, as the picture shrinks).
+            let columnWidth = startColumn + Double(max(0, width - startRoom))
+            let delta = columnWidth - self.model.data.columnWidths[column]
+            if abs(delta) >= 0.5 {
+                self.model.data.columnWidths[column] = columnWidth
+                self.model.onWidthChange?(CGFloat(delta))
+            }
+            self.heightCache.removeAll()
+            self.growFixedRows(rows)
+            self.pictureSizeLabel = "\(Int(size.width)) × \(Int(size.height))"
+            self.relayout()
+            if let frame = self.pictureFrames(cell).first(where: { $0.index == hit.index }) {
+                self.hoveredPicture = PictureHit(cell: cell, index: hit.index, rect: frame.rect, edge: hit.edge)
+            }
+            self.needsDisplay = true
+        }
+        pictureSizeLabel = nil
+        hoveredPicture = picture(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        needsDisplay = true
+        guard resized, OneNoteImport.displaySize(saved) != startSize else { return }
+        model.store(model.storedText(cell), in: cell)
+        heightCache[cell] = nil
+        relayout()
+        model.checkpoint("Resize Picture", widthBefore: widthBefore)
+        owner?.controller?.markDirty()
+    }
+
+    /// A picture that follows its cell's size while a column or row border is dragged.
+    private struct PictureFollower {
+        var cell: CellRef
+        var picture: NSTextAttachment
+        /// Height over width.
+        var aspect: CGFloat
+        /// The picture's share of the cell's width (column drags) or height (row drags) when the drag began, at most 1.
+        var share: CGFloat
+        var startSize: NSSize
+    }
+
+    /// Pictures on a line of their own in the column's cells: they keep their share of the cell's width.
+    private func columnFollowers(_ column: Int) -> [PictureFollower] {
+        var found: [PictureFollower] = []
+        for cell in model.visibleCells {
+            let block = model.span(cell)
+            guard column >= block.column, column < block.column + block.columns else { continue }
+            let room = textWidth(cell)
+            guard room > 10 else { continue }
+            for (_, picture) in CellPictures.ownLinePictures(model.storedText(cell)) {
+                let size = OneNoteImport.displaySize(picture)
+                guard size.width > 0, size.height > 0 else { continue }
+                found.append(PictureFollower(cell: cell, picture: picture, aspect: CellPictures.aspect(picture),
+                                             share: min(1, size.width / room), startSize: size))
+            }
+        }
+        return found
+    }
+
+    /// Cells in the row whose only content is a picture: it keeps its share of the cell's height (as wide as the cell at most).
+    private func rowFollowers(_ row: Int) -> [PictureFollower] {
+        guard row + 1 < rowTops.count else { return [] }
+        let height = rowTops[row + 1] - rowTops[row] - 2 * Self.padY
+        guard height > 1 else { return [] }
+        var found: [PictureFollower] = []
+        for c in 0..<model.columnCount where !model.isColumnHidden(c) && !model.data.isCovered(row, c) {
+            let cell = CellRef(row: row, column: c)
+            guard model.span(cell).rows == 1, let picture = CellPictures.onlyPicture(model.storedText(cell)) else { continue }
+            let size = OneNoteImport.displaySize(picture), room = textWidth(cell)
+            guard size.width > 0, size.height > 0, room > 10 else { continue }
+            let shown = size.width > room ? size.height * room / size.width : size.height
+            found.append(PictureFollower(cell: cell, picture: picture, aspect: CellPictures.aspect(picture),
+                                         share: min(1, shown / height), startSize: size))
+        }
+        return found
+    }
+
+    /// Sizes the following pictures for their cells' widths (column drag), or for a row height (row drag).
+    private func follow(_ followers: [PictureFollower], height: CGFloat?) {
+        for follower in followers {
+            let room = textWidth(follower.cell)
+            var width = follower.share * room
+            if let height { width = min(room, follower.share * (height - 2 * Self.padY) / follower.aspect) }
+            width = max(16, width.rounded())
+            let size = NSSize(width: width, height: max(1, (width * follower.aspect).rounded()))
+            guard OneNoteImport.displaySize(follower.picture) != size else { continue }
+            CellPictures.resize(follower.picture, to: size)
+            heightCache[follower.cell] = nil
+        }
+        if height != nil { needsDisplay = true }
+    }
+
+    /// Saves the cells whose pictures followed a drag (in the drag's undo step).
+    private func storeFollowers(_ followers: [PictureFollower]) {
+        var cells: [CellRef] = []
+        for follower in followers where OneNoteImport.displaySize(follower.picture) != follower.startSize
+            && !cells.contains(follower.cell) { cells.append(follower.cell) }
+        guard !cells.isEmpty else { return }
+        for cell in cells { model.store(model.storedText(cell), in: cell) }
+        heightCache.removeAll()
+        relayout()
+    }
+
+    /// Rows of fixed height holding these cells, with their heights and the cells (for growFixedRows).
+    private func fixedRows(_ cells: [CellRef]) -> [(row: Int, height: CGFloat, cells: [CellRef])] {
+        var rows: [Int: [CellRef]] = [:]
+        for cell in cells where model.span(cell).rows == 1 && model.manualHeight(cell.row) != nil {
+            rows[cell.row, default: []].append(cell)
+        }
+        return rows.sorted { $0.key < $1.key }.map { ($0.key, model.manualHeight($0.key) ?? 0, $0.value) }
+    }
+
+    /// A row of fixed height grows to show its cells' pictures as they get bigger (and goes back, no lower than it was).
+    private func growFixedRows(_ rows: [(row: Int, height: CGFloat, cells: [CellRef])]) {
+        for (row, height, cells) in rows {
+            let tallest = cells.map { measure($0) }.max() ?? 0
+            let wanted = max(height, (tallest + 2 * Self.padY).rounded(.up))
+            if abs((model.manualHeight(row) ?? 0) - wanted) >= 0.5 { model.setManualHeight(wanted, row: row) }
         }
     }
 
@@ -2444,6 +2888,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         endEditing()
         let startY = convert(event.locationInWindow, from: nil).y
         let startHeight = rowTops[row + 1] - rowTops[row]
+        let followers = rowFollowers(row)
         window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
                            mode: .eventTracking) { ev, stop in
             guard let ev, ev.type == .leftMouseDragged else {
@@ -2451,8 +2896,11 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
                 return
             }
             let y = self.convert(ev.locationInWindow, from: nil).y
-            self.setRowHeight(max(Self.minManualHeight, startHeight + y - startY), row: row)
+            let height = max(Self.minManualHeight, startHeight + y - startY).rounded()
+            self.follow(followers, height: height)
+            self.setRowHeight(height, row: row)
         }
+        storeFollowers(followers)
         model.checkpoint("Row Height")
         owner?.controller?.markDirty()
     }
@@ -2488,6 +2936,8 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         model.freezeColumnWidths()
         let startX = convert(event.locationInWindow, from: nil).x
         let startWidth = model.data.columnWidths[column]
+        let followers = columnFollowers(column)
+        let rows = fixedRows(followers.map(\.cell))
         window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
                            mode: .eventTracking) { ev, stop in
             guard let ev, ev.type == .leftMouseDragged else {
@@ -2500,9 +2950,12 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             guard abs(delta) >= 0.5 else { return }
             self.model.data.columnWidths[column] = newWidth
             self.model.onWidthChange?(CGFloat(delta))
+            self.follow(followers, height: nil)
             self.heightCache.removeAll()
+            self.growFixedRows(rows)
             self.relayout()
         }
+        storeFollowers(followers)
         model.checkpoint("Resize Column", widthBefore: widthBefore)
         owner?.controller?.markDirty()
     }

@@ -166,9 +166,16 @@ Section and New Section Group. Right-click a page for its own menu.
   height of its own — text that doesn't fit is cut off, and the row opens up while you type in it. **Double-click the
   border to auto-fit** the row to its content again (with whole rows selected, all of them). Also Auto-Fit Row Height /
   Auto-Fit All Rows by right-click.
+- **Pictures in cells**: point at a picture to see its frame, with a handle on each side and corner; drag one (the
+  pointer turns to a resize arrow) to resize the picture, keeping its proportions — also while typing in the cell. A
+  picture made wider than its cell widens the column, and a row with a height of its own grows to show it. A picture on
+  a line of its own follows the cell: dragging the column border keeps its share of the cell's width, and dragging the
+  row border fits a cell's only picture to the row's height. A picture wider than its cell is shown at the cell's width
+  and keeps its own size, so it grows back when the column is widened. Pictures keep their sizes when the page is saved
+  (in text boxes too).
 - **Pointer**: ↔ on column borders (resize), open hand on the table's top, left and bottom edges (drag to move the
-  table), pointing hand on links (click to follow; ⌥-click to type in the cell instead), text cursor in cells. Links in
-  text boxes show the pointing hand as well.
+  table), resize arrows on a picture's sides and corners, pointing hand on links (click to follow; ⌥-click to type in
+  the cell instead), text cursor in cells. Links in text boxes show the pointing hand as well.
 - **Frozen header row**: in a table with a header row, the header stays pinned at the top of the view while you scroll
   through the table, and scrolls away with its last row. Clicking a pinned header cell scrolls back to type in it.
   Turn it off per table with **Freeze Header Row** (right-click a cell or a column letter, or the Table ribbon's
