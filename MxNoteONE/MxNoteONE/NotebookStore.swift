@@ -78,6 +78,8 @@ struct ParagraphTarget {
     var paragraph: Int
     var cell: CellRef?
     var text: String
+    /// A pin on a map (the element is the map).
+    var pin: UUID?
 
     init?(_ url: URL) {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
@@ -88,6 +90,7 @@ struct ParagraphTarget {
         let parts = (value("c") ?? "").split(separator: ",").compactMap { Int($0) }
         cell = parts.count == 2 ? CellRef(row: parts[0], column: parts[1]) : nil
         text = value("t") ?? ""
+        pin = value("pin").flatMap(UUID.init(uuidString:))
     }
 }
 
@@ -1507,6 +1510,18 @@ final class NotebookStore {
         if !words.isEmpty { items.append(URLQueryItem(name: "t", value: String(words.prefix(60)))) }
         components.queryItems = items
         return components.url!
+    }
+
+    /// A link to a pin on a map: the map's container, the pin, and its title (for the link's name).
+    func pinLink(_ ref: PageRef, map: UUID, pin: UUID, title: String) -> URL {
+        var components = URLComponents(url: link(for: ref), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "e", value: map.uuidString), URLQueryItem(name: "pin", value: pin.uuidString),
+                                 URLQueryItem(name: "t", value: String(title.prefix(60)))]
+        return components.url!
+    }
+
+    func copyPinLink(_ ref: PageRef, map: UUID, pin: UUID, title: String) {
+        copyLink(pinLink(ref, map: map, pin: pin, title: title), title: title)
     }
 
     func copyParagraphLink(_ ref: PageRef, element: UUID, paragraph: Int, cell: CellRef?, text: String) {

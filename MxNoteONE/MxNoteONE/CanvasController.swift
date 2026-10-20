@@ -218,9 +218,20 @@ final class CanvasController: NSObject {
         }
     }
 
-    /// Where inserted things go: under the container being edited, or near the top of the visible page.
+    /// Where inserted things go: where the page was right-clicked (Insert Here), under the container being edited,
+    /// or near the top of the visible page.
     func nextInsertionPoint() -> NSPoint {
-        canvas.snapped(rawInsertionPoint())
+        canvas.snapped(insertionPoint ?? rawInsertionPoint())
+    }
+
+    /// Set while an Insert Here command runs (the point right-clicked).
+    private var insertionPoint: NSPoint?
+
+    /// Runs an insert command putting what it inserts at a point on the page.
+    func insert(at point: NSPoint, _ command: () -> Void) {
+        insertionPoint = point
+        defer { insertionPoint = nil }
+        command()
     }
 
     private func rawInsertionPoint() -> NSPoint {
@@ -974,6 +985,17 @@ final class CanvasController: NSObject {
     func applyPendingReveal() {
         guard let target = store.pendingReveal, ref != nil, ref == store.currentPageRef else { return }
         store.pendingReveal = nil
+        // A pin: its map scrolled to, the pin centred and its callout open (any map with it, if the map was replaced).
+        if let pin = target.pin {
+            let maps = canvas.elementViews.compactMap { $0 as? MapElementView }
+            if let map = maps.first(where: { $0.element.id == target.element && $0.data.pins.contains { $0.id == pin } })
+                ?? maps.first(where: { $0.data.pins.contains { $0.id == pin } }) {
+                map.reveal(pin)
+            } else {
+                NSSound.beep()
+            }
+            return
+        }
         if let table = canvas.elementViews.first(where: { $0.element.id == target.element }) as? TableElementView,
            let cell = target.cell {
             table.grid.reveal(cell)

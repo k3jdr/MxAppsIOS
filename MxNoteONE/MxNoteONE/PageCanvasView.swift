@@ -401,9 +401,59 @@ final class PageCanvasView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         selectedElement = nil
         window?.makeFirstResponder(self)
-        if controller.editor.tool == .type, p.y > Self.contentTop - 24 {
+        // A new text box where the page is clicked (or double-clicked; or not at all — Settings ▸ General ▸ Page).
+        let starts: Bool
+        switch Prefs.newTextBox {
+        case .click: starts = true
+        case .doubleClick: starts = event.clickCount >= 2
+        case .menu: starts = false
+        }
+        if starts, controller.editor.tool == .type, p.y > Self.contentTop - 24 {
             controller.createTextElement(at: p)
         }
+    }
+
+    /// Right-click on the page: a new text box (or anything else) there, paste there, and what clicks do.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard showsPage, !isExport, let controller else { return nil }
+        let p = convert(event.locationInWindow, from: nil)
+        guard p.y > Self.contentTop - 24 else { return nil }
+        window?.makeFirstResponder(self)
+        selectedElement = nil
+        let menu = NSMenu()
+        menu.addItem(ClosureMenuItem("New Text Box Here") { [weak controller] in controller?.createTextElement(at: p) })
+        let paste = ClosureMenuItem("Paste Here") { [weak controller] in controller?.paste(at: p) }
+        paste.isEnabled = !(NSPasteboard.general.types ?? []).isEmpty
+        menu.addItem(paste)
+        let insert = NSMenuItem(title: "Insert Here", action: nil, keyEquivalent: "")
+        let im = NSMenu()
+        func here(_ title: String, _ symbol: String, _ command: @escaping (CanvasController) -> Void) {
+            let item = ClosureMenuItem(title) { [weak controller] in
+                guard let controller else { return }
+                controller.insert(at: p) { command(controller) }
+            }
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            im.addItem(item)
+        }
+        here("Table", "tablecells") { $0.insertTable(rows: 3, columns: 3) }
+        here("Picture…", "photo") { $0.choosePictures() }
+        here("File Attachment…", "paperclip") { $0.chooseAttachments() }
+        im.addItem(.separator())
+        here("Map", "map") { $0.insertMap() }
+        here("Music Score", "music.note.list") { $0.insertScore() }
+        here("3D Model", "cube") { $0.insertModel() }
+        here("Diagram (draw.io)", "point.3.connected.trianglepath.dotted") { $0.newDiagram() }
+        insert.submenu = im
+        menu.addItem(insert)
+        menu.addItem(.separator())
+        let clicks = NSMenuItem(title: "Clicking the Page", action: nil, keyEquivalent: "")
+        let cm = NSMenu()
+        for option in Prefs.NewTextBox.allCases {
+            cm.addItem(ClosureMenuItem(option.menuTitle, state: Prefs.newTextBox == option) { Prefs.newTextBox = option })
+        }
+        clicks.submenu = cm
+        menu.addItem(clicks)
+        return menu
     }
 
     override func keyDown(with event: NSEvent) {

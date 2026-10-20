@@ -214,12 +214,26 @@ enum MapLinks {
         return out
     }
 
-    /// The name of a link's target: a page's title, "Title › “words…”" for a paragraph, else the address.
+    /// The pin a pin link goes to (from the map on the page open, else the page as saved).
+    static func pin(for url: URL) -> MapPin? {
+        let store = NotebookStore.shared
+        guard let target = ParagraphTarget(url), let id = target.pin, let ref = store.resolve(url) else { return nil }
+        if store.currentPageRef == ref, let maps = store.canvas?.canvas.elementViews.compactMap({ $0 as? MapElementView }) {
+            return maps.lazy.compactMap { $0.data.pins.first { $0.id == id } }.first
+        }
+        return store.loadPage(ref)?.elements.compactMap(\.map).lazy.compactMap { $0.pins.first { $0.id == id } }.first
+    }
+
+    /// The name of a link's target: a page's title, "Title › “words…”" for a paragraph, "Title › 📍 Pin" for a pin,
+    /// else the address.
     static func title(of url: URL) -> String {
         let store = NotebookStore.shared
         if url.scheme == NotebookStore.linkScheme {
             guard let ref = store.resolve(url) else { return "A page that can't be found" }
             let page = store.meta(ref)?.displayTitle ?? "Page"
+            if let target = ParagraphTarget(url), target.pin != nil {
+                return "\(page) › 📍 \(pin(for: url)?.title ?? (target.text.isEmpty ? "Pin" : target.text))"
+            }
             if let target = ParagraphTarget(url), !target.text.isEmpty {
                 let words = target.text.count > 40 ? String(target.text.prefix(40)) + "…" : target.text
                 return "\(page) › “\(words)”"

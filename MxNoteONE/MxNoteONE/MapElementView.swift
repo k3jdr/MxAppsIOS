@@ -132,6 +132,7 @@ final class MapPanelModel {
     var toggleCategory: (String) -> Void = { _ in }
     var addPin: () -> Void = {}
     var deleteRoute: (UUID) -> Void = { _ in }
+    var copyLink: (UUID) -> Void = { _ in }
 }
 
 final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegate {
@@ -193,6 +194,7 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         panel.toggleCategory = { [weak self] c in self?.toggleCategory(c) }
         panel.addPin = { [weak self] in self?.pinAtCenter() }
         panel.deleteRoute = { [weak self] id in self?.deleteRoute(id) }
+        panel.copyLink = { [weak self] id in self?.copyLink(id) }
         finishSetup()
         configure()
         mapView.camera = Self.camera(for: data)
@@ -616,6 +618,24 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         MapLinks.follow(url)
     }
 
+    /// Copy Link to Pin: a link that opens this page at the map with the pin centred and its callout open — pasted
+    /// on words it links them, pasted alone it's the pin's name.
+    func copyLink(_ id: UUID? = nil) {
+        guard let pin = id.flatMap({ i in data.pins.first { $0.id == i } }) ?? targetPin, let ref = controller?.ref else { return NSSound.beep() }
+        NotebookStore.shared.copyPinLink(ref, map: element.id, pin: pin.id, title: pin.title)
+    }
+
+    /// Following a link to a pin: the map scrolled into view and made active, the pin's category shown, the pin
+    /// centred with its callout open.
+    func reveal(_ id: UUID) {
+        guard let pin = data.pins.first(where: { $0.id == id }) else { return NSSound.beep() }
+        canvas?.scrollToVisible(frame.insetBy(dx: 0, dy: -20))
+        activate()
+        if !data.isShown(pin) { toggleCategory(pin.categoryName) }
+        go(to: pin.coordinate, distance: min(mapView.camera.centerCoordinateDistance, 4000))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.selectPin(id, center: false) }
+    }
+
     /// The selected pin links to what's on the clipboard (Copy Link to Page or Paragraph, or a web address).
     func pasteLink() {
         guard let pin = targetPin, let url = MapLinks.copiedLink else { return NSSound.beep() }
@@ -837,6 +857,7 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         guard let pin = data.pins.first(where: { $0.id == id }) else { return menu }
         selectPin(id, center: false)
         menu.addItem(ClosureMenuItem("Edit “\(pin.title)”…") { [weak self] in self?.editPin(id) })
+        menu.addItem(ClosureMenuItem("Copy Link to Pin") { [weak self] in self?.copyLink(id) })
         if pin.linkURL != nil { menu.addItem(ClosureMenuItem("Go to \(pin.linkTitle ?? "Link")") { [weak self] in self?.followLink(id) }) }
         let paste = ClosureMenuItem("Link to Copied Link") { [weak self] in self?.pasteLink() }
         paste.isEnabled = MapLinks.copiedLink != nil
@@ -1188,6 +1209,7 @@ struct MapPinList: View {
         .onTapGesture { model.select(pin.id) }
         .contextMenu {
             Button("Edit Pin…") { model.edit(pin.id) }
+            Button("Copy Link to Pin") { model.copyLink(pin.id) }
             if pin.linkURL != nil { Button("Go to \(pin.linkTitle ?? "Link")") { model.follow(pin.id) } }
             Divider()
             Button("Delete Pin", role: .destructive) { model.delete(pin.id) }

@@ -192,6 +192,17 @@ struct LinkInfo {
                 let nb = store.notebook(ref.notebookID)
                 let section = nb?.manifest.sections.find(ref.sectionID)?.name
                 detail = [nb?.name, section].compactMap { $0 }.joined(separator: " › ")
+                if let target = ParagraphTarget(url), target.pin != nil {
+                    // A pin on a map: its name, and its place and notes as the preview.
+                    let pin = MapLinks.pin(for: url)
+                    symbol = "mappin.and.ellipse"
+                    title = pin?.title ?? (target.text.isEmpty ? "Pin" : target.text)
+                    detail = "A pin on the map in “\(meta.displayTitle)” · " + detail
+                    preview = pin.map { p in [p.address, p.notes].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " — ") }
+                    if preview?.isEmpty == true { preview = nil }
+                    updated = meta.modified
+                    return
+                }
                 if url.query != nil { detail += " (a paragraph on the page)" }
                 updated = meta.modified
                 // The page's opening words (after its title).

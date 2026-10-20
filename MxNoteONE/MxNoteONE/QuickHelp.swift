@@ -160,7 +160,8 @@ final class QuickHelp {
             if canvas.dateLabel.frame.contains(p) {
                 return QuickHelpItem(title: "Page Dates", detail: "When the page was created │ when it was last updated.", shortcut: nil, symbol: "calendar")
             }
-            return QuickHelpItem(title: "Page", detail: "Click anywhere to start typing there. Drop pictures and files here. Pinch or use View ▸ Zoom to zoom.", shortcut: nil, symbol: "doc")
+            let start = Prefs.newTextBox == .click ? "Click anywhere to start typing there" : Prefs.newTextBox == .doubleClick ? "Double-click anywhere to start typing there" : "Right-click ▸ New Text Box Here to start typing"
+            return QuickHelpItem(title: "Page", detail: start + "; right-click to paste or insert there. Drop pictures and files here. Pinch or use View ▸ Zoom to zoom.", shortcut: nil, symbol: "doc")
         default:
             return nil
         }

@@ -17,6 +17,32 @@ enum Prefs {
     static let notebooksFolderKey = "notebooksFolder"
     static let autoLockKey = "autoLockMinutes"
     static let openNotebooksKey = "openNotebooks"
+    static let newTextBoxKey = "newTextBoxOnClick"
+
+    /// What a click on an empty part of the page does.
+    enum NewTextBox: String, CaseIterable, Identifiable {
+        case click, doubleClick, menu
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .click: "A click starts a new text box (as in OneNote)"
+            case .doubleClick: "A double-click starts a new text box"
+            case .menu: "Clicking does nothing (right-click ▸ New Text Box Here)"
+            }
+        }
+        var menuTitle: String {
+            switch self {
+            case .click: "Click Starts a New Text Box"
+            case .doubleClick: "Double-Click Starts a New Text Box"
+            case .menu: "Clicking Does Nothing"
+            }
+        }
+    }
+
+    static var newTextBox: NewTextBox {
+        get { NewTextBox(rawValue: UserDefaults.standard.string(forKey: newTextBoxKey) ?? "") ?? .click }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: newTextBoxKey) }
+    }
 
     private static var defaults: UserDefaults { .standard }
 

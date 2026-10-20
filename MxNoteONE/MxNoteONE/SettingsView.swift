@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.ruleLinesKey) private var ruleLines = RuleLines.none.rawValue
     @AppStorage(Prefs.notebooksFolderKey) private var notebooksFolder = ""
     @AppStorage(Prefs.autoLockKey) private var autoLockMinutes = 10
+    @AppStorage(Prefs.newTextBoxKey) private var newTextBox = Prefs.NewTextBox.click.rawValue
     @AppStorage(DeviceUnlock.appLockKey) private var appLock = false
     @State private var useOfficeFonts = OfficeFonts.enabled
     @AppStorage(WebBrowser.key) private var browserID = ""
@@ -57,6 +58,15 @@ struct SettingsView: View {
                 Text("The quick brown fox jumps over the lazy dog.")
                     .font(Font(Prefs.defaultFont as CTFont))
                     .foregroundStyle(.secondary)
+            }
+            Section("Page") {
+                Picker("Clicking an empty part of a page:", selection: $newTextBox) {
+                    ForEach(Prefs.NewTextBox.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                Text("Right-click the page any time for New Text Box Here, Paste Here, and Insert Here (a table, picture, map, score, 3D model, diagram…).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("Fonts") {
                 Toggle("Use fonts from Microsoft Office", isOn: Binding(

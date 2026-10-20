@@ -1199,6 +1199,9 @@ struct MapRibbon: View {
             RibbonButton("Link Pin…", "link", large: true) { act { $0.editPin() } }
                 .tip("Link Pin", "Links the selected pin to a page, a paragraph on a page, or a web address (in the pin's editor).")
                 .disabled(pin == nil)
+            RibbonButton("Copy Link to Pin", "link.badge.plus") { act { $0.copyLink() } }
+                .tip("Copy Link to Pin", "Copies a link to the selected pin: paste it on words in your notes (or in another pin's link) and it opens this map with the pin centred and its callout open.")
+                .disabled(pin == nil)
             RibbonButton("Use Copied Link", "doc.on.clipboard") { act { $0.pasteLink() } }
                 .tip("Use Copied Link", "Links the selected pin to a link you copied: right-click a page or a paragraph ▸ Copy Link to Page / Paragraph.")
                 .disabled(pin == nil)
