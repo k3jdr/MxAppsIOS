@@ -15,16 +15,8 @@ struct SidebarView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        List(selection: Binding(get: { store.sidebarSelection }, set: { store.selectSidebar($0) })) {
-            ForEach(store.notebooks) { notebook in
-                Section(isExpanded: expandedBinding(notebook.id)) {
-                    SectionTree(notebook: notebook)
-                } header: {
-                    NotebookHeader(notebook: notebook)
-                }
-            }
-        }
-        .listStyle(.sidebar)
+        // AppKit's outline (for dependable drag and drop); its rows are the SwiftUI views below.
+        SidebarOutline(signature: signature, expansion: expansion, selection: store.sidebarSelection)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
             OneDriveStatusView()
@@ -68,53 +60,27 @@ struct SidebarView: View {
         }
     }
 
-    private func expandedBinding(_ id: UUID) -> Binding<Bool> {
-        Binding(
-            get: { store.expandedNotebooks.contains(id) },
-            set: { expanded in
-                if expanded { store.expandedNotebooks.insert(id) } else { store.expandedNotebooks.remove(id) }
-            })
-    }
-}
-
-/// A notebook's sections and section groups as one flat run of rows, indented, with our own
-/// disclosure chevrons. Not OutlineGroup / DisclosureGroup: the sidebar's outline view reloads
-/// a group's whole subtree whenever its children change (Move to Group, deleting a group),
-/// which collapses sibling groups and discards row views mid-animation, leaving a faded copy
-/// of a moved row drawn over the row now in its place. A flat list only ever inserts, removes
-/// and moves rows, each keeping its identity.
-struct SectionTree: View {
-    let notebook: Notebook
-    @Bindable private var store = NotebookStore.shared
-
-    var body: some View {
-        ForEach(notebook.manifest.sections.visibleRows(expanded: store.expandedGroups), id: \.node.id) { row in
-            let ref = SectionRef(notebookID: notebook.id, sectionID: row.node.id)
-            HStack(spacing: 4) {
-                if row.node.isGroup {
-                    let open = store.expandedGroups.contains(row.node.id)
-                    Button {
-                        if open { store.expandedGroups.remove(row.node.id) } else { store.expandedGroups.insert(row.node.id) }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(open ? 90 : 0))
-                            .frame(width: 12, height: 16)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(open ? "Collapse \(row.node.name)" : "Expand \(row.node.name)")
-                } else {
-                    Color.clear.frame(width: 12, height: 1)
-                }
-                SectionRow(notebook: notebook, node: row.node)
-            }
-            .padding(.leading, CGFloat(row.depth) * 14)
-            // Drag to another place (or into a group); pages dropped on a section move there.
-            .sidebarDragDrop(ref, isGroup: row.node.isGroup)
-            .tag(row.node.isGroup ? SidebarItem.group(ref) : SidebarItem.section(ref))
+    /// Everything the sidebar shows (what's open aside): when it changes, the outline is rebuilt.
+    private var signature: Int {
+        var h = Hasher()
+        for nb in store.notebooks {
+            h.combine(nb.id)
+            h.combine(nb.name)
+            h.combine(nb.manifest.color)
+            h.combine(nb.manifest.oneNote != nil)
+            h.combine(nb.manifest.sections)
+            h.combine(nb.unlocked)
         }
+        return h.finalize()
+    }
+
+    /// Which notebooks and groups are open: when it changes, rows open or close (not rebuilt — that would end a
+    /// drag hovering over a closed group as it springs open).
+    private var expansion: Int {
+        var h = Hasher()
+        h.combine(store.expandedNotebooks)
+        h.combine(store.expandedGroups)
+        return h.finalize()
     }
 }
 
@@ -136,8 +102,6 @@ struct NotebookHeader: View {
                     .help("Synced with OneNote on OneDrive")
             }
         }
-        // A section or group dropped here goes last in the notebook.
-        .notebookDrop(notebook.id)
         .contextMenu {
             Button("New Section") { store.addSection(to: notebook.id) }
             Button("New Section Group") { store.addSectionGroup(to: notebook.id) }

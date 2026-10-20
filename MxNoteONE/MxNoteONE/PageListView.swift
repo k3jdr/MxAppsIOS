@@ -61,24 +61,10 @@ struct PagesList: View {
     var body: some View {
         let pages = store.visiblePages(in: section)
         let node = store.node(section)
-        List(selection: Binding(get: { store.selectedPageID }, set: { store.selectPage($0) })) {
-            ForEach(pages) { meta in
-                let ref = PageRef(notebookID: section.notebookID, sectionID: section.sectionID, pageID: meta.id)
-                let hasSubpages = store.hasSubpages(meta.id, in: section)
-                PageRow(meta: meta, ref: ref, hasSubpages: hasSubpages)
-                    // Drag to another place in the list (subpages come along), or onto a section in the sidebar.
-                    .pageDragDrop(ref)
-                    .tag(meta.id)
-                    .contextMenu { PageMenu(ref: ref, meta: meta, hasSubpages: hasSubpages) }
-            }
-        }
-        // Dropped below the pages: last in the section.
-        .pagesEndDrop(section)
+        // AppKit's table (for dependable drag and drop); its rows are PageRow, with PageMenu on right-click.
+        PagesTable(section: section, pages: pages, selected: store.selectedPageID)
         // Right-click the empty space (below the pages, or an empty section) for Add New.
         .background(AddNewArea(section: section))
-        .onDeleteCommand {
-            if let ref = store.currentPageRef { store.deletePage(ref) }
-        }
         .safeAreaInset(edge: .top, spacing: 0) {
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 2)
