@@ -2,7 +2,7 @@
 //  MediaMetadata.swift
 //  MxFileMGR
 //
-//  ffmpeg Meta-data… for MP4, MOV, WebM and MKV files (file list right-click menu): edit the Title and Description
+//  ffmpeg Meta-data… for MP4, M4V, MOV, WebM, MKV and AVI files (file list right-click menu): edit the Title and Description
 //  tags with ffmpeg, without re-encoding —
 //
 //      ffmpeg -i input.mp4 -map 0 -map_metadata 0 -c copy -ignore_unknown \
@@ -15,7 +15,10 @@
 //  MOV: QuickTime's standard tags have no description, so ffmpeg would drop it. For .mov the command adds
 //  -movflags use_metadata_tags (keys written as mdta metadata) and blanks major_brand, minor_version and
 //  compatible_brands in that copy — otherwise each edit appends them again ("qt ;qt "); the file-type header is
-//  unaffected. MP4, WebM and MKV keep description natively (WebM / MKV as DESCRIPTION).
+//  unaffected. MP4, M4V, WebM and MKV keep description natively (WebM / MKV as DESCRIPTION).
+//
+//  AVI: its INFO tags have no description either (ffmpeg drops it), so for .avi the Description is written to
+//  and read from the comment tag (ICMT).
 //
 
 import AppKit
@@ -23,12 +26,17 @@ import SwiftUI
 
 nonisolated enum FFmpegTool {
     /// File types the menu offers ffmpeg Meta-data… for.
-    static let extensions: Set<String> = ["mp4", "mov", "webm", "mkv"]
+    static let extensions: Set<String> = ["mp4", "m4v", "mov", "webm", "mkv", "avi"]
 
     static func supports(_ url: URL) -> Bool { extensions.contains(url.pathExtension.lowercased()) }
 
     static var ffmpeg: String? { CLITool.find(["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]) }
     static var ffprobe: String? { CLITool.find(["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "/usr/bin/ffprobe"]) }
+
+    /// The tag the dialog's Description is stored in: AVI has no description tag, so it uses comment (ICMT).
+    static func descriptionKey(for url: URL) -> String {
+        url.pathExtension.lowercased() == "avi" ? "comment" : "description"
+    }
 
     struct Info: Sendable {
         var tags: [String: String] = [:]      // keys lower-cased (WebM writes DESCRIPTION, MP4 description)
@@ -37,10 +45,11 @@ nonisolated enum FFmpegTool {
         var streams: [String] = []            // "video h264", "audio aac", …
 
         var title: String { tags["title"] ?? "" }
-        var description: String { tags["description"] ?? "" }
+        var descriptionKey = "description"
+        var description: String { tags[descriptionKey] ?? "" }
         /// Tags other than title and description, for reference.
         var otherTags: [(String, String)] {
-            tags.filter { $0.key != "title" && $0.key != "description" }.sorted { $0.key < $1.key }
+            tags.filter { $0.key != "title" && $0.key != descriptionKey }.sorted { $0.key < $1.key }
         }
     }
 
@@ -53,6 +62,7 @@ nonisolated enum FFmpegTool {
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         let format = json["format"] as? [String: Any] ?? [:]
         var info = Info()
+        info.descriptionKey = descriptionKey(for: url)
         for (key, value) in format["tags"] as? [String: Any] ?? [:] {
             info.tags[key.lowercased()] = "\(value)"
         }
@@ -75,7 +85,7 @@ nonisolated enum FFmpegTool {
         ["-nostdin", "-v", "error", "-y", "-i", input.path,
          "-map", "0", "-map_metadata", "0", "-c", "copy", "-ignore_unknown"]
             + containerOptions(for: input)
-            + ["-metadata", "title=\(title)", "-metadata", "description=\(description)"]
+            + ["-metadata", "title=\(title)", "-metadata", "\(descriptionKey(for: input))=\(description)"]
             + (progress ? ["-progress", "pipe:1", "-nostats"] : [])
             + [output.path]
     }
@@ -86,7 +96,7 @@ nonisolated enum FFmpegTool {
         let extra = containerOptions(for: input).joined(separator: " ")
         return "ffmpeg -i \(q(input.lastPathComponent)) -map 0 -map_metadata 0 -c copy -ignore_unknown \\\n"
             + (extra.isEmpty ? "" : "  \(extra) \\\n")
-            + "  -metadata title=\(q(title)) \\\n  -metadata description=\(q(description)) \\\n  \(q(output.lastPathComponent))"
+            + "  -metadata title=\(q(title)) \\\n  -metadata \(descriptionKey(for: input))=\(q(description)) \\\n  \(q(output.lastPathComponent))"
     }
 
     /// Writes the tags as a background job. `destination` nil replaces the original.
@@ -193,7 +203,11 @@ struct MediaMetadataSheet: View {
                 }
                 GridRow {
                     Text("")
-                    Text("An empty field removes that tag.").font(.caption).foregroundStyle(.secondary)
+                    Text(FFmpegTool.descriptionKey(for: url) == "comment"
+                         ? "AVI has no description tag, so Description is stored as the comment (ICMT). An empty field removes that tag."
+                         : "An empty field removes that tag.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .disabled(info == nil)
