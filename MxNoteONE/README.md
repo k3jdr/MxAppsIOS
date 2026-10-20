@@ -425,43 +425,84 @@ A tie carries its note's accidental across the bar line.
 ## 3D models (CAD)
 
 **Insert ▸ 3D Model** (⌃⌘3, or the Insert tab's 3D group) puts a parametric 3D model on the page and opens the
-**3D editor**; **Sample** inserts a bracket to start from, and **STL / OBJ** brings in a mesh. On the page the model
-is live: drag to orbit, ⇧-drag to pan, pinch (or scroll, once clicked) to zoom, right-click for standard views,
-display style and STL / OBJ export; double-click opens the editor. Printed and exported pages (PDF, Markdown — with
-an STL beside it — and OneNote) carry its picture.
+**3D editor**; **Sample** inserts a bracket to start from, **STL / OBJ** brings in a mesh, and **FreeCAD** (Insert ▸ 3D
+Model from FreeCAD, STEP or IGES…) brings in a FreeCAD, STEP, IGES or BREP file. Dropping any of those files on a page
+does the same. On the page the model is live: drag to orbit, ⇧-drag to pan, pinch (or scroll, once clicked) to zoom,
+right-click for standard views, draw style, Open in FreeCAD, Edit in FreeCAD and export (STL, OBJ, and through
+FreeCAD STEP, IGES, BREP or a FreeCAD document); double-click opens the editor. Printed and exported pages (PDF,
+Markdown — with an STL beside it — and OneNote) carry its picture.
 
-**The editor** has a toolbar, the feature tree, the Metal viewport and an inspector:
+**The editor is laid out as FreeCAD is**: a **workbench** — **Part Design** or **Part** — and its toolbars (FreeCAD's
+names, and its colours: additive yellow, subtractive red, dress-up blue, transforms purple), the **Sketcher**'s
+toolbars while a sketch is open; the **model tree** (parameters, then the features — a Part Design body's history
+listed in order under its last feature, each feature's sketch under it); the 3D view with FreeCAD's **navigation
+cube**; the property panel; the status bar. While the editor is in front the menu bar has FreeCAD's **Part Design**,
+**Part**, **Sketch** and **3D View** menus, and a **FreeCAD** menu (the notebook's Format, Tags, Insert, Go and Notebook
+menus step aside until a notebook window is in front again).
 
-- **Create** — box (with an edge radius for rounded edges), cylinder, cone or frustum, sphere, torus, wedge, prism.
-- **Sketch** — Extrude or Revolve on the top, front or right plane opens the sketcher: lines (click point to point,
-  back to the first to close), three-point arcs, circles, rectangles and polygons, snapping to ends, corners and
-  centres and to the grid, with lengths and radii shown as you draw; drag handles to change a shape. Closed outlines
-  are shaded — an outline inside another is a hole. **Finish Sketch** (⌘↩) extrudes or revolves it.
-- **Combine** — Union, Subtract and Intersect of the selected bodies (⇧-click to select several; the first is the
-  one cut or joined). The tree nests the bodies a feature is built from.
-- **Pattern** — linear, circular (round Z) and mirror.
-- **Parameters** — named values; every dimension, position, turn and sketch offset is an expression of them
-  (`width / 2 + 3`, `sqrt(2) * 10`, `1in`), so changing one rebuilds the part. Renaming a parameter renames it where
-  it's used.
-- **Inspector** — the selected feature's dimensions, placement (X Y Z, turns about X Y Z), sketch plane and offset,
-  colour, hidden, and its volume, surface area and size; the status bar measures the selection (or everything).
-- **View** — fit, front / back / right / left / top / bottom / isometric, perspective or orthographic, Shaded with
-  Edges, Shaded or Hidden Line, the ground grid; drag to orbit, ⇧-drag or right-drag to pan, scroll or pinch to zoom;
-  click to select (hovering highlights); double-click a sketched body to edit its sketch.
-- **File** — import STL (binary or text) and OBJ as bodies (they can be cut and joined too); export the selected bodies
-  (or all) as STL or OBJ, in millimetres.
+- **Selecting** — as in FreeCAD: the face or edge under the pointer is preselected (yellow); a click selects it (green),
+  ⇧- or ⌘-click adds more; the status bar names it. Selecting in the tree selects whole features.
+- **Part Design** — **Sketch** on the selected flat face (or a base plane); **Pad** and **Pocket** (a length, two
+  lengths, symmetric, through all; reversed), **Revolution** and **Groove** (round either sketch axis, symmetric,
+  reversed), additive and subtractive **Loft** (through two sketches or more — smooth, or ruled), **Pipe** (a profile
+  along a path sketch, mitred at corners), **Helix** (pitch, height, right- or left-handed) and **primitives** (box,
+  cylinder, sphere, cone, ellipsoid, torus, prism, wedge, tube); **Hole** (one at each circle of its sketch: a
+  diameter or as drawn, a depth or through all, counterbored or countersunk, an angled drill point); **Fillet** and
+  **Chamfer** on the selected edges (or a face's edges) — straight and round edges, concave ones get material;
+  **Mirrored**, **Linear Pattern** and **Polar Pattern** — of a Part Design feature (a pocket repeated on its body) or
+  of a body. A feature goes on the body its sketch is on (else the selected body, else the only one); with no sketch
+  selected, Pad, Pocket and the rest start one (on the selected face) and open it.
+- **Part** — primitives (cube, cylinder, sphere, cone, torus, tube; wedge, prism, ellipsoid); **Extrude**, **Revolve**,
+  **Loft**, **Sweep**, **Helix**, **Mirror**, **Fillet**, **Chamfer**; **Union**, **Cut** and **Common** of the
+  selected bodies (the first is the one cut or joined); linear and polar **arrays**.
+- **Sketcher** — points, polylines, arcs (by centre, or three points), circles (by centre, or three points),
+  rectangles (corner to corner, centred, rounded), regular polygons and slots; **Fillet** (round a corner where two
+  lines meet) and **Trim** (cut an edge back to where it crosses others); construction geometry (dashed blue, not part
+  of any outline). Points snap to ends, centres, the origin and onto edges; lines drawn near level or upright snap to
+  it — each adding the constraint it implies. **Constraints**, FreeCAD's: coincident, point on object, vertical,
+  horizontal, parallel, perpendicular, tangent (also end to end), equal, symmetric (about a line or a point), block,
+  lock, horizontal and vertical distance, distance, radius, diameter and angle — select points and edges, then the
+  constraint. Dimensions show on the sketch; double-click one to type a new size (an expression of the parameters —
+  `width / 2`), or drag it aside. The solver keeps every constraint as you drag points and edges; the status says how
+  many degrees of freedom are left (fully constrained geometry turns green), and a constraint that would conflict
+  with the others, or repeat one, isn't added. **Leave Sketch** (⌘↩).
+- **Parameters** — named values; every dimension, position, turn, sketch offset and sketch dimension is an expression
+  of them (`width / 2 + 3`, `sqrt(2) * 10`, `1in`), so changing one rebuilds the part. Renaming a parameter renames it
+  where it's used.
+- **3D View** — fit all; FreeCAD's standard views (the keys 0 isometric, 1 front, 2 top, 3 right, 4 rear, 5 bottom,
+  6 left, or the cube: click a face, an edge or a corner; its arrows turn the view); orthographic or perspective;
+  FreeCAD's draw styles — **Flat Lines**, **Shaded**, **No Shading**, **Hidden Line**, **Wireframe**; the grid; toggle
+  visibility, show all. Drag to orbit, ⇧-drag or right-drag to pan, scroll or pinch to zoom; double-click a feature to
+  edit its sketch. Sketches not yet used show in the model.
+- **Property panel** — the selected feature's settings, its body, sketch, sections or path, its edges (add the
+  selected edges, remove one), placement (X Y Z, turns about X Y Z), colour, hidden, and its volume, surface area and
+  size; while sketching, the selected shape and the sketch's constraints with their dimensions.
 
 Every change is one undo step (⌘Z / ⇧⌘Z in the editor) and goes straight back to the page.
 
+**FreeCAD** (free, from freecad.org — MxNoteONE finds it in Applications): **Open in FreeCAD** saves the model as a
+FreeCAD document and opens it there — parametric, as you'd build it in FreeCAD's Part workbench: the parameters as a
+spreadsheet (*Parameters*) that the dimensions are bound to, sketches as Sketcher sketches with their constraints,
+pads and pockets as extrusions and cuts, fillets on the same edges, patterns as Draft arrays; the colours and what's
+shown carried over. **Export** writes it as a FreeCAD document, or as **STEP**, **IGES** or **BREP** made by FreeCAD's
+OpenCascade kernel (exact curved surfaces). **Import** (the FreeCAD menu, or the toolbar) brings in a FreeCAD, STEP,
+IGES or BREP file's visible bodies, each face numbered as FreeCAD has it (so its edges can be filleted), with their
+colours; they follow the file — **Edit in FreeCAD**, save there, and the model (and the page) change within seconds.
+A file put on a page is kept in the notebook (⌥ while dropping, or the open panel's checkbox, follows the file where it
+is instead); Edit in FreeCAD then opens a working copy and keeps what FreeCAD saves. FreeCAD runs out of sight for
+these (with its own settings folder, so yours aren't touched); without FreeCAD, everything else works as before.
+
 **How it's built** — as the macOS CAD architecture of SwiftUI + AppKit + Metal + an Objective-C++ bridge + a C++
 kernel: the editor's views are SwiftUI in an AppKit window; `CADDocument` is the command / undo / selection layer;
-`CADModel` the parametric document (features rebuilt in order, unchanged ones taken from a cache); the geometry kernel
-(`MxCADKernel.cpp`, C++) keeps solids as closed sets of planar polygons tagged by face, with primitives, extrude and
-revolve of profiles, BSP-tree booleans, transforms, meshing and mass properties, reached from Swift through
-`MXSolid` (`MxCADBridge.mm`, Objective-C++); and the renderer (`CADRenderer`, Metal) draws a lit scene pass and a face-
-number buffer, then a composite pass that draws feature edges where faces meet. The kernel sits behind the bridge, so
-a B-rep kernel such as OpenCascade (for STEP / IGES, fillets on any edge, exact curved surfaces) could take its place.
-Curved surfaces are faceted (Smoothness in the inspector sets how finely).
+`CADModel` the parametric document and `CADBuilder` rebuilds it (features in order, unchanged ones taken from a cache,
+sketches solved by `CADSketchSolver`); the geometry kernel (`MxCADKernel.cpp`, C++) keeps solids as closed sets of
+planar polygons tagged by face, with primitives, extrudes, revolves and sweeps through sections (lofts, pipes,
+helices), BSP-tree booleans, transforms, the edges where faces meet and fillets and chamfers on them, meshing and mass
+properties, reached from Swift through `MXSolid` (`MxCADBridge.mm`, Objective-C++); the renderer (`CADRenderer`,
+Metal) draws a lit scene pass and a face-number buffer, then a composite pass that draws feature edges where faces
+meet, with wide lines for edges, sketches and wireframes. `CADFreeCAD` hands models to FreeCAD and reads its files
+(the Python FreeCAD runs is in `CADFreeCADLibrary`). Curved surfaces are faceted (Smoothness in the property panel sets
+how finely); FreeCAD's exports are exact.
 
 ## Microsoft Office fonts
 
@@ -629,6 +670,8 @@ Ignore and Learn; F7 again goes on to the next one. When there are none, a messa
 | Date / Time / Date & Time                               | ⌥⇧D / ⌥⇧T / ⌥⇧F                      |
 | Insert Table / Picture / Screen Clipping / Record Audio | ⌃⌘T / ⌃⌘P / ⌃⇧⌘S / ⌃⌘R            |
 | Insert 3D Model                                         | ⌃⌘3                                      |
+| 3D editor: standard views / fit all (in the 3D view)    | 0 – 6 / F                                |
+| 3D editor: Leave Sketch                                 | ⌘↩                                       |
 | Back / Forward (pages visited)                          | ⌃← / ⌃→, or ⌘[ / ⌘]                    |
 | Previous / Next Page                                    | ⌥⌘↑ / ⌥⌘↓                            |
 | Previous / Next Section                                 | ⌥⌘← / ⌥⌘→                            |

@@ -3,14 +3,17 @@
 //  MxNoteONE
 //
 //  The geometry kernel (C++): solids as closed sets of planar, convex polygons, each tagged with the face it
-//  belongs to. Primitives (box — with rounded edges —, cylinder, cone, sphere, torus), sketch profiles extruded
-//  or revolved, meshes brought in from STL / OBJ; union, subtraction and intersection by BSP trees; transforms;
-//  triangle meshes for the Metal viewport and mass properties. Swift reaches it through MxCADBridge (Objective-C++).
+//  belongs to. Primitives (box — with rounded edges —, cylinder, cone, sphere, torus), sketch profiles extruded,
+//  revolved or swept through a series of sections (lofts, pipes, helices), meshes brought in from STL / OBJ /
+//  FreeCAD; union, subtraction and intersection by BSP trees; transforms; the edges where faces meet, and fillets
+//  and chamfers on straight and round ones; triangle meshes for the Metal viewport and mass properties. Swift
+//  reaches it through MxCADBridge (Objective-C++).
 //
 
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace mxcad {
@@ -73,6 +76,23 @@ struct Profile {
     std::vector<uint8_t> smooth;
 };
 
+/// An edge where two faces meet (a < b): its points in order, each face's outward normal at them, and a point of
+/// each face beside the edge (which side of it the face is on).
+struct Edge {
+    uint32_t a = 0, b = 0;
+    std::vector<Vec3> points;
+    std::vector<Vec3> normalsA, normalsB;
+    Vec3 insideA, insideB;
+    bool closed = false;
+};
+
+/// An edge picked by its two faces, and — when they meet more than once — a point on or near the one meant.
+struct EdgeRef {
+    uint32_t a = 0, b = 0;
+    bool hasNear = false;
+    Vec3 near;
+};
+
 class Solid {
 public:
     std::vector<Polygon> polygons;
@@ -90,8 +110,14 @@ public:
     static Solid extrude(const Profile& profile, double height, uint32_t face);
     /// A profile (x: distance from the axis, y: along it) revolved round the Y axis.
     static Solid revolve(const Profile& profile, double degrees, int segments, uint32_t face);
-    /// Triangles (nine floats each), their faces found from flat regions.
-    static Solid triangles(const std::vector<float>& xyz, uint32_t face);
+    /// Triangles (nine floats each), their faces found from flat regions — or, given, a face number for each
+    /// triangle and nine floats of normals (an imported B-rep's faces).
+    static Solid triangles(const std::vector<float>& xyz, uint32_t face, const std::vector<uint32_t>* faces = nullptr,
+                           const std::vector<float>* normals = nullptr);
+    /// Closed rings of points (each the same count) joined one to the next — a loft, pipe or helix; capped at both
+    /// ends unless `closed` joins the last ring back to the first. `groups` and `smooth` are the profile edges'.
+    static Solid sweep(const std::vector<std::vector<Vec3>>& rings, const std::vector<int32_t>& groups,
+                       const std::vector<uint8_t>& smooth, bool closed, uint32_t face);
 
     Solid unite(const Solid& other) const;
     Solid subtract(const Solid& other) const;
@@ -99,6 +125,12 @@ public:
     Solid transformed(const Transform& t) const;
     /// Turns the polygons round if the solid is inside out.
     void orientOutward();
+
+    /// The edges where different faces meet.
+    std::vector<Edge> edges() const;
+    /// Fillets (radius) or chamfers (size) the edges: straight ones between flat faces and round ones (a circle or
+    /// an arc); concave edges get material added. `error` says why an edge couldn't be done.
+    Solid blend(const std::vector<EdgeRef>& refs, double size, bool chamfer, int segments, uint32_t face, std::string& error) const;
 
     Mesh mesh() const;
     double volume() const;

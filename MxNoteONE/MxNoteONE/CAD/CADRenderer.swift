@@ -5,7 +5,9 @@
 //  The Metal renderer. A scene pass draws the bodies lit (two lights, a highlight) into a colour texture and each
 //  pixel's face number into an integer texture; a composite pass then lays the picture over a soft background and
 //  draws feature edges wherever neighbouring pixels belong to different faces — so edges stay clean however the
-//  booleans cut the polygons. Also a ground grid, the axes, a small axis triad, and pictures drawn off screen.
+//  booleans cut the polygons. FreeCAD's draw styles (Flat Lines, Shaded, No Shading, Hidden Line, Wireframe);
+//  selected and preselected faces and edges in FreeCAD's green and yellow; sketches as lines in the model; a ground
+//  grid, the axes, a small axis cross, and pictures drawn off screen.
 //
 
 import AppKit
@@ -45,6 +47,12 @@ fragment FOut modelFragment(VOut in [[stage_in]], constant Uniforms &u [[buffer(
     if (u.mode == 2) {
         // Hidden line: white faces (the edges do the drawing).
         o.color = float4(mix(float3(1.0), float3(0.80, 0.88, 1.0), u.highlight), 1);
+    } else if (u.mode == 3) {
+        // No shading: the colour as it is.
+        o.color = float4(mix(base, float3(0.22, 0.50, 1.0), u.highlight), 1);
+    } else if (u.mode == 4) {
+        // A selected or preselected face: its colour, lightly shaded.
+        o.color = float4(base * (0.75 + diffuse * 0.25), 1);
     } else {
         float3 c = base * (0.30 + diffuse * 0.70) + specular;
         o.color = float4(mix(c, float3(0.22, 0.50, 1.0), u.highlight), 1);
@@ -67,6 +75,25 @@ fragment FOut lineFragment(LOut in [[stage_in]]) {
     FOut o;
     o.color = in.color;
     o.id = 0;
+    return o;
+}
+
+/// A line drawn wide: each segment two triangles, pushed apart across the screen.
+struct ThickIn { packed_float3 a; packed_float3 b; float side; float end; packed_float4 color; };
+
+vertex LOut thickVertex(device const ThickIn *v [[buffer(0)]], constant Uniforms &u [[buffer(1)]], constant float4 &screen [[buffer(2)]], uint vid [[vertex_id]]) {
+    ThickIn i = v[vid];
+    float4 ca = u.viewProjection * float4(float3(i.a), 1), cb = u.viewProjection * float4(float3(i.b), 1);
+    float2 half_size = screen.xy * 0.5;
+    float2 sa = ca.xy / max(ca.w, 1e-6) * half_size, sb = cb.xy / max(cb.w, 1e-6) * half_size;
+    float2 d = sb - sa;
+    float len = length(d);
+    d = len > 1e-6 ? d / len : float2(1, 0);
+    float2 n = float2(-d.y, d.x);
+    float4 c = i.end < 0.5 ? ca : cb;
+    LOut o;
+    o.position = float4(c.xy + n * i.side * screen.z * 0.5 / half_size * c.w, c.z - screen.w * c.w, c.w);
+    o.color = float4(i.color);
     return o;
 }
 
@@ -136,9 +163,39 @@ struct CADGPUBody {
     let faces: [UInt32]
 }
 
+/// Lines drawn a few pixels wide: edges picked or hovered, sketches, a wireframe.
+struct CADLineSet {
+    var segments: [(SIMD3<Float>, SIMD3<Float>)]
+    var color: SIMD4<Float>
+    var width: Float = 2
+    /// Over everything (not hidden by the bodies).
+    var onTop = false
+
+    /// Polylines as segments.
+    init(_ polylines: [[SIMD3<Double>]], closed: [Bool] = [], color: SIMD4<Float>, width: Float = 2, onTop: Bool = false) {
+        var segs: [(SIMD3<Float>, SIMD3<Float>)] = []
+        for (k, pl) in polylines.enumerated() {
+            for i in 0..<max(0, pl.count - 1) { segs.append((SIMD3<Float>(pl[i]), SIMD3<Float>(pl[i + 1]))) }
+            if closed.indices.contains(k), closed[k], let f = pl.first, let l = pl.last, pl.count > 2 { segs.append((SIMD3<Float>(l), SIMD3<Float>(f))) }
+        }
+        segments = segs
+        self.color = color
+        self.width = width
+        self.onTop = onTop
+    }
+}
+
+/// A face of a body drawn in a highlight colour: its triangles' vertices (as the body's buffer has them).
+struct CADFaceHighlight {
+    var vertices: Data
+    var color: SIMD4<Float>
+}
+
 /// What to draw.
 struct CADScene {
     var bodies: [CADGPUBody] = []
+    var lines: [CADLineSet] = []
+    var faceHighlights: [CADFaceHighlight] = []
     var camera = CADCamera()
     var display: CADDisplay = .shadedEdges
     var selected: Set<UUID> = []
@@ -177,6 +234,7 @@ final class CADRenderer {
     private var modelPipeline: MTLRenderPipelineState?
     private var linePipeline: MTLRenderPipelineState?
     private var compositePipeline: MTLRenderPipelineState?
+    private var thickPipeline: MTLRenderPipelineState?
     private var depthWrite: MTLDepthStencilState?
     private var depthRead: MTLDepthStencilState?
     private var depthAlways: MTLDepthStencilState?
@@ -212,6 +270,7 @@ final class CADRenderer {
             }
             modelPipeline = try pipeline("modelVertex", "modelFragment", scene: true)
             linePipeline = try pipeline("lineVertex", "lineFragment", scene: true, blend: true)
+            thickPipeline = try pipeline("thickVertex", "lineFragment", scene: true, blend: true)
             compositePipeline = try pipeline("quadVertex", "compositeFragment", scene: false)
             func depth(_ compare: MTLCompareFunction, write: Bool) -> MTLDepthStencilState? {
                 let d = MTLDepthStencilDescriptor()
@@ -403,8 +462,9 @@ final class CADRenderer {
         enc.setRenderPipelineState(modelPipeline)
         enc.setDepthStencilState(depthWrite)
         enc.setCullMode(.none)
-        let mode: UInt32 = scene.display == .hiddenLine ? 2 : 0
-        for body in scene.bodies {
+        let mode: UInt32 = scene.display == .hiddenLine ? 2 : scene.display == .noShading ? 3 : 0
+        let solidFaces = scene.display != .wireframe
+        for body in scene.bodies where solidFaces {
             let highlight: Float = scene.selected.contains(body.id) ? 0.38 : scene.hovered == body.id ? 0.16 : 0
             var u = Uniforms(viewProjection: vp, view: view, color: body.color, highlight: highlight, mode: mode)
             enc.setVertexBuffer(body.buffer, offset: 0, index: 0)
@@ -414,7 +474,7 @@ final class CADRenderer {
         }
         // The triangles' sides over them, closing cracks (same faces and colours; nothing new is drawn).
         enc.setDepthStencilState(depthRead)
-        for body in scene.bodies {
+        for body in scene.bodies where solidFaces {
             guard let lines = body.lines else { continue }
             let highlight: Float = scene.selected.contains(body.id) ? 0.38 : scene.hovered == body.id ? 0.16 : 0
             var u = Uniforms(viewProjection: vp, view: view, color: body.color, highlight: highlight, mode: mode)
@@ -422,6 +482,41 @@ final class CADRenderer {
             enc.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
             enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
             enc.drawIndexedPrimitives(type: .line, indexCount: body.count * 2, indexType: .uint32, indexBuffer: lines, indexBufferOffset: 0)
+        }
+        // Faces picked (green) or under the pointer (yellow).
+        if solidFaces, let device {
+            for h in scene.faceHighlights where !h.vertices.isEmpty {
+                guard let buffer = h.vertices.withUnsafeBytes({ device.makeBuffer(bytes: $0.baseAddress!, length: h.vertices.count, options: .storageModeShared) }) else { continue }
+                enc.setRenderPipelineState(modelPipeline)
+                enc.setDepthStencilState(depthRead)
+                var u = Uniforms(viewProjection: vp, view: view, color: h.color, highlight: 0, mode: 4)
+                enc.setVertexBuffer(buffer, offset: 0, index: 0)
+                enc.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
+                enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
+                enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: h.vertices.count / 28)
+            }
+        }
+        // Wide lines: edges picked, sketches, the wireframe.
+        if let thickPipeline, let device, !scene.lines.isEmpty {
+            enc.setRenderPipelineState(thickPipeline)
+            for set in scene.lines where !set.segments.isEmpty {
+                var data: [Float] = []
+                data.reserveCapacity(set.segments.count * 72)
+                let c = set.color
+                for (a, b) in set.segments {
+                    for (side, end) in [(Float(-1), Float(0)), (1, 0), (1, 1), (-1, 0), (1, 1), (-1, 1)] {
+                        data += [a.x, a.y, a.z, b.x, b.y, b.z, side, end, c.x, c.y, c.z, c.w]
+                    }
+                }
+                guard let buffer = device.makeBuffer(bytes: data, length: data.count * 4, options: .storageModeShared) else { continue }
+                enc.setDepthStencilState(set.onTop ? depthAlways : depthRead)
+                var u = Uniforms(viewProjection: vp, view: view, color: .one, highlight: 0, mode: 0)
+                var screen = SIMD4<Float>(Float(size.width), Float(size.height), set.width * Float(max(1, size.width / 1000)), set.onTop ? 0 : 0.0004)
+                enc.setVertexBuffer(buffer, offset: 0, index: 0)
+                enc.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
+                enc.setVertexBytes(&screen, length: MemoryLayout<SIMD4<Float>>.stride, index: 2)
+                enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: data.count / 12)
+            }
         }
         // The grid and axes behind and among the bodies.
         var lineData = lines(scene)
@@ -468,7 +563,7 @@ final class CADRenderer {
         comp.setRenderPipelineState(compositePipeline)
         comp.setFragmentTexture(t.color, index: 0)
         comp.setFragmentTexture(t.ids, index: 1)
-        var cu = CompositeUniforms(edges: scene.display == .shaded ? 0 : 1, strength: scene.display == .hiddenLine ? 1 : 0.82,
+        var cu = CompositeUniforms(edges: scene.display == .shaded || scene.display == .wireframe ? 0 : 1, strength: scene.display == .hiddenLine ? 1 : 0.82,
                                    top: SIMD4(0.97, 0.975, 0.985, 1), bottom: SIMD4(0.84, 0.86, 0.90, 1))
         comp.setFragmentBytes(&cu, length: MemoryLayout<CompositeUniforms>.stride, index: 0)
         comp.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)

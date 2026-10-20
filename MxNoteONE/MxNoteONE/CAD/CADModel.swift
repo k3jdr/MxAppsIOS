@@ -2,8 +2,10 @@
 //  CADModel.swift
 //  MxNoteONE
 //
-//  A 3D model: named parameters and a history of features — primitives, sketches extruded or revolved, imported
-//  meshes, booleans, patterns and mirrors — rebuilt in order by the geometry kernel (MXSolid). Any number can be an
+//  A 3D model: named parameters and a history of features, as FreeCAD's Part and Part Design workbenches have them —
+//  primitives; sketches (with constraints) padded, pocketed, revolved, grooved, lofted, swept along a path or round a
+//  helix; holes; fillets and chamfers on edges; booleans, patterns and mirrors; meshes and shapes brought in from STL,
+//  OBJ or FreeCAD — rebuilt in order by the geometry kernel (MXSolid, see CADBuilder). Any number can be an
 //  expression of the parameters ("width / 2 + 3"), so changing a parameter changes the part. Units are millimetres.
 //
 
@@ -23,8 +25,10 @@ struct CADModel: Codable, Hashable {
     var nextSerial = 1
 
     /// A new feature with the next serial (its faces are numbered from it).
-    mutating func make(_ kind: CADFeature.Kind, name: String? = nil) -> CADFeature {
-        var f = CADFeature(kind: kind, name: name ?? uniqueName(kind.title))
+    mutating func make(_ kind: CADFeature.Kind, name: String? = nil, operation: CADFeature.Operation? = nil) -> CADFeature {
+        var f = CADFeature(kind: kind, name: "")
+        f.operation = operation
+        f.name = name ?? uniqueName(f.typeTitle)
         f.serial = nextSerial
         nextSerial += 1
         for field in CADFeature.fields(kind) { f.values[field.key] = field.value }
@@ -42,8 +46,9 @@ struct CADModel: Codable, Hashable {
 
     func feature(_ id: UUID) -> CADFeature? { features.first { $0.id == id } }
 
-    /// The features a feature is built from (the bodies a boolean, pattern or mirror uses up).
-    func consumed() -> Set<UUID> { Set(features.flatMap { $0.inputs ?? [] }) }
+    /// The features a feature is built from (the bodies a boolean, pattern, mirror, Pad or Fillet uses up, and the
+    /// sketches it's made from).
+    func consumed() -> Set<UUID> { Set(features.flatMap { ($0.inputs ?? []) + ($0.profile.map { [$0] } ?? []) + ($0.sections ?? []) }) }
 
     /// A sample: a mounting bracket (a plate with rounded edges and two holes, an upright and a gusset).
     static var bracket: CADModel {
@@ -113,14 +118,55 @@ struct CADCamera: Codable, Hashable {
     var perspective = true
 }
 
+/// FreeCAD's draw styles.
 enum CADDisplay: String, Codable, CaseIterable {
-    case shadedEdges = "Shaded with Edges", shaded = "Shaded", hiddenLine = "Hidden Line"
+    case shadedEdges = "Shaded with Edges", shaded = "Shaded", noShading = "No Shading", hiddenLine = "Hidden Line", wireframe = "Wireframe"
+
+    var title: String {
+        switch self {
+        case .shadedEdges: "Flat Lines"
+        case .shaded: "Shaded"
+        case .noShading: "No Shading"
+        case .hiddenLine: "Hidden Line"
+        case .wireframe: "Wireframe"
+        }
+    }
+}
+
+/// One of a feature's settings: a number (an expression), or a choice among `choices`.
+struct CADField {
+    let key: String
+    let label: String
+    let value: String
+    var choices: [String]? = nil
+}
+
+/// An edge picked for a fillet or chamfer: the two faces it lies between, and a point on it (for when they meet
+/// along more than one edge).
+struct CADEdgeRef: Codable, Hashable {
+    var a: UInt32
+    var b: UInt32
+    var near: SIMD3<Double>?
+
+    func same(_ o: CADEdgeRef) -> Bool { min(a, b) == min(o.a, o.b) && max(a, b) == max(o.a, o.b) && (near == nil || o.near == nil || simd_distance(near!, o.near!) < 1e-3) }
+}
+
+/// Where an imported shape came from: a FreeCAD (or STEP, IGES, BREP) file outside the notebook — followed when it
+/// changes — or one kept in it, and the object in it.
+struct CADSource: Codable, Hashable {
+    var path: String?
+    var asset: String?
+    var object: String
+    var label: String?
+    var format: String
+    var modified: Date?
 }
 
 struct CADFeature: Codable, Hashable, Identifiable {
     enum Kind: String, Codable, CaseIterable {
         case box, cylinder, cone, sphere, torus, wedge, prism, extrude, revolve, mesh, union, subtract, intersect
         case linearPattern, circularPattern, mirror
+        case tube, ellipsoid, sketch, loft, pipe, helix, hole, fillet, chamfer
 
         var title: String {
             switch self {
@@ -131,14 +177,23 @@ struct CADFeature: Codable, Hashable, Identifiable {
             case .torus: "Torus"
             case .wedge: "Wedge"
             case .prism: "Prism"
+            case .tube: "Tube"
+            case .ellipsoid: "Ellipsoid"
+            case .sketch: "Sketch"
             case .extrude: "Extrude"
             case .revolve: "Revolve"
+            case .loft: "Loft"
+            case .pipe: "Sweep"
+            case .helix: "Helix"
+            case .hole: "Hole"
             case .mesh: "Mesh"
             case .union: "Union"
             case .subtract: "Subtract"
             case .intersect: "Intersect"
+            case .fillet: "Fillet"
+            case .chamfer: "Chamfer"
             case .linearPattern: "Linear Pattern"
-            case .circularPattern: "Circular Pattern"
+            case .circularPattern: "Polar Pattern"
             case .mirror: "Mirror"
             }
         }
@@ -151,31 +206,52 @@ struct CADFeature: Codable, Hashable, Identifiable {
             case .torus: "torus"
             case .wedge: "triangle"
             case .prism: "hexagon"
+            case .tube: "smallcircle.circle"
+            case .ellipsoid: "oval"
+            case .sketch: "pencil.and.outline"
             case .extrude: "square.3.layers.3d.top.filled"
             case .revolve: "arrow.trianglehead.2.clockwise.rotate.90"
+            case .loft: "skew"
+            case .pipe: "scribble.variable"
+            case .helix: "tornado"
+            case .hole: "record.circle"
             case .mesh: "cube.transparent"
             case .union: "square.on.square"
             case .subtract: "minus.square"
             case .intersect: "square.on.square.intersection.dashed"
+            case .fillet: "rectangle.roundedtop"
+            case .chamfer: "righttriangle"
             case .linearPattern: "square.grid.3x1.below.line.grid.1x2"
             case .circularPattern: "circle.dotted"
             case .mirror: "arrow.left.and.right.righttriangle.left.righttriangle.right"
             }
         }
         var isBoolean: Bool { self == .union || self == .subtract || self == .intersect }
-        var usesInput: Bool { isBoolean || self == .linearPattern || self == .circularPattern || self == .mirror }
-        var usesSketch: Bool { self == .extrude || self == .revolve }
-        var isPlaced: Bool { !isBoolean && self != .linearPattern && self != .circularPattern && self != .mirror }
+        var isPattern: Bool { self == .linearPattern || self == .circularPattern || self == .mirror }
+        var isDressUp: Bool { self == .fillet || self == .chamfer }
+        var isPrimitive: Bool { [.box, .cylinder, .cone, .sphere, .torus, .wedge, .prism, .tube, .ellipsoid].contains(self) }
+        var usesInput: Bool { isBoolean || isPattern || isDressUp }
+        var usesSketch: Bool { [.extrude, .revolve, .loft, .pipe, .helix, .hole, .sketch].contains(self) }
+        var isPlaced: Bool { isPrimitive || self == .extrude || self == .revolve || self == .mesh }
+        /// Makes a solid of its own (Part Design adds it to a body, or cuts it out).
+        var canCombine: Bool { isPrimitive || [.extrude, .revolve, .loft, .pipe, .helix].contains(self) }
+    }
+
+    /// Part Design: what a feature does to the body it's on (its first input) — Pad adds, Pocket cuts.
+    enum Operation: String, Codable, CaseIterable {
+        case add, subtract, intersect
     }
 
     var id = UUID()
     var kind: Kind
     var name: String
-    /// Each dimension as an expression, by key (see `fields`).
+    /// Each dimension as an expression, by key (see `fields`); a choice as its title.
     var values: [String: String] = [:]
     var placement = CADPlacement()
+    /// Its own sketch (a sketch feature's; older models' Extrude and Revolve).
     var sketch: CADSketch?
-    /// The bodies it uses (a boolean: the first is cut or joined by the rest; a pattern or mirror: the body).
+    /// The bodies it uses (a boolean: the first is cut or joined by the rest; a pattern or mirror: the body or
+    /// feature; Part Design: the body it's added to or cut from).
     var inputs: [UUID]?
     var color: CADColor?
     var hidden: Bool?
@@ -183,30 +259,108 @@ struct CADFeature: Codable, Hashable, Identifiable {
     var meshData: Data?
     /// Its faces are numbered from this (each feature's are its own).
     var serial = 0
+    var operation: Operation?
+    /// The sketch feature it's made from (a Pad's sketch).
+    var profile: UUID?
+    /// More sketch features: a loft's further sections; a pipe's path.
+    var sections: [UUID]?
+    /// A sketch drawn on a body's face: that body (what a Pad or Pocket from it goes on).
+    var support: UUID?
+    /// A fillet's or chamfer's edges.
+    var edges: [CADEdgeRef]?
+    /// An imported shape's file and object.
+    var source: CADSource?
+    /// An imported shape's face number for each triangle (uint32), and its normals (nine float32s a triangle).
+    var meshFaces: Data?
+    var meshNormals: Data?
 
-    /// A feature's dimensions: key, label, default.
-    static func fields(_ kind: Kind) -> [(key: String, label: String, value: String)] {
+    /// What it is, as FreeCAD names it: Pad, Pocket, Revolution, Groove, Additive Box…
+    var typeTitle: String {
+        switch (kind, operation) {
+        case (.extrude, .add?): "Pad"
+        case (.extrude, .subtract?): "Pocket"
+        case (.revolve, .add?): "Revolution"
+        case (.revolve, .subtract?): "Groove"
+        case (.loft, .add?): "Additive Loft"
+        case (.loft, .subtract?): "Subtractive Loft"
+        case (.pipe, .add?): "Additive Pipe"
+        case (.pipe, .subtract?): "Subtractive Pipe"
+        case (.helix, .add?): "Additive Helix"
+        case (.helix, .subtract?): "Subtractive Helix"
+        case (_, .add?) where kind.isPrimitive: "Additive \(kind.title)"
+        case (_, .subtract?) where kind.isPrimitive: "Subtractive \(kind.title)"
+        case (_, .intersect?): "\(kind.title) (Common)"
+        default: kind.title
+        }
+    }
+
+    /// The body it adds to or cuts from (Part Design), or fillets.
+    var base: UUID? { (operation != nil || kind.isDressUp || kind == .hole) ? inputs?.first : nil }
+
+    /// A choice's value (its default when not set).
+    func choice(_ key: String) -> String {
+        values[key] ?? CADFeature.fields(kind).first { $0.key == key }?.value ?? ""
+    }
+
+    /// A feature's settings: key, label, default (and choices).
+    static func fields(_ kind: Kind) -> [CADField] {
+        let yesNo = ["No", "Yes"]
         switch kind {
-        case .box: [("width", "Width", "40"), ("depth", "Depth", "30"), ("height", "Height", "20"), ("radius", "Edge radius", "0")]
-        case .cylinder: [("radius", "Radius", "10"), ("height", "Height", "30")]
-        case .cone: [("bottom", "Bottom radius", "15"), ("top", "Top radius", "0"), ("height", "Height", "30")]
-        case .sphere: [("radius", "Radius", "15")]
-        case .torus: [("major", "Ring radius", "20"), ("minor", "Tube radius", "5")]
-        case .wedge: [("width", "Width", "40"), ("depth", "Depth", "20"), ("height", "Height", "20")]
-        case .prism: [("sides", "Sides", "6"), ("radius", "Radius", "15"), ("height", "Height", "20")]
-        case .extrude: [("distance", "Distance", "20")]
-        case .revolve: [("angle", "Angle", "360")]
-        case .linearPattern: [("count", "Count", "3"), ("dx", "Step X", "30"), ("dy", "Step Y", "0"), ("dz", "Step Z", "0")]
-        case .circularPattern: [("count", "Count", "6"), ("angle", "Angle", "360")]
-        case .mirror: [("plane", "Plane (YZ, XZ, XY)", "YZ")]
-        case .mesh, .union, .subtract, .intersect: []
+        case .box: return [CADField(key: "width", label: "Width", value: "40"), CADField(key: "depth", label: "Depth", value: "30"),
+                           CADField(key: "height", label: "Height", value: "20"), CADField(key: "radius", label: "Edge radius", value: "0")]
+        case .cylinder: return [CADField(key: "radius", label: "Radius", value: "10"), CADField(key: "height", label: "Height", value: "30")]
+        case .cone: return [CADField(key: "bottom", label: "Bottom radius", value: "15"), CADField(key: "top", label: "Top radius", value: "0"),
+                            CADField(key: "height", label: "Height", value: "30")]
+        case .sphere: return [CADField(key: "radius", label: "Radius", value: "15")]
+        case .torus: return [CADField(key: "major", label: "Ring radius", value: "20"), CADField(key: "minor", label: "Tube radius", value: "5")]
+        case .wedge: return [CADField(key: "width", label: "Width", value: "40"), CADField(key: "depth", label: "Depth", value: "20"),
+                             CADField(key: "height", label: "Height", value: "20")]
+        case .prism: return [CADField(key: "sides", label: "Sides", value: "6"), CADField(key: "radius", label: "Radius", value: "15"),
+                             CADField(key: "height", label: "Height", value: "20")]
+        case .tube: return [CADField(key: "outer", label: "Outer radius", value: "12"), CADField(key: "inner", label: "Inner radius", value: "8"),
+                            CADField(key: "height", label: "Height", value: "20")]
+        case .ellipsoid: return [CADField(key: "rx", label: "Radius X", value: "20"), CADField(key: "ry", label: "Radius Y", value: "15"),
+                                 CADField(key: "rz", label: "Radius Z", value: "10")]
+        case .extrude: return [CADField(key: "type", label: "Type", value: "Length", choices: ["Length", "Two Lengths", "Symmetric", "Through All"]),
+                               CADField(key: "distance", label: "Length", value: "20"), CADField(key: "distance2", label: "Second length", value: "10"),
+                               CADField(key: "reversed", label: "Reversed", value: "No", choices: yesNo)]
+        case .revolve: return [CADField(key: "axis", label: "Axis", value: "Vertical", choices: ["Vertical", "Horizontal"]),
+                               CADField(key: "angle", label: "Angle", value: "360"), CADField(key: "symmetric", label: "Symmetric", value: "No", choices: yesNo),
+                               CADField(key: "reversed", label: "Reversed", value: "No", choices: yesNo)]
+        case .loft: return [CADField(key: "ruled", label: "Ruled", value: "No", choices: yesNo)]
+        case .helix: return [CADField(key: "pitch", label: "Pitch", value: "5"), CADField(key: "height", label: "Height", value: "20"),
+                             CADField(key: "hand", label: "Turns", value: "Right-handed", choices: ["Right-handed", "Left-handed"])]
+        case .hole: return [CADField(key: "diameter", label: "Diameter (0: as drawn)", value: "0"),
+                            CADField(key: "depthType", label: "Depth", value: "Dimension", choices: ["Dimension", "Through All"]),
+                            CADField(key: "depth", label: "Depth (mm)", value: "10"),
+                            CADField(key: "cut", label: "Hole cut", value: "None", choices: ["None", "Counterbore", "Countersink"]),
+                            CADField(key: "cutDiameter", label: "Cut diameter", value: "12"), CADField(key: "cutDepth", label: "Counterbore depth", value: "3"),
+                            CADField(key: "cutAngle", label: "Countersink angle", value: "90"),
+                            CADField(key: "point", label: "Drill point", value: "Angled", choices: ["Angled", "Flat"]),
+                            CADField(key: "reversed", label: "Reversed", value: "No", choices: yesNo)]
+        case .fillet: return [CADField(key: "radius", label: "Radius", value: "2")]
+        case .chamfer: return [CADField(key: "size", label: "Size", value: "1")]
+        case .linearPattern: return [CADField(key: "count", label: "Count", value: "3"), CADField(key: "dx", label: "Step X", value: "30"),
+                                     CADField(key: "dy", label: "Step Y", value: "0"), CADField(key: "dz", label: "Step Z", value: "0")]
+        case .circularPattern: return [CADField(key: "count", label: "Count", value: "6"), CADField(key: "angle", label: "Angle", value: "360")]
+        case .mirror: return [CADField(key: "plane", label: "Plane", value: "YZ", choices: ["YZ", "XZ", "XY"])]
+        case .mesh, .union, .subtract, .intersect, .sketch, .pipe: return []
         }
     }
 }
 
 // MARK: - Sketches
 
-/// A 2D sketch on a plane, its closed outlines extruded or revolved (an outline inside another is a hole).
+/// A sketch's plane when it's on a body's face: its origin and across and up directions in the model.
+struct CADFrame: Codable, Hashable {
+    var origin: SIMD3<Double>
+    var u: SIMD3<Double>
+    var v: SIMD3<Double>
+    var n: SIMD3<Double> { simd_normalize(simd_cross(u, v)) }
+}
+
+/// A 2D sketch on a plane — its closed outlines padded, revolved, lofted or swept (an outline inside another is a
+/// hole), its open chains a path — held in shape by its constraints.
 struct CADSketch: Codable, Hashable {
     enum Plane: String, Codable, CaseIterable {
         case xy = "XY", xz = "XZ", yz = "YZ"
@@ -230,21 +384,57 @@ struct CADSketch: Codable, Hashable {
     /// How far out along the plane's normal.
     var offset = "0"
     var entities: [CADSketchEntity] = []
+    /// On a body's face: the face's plane (instead of `plane`).
+    var frame: CADFrame?
+    var constraints: [CADConstraint]?
+
+    var planeTitle: String { frame != nil ? "On a face" : plane.title }
+
+    /// Across, up and out in the model, and the origin (before the offset).
+    var axes: (u: SIMD3<Double>, v: SIMD3<Double>, n: SIMD3<Double>, origin: SIMD3<Double>) {
+        if let f = frame { return (f.u, f.v, f.n, f.origin) }
+        let a = plane.axes
+        return (a.u, a.v, a.n, .zero)
+    }
 }
 
 struct CADSketchEntity: Codable, Hashable, Identifiable {
     enum Kind: String, Codable, CaseIterable {
-        case line, arc, circle, rectangle, polygon
+        case line, arc, circle, rectangle, polygon, point
         var title: String { rawValue.capitalized }
     }
     var id = UUID()
     var kind: Kind
     /// line: start, end · arc: start, end, a point on it · circle: centre, a point on it · rectangle: two corners ·
-    /// polygon: centre, a corner.
+    /// polygon: centre, a corner · point: where it is.
     var points: [SIMD2<Double>]
     var sides: Int?
+    /// Construction geometry: guides and references, not part of any outline.
+    var construction: Bool?
 
     var radius: Double { points.count >= 2 ? simd_distance(points[0], points[1]) : 0 }
+    var isConstruction: Bool { construction == true || kind == .point }
+
+    /// Its outline as points (closed shapes end where they start).
+    func outline(segments: Int = 64) -> [SIMD2<Double>] {
+        switch kind {
+        case .line: return points.count >= 2 ? [points[0], points[1]] : []
+        case .arc: return points.count >= 3 ? CADSketch.arcPoints(points[0], points[1], through: points[2], segments: segments) : []
+        case .circle:
+            guard points.count >= 2 else { return [] }
+            return (0...segments).map { k in points[0] + radius * SIMD2(cos(2 * .pi * Double(k) / Double(segments)), sin(2 * .pi * Double(k) / Double(segments))) }
+        case .rectangle:
+            guard points.count >= 2 else { return [] }
+            let a = points[0], b = points[1]
+            return [a, SIMD2(b.x, a.y), b, SIMD2(a.x, b.y), a]
+        case .polygon:
+            guard points.count >= 2 else { return [] }
+            let n = max(3, sides ?? 6)
+            let start = atan2(points[1].y - points[0].y, points[1].x - points[0].x)
+            return (0...n).map { k in points[0] + radius * SIMD2(cos(start + 2 * .pi * Double(k) / Double(n)), sin(start + 2 * .pi * Double(k) / Double(n))) }
+        case .point: return points.isEmpty ? [] : [points[0]]
+        }
+    }
 }
 
 extension CADSketch {
@@ -292,12 +482,23 @@ extension CADSketch {
         }
     }
 
+    /// Lines and arcs (not construction) as point chains.
+    private func chains(segments: Int) -> [(points: [SIMD2<Double>], smooth: Bool)] {
+        entities.compactMap { e -> ([SIMD2<Double>], Bool)? in
+            guard !e.isConstruction else { return nil }
+            switch e.kind {
+            case .line where e.points.count >= 2: return ([e.points[0], e.points[1]], false)
+            case .arc where e.points.count >= 3: return (Self.arcPoints(e.points[0], e.points[1], through: e.points[2], segments: segments), true)
+            default: return nil
+            }
+        }
+    }
+
     /// The sketch's closed outlines: circles, rectangles and polygons, and lines and arcs joined end to end.
     func loops(segments: Int) -> [Loop] {
         var loops: [Loop] = []
         var group: Int32 = 0
-        var chains: [(points: [SIMD2<Double>], smooth: Bool)] = []
-        for e in entities {
+        for e in entities where !e.isConstruction {
             switch e.kind {
             case .circle:
                 guard e.points.count >= 2, e.radius > 1e-9 else { continue }
@@ -318,14 +519,10 @@ extension CADSketch {
                 let pts = (0..<n).map { k in e.points[0] + e.radius * SIMD2(cos(start + 2 * .pi * Double(k) / Double(n)), sin(start + 2 * .pi * Double(k) / Double(n))) }
                 loops.append(Loop(points: pts, groups: (0..<n).map { group + Int32($0) }, smooth: Array(repeating: 0, count: n)))
                 group += Int32(n)
-            case .line:
-                guard e.points.count >= 2 else { continue }
-                chains.append(([e.points[0], e.points[1]], false))
-            case .arc:
-                guard e.points.count >= 3 else { continue }
-                chains.append((Self.arcPoints(e.points[0], e.points[1], through: e.points[2], segments: segments), true))
+            default: break
             }
         }
+        let chains = chains(segments: segments)
         // Lines and arcs end to end: follow from piece to piece until back at the start.
         let tolerance = 1e-4
         var used = Array(repeating: false, count: chains.count)
@@ -354,6 +551,45 @@ extension CADSketch {
             if pts.count >= 3 { loops.append(Loop(points: pts, groups: groups, smooth: smooth)) }
         }
         return loops
+    }
+
+    /// A path (a pipe's): the longest chain of lines and arcs end to end, open or closed — or a closed outline.
+    func path(segments: Int) -> (points: [SIMD2<Double>], closed: Bool)? {
+        let chains = chains(segments: segments)
+        let tolerance = 1e-4
+        var best: ([SIMD2<Double>], Bool)?
+        var used = Array(repeating: false, count: chains.count)
+        func length(_ p: [SIMD2<Double>]) -> Double { zip(p, p.dropFirst()).reduce(0) { $0 + simd_distance($1.0, $1.1) } }
+        for start in chains.indices where !used[start] {
+            used[start] = true
+            var pts = chains[start].points
+            var grew = true
+            while grew {
+                grew = false
+                for k in chains.indices where !used[k] {
+                    let c = chains[k].points
+                    if simd_distance(c.first!, pts.last!) < tolerance { pts += c.dropFirst() }
+                    else if simd_distance(c.last!, pts.last!) < tolerance { pts += c.reversed().dropFirst() }
+                    else if simd_distance(c.last!, pts.first!) < tolerance { pts = c.dropLast() + pts }
+                    else if simd_distance(c.first!, pts.first!) < tolerance { pts = c.reversed().dropLast() + pts }
+                    else { continue }
+                    used[k] = true
+                    grew = true
+                }
+            }
+            var closed = false
+            if pts.count > 2, simd_distance(pts.first!, pts.last!) < tolerance { pts.removeLast(); closed = true }
+            if best == nil || length(pts) > length(best!.0) { best = (pts, closed) }
+        }
+        if let best, best.0.count >= 2 { return best }
+        if let loop = loops(segments: segments).first { return (loop.points, true) }
+        return nil
+    }
+
+    /// The sketch's shapes as lines in the model (for showing it in the 3D view).
+    func lines3D(offset: Double, segments: Int = 48) -> [[SIMD3<Double>]] {
+        let a = axes
+        return entities.map { e in e.outline(segments: segments).map { a.origin + a.u * $0.x + a.v * $0.y + a.n * offset } }
     }
 
     /// The outlines nested: how many others each is inside (even: material, odd: a hole).
@@ -477,236 +713,6 @@ enum CADExpression {
                 return v
             }
             throw CADExpressionError.syntax(String(chars))
-        }
-    }
-}
-
-// MARK: - Building
-
-/// A body to show: a feature's solid as triangles for the viewport.
-struct CADBody {
-    let id: UUID
-    let name: String
-    let color: CADColor
-    let solid: MXSolid
-    /// Each vertex: position (3 floats), normal (3 floats), face (uint32) — 28 bytes.
-    let vertices: Data
-    let positions: [SIMD3<Float>]
-    let faces: [UInt32]
-    let bounds: (min: SIMD3<Double>, max: SIMD3<Double>)
-}
-
-/// What a model builds into.
-struct CADBuild {
-    var bodies: [CADBody] = []
-    var solids: [UUID: MXSolid] = [:]
-    var errors: [UUID: String] = [:]
-    var parameterValues: [String: Double] = [:]
-    var parameterErrors: [UUID: String] = [:]
-
-    var bounds: (min: SIMD3<Double>, max: SIMD3<Double>)? {
-        guard let first = bodies.first else { return nil }
-        return bodies.dropFirst().reduce(first.bounds) { (simd_min($0.min, $1.bounds.min), simd_max($0.max, $1.bounds.max)) }
-    }
-}
-
-/// Rebuilds models feature by feature, keeping what didn't change.
-final class CADBuilder {
-    private var cache: [String: MXSolid] = [:]
-    private var meshes: [ObjectIdentifier: (Data, [SIMD3<Float>], [UInt32])] = [:]
-
-    static func matrix(translate t: SIMD3<Double>, rotate r: SIMD3<Double>) -> simd_double4x4 {
-        let (x, y, z) = (r.x * .pi / 180, r.y * .pi / 180, r.z * .pi / 180)
-        let rx = simd_double4x4(rows: [SIMD4(1, 0, 0, 0), SIMD4(0, cos(x), -sin(x), 0), SIMD4(0, sin(x), cos(x), 0), SIMD4(0, 0, 0, 1)])
-        let ry = simd_double4x4(rows: [SIMD4(cos(y), 0, sin(y), 0), SIMD4(0, 1, 0, 0), SIMD4(-sin(y), 0, cos(y), 0), SIMD4(0, 0, 0, 1)])
-        let rz = simd_double4x4(rows: [SIMD4(cos(z), -sin(z), 0, 0), SIMD4(sin(z), cos(z), 0, 0), SIMD4(0, 0, 1, 0), SIMD4(0, 0, 0, 1)])
-        var m = rz * ry * rx
-        m.columns.3 = SIMD4(t.x, t.y, t.z, 1)
-        return m
-    }
-
-    static func data(_ m: simd_double4x4) -> Data {
-        var values: [Double] = []
-        for c in 0..<4 { for r in 0..<4 { values.append(m[c][r]) } }
-        return values.withUnsafeBufferPointer { Data(buffer: $0) }
-    }
-
-    /// The sketch plane's frame: profile coordinates into the model.
-    static func frame(_ sketch: CADSketch, offset: Double) -> simd_double4x4 {
-        let a = sketch.plane.axes
-        return simd_double4x4(columns: (SIMD4(a.u, 0), SIMD4(a.v, 0), SIMD4(a.n, 0), SIMD4(a.n * offset, 1)))
-    }
-
-    func build(_ model: CADModel) -> CADBuild {
-        var result = CADBuild()
-        // Parameters, in order (each may use the ones before it).
-        var vars: [String: Double] = [:]
-        for p in model.parameters {
-            do { vars[p.name] = try CADExpression.evaluate(p.expression, vars) } catch { result.parameterErrors[p.id] = error.localizedDescription }
-        }
-        result.parameterValues = vars
-        var keys: [UUID: String] = [:]
-        let segments = max(8, model.smoothness)
-        for f in model.features {
-            do {
-                func value(_ key: String) throws -> Double {
-                    let text = f.values[key] ?? CADFeature.fields(f.kind).first { $0.key == key }?.value ?? "0"
-                    return try CADExpression.evaluate(text, vars)
-                }
-                let face = UInt32(f.serial & 0xFFFF) << 16
-                let numbers = try CADFeature.fields(f.kind).filter { $0.key != "plane" }.map { try value($0.key) }
-                let placed = f.kind.isPlaced
-                    ? try [f.placement.x, f.placement.y, f.placement.z, f.placement.rx, f.placement.ry, f.placement.rz].map { try CADExpression.evaluate($0, vars) }
-                    : []
-                let inputKeys = (f.inputs ?? []).map { keys[$0] ?? "?" }
-                let sketchOffset = try f.sketch.map { try CADExpression.evaluate($0.offset, vars) } ?? 0
-                let key = "\(f.kind.rawValue)|\(f.serial)|\(numbers)|\(placed)|\(f.values["plane"] ?? "")|\(f.sketch?.hashValue ?? 0)|\(sketchOffset)|\(f.meshData?.hashValue ?? 0)|\(inputKeys)|\(segments)"
-                keys[f.id] = key
-                if let cached = cache[key] {
-                    result.solids[f.id] = cached
-                    continue
-                }
-                var solid: MXSolid
-                switch f.kind {
-                case .box:
-                    solid = .box(width: try value("width"), depth: try value("depth"), height: try value("height"), radius: try value("radius"), segments: segments, face: face)
-                case .cylinder:
-                    let r = try value("radius")
-                    solid = .cone(bottom: r, top: r, height: try value("height"), segments: segments, face: face)
-                case .cone:
-                    solid = .cone(bottom: try value("bottom"), top: try value("top"), height: try value("height"), segments: segments, face: face)
-                case .sphere:
-                    solid = .sphere(radius: try value("radius"), segments: segments, face: face)
-                case .torus:
-                    solid = .torus(major: try value("major"), minor: try value("minor"), segments: segments, face: face)
-                case .wedge:
-                    // A ramp: a right triangle (in XZ) through the depth.
-                    let w = try value("width"), d = try value("depth"), h = try value("height")
-                    let profile = CADSketch.Loop(points: [SIMD2(-w / 2, 0), SIMD2(w / 2, 0), SIMD2(-w / 2, h)], groups: [0, 1, 2], smooth: [0, 0, 0])
-                    solid = Self.extrude(profile, height: d, face: face)
-                        .transformed(Self.data(simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, 0, 1, 0), SIMD4(0, -1, 0, 0), SIMD4(0, d / 2, 0, 1)))))
-                case .prism:
-                    let n = max(3, Int(try value("sides"))), r = try value("radius")
-                    let pts = (0..<n).map { k in r * SIMD2(cos(2 * .pi * Double(k) / Double(n) + .pi / 2), sin(2 * .pi * Double(k) / Double(n) + .pi / 2)) }
-                    solid = Self.extrude(CADSketch.Loop(points: pts, groups: (0..<n).map { Int32($0) }, smooth: Array(repeating: 0, count: n)), height: try value("height"), face: face)
-                case .extrude, .revolve:
-                    guard let sketch = f.sketch else { throw CADBuildError.noSketch }
-                    let loops = sketch.loops(segments: segments)
-                    guard !loops.isEmpty else { throw CADBuildError.noProfile }
-                    let depths = CADSketch.depths(loops)
-                    var body = MXSolid.empty()
-                    // Outlines from the outside in: material joins, holes cut.
-                    for (loop, depth) in zip(loops, depths).sorted(by: { $0.1 < $1.1 }) {
-                        let piece = f.kind == .extrude
-                            ? Self.extrude(loop, height: try value("distance"), face: face)
-                            : Self.revolve(loop, degrees: try value("angle"), segments: segments, face: face)
-                        body = depth % 2 == 0 ? body.union(piece) : body.subtracting(piece)
-                    }
-                    solid = body.transformed(Self.data(Self.frame(sketch, offset: sketchOffset)))
-                case .mesh:
-                    guard let data = f.meshData, !data.isEmpty else { throw CADBuildError.noMesh }
-                    solid = .triangles(data, face: face)
-                case .union, .subtract, .intersect:
-                    let ins = try (f.inputs ?? []).map { id -> MXSolid in
-                        guard let s = result.solids[id] else { throw CADBuildError.missingInput }
-                        return s
-                    }
-                    guard let target = ins.first, ins.count >= 2 else { throw CADBuildError.needsTwo }
-                    solid = ins.dropFirst().reduce(target) { acc, tool in
-                        f.kind == .union ? acc.union(tool) : f.kind == .subtract ? acc.subtracting(tool) : acc.intersecting(tool)
-                    }
-                case .linearPattern, .circularPattern, .mirror:
-                    guard let id = f.inputs?.first, let source = result.solids[id] else { throw CADBuildError.missingInput }
-                    if f.kind == .mirror {
-                        let plane = (f.values["plane"] ?? "YZ").uppercased()
-                        let s = SIMD3<Double>(plane == "YZ" ? -1 : 1, plane == "XZ" ? -1 : 1, plane == "XY" ? -1 : 1)
-                        let m = simd_double4x4(diagonal: SIMD4(s, 1))
-                        solid = source.union(source.transformed(Self.data(m)))
-                    } else {
-                        let count = max(1, min(200, Int(try value("count"))))
-                        solid = source
-                        for k in 1..<max(2, count) where k < count {
-                            let m: simd_double4x4
-                            if f.kind == .linearPattern {
-                                m = Self.matrix(translate: SIMD3(try value("dx"), try value("dy"), try value("dz")) * Double(k), rotate: .zero)
-                            } else {
-                                let angle = try value("angle")
-                                let step = abs(abs(angle) - 360) < 1e-9 ? angle / Double(count) : angle / Double(max(1, count - 1))
-                                m = Self.matrix(translate: .zero, rotate: SIMD3(0, 0, step * Double(k)))
-                            }
-                            solid = solid.union(source.transformed(Self.data(m)))
-                        }
-                    }
-                }
-                if placed.count == 6, placed.contains(where: { $0 != 0 }) {
-                    solid = solid.transformed(Self.data(Self.matrix(translate: SIMD3(placed[0], placed[1], placed[2]), rotate: SIMD3(placed[3], placed[4], placed[5]))))
-                }
-                cache[key] = solid
-                result.solids[f.id] = solid
-            } catch {
-                result.errors[f.id] = error.localizedDescription
-            }
-        }
-        // Don't keep solids no longer used.
-        let live = Set(keys.values)
-        cache = cache.filter { live.contains($0.key) }
-        // The bodies: what isn't used up by a later feature, and isn't hidden.
-        let consumed = model.consumed()
-        for f in model.features where !consumed.contains(f.id) && f.hidden != true {
-            guard let solid = result.solids[f.id], solid.polygonCount > 0 else { continue }
-            let (vertices, positions, faces) = mesh(solid)
-            let b = solid.bounds.withUnsafeBytes { Array($0.bindMemory(to: Double.self)) }
-            result.bodies.append(CADBody(id: f.id, name: f.name, color: f.color ?? CADColor.palette[0], solid: solid, vertices: vertices,
-                                         positions: positions, faces: faces, bounds: (SIMD3(b[0], b[1], b[2]), SIMD3(b[3], b[4], b[5]))))
-        }
-        return result
-    }
-
-    /// A solid's triangles, interleaved for Metal (kept while the solid is).
-    private func mesh(_ solid: MXSolid) -> (Data, [SIMD3<Float>], [UInt32]) {
-        if let m = meshes[ObjectIdentifier(solid)] { return m }
-        let p = solid.meshPositions.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
-        let n = solid.meshNormals.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
-        let f = solid.meshFaces.withUnsafeBytes { Array($0.bindMemory(to: UInt32.self)) }
-        var data = Data(capacity: f.count * 28)
-        var positions: [SIMD3<Float>] = []
-        positions.reserveCapacity(f.count)
-        for i in f.indices {
-            var v: (Float, Float, Float, Float, Float, Float, UInt32) = (p[3 * i], p[3 * i + 1], p[3 * i + 2], n[3 * i], n[3 * i + 1], n[3 * i + 2], f[i])
-            withUnsafeBytes(of: &v) { data.append(contentsOf: $0.prefix(28)) }
-            positions.append(SIMD3(p[3 * i], p[3 * i + 1], p[3 * i + 2]))
-        }
-        let m = (data, positions, f)
-        if meshes.count > 64 { meshes.removeAll() }
-        meshes[ObjectIdentifier(solid)] = m
-        return m
-    }
-
-    static func extrude(_ loop: CADSketch.Loop, height: Double, face: UInt32) -> MXSolid {
-        let (points, groups, smooth) = profileData(loop)
-        return .extrude(points: points, groups: groups, smooth: smooth, height: height, face: face)
-    }
-
-    static func revolve(_ loop: CADSketch.Loop, degrees: Double, segments: Int, face: UInt32) -> MXSolid {
-        let (points, groups, smooth) = profileData(loop)
-        return .revolve(points: points, groups: groups, smooth: smooth, degrees: degrees, segments: segments, face: face)
-    }
-
-    private static func profileData(_ loop: CADSketch.Loop) -> (Data, Data, Data) {
-        let xy = loop.points.flatMap { [$0.x, $0.y] }
-        return (xy.withUnsafeBufferPointer { Data(buffer: $0) }, loop.groups.withUnsafeBufferPointer { Data(buffer: $0) }, Data(loop.smooth))
-    }
-}
-
-enum CADBuildError: LocalizedError {
-    case noSketch, noProfile, noMesh, missingInput, needsTwo
-    var errorDescription: String? {
-        switch self {
-        case .noSketch: "It has no sketch."
-        case .noProfile: "Its sketch has no closed outline (lines and arcs must meet end to end)."
-        case .noMesh: "The mesh is empty."
-        case .missingInput: "A body it uses couldn't be made."
-        case .needsTwo: "It needs two bodies or more."
         }
     }
 }

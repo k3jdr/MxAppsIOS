@@ -455,6 +455,7 @@ struct InsertRibbon: View {
             RibbonButton("3D Model", "cube", large: true) { canvas?.insertModel() }
             RibbonButton("Sample", "cube.transparent", large: true) { canvas?.insertModel(sample: true) }
             RibbonButton("STL / OBJ", "square.and.arrow.down.on.square", large: true) { canvas?.importModel() }
+            RibbonButton("FreeCAD", "arrow.down.forward.and.arrow.up.backward", large: true) { canvas?.importFreeCADModel() }
         }
         RibbonGroup("Files") {
             RibbonButton("Picture", "photo", large: true) { canvas?.choosePictures() }

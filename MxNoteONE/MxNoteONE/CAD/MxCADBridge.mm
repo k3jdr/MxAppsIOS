@@ -8,11 +8,24 @@
 #import "MxCADBridge.h"
 #include "MxCADKernel.hpp"
 
+@implementation MXEdge {
+@public
+    uint32_t _faceA, _faceB;
+    BOOL _closed;
+    NSData *_points;
+}
+- (uint32_t)faceA { return _faceA; }
+- (uint32_t)faceB { return _faceB; }
+- (BOOL)closed { return _closed; }
+- (NSData *)points { return _points; }
+@end
+
 @implementation MXSolid {
     mxcad::Solid _solid;
     mxcad::Mesh _mesh;
     BOOL _meshed;
     NSData *_positions, *_normals, *_faces;
+    NSArray<MXEdge *> *_edges;
 }
 
 + (MXSolid *)with:(mxcad::Solid)solid {
@@ -63,6 +76,71 @@ static mxcad::Profile profile(NSData *points, NSData *groups, NSData *smooth) {
     const float *f = (const float *)xyz.bytes;
     std::vector<float> v(f, f + xyz.length / sizeof(float));
     return [MXSolid with:mxcad::Solid::triangles(v, face)];
+}
+
++ (MXSolid *)triangles:(NSData *)xyz faces:(NSData *)faces normals:(NSData *)normals face:(uint32_t)face {
+    const float *f = (const float *)xyz.bytes;
+    std::vector<float> v(f, f + xyz.length / sizeof(float));
+    const uint32_t *fs = (const uint32_t *)faces.bytes;
+    std::vector<uint32_t> faceList(fs, fs + faces.length / sizeof(uint32_t));
+    std::vector<float> n;
+    if (normals.length > 0) {
+        const float *nf = (const float *)normals.bytes;
+        n.assign(nf, nf + normals.length / sizeof(float));
+    }
+    return [MXSolid with:mxcad::Solid::triangles(v, face, &faceList, n.empty() ? nullptr : &n)];
+}
+
++ (MXSolid *)sweepRings:(NSData *)points count:(NSInteger)count groups:(NSData *)groups smooth:(NSData *)smooth closed:(BOOL)closed face:(uint32_t)face {
+    const double *p = (const double *)points.bytes;
+    NSUInteger total = points.length / (3 * sizeof(double));
+    if (count < 2 || total % NSUInteger(count) != 0) return [MXSolid empty];
+    NSUInteger n = total / NSUInteger(count);
+    std::vector<std::vector<mxcad::Vec3>> rings; rings.resize(size_t(count));
+    for (NSUInteger r = 0; r < NSUInteger(count); r++)
+        for (NSUInteger k = 0; k < n; k++) {
+            const double *q = p + 3 * (r * n + k);
+            rings[r].push_back({q[0], q[1], q[2]});
+        }
+    const int32_t *g = (const int32_t *)groups.bytes;
+    std::vector<int32_t> gs(g, g + groups.length / sizeof(int32_t));
+    const uint8_t *s = (const uint8_t *)smooth.bytes;
+    std::vector<uint8_t> ss(s, s + smooth.length);
+    return [MXSolid with:mxcad::Solid::sweep(rings, gs, ss, closed, face)];
+}
+
+- (MXSolid *)blendEdges:(NSData *)refs size:(double)size chamfer:(BOOL)chamfer segments:(NSInteger)segments face:(uint32_t)face error:(NSString **)error {
+    const double *d = (const double *)refs.bytes;
+    std::vector<mxcad::EdgeRef> list;
+    for (NSUInteger i = 0; i + 6 <= refs.length / sizeof(double); i += 6) {
+        mxcad::EdgeRef r;
+        r.a = uint32_t(d[i]);
+        r.b = uint32_t(d[i + 1]);
+        r.hasNear = d[i + 2] != 0;
+        r.near = {d[i + 3], d[i + 4], d[i + 5]};
+        list.push_back(r);
+    }
+    std::string problem;
+    mxcad::Solid s = _solid.blend(list, size, chamfer, int(segments), face, problem);
+    if (error) *error = problem.empty() ? nil : [NSString stringWithUTF8String:problem.c_str()];
+    return [MXSolid with:std::move(s)];
+}
+
+- (NSArray<MXEdge *> *)edges {
+    if (_edges) return _edges;
+    NSMutableArray<MXEdge *> *out = [NSMutableArray array];
+    for (const auto& e : _solid.edges()) {
+        MXEdge *m = [[MXEdge alloc] init];
+        m->_faceA = e.a;
+        m->_faceB = e.b;
+        m->_closed = e.closed;
+        std::vector<double> xyz;
+        for (const auto& p : e.points) { xyz.push_back(p.x); xyz.push_back(p.y); xyz.push_back(p.z); }
+        m->_points = [NSData dataWithBytes:xyz.data() length:xyz.size() * sizeof(double)];
+        [out addObject:m];
+    }
+    _edges = out;
+    return _edges;
 }
 
 - (MXSolid *)unionWith:(MXSolid *)other { return [MXSolid with:_solid.unite(other->_solid)]; }

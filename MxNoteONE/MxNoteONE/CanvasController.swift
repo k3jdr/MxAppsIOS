@@ -676,6 +676,17 @@ final class CanvasController: NSObject {
                 p.y = view.frame.maxY + 14
                 continue
             }
+            // 3D models: STL and OBJ meshes; FreeCAD, STEP, IGES and BREP files (⌥ follows the file where it is).
+            let ext3D = url.pathExtension.lowercased()
+            if ["stl", "obj"].contains(ext3D), let view = insertModel(from: url) {
+                p.y = view.frame.maxY + 14
+                continue
+            }
+            if CADFreeCAD.importTypes.contains(ext3D) {
+                insertFreeCAD(url, link: NSEvent.modifierFlags.contains(.option), at: p)
+                p.y += 320
+                continue
+            }
             // draw.io diagrams (.drawio.svg, .drawio) come in as diagrams; ⌥ while dropping links the file instead.
             let lower = url.lastPathComponent.lowercased()
             if lower.hasSuffix(".drawio.svg") || lower.hasSuffix(".drawio"),

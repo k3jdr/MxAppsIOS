@@ -10,6 +10,14 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// An edge where two faces meet: the faces either side (a < b) and its points (x y z doubles), in order.
+@interface MXEdge : NSObject
+@property (readonly) uint32_t faceA;
+@property (readonly) uint32_t faceB;
+@property (readonly) BOOL closed;
+@property (readonly) NSData *points;
+@end
+
 @interface MXSolid : NSObject
 
 + (MXSolid *)empty;
@@ -29,12 +37,26 @@ NS_ASSUME_NONNULL_BEGIN
                   segments:(NSInteger)segments face:(uint32_t)face NS_SWIFT_NAME(revolve(points:groups:smooth:degrees:segments:face:));
 /// Triangles: nine floats each.
 + (MXSolid *)triangles:(NSData *)xyz face:(uint32_t)face NS_SWIFT_NAME(triangles(_:face:));
+/// Triangles with a face number each (uint32) and, if given, nine floats of normals each (an imported B-rep).
++ (MXSolid *)triangles:(NSData *)xyz faces:(NSData *)faces normals:(nullable NSData *)normals face:(uint32_t)face
+    NS_SWIFT_NAME(triangles(_:faces:normals:face:));
+/// Closed rings of points joined one to the next: `points` holds `count` rings of the same number of points (x y z
+/// doubles); capped at both ends unless `closed`. `groups` (int32) and `smooth` (bytes) are the profile edges'.
++ (MXSolid *)sweepRings:(NSData *)points count:(NSInteger)count groups:(NSData *)groups smooth:(NSData *)smooth
+                 closed:(BOOL)closed face:(uint32_t)face NS_SWIFT_NAME(sweep(rings:count:groups:smooth:closed:face:));
 
 - (MXSolid *)unionWith:(MXSolid *)other NS_SWIFT_NAME(union(_:));
 - (MXSolid *)subtracting:(MXSolid *)other NS_SWIFT_NAME(subtracting(_:));
 - (MXSolid *)intersecting:(MXSolid *)other NS_SWIFT_NAME(intersecting(_:));
 /// Moved by a 4×4 matrix (16 doubles, column-major).
 - (MXSolid *)transformed:(NSData *)matrix NS_SWIFT_NAME(transformed(_:));
+/// Fillets (or chamfers) edges given as six doubles each — face a, face b, whether a point near the edge follows,
+/// and that point. `error` is set when an edge couldn't be done (the rest still are).
+- (MXSolid *)blendEdges:(NSData *)refs size:(double)size chamfer:(BOOL)chamfer segments:(NSInteger)segments
+                   face:(uint32_t)face error:(NSString * _Nullable * _Nullable)error NS_SWIFT_NAME(blend(edges:size:chamfer:segments:face:error:));
+
+/// The edges where different faces meet (worked out once).
+@property (readonly) NSArray<MXEdge *> *edges;
 
 @property (readonly) NSInteger polygonCount;
 @property (readonly) double volume;

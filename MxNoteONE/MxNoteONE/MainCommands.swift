@@ -222,6 +222,7 @@ struct MainCommands: Commands {
                 .keyboardShortcut("3", modifiers: [.command, .control])
             Button("3D Model (Sample Bracket)") { canvas?.insertModel(sample: true) }
             Button("3D Model from STL / OBJ…") { canvas?.importModel() }
+            Button("3D Model from FreeCAD, STEP or IGES…") { canvas?.importFreeCADModel() }
             Divider()
             Button("Music Score from MusicXML…") { canvas?.chooseMusicXML() }
             Button("Picture…") { canvas?.choosePictures() }
