@@ -78,7 +78,7 @@ enum Prefs {
 }
 
 enum RibbonTab: String, CaseIterable, Identifiable {
-    case home = "Home", insert = "Insert", draw = "Draw", view = "View", table = "Table", score = "Score"
+    case home = "Home", insert = "Insert", draw = "Draw", view = "View", table = "Table", score = "Score", map = "Map"
     var id: String { rawValue }
 }
 
@@ -141,6 +141,10 @@ final class EditorState {
     var scorePlaying = false
     /// Bumped when the length or dot for new notes changes (the Score tab shows it).
     var scoreInputChanged = 0
+    /// A map is being worked on (the Map ribbon tab shows); clicks on it drop pins; bumped when it changes.
+    var mapActive = false
+    var mapDropping = false
+    var mapChanged = 0
     var showRibbon = true
     var tool: CanvasTool = .type {
         didSet { NotebookStore.shared.canvas?.toolChanged() }

@@ -18,7 +18,7 @@ struct RibbonView: View {
     /// The tab shown (Table and Score only while a table or score is being worked on).
     private var shownTab: RibbonTab {
         switch editor.ribbonTab {
-        case .table where !editor.tableActive, .score where !editor.scoreActive: .home
+        case .table where !editor.tableActive, .score where !editor.scoreActive, .map where !editor.mapActive: .home
         default: editor.ribbonTab
         }
     }
@@ -26,13 +26,13 @@ struct RibbonView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 2) {
-                ForEach(RibbonTab.allCases.filter { ($0 != .table || editor.tableActive) && ($0 != .score || editor.scoreActive) }) { tab in
+                ForEach(RibbonTab.allCases.filter { ($0 != .table || editor.tableActive) && ($0 != .score || editor.scoreActive) && ($0 != .map || editor.mapActive) }) { tab in
                     Button {
                         editor.ribbonTab = tab
                     } label: {
                         Text(tab.rawValue)
                             .font(.system(size: 12, weight: editor.ribbonTab == tab ? .semibold : .regular))
-                            .foregroundStyle(tab == .table || tab == .score ? Color.accentColor : Color.primary)
+                            .foregroundStyle(tab == .table || tab == .score || tab == .map ? Color.accentColor : Color.primary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
                             .background(editor.ribbonTab == tab ? Color.accentColor.opacity(0.16) : .clear,
@@ -450,6 +450,10 @@ struct InsertRibbon: View {
             RibbonButton("Drums", "circle.grid.cross", large: true) { canvas?.insertScore(drums: true) }
             RibbonButton("Lead Sheet", "music.note.list", large: true) { canvas?.insertScore(leadSheet: true) }
             RibbonButton("MusicXML", "square.and.arrow.down", large: true) { canvas?.chooseMusicXML() }
+        }
+        RibbonGroup("Maps") {
+            RibbonButton("Map", "map", large: true) { canvas?.insertMap() }
+                .tip("Map", "A map on the page, as in Apple Maps: search for places, drop pins, and link each pin to a page or a paragraph. ⌃⌘M.")
         }
         RibbonGroup("3D") {
             RibbonButton("3D Model", "cube", large: true) { canvas?.insertModel() }
@@ -1139,6 +1143,99 @@ struct TableRibbon: View {
             RibbonButton("Row Up", "arrow.up.to.line", large: true) { grid?.moveRows(up: true) }
             RibbonButton("Row Down", "arrow.down.to.line", large: true) { grid?.moveRows(up: false) }
             RibbonButton("Select Table", "tablecells", large: true) { grid?.selectTable() }
+        }
+    }
+}
+
+// MARK: - Map (shown while a map is being worked on)
+
+struct MapRibbon: View {
+    @Bindable private var editor = NotebookStore.shared.editor
+    private var map: MapElementView? { MapElementView.active }
+
+    /// Runs a command on the map.
+    private func act(_ body: (MapElementView) -> Void) {
+        guard let map else { return NSSound.beep() }
+        body(map)
+    }
+
+    var body: some View {
+        let _ = editor.mapChanged
+        let d = map?.data
+        let pin = map?.targetPin
+        RibbonGroup("Search") {
+            RibbonButton("Search Maps", "magnifyingglass", large: true) { act { $0.focusSearch() } }
+                .tip("Search Maps", "Type a place, a kind of place (coffee, parks) or an address in the map's search field and press Return; choose a result to pin it (hold ⌥ to just go there).")
+            RibbonButton("Pin an Address…", "signpost.right") { act { $0.pinAtAddress() } }
+                .tip("Pin an Address", "Finds a street address, a place's name or a city, and pins it.")
+            RibbonButton("Pin My Location", "location") { act { $0.pinAtMyLocation() } }
+                .tip("Pin My Location", "Pins where your Mac is (macOS asks you to allow it the first time).")
+        }
+        RibbonGroup("Pins") {
+            RibbonButton("Drop Pins", "mappin.and.ellipse", large: true, active: editor.mapDropping) { editor.mapDropping.toggle() }
+                .tip("Drop Pins", "While on, each click on the map drops a pin there (its address is looked up). Right-click the map for Drop Pin Here too.")
+            RibbonButton("Pin at Center", "plus.viewfinder") { act { $0.pinAtCenter() } }
+                .tip("Pin at Center", "A pin at the centre of the map.")
+            RibbonButton("Edit Pin…", "pencil") { act { $0.editPin() } }
+                .tip("Edit Pin", "The selected pin's title, category, notes, colour, symbol or letters, link and place.")
+                .disabled(pin == nil)
+            RibbonMenu("Color", "paintpalette") {
+                ForEach(MapPin.palette, id: \.1) { name, hex in
+                    Button {
+                        act { m in
+                            guard let id = m.targetPin?.id else { return }
+                            m.update("Pin Color") { d in if let i = d.pins.firstIndex(where: { $0.id == id }) { d.pins[i].color = hex } }
+                        }
+                    } label: { Label { Text(name) } icon: { Image(nsImage: MapElementView.swatch(hex)) } }
+                }
+            }
+            .tip("Pin Color", "The selected pin's marker colour.")
+            .disabled(pin == nil)
+            RibbonButton("Delete Pin", "trash") { act { $0.deletePin() } }
+                .tip("Delete Pin", "Removes the selected pin (and its routes).")
+                .disabled(pin == nil)
+        }
+        RibbonGroup("Link") {
+            RibbonButton("Link Pin…", "link", large: true) { act { $0.editPin() } }
+                .tip("Link Pin", "Links the selected pin to a page, a paragraph on a page, or a web address (in the pin's editor).")
+                .disabled(pin == nil)
+            RibbonButton("Use Copied Link", "doc.on.clipboard") { act { $0.pasteLink() } }
+                .tip("Use Copied Link", "Links the selected pin to a link you copied: right-click a page or a paragraph ▸ Copy Link to Page / Paragraph.")
+                .disabled(pin == nil)
+            RibbonButton("Go to Link", "arrow.up.forward.app") { act { $0.followLink() } }
+                .tip("Go to Link", "Opens the page or paragraph (or web page) the selected pin links to.")
+                .disabled(pin?.linkURL == nil)
+            RibbonButton("Remove Link", "xmark.square") { act { $0.removeLink() } }
+                .disabled(pin?.link == nil)
+        }
+        RibbonGroup("Map") {
+            RibbonMenu((d?.style ?? .standard).title.components(separatedBy: " (").first ?? "Style", "map") {
+                ForEach(MapStyle.allCases) { s in Button(s.title) { act { $0.setStyle(s) } } }
+            }
+            .tip("Map Style", "Standard, muted, satellite, or hybrid (satellite with roads and labels).")
+            RibbonButton("3D", "view.3d", active: d?.realistic == true) { act { $0.toggle3D() } }
+                .tip("3D", "Terrain and buildings in relief (tilt the map to see them: the tilt control, or ⌥-drag).")
+            RibbonButton("Points of Interest", "building.2", active: d?.pointsOfInterest != false) { act { $0.togglePointsOfInterest() } }
+                .tip("Points of Interest", "Shops, restaurants, parks and other places on the map.")
+            RibbonButton("Traffic", "car.2", active: d?.traffic == true) { act { $0.toggleTraffic() } }
+            RibbonButton("Group Nearby Pins", "circle.grid.2x2", active: d?.clusters == true) { act { $0.toggleClusters() } }
+                .tip("Group Nearby Pins", "Pins close together show as one with a count when zoomed out.")
+        }
+        RibbonGroup("Directions") {
+            RibbonButton("Directions…", "arrow.triangle.turn.up.right.diamond", large: true) { act { $0.directions() } }
+                .tip("Directions", "A driving or walking route from one pin to another, drawn on the map with its distance and time.")
+            RibbonButton("Clear Routes", "xmark.circle") { act { $0.clearRoutes() } }
+                .disabled(d?.routes == nil)
+        }
+        RibbonGroup("View") {
+            RibbonButton("Pin List", "sidebar.right", large: true, active: d?.showsList == true) { act { $0.toggleList() } }
+                .tip("Pin List", "The pins beside the map, by category: click one to go to it, double-click to edit it, the eye to show or hide a category.")
+            RibbonButton("Show All Pins", "arrow.up.left.and.down.right.magnifyingglass") { act { $0.fitPins() } }
+            RibbonButton("Zoom In", "plus.magnifyingglass") { act { $0.zoom(0.5) } }
+            RibbonButton("Zoom Out", "minus.magnifyingglass") { act { $0.zoom(2) } }
+            RibbonButton("Face North", "location.north.line") { act { $0.faceNorth() } }
+            RibbonButton("Map Title…", "textformat") { act { $0.editTitle() } }
+            RibbonButton("Copy Picture", "photo.on.rectangle") { act { $0.copyPicture() } }
         }
     }
 }

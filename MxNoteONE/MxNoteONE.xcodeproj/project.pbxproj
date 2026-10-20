@@ -255,6 +255,8 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MxNoteONE records audio notes into your pages.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "MxNoteONE pins your location on maps in your pages when you ask it to.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "MxNoteONE pins your location on maps in your pages when you ask it to.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -290,6 +292,8 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MxNoteONE records audio notes into your pages.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "MxNoteONE pins your location on maps in your pages when you ask it to.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "MxNoteONE pins your location on maps in your pages when you ask it to.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

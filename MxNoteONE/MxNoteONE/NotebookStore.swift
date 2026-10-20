@@ -1559,6 +1559,9 @@ enum PageIndexer {
             case .model:
                 // A model's name and its features' (found by search).
                 if let m = element.cad { texts.append(([m.name] + m.features.map(\.name)).joined(separator: " ")) }
+            case .map:
+                // A map's title and its pins' titles, notes, addresses and categories.
+                if let m = element.map { texts.append(m.searchText) }
             }
         }
         return index(texts: texts)

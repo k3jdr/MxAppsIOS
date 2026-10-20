@@ -11,6 +11,7 @@
 //
 
 import AppKit
+import MapKit
 import SwiftUI
 
 struct QuickHelpItem: Equatable {
@@ -141,6 +142,15 @@ final class QuickHelp {
                                  detail: file.element.kind == .audio ? "Click to play the recording. Right-click to save or delete it."
                                     : "\(file.element.fileName ?? "A file") — double-click to open it; right-click to save a copy or delete it.",
                                  shortcut: nil, symbol: file.element.kind == .audio ? "waveform" : "paperclip")
+        case let marker as PinMarkerView:
+            guard let pin = (marker.annotation as? PinAnnotation)?.pin else { return nil }
+            let link = pin.linkTitle.map { "Links to \($0). " } ?? ""
+            return QuickHelpItem(title: "Pin: \(pin.title)", detail: (pin.notes.map { $0 + "\n" } ?? "") + link
+                                 + "Click for its callout (edit, go to its link); drag it to move it; right-click for its colour, directions and more.",
+                                 shortcut: nil, symbol: pin.symbol ?? "mappin")
+        case is NoteMapView, is MapElementView:
+            return QuickHelpItem(title: "Map", detail: "Click it to work on it (the Map tab): drag to pan, pinch or scroll to zoom, search for places, drop pins and link them to pages and paragraphs. Right-click to drop a pin.",
+                                 shortcut: nil, symbol: "map")
         case is ChartElementView:
             return QuickHelpItem(title: "Chart", detail: "Made from table data. Right-click to change its type, titles, colours and axes, or to copy it as a picture.", shortcut: nil, symbol: "chart.bar")
         case let canvas as PageCanvasView:
@@ -238,6 +248,13 @@ extension QuickHelp {
         "Home/Tags": "To Do boxes and other tags; the Tag Summary lists every tagged paragraph.",
         "Insert/Tables": "A table, from a size or the Insert Table dialog.",
         "Insert/Music": "A music score, empty or from a MusicXML file.",
+        "Insert/Maps": "A map, as in Apple Maps: search for places, drop pins and link each one to a page or a paragraph.",
+        "Map/Search": "Search for places and addresses, pin an address, or pin where you are.",
+        "Map/Pins": "Drop pins with a click, pin the centre, edit, colour or delete the selected pin.",
+        "Map/Link": "Link the selected pin to a page, a paragraph on a page, or a web address — and go there.",
+        "Map/Map": "The map's style (standard, muted, satellite, hybrid), 3D, points of interest, traffic, and grouping nearby pins.",
+        "Map/Directions": "Driving or walking routes from one pin to another.",
+        "Map/View": "The pin list, showing every pin, zooming, facing north, the title, and copying a picture of the map.",
         "Insert/3D": "A 3D model (parametric CAD): a new part, the sample bracket, or an STL / OBJ file. Double-click it on the page to edit it.",
         "Insert/Files": "Pictures, attachments and screen clippings.",
         "Insert/Recording": "Record audio onto the page.",

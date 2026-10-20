@@ -257,6 +257,8 @@ final class PageCanvasView: NSView {
             view = DiagramElementView(element: element, image: data.flatMap(NSImage.init(data:)))
         case .model:
             view = CADElementView(element: element)
+        case .map:
+            view = MapElementView(element: element)
         }
         view.canvas = self
         if isExport { view.prepareForExport() }

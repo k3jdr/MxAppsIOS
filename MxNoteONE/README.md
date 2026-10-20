@@ -549,6 +549,47 @@ meet, with wide lines for edges, sketches and wireframes. `CADFreeCAD` hands mod
 (the Python FreeCAD runs is in `CADFreeCADLibrary`). Curved surfaces are faceted (Smoothness in the property panel sets
 how finely); FreeCAD's exports are exact.
 
+## Maps
+
+**Insert ▸ Map** (⌃⌘M, or the Insert tab's Map button) puts a map on the page — Apple's maps, as in the Maps app:
+drag to pan, pinch (or scroll, once the map is clicked) to zoom, the compass to turn it back north, the tilt control
+(or ⌥-drag) to tilt it. Until you click it, scrolling over the map scrolls the page past it. Clicked, the map is
+active and the **Map** tab shows.
+
+**Finding places** — type in the map's search field (a place, a kind of place such as "coffee" or "parks", or an
+address) and press Return: places near the map are listed; choose one to pin it (its name, address and a symbol for
+its kind), or hold ⌥ to just go there. **Pin an Address…** finds an address or a city; **Pin My Location** pins where
+your Mac is (macOS asks you to allow it the first time).
+
+**Pins** — **Drop Pins** makes each click on the map drop a pin (right-click ▸ Drop Pin Here works any time; **Pin at
+Center** pins the middle); a dropped pin's address and name are looked up. Drag a pin to move it. Click it for its
+callout: its title, address, notes, an edit button and — if it links somewhere — a button to go there. **Edit Pin…**
+(the callout's pencil, a double-click in the pin list, or right-click the pin) sets its title, **category**, address and
+notes; its marker — one of Apple Maps' twelve colours, and one of 45 symbols (home, work, restaurant, café, hotel,
+park, beach, hike, airport…) or up to three letters or numbers; and its place (latitude and longitude).
+
+**Links to pages and paragraphs** — a pin can link to a page, to a paragraph on a page, or to a web address. In the
+pin's editor, under Link, pick a page (filter the list by title), then *the whole page* or one of its paragraphs
+(listed by their words); or **Use Copied Link** for a link copied with right-click ▸ Copy Link to Page or Copy Link
+to Paragraph (or a web address) — the Map tab's **Use Copied Link** does it for the selected pin in one click. The
+link's target is shown under the pin's title (in its callout and in the pin list); **Go to Link** (or the callout's
+arrow) opens the page and selects the paragraph. A paragraph link finds its paragraph again by its words if it moves.
+
+**The pin list** (Map tab ▸ Pin List) shows the pins beside the map, grouped by category, like Google My Maps'
+layers: click a pin to go to it, double-click to edit it, the arrow to follow its link, and the eye beside a category
+to show or hide all its pins. Routes are listed there too, with their distance and time.
+
+**The map's look** — **Map Style**: Standard, Muted, Satellite or Hybrid (satellite with roads and labels); **3D**
+(terrain and buildings in relief); **Points of Interest**; **Traffic**; **Group Nearby Pins** (pins close together show
+as one with a count when zoomed out). **Directions…** draws a driving or walking route from one pin to another (each
+route its own colour; walking routes dotted). **Show All Pins** fits every pin and route in view; **Face North**,
+**Zoom In / Out**, **Map Title…**, **Copy Picture**. Where the map looks is kept with the page; every other change can
+be undone.
+
+Maps print, export to PDF and go to OneNote as a picture with their pins (and a list of the pins); Markdown export
+writes the picture and the pins, each linked to its place on Apple Maps. Search finds a map by its title and its pins'
+titles, notes, addresses and categories.
+
 ## Microsoft Office fonts
 
 Office for Mac keeps its fonts (Calibri, Consolas, Cambria, Aptos, Segoe UI…) inside the Office apps, so other apps
@@ -715,6 +756,7 @@ Ignore and Learn; F7 again goes on to the next one. When there are none, a messa
 | Date / Time / Date & Time                               | ⌥⇧D / ⌥⇧T / ⌥⇧F                      |
 | Insert Table / Picture / Screen Clipping / Record Audio | ⌃⌘T / ⌃⌘P / ⌃⇧⌘S / ⌃⌘R            |
 | Insert 3D Model                                         | ⌃⌘3                                      |
+| Insert Map                                              | ⌃⌘M                                      |
 | 3D editor: standard views / fit all (in the 3D view)    | 0 – 6 / F                                |
 | 3D editor: Leave Sketch                                 | ⌘↩                                       |
 | Back / Forward (pages visited)                          | ⌃← / ⌃→, or ⌘[ / ⌘]                    |

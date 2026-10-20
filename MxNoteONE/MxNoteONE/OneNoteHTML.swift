@@ -77,6 +77,17 @@ enum OneNoteHTML {
                 let name = "img\(parts.count)"
                 parts.append(GraphClient.Part(name: name, contentType: "image/png", data: png))
                 body += "<img style=\"position:absolute;left:\(x)px;top:\(y)px\" width=\"\(w)\" height=\"\(Int(height.rounded()))\" src=\"name:\(name)\" />\n"
+            case .map:
+                // OneNote has no maps: its picture, and its pins in a list.
+                guard let map = element.map else { continue }
+                body += "<div style=\"position:absolute;left:\(x)px;top:\(y)px;width:\(w)px\"><p><b>\(escape(map.title ?? "Map"))</b></p>"
+                if let asset = element.preview, let data = assetData(asset), let (imageData, type) = webImage(data, ext: "png") {
+                    let name = "img\(parts.count)"
+                    parts.append(GraphClient.Part(name: name, contentType: type, data: imageData))
+                    body += "<img width=\"\(w)\" height=\"\(Int(max(element.height - grip, 10).rounded()))\" src=\"name:\(name)\" />"
+                }
+                if !map.pins.isEmpty { body += "<ul>" + map.pinLines(markdown: false).map { "<li>\(escape($0))</li>" }.joined() + "</ul>" }
+                body += "</div>\n"
             case .score:
                 // OneNote has no scores: its title, signatures and notes in letter names.
                 guard let score = element.score else { continue }

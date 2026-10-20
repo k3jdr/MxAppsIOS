@@ -187,6 +187,21 @@ enum PageExporter {
                 let stl = (assetsName + "/" + base + ".stl").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? base
                 lines.append("")
                 lines.append("*3D model: \(model.name) — [\(base).stl](\(stl))*")
+            case .map:
+                // A map: its picture, and its pins with links to their places on Apple Maps.
+                guard let map = element.map else { continue }
+                let name = map.title ?? "Map"
+                if let asset = element.preview, let data = store.assetData(asset, for: ref) {
+                    let fileName = safeName(name) + "-" + String(element.id.uuidString.prefix(4)) + ".png"
+                    try? FileManager.default.createDirectory(at: assetsFolder, withIntermediateDirectories: true)
+                    try? data.write(to: assetsFolder.appending(path: fileName))
+                    let link = (assetsName + "/" + fileName).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? fileName
+                    lines.append("![\(name)](\(link))")
+                    lines.append("")
+                }
+                lines.append("*Map: \(name)*")
+                if !map.pins.isEmpty { lines.append("") }
+                lines += map.pinLines(markdown: true)
             }
             lines.append("")
         }

@@ -37,11 +37,12 @@ final class RibbonLayout {
     /// Every tab's sections, in order (as the ribbon shows them).
     static let sections: [(RibbonTab, [String])] = [
         (.home, ["Font", "Format", "Paragraph", "Styles", "Tags"]),
-        (.insert, ["Tables", "Music", "3D", "Files", "Recording", "Links", "Time Stamp", "Pages"]),
+        (.insert, ["Tables", "Music", "3D", "Maps", "Files", "Recording", "Links", "Time Stamp", "Pages"]),
         (.draw, ["Diagram", "Selected Diagram", "Editor", "Ink"]),
         (.view, ["Page Setup", "Zoom", "Views"]),
         (.table, ["Automation", "Insert", "Merge", "Delete", "Shading", "Cell Text", "Table"]),
         (.score, ["Notes", "Expression", "Articulation", "Staves", "Transpose", "Lead Sheet", "Bars", "Voice", "Add", "Selected Note", "Chords & Lyrics", "Analysis", "Score"]),
+        (.map, ["Search", "Pins", "Link", "Map", "Directions", "View"]),
     ]
 
     static func key(_ tab: RibbonTab, _ title: String) -> String { tab.rawValue + "/" + title }
@@ -138,6 +139,7 @@ struct RibbonTabContent: View {
         case .view: ViewRibbon()
         case .table: TableRibbon()
         case .score: ScoreRibbon()
+        case .map: MapRibbon()
         }
     }
 }
@@ -295,6 +297,7 @@ struct RibbonPaletteView: View {
         switch tab {
         case .table: editor.tableActive
         case .score: editor.scoreActive
+        case .map: editor.mapActive
         default: true
         }
     }
@@ -307,7 +310,7 @@ struct RibbonPaletteView: View {
         .environment(\.ribbonPaletteKey, key)
         .disabled(!available)
         .opacity(available ? 1 : 0.45)
-        .help(available ? "" : (tab == .score ? "Click in a music score to use these" : "Click in a table to use these"))
+        .help(available ? "" : (tab == .score ? "Click in a music score to use these" : tab == .map ? "Click a map to use these" : "Click in a table to use these"))
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .fixedSize()

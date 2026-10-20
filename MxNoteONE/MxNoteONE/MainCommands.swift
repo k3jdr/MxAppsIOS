@@ -218,6 +218,9 @@ struct MainCommands: Commands {
             Button("Diagram File (.drawio.svg)…") { canvas?.chooseDiagramFile(link: false) }
             Button("Link Diagram File…") { canvas?.chooseDiagramFile(link: true) }
             Divider()
+            Button("Map") { canvas?.insertMap() }
+                .keyboardShortcut("m", modifiers: [.command, .control])
+            Divider()
             Button("3D Model") { canvas?.insertModel() }
                 .keyboardShortcut("3", modifiers: [.command, .control])
             Button("3D Model (Sample Bracket)") { canvas?.insertModel(sample: true) }
