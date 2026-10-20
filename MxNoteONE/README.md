@@ -277,6 +277,7 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Move the note to another guitar string | **⌥↑ / ⌥↓** | Score tab ▸ Guitar |
 | Type frets into the TAB: click a string (or **⌃T**), **↑ ↓** change string, digits are frets (two quickly: 10 and up), **⇧3–⇧7** lengths, **→** next note, **Delete** the fret, **Esc** stops | **⌃T** | Score tab ▸ Guitar ▸ Type Frets |
 | Techniques: hammer-on / pull-off, slide, slide in / out, bend, bend and release, vibrato, palm mute, let ring, natural / artificial harmonic, dead note, ghost note, tap | **⌥H ⌥S ⌥I ⌥O ⌥B ⌥R ⌥V ⌥M ⌥L ⌥N ⌥A ⌥X ⌥G ⌥T** | Score tab ▸ Guitar ▸ Technique, right-click ▸ Guitar |
+| Down strum / up strum (muted strum: ⌥X) | **⌥D / ⌥U** | Score tab ▸ Guitar ▸ Strum, right-click ▸ Guitar ▸ Strumming |
 | Tuning (guitar, drop and open tunings, DADGAD, seven-string, bass, ukulele, mandolin, banjo, or typed) / TAB Only / Sound | | Score tab ▸ Guitar, right-click ▸ Guitar |
 | Chord voicing (choose, or draw it) / chord chart / chord symbols named from the notes | | Score tab ▸ Guitar ▸ Voicing, Chord Chart, right-click ▸ Guitar |
 | On a drum staff: kick, snare, hi-hat, open / pedal hi-hat, crash, ride, ride bell, high / mid / floor tom, side stick (⇧: played with the note) | **K S H O P C R B T M F X** | Score tab ▸ Add ▸ Drum |
@@ -380,6 +381,26 @@ chords and lyrics; **Slash Entry** makes typed notes slashes. Slashes play the c
 chart comps itself. **1st / 2nd / 3rd endings** bracket their bars — the 1st is played before the repeat and skipped
 after it. **Bars per Line** (2, 3, 4, 5, 6 or 8, or as many as fit) puts that many bars on each line, squeezing the spacing a little
 if need be. MusicXML keeps all of it (slash noteheads, endings, the composer, line breaks).
+
+**Strumming patterns** — **Strum** (Score tab ▸ Guitar, or right-click ▸ Guitar ▸ Strumming) puts a pattern on the
+selected bars, or the bar at the caret, as rhythm slashes: for 4/4 quarter downs, down-up eighths, folk / pop
+(D-DU-UDU), rock, ballad, backbeat accents, backbeat chuck, punk downstrokes, ska / reggae offbeats, funk and
+syncopated sixteenths, boom-chick and country bass-strum, half notes and a whole bar; waltz patterns for 3/4; 6/8,
+2/4 and 12/8 patterns (slow blues), and down strums for any other time. Each bar keeps its chord symbols where they
+were — a chord change mid-strum takes a stroke of its own. Strums are marked over the staff with the pick strokes ⊓
+(down) and V (up), or arrows (**Mark Strums with Arrows**); a muted strum is an x, a bass note a slash under the
+middle line, and an accent >. They play as a guitar strums the chord symbol in effect, in its diagram's voicing (the
+one chosen for it, with the tuning and capo): down from the low strings, up across the top four from the high ones,
+string by string; a muted strum is a percussive chk; bass notes alternate the root and the fifth on the string beside
+it (boom-chick); holds ring on, and the beat is a little louder. With the TAB on, each strum's frets show on it (x
+for muted strums). **Pattern Editor…** shows the bar's steps on a grid of beats, eighths or sixteenths counted
+"1 e & a": click a step for the stroke the hand makes there (down on the beat, up between), again to hold, again for a
+rest; ⌥-click accents; right-click for any stroke — or choose a preset, or type the steps (D U X B, - hold, . rest, >
+accent). **Play** tries it on the bar's chord; it goes on the bar, every bar, or **a new rhythm guitar staff** that
+strums the first staff's chord symbols through the song. **Strum Every Bar Like This One** copies the bar's strumming
+through the score. ⌥D and ⌥U mark the selected notes (a written chord strums too). **Swing Eighths** plays eighths
+long-short ("Swing" is marked by the tempo). A piano staff given a pattern takes a steel guitar's sound. MusicXML
+keeps the strokes (down-bow, up-bow), bass notes, muted strums and swing.
 
 **Figured bass and Roman numeral analysis** — **⌃F** types figured bass under a note: `6`, `64` or `6/4` (a
 slash stacks figures, top first), `7/#`, `#6`, `4 3`; `#` `b` `n` are ♯ ♭ ♮, a lone accidental is the 3rd's, `+` and `\`

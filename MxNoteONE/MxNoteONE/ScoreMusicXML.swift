@@ -174,7 +174,13 @@ enum MusicXML {
             x += "<direction-type><metronome><beat-unit>\(beatUnit)<per-minute>\(Int((Double(quarters) / unit.1).rounded()))</per-minute></metronome></direction-type>"
             x += "<sound tempo=\"\(quarters)\"/>"
         }
-        return x + "</direction>\n"
+        x += "</direction>\n"
+        // Swing eighths.
+        if bar == 0, score.swing == true {
+            x += "      <direction placement=\"above\"><direction-type><words>Swing</words></direction-type>"
+            x += "<sound><swing><first>2</first><second>1</second><swing-type>eighth</swing-type></swing></sound></direction>\n"
+        }
+        return x
     }
 
     /// A fretted instrument's strings (lowest first, numbered from the bottom line) and its capo.
@@ -267,7 +273,7 @@ enum MusicXML {
                 if note.slash != nil, !note.rest { x += "<notehead>slash</notehead>" }
                 if let drum, !note.rest, drum.head != .normal {
                     x += "<notehead>\(drum.head == .x ? "x" : drum.head == .circleX ? "circle-x" : "diamond")</notehead>"
-                } else if !note.rest, let g {
+                } else if !note.rest, let g, note.slash == nil {
                     if g.dead == true { x += "<notehead>x</notehead>" } else if g.harmonic == "natural" { x += "<notehead>diamond</notehead>" } else if g.ghost == true { x += "<notehead parentheses=\"yes\">normal</notehead>" }
                 }
                 x += noteStaffTag
@@ -292,6 +298,14 @@ enum MusicXML {
                     if let bend = g?.bend { technical += "<bend><bend-alter>\(bend)</bend-alter>\(g?.release == true ? "<release/>" : "")</bend>" }
                     if let h = g?.harmonic { technical += "<harmonic><\(h == "artificial" ? "artificial" : "natural")/></harmonic>" }
                     if g?.tap == true { technical += "<tap/>" }
+                    // Strums: pick strokes (down-bow, up-bow); a bass note and a muted strum as words.
+                    switch g?.strum {
+                    case "down"?: technical += "<down-bow/>"
+                    case "up"?: technical += "<up-bow/>"
+                    case "bass"?: technical += "<other-technical>bass note</other-technical>"
+                    default: break
+                    }
+                    if note.slash != nil, g?.dead == true { technical += "<other-technical>muted</other-technical>" }
                     if previousSlide { notations += "<slide type=\"stop\" number=\"1\"/>" }
                     if g?.slide == "next" { notations += "<slide type=\"start\" number=\"1\" line-type=\"solid\"/>" }
                     if g?.vibrato == true { notations += "<ornaments><wavy-line type=\"start\" number=\"1\"/><wavy-line type=\"stop\" number=\"1\"/></ornaments>" }
@@ -625,6 +639,11 @@ enum MusicXML {
                             }
                         }
                         guard shared else { break }
+                        // Swing eighths.
+                        if let swing = e.elements(forName: "sound").first?.elements(forName: "swing").first {
+                            score.swing = swing.elements(forName: "straight").isEmpty ? true : nil
+                            break
+                        }
                         // Tempo: the speed (from <sound>, else the metronome mark in its note), a word, rit. / accel.
                         let metronome = e.elements(forName: "direction-type").compactMap { $0.elements(forName: "metronome").first }.first
                         var unitID = "quarter"
@@ -856,6 +875,13 @@ enum MusicXML {
                             }
                             if let h = technical.elements(forName: "harmonic").first { g.harmonic = h.elements(forName: "artificial").first != nil ? "artificial" : "natural" }
                             if technical.elements(forName: "tap").first != nil { g.tap = true }
+                            if technical.elements(forName: "down-bow").first != nil { g.strum = "down" }
+                            if technical.elements(forName: "up-bow").first != nil { g.strum = "up" }
+                            for other in technical.elements(forName: "other-technical") {
+                                let word = other.stringValue?.lowercased() ?? ""
+                                if word.hasPrefix("bass") { g.strum = "bass" }
+                                if word == "muted" || word == "mute" { g.dead = true }
+                            }
                         }
                         for notation in e.elements(forName: "notations") {
                             if notation.elements(forName: "slide").contains(where: { $0.attribute(forName: "type")?.stringValue == "start" }) { g.slide = "next" }

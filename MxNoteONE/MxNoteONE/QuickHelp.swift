@@ -269,7 +269,7 @@ extension QuickHelp {
         "Score/Add": "Add notes A–G or a rest after the cursor.",
         "Score/Selected Note": "Move, alter, tie, swap or delete the selected note.",
         "Score/Chords & Lyrics": "Chord notes, chord symbols and lyrics.",
-        "Score/Guitar": "Guitar tablature (any tuning, TAB only, typing frets, playing techniques), chord diagrams, voicings and the chord chart, and the staff's sound.",
+        "Score/Guitar": "Guitar tablature (any tuning, TAB only, typing frets, playing techniques), chord diagrams, voicings and the chord chart, strumming patterns, and the staff's sound.",
         "Score/Analysis": "Figured bass and Roman numeral analysis: typed under the notes, or worked out from the music.",
         "Score/Score": "Play, clef, key, time, tempo, title and MusicXML export.",
     ]
@@ -448,6 +448,7 @@ extension QuickHelp {
         "Chord Chart": "Every chord used, with its diagram, under the title.",
         "Voicing": "The fingering for the selected chord: choose one up the neck or draw it; name chords from their notes.",
         "Technique": "How notes are played: hammer-on / pull-off, slides, bends, vibrato, palm mute, let ring, harmonics, dead and ghost notes, taps (⌥ with a letter).",
+        "Strum": "Strumming patterns for the bar (or the bars selected): folk, rock, ballad, reggae, funk, boom-chick, waltz, 6/8 and more, as rhythm slashes marked ⊓ V (or ↓ ↑) and played as a guitar strums the chord symbols — down from the low strings, up from the high ones, muted strums, bass notes alternating root and fifth. The Pattern Editor makes your own; New Rhythm Guitar Staff adds a staff that strums the first staff's chords. ⌥D / ⌥U mark strums; Swing plays eighths long-short.",
         "Sound": "The staff's General MIDI sound for playback: piano, guitars, bass…",
         "Chord Diagrams": "Chord diagrams over the chord symbols, in the instrument's tuning: the usual open chord, else a barre or the handiest voicing; fingers numbered; with a capo, the shape played. Click one to hear it.",
         "Capo": "A capo on a fret: TAB counts frets from it, chord names show the shape played (E♭ (C) with capo 3), the diagrams show that shape, and \"Capo n\" is marked. The music still sounds as written.",

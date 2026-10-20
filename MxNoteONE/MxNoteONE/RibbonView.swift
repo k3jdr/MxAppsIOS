@@ -900,6 +900,29 @@ struct ScoreRibbon: View {
                 }
             }
             .tip("Technique", "How the selected notes are played: hammer-on / pull-off, slides, bends, vibrato, palm mute, let ring, harmonics, dead and ghost notes, tapping. They're written on the TAB and the music, and heard.")
+            RibbonMenu("Strum", "arrow.up.arrow.down") {
+                if let staff {
+                    Section("Pattern for the selected bars (or this bar)") {
+                        ForEach(staff.strumPatterns) { p in
+                            Button("\(staff.strummedLike(p) ? "✓ " : "")\(p.name)   \(p.display)") { act { $0.applyStrum(p.steps) } }
+                        }
+                    }
+                }
+                Divider()
+                Button("Pattern Editor…") { staff?.editStrumPattern() }
+                Button("Strum Every Bar Like This One") { act { $0.strumEveryBarLikeThis() } }
+                Button("New Rhythm Guitar Staff…") { staff?.editStrumPattern(newStaff: true) }
+                Divider()
+                ForEach(GuitarMarks.strumKinds, id: \.0) { id, name, key in
+                    Button(key.isEmpty ? name : "\(name)  ⌥\(key)") { act { $0.toggleTechnique(id) } }
+                }
+                Button("Muted Strum  ⌥X") { act { $0.toggleTechnique("dead") } }
+                Button("Accent  ⇧V") { act { $0.toggleArticulation("accent") } }
+                Divider()
+                Toggle("Swing Eighths", isOn: Binding(get: { sc?.swing == true }, set: { _ in act { $0.toggleSwing() } }))
+                Toggle("Mark Strums with Arrows (↓ ↑)", isOn: Binding(get: { sc?.strumArrows == true }, set: { _ in act { $0.toggleStrumArrows() } }))
+            }
+            .tip("Strum", "Strumming patterns: folk, rock, ballad, reggae, funk, boom-chick, waltz, 6/8… as rhythm slashes with ⊓ V (or ↓ ↑), played as a guitar strums the chord symbols. Make your own in the Pattern Editor, or add a rhythm guitar staff that follows the chords.")
             RibbonButton("String Up (⌥↑)", "arrow.up.circle") { act { $0.moveString(by: 1) } }
             RibbonButton("String Down (⌥↓)", "arrow.down.circle") { act { $0.moveString(by: -1) } }
             RibbonMenu("Sound", "speaker.wave.2") {

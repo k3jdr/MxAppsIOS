@@ -91,6 +91,9 @@ struct GuitarMarks: Codable, Hashable {
     /// A ghost note, played softly: (5).
     var ghost: Bool?
     var tap: Bool?
+    /// A strum: "down" (low strings first), "up" (the top strings, high first) or "bass" (the chord's bass note —
+    /// every other one under the same chord, its fifth: boom-chick).
+    var strum: String?
 
     var isEmpty: Bool { self == GuitarMarks() }
 
@@ -101,6 +104,10 @@ struct GuitarMarks: Codable, Hashable {
         ("release", "Bend and Release", "R"), ("vibrato", "Vibrato", "V"), ("palmMute", "Palm Mute", "M"),
         ("letRing", "Let Ring", "L"), ("natural", "Natural Harmonic", "N"), ("artificial", "Artificial Harmonic", "A"),
         ("dead", "Dead Note", "X"), ("ghost", "Ghost Note", "G"), ("tap", "Tap", "T"),
+    ]
+    /// Strums, for menus (as `kinds`).
+    static let strumKinds: [(String, String, String)] = [
+        ("strum-down", "Down Strum", "D"), ("strum-up", "Up Strum", "U"), ("strum-bass", "Bass Note (Boom-Chick)", ""),
     ]
 
     func has(_ kind: String) -> Bool {
@@ -121,6 +128,9 @@ struct GuitarMarks: Codable, Hashable {
         case "dead": dead == true
         case "ghost": ghost == true
         case "tap": tap == true
+        case "strum-down": strum == "down"
+        case "strum-up": strum == "up"
+        case "strum-bass": strum == "bass"
         default: false
         }
     }
@@ -147,6 +157,9 @@ struct GuitarMarks: Codable, Hashable {
         case "dead": dead = on ? true : nil
         case "ghost": ghost = on ? true : nil
         case "tap": tap = on ? true : nil
+        case "strum-down": strum = on ? "down" : nil
+        case "strum-up": strum = on ? "up" : nil
+        case "strum-bass": strum = on ? "bass" : nil
         default: break
         }
         if bend == nil { release = nil }
@@ -200,7 +213,14 @@ extension ScoreData {
         var costs: [[Double]] = []
         for i in notes.indices {
             let n = notes[i]
-            guard !n.rest, n.slash == nil, n.drum == nil else { candidates.append([]); costs.append([]); continue }
+            guard !n.rest, n.drum == nil else { candidates.append([]); costs.append([]); continue }
+            // A slash: the strings its strum strikes, in the chord's voicing.
+            if n.slash != nil {
+                let spots = strumSpots(i)
+                candidates.append(spots.isEmpty ? [] : [spots.map { Optional($0) }])
+                costs.append(spots.isEmpty ? [] : [0])
+                continue
+            }
             let pitches = midis(i).map { $0 - tabOffset }
             let pins = [n.tabString] + (n.chord ?? []).map(\.tabString)
             var found: [[TabSpot?]] = []
