@@ -487,12 +487,12 @@ struct PageContent: Codable {
 
 // MARK: - References
 
-struct SectionRef: Hashable, Codable {
+struct SectionRef: Hashable, Codable, Sendable {
     var notebookID: UUID
     var sectionID: UUID
 }
 
-struct PageRef: Hashable, Codable {
+struct PageRef: Hashable, Codable, Sendable {
     var notebookID: UUID
     var sectionID: UUID
     var pageID: UUID
@@ -560,6 +560,19 @@ extension Array where Element == SectionNode {
         }
         for i in indices where self[i].children != nil {
             if self[i].children!.moveSibling(id, by: delta) { return true }
+        }
+        return false
+    }
+
+    /// Puts a node just before or after another (in whatever group that one is in); false if it isn't here.
+    @discardableResult
+    mutating func insert(_ node: SectionNode, beside target: UUID, after: Bool) -> Bool {
+        if let i = firstIndex(where: { $0.id == target }) {
+            insert(node, at: after ? i + 1 : i)
+            return true
+        }
+        for i in indices where self[i].children != nil {
+            if self[i].children!.insert(node, beside: target, after: after) { return true }
         }
         return false
     }

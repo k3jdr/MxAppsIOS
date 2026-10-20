@@ -850,7 +850,7 @@ final class NotebookStore {
         saveSection(nb, ref.sectionID)
     }
 
-    private func normalizedLevels(_ pages: [PageMeta]) -> [PageMeta] {
+    func normalizedLevels(_ pages: [PageMeta]) -> [PageMeta] {
         var result = pages
         for i in result.indices {
             let maxLevel = i == 0 ? 0 : min(result[i - 1].level + 1, 2)

@@ -66,11 +66,14 @@ struct PagesList: View {
                 let ref = PageRef(notebookID: section.notebookID, sectionID: section.sectionID, pageID: meta.id)
                 let hasSubpages = store.hasSubpages(meta.id, in: section)
                 PageRow(meta: meta, ref: ref, hasSubpages: hasSubpages)
+                    // Drag to another place in the list (subpages come along), or onto a section in the sidebar.
+                    .pageDragDrop(ref)
                     .tag(meta.id)
                     .contextMenu { PageMenu(ref: ref, meta: meta, hasSubpages: hasSubpages) }
             }
-            .onMove { store.movePages(in: section, from: $0, to: $1) }
         }
+        // Dropped below the pages: last in the section.
+        .pagesEndDrop(section)
         // Right-click the empty space (below the pages, or an empty section) for Add New.
         .background(AddNewArea(section: section))
         .onDeleteCommand {

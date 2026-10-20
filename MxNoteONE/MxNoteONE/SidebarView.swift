@@ -3,7 +3,9 @@
 //  MxNoteONE
 //
 //  Open notebooks, each with its sections and section groups. Right-click
-//  a notebook, section or group for everything you can do with it.
+//  a notebook, section or group for everything you can do with it; drag
+//  sections and groups to reorder them (or into a group), and pages onto a
+//  section to move them there.
 //
 
 import SwiftUI
@@ -109,6 +111,8 @@ struct SectionTree: View {
                 SectionRow(notebook: notebook, node: row.node)
             }
             .padding(.leading, CGFloat(row.depth) * 14)
+            // Drag to another place (or into a group); pages dropped on a section move there.
+            .sidebarDragDrop(ref, isGroup: row.node.isGroup)
             .tag(row.node.isGroup ? SidebarItem.group(ref) : SidebarItem.section(ref))
         }
     }
@@ -132,6 +136,8 @@ struct NotebookHeader: View {
                     .help("Synced with OneNote on OneDrive")
             }
         }
+        // A section or group dropped here goes last in the notebook.
+        .notebookDrop(notebook.id)
         .contextMenu {
             Button("New Section") { store.addSection(to: notebook.id) }
             Button("New Section Group") { store.addSectionGroup(to: notebook.id) }
