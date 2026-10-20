@@ -847,17 +847,65 @@ struct ScoreRibbon: View {
             }
             RibbonButton("Chord Symbol (⌃K)", "textformat.abc", large: true) { staff?.beginWords(.chordSymbol) }
             RibbonButton("Lyrics (⌃L)", "text.quote", large: true) { staff?.beginWords(.lyric) }
-            RibbonButton("Guitar Tab", "guitars", large: true, active: staff?.owner?.score.showTab == true) { act { $0.toggleTab() } }
-            RibbonButton("Chord Diagrams", "squareshape.split.3x3", large: true, active: staff?.owner?.score.chordDiagrams == true) { act { $0.toggleChordDiagrams() } }
-            RibbonMenu(staff?.owner?.score.capo.map { "Capo \($0)" } ?? "Capo", "dial.low") {
+        }
+        RibbonGroup("Guitar") {
+            let sc = staff?.owner?.score
+            RibbonButton("Guitar Tab", "guitars", large: true, active: sc?.showTab == true) { act { $0.toggleTab() } }
+                .tip("Guitar Tab", "A TAB staff under the music: each note's string and fret, in the instrument's tuning, with a capo.")
+            RibbonButton("TAB Only", "rectangle.grid.1x2", active: sc?.tabOnly == true) { act { $0.toggleTabOnly() } }
+                .tip("TAB Only", "The TAB in place of the music, with the rhythm under it.")
+            RibbonButton("Type Frets (⌃T)", "number.square", active: staff?.tabInput == true) { act { $0.setTabInput(!$0.tabInput) } }
+                .tip("Type Frets", "Type frets onto the TAB: click a string (or ↑ ↓), type the fret (two digits for 10 and up); ⇧3–⇧7 set the length; → moves on. Esc stops.")
+            RibbonMenu(sc.map { $0.tabTuning == nil ? $0.fretted.name.components(separatedBy: " (").first ?? "Tuning" : "Tuning" } ?? "Tuning", "tuningfork") {
+                ForEach(["Guitar", "Bass", "Other"], id: \.self) { family in
+                    Section(family) {
+                        ForEach(TabInstrument.all.filter { $0.family == family }) { t in Button(t.name) { act { $0.setTuning(t.id) } } }
+                    }
+                }
+                Divider()
+                Button("Other Tuning…") { staff?.editTuning() }
+            }
+            .tip("Tuning", "The instrument and its tuning: standard, drop and open tunings, DADGAD, seven-string, bass, ukulele, mandolin, banjo — or your own.")
+            RibbonMenu(sc?.capo.map { "Capo \($0)" } ?? "Capo", "dial.low") {
                 Button("No Capo") { act { $0.setCapo(0) } }
                 Divider()
                 ForEach(1...9, id: \.self) { fret in
                     Button("Capo \(fret)") { act { $0.setCapo(fret) } }
                 }
             }
+            RibbonButton("Chord Diagrams", "squareshape.split.3x3", active: sc?.chordDiagrams == true) { act { $0.toggleChordDiagrams() } }
+            RibbonButton("Chord Chart", "square.grid.3x2", active: sc?.chordChart == true) { act { $0.toggleChordChart() } }
+                .tip("Chord Chart", "Every chord used, with its diagram, under the title.")
+            RibbonMenu("Voicing", "hand.raised.fingers.spread") {
+                if let symbol = staff?.selectedChordSymbol, let staff {
+                    Section("\(symbol)") {
+                        ForEach(Array(staff.voicings(symbol).enumerated()), id: \.offset) { _, shape in
+                            Button("\(shape.text)\(shape.baseFret > 1 ? "  (\(shape.baseFret)fr)" : "")") { act { $0.chooseVoicing(symbol, shape) } }
+                        }
+                    }
+                    Divider()
+                    Button("Edit \(symbol) Diagram…") { staff.editDiagram(symbol) }
+                    Button("Automatic") { act { $0.chooseVoicing(symbol, nil) } }
+                } else {
+                    Text("Select a note with a chord symbol")
+                }
+                Divider()
+                Button("Name Chord from Its Notes") { act { $0.nameChord() } }
+                Button("Chord Symbols from the Notes") { act { $0.nameAllChords() } }
+            }
+            .tip("Voicing", "The fingering for the selected chord: choose one of several up the neck, or draw it. Or name chords from the notes (as typed into the TAB).")
+            RibbonMenu("Technique", "waveform.path") {
+                ForEach(GuitarMarks.kinds, id: \.0) { id, name, key in
+                    Button(key.isEmpty ? name : "\(name)  ⌥\(key)") { act { $0.toggleTechnique(id) } }
+                }
+            }
+            .tip("Technique", "How the selected notes are played: hammer-on / pull-off, slides, bends, vibrato, palm mute, let ring, harmonics, dead and ghost notes, tapping. They're written on the TAB and the music, and heard.")
             RibbonButton("String Up (⌥↑)", "arrow.up.circle") { act { $0.moveString(by: 1) } }
             RibbonButton("String Down (⌥↓)", "arrow.down.circle") { act { $0.moveString(by: -1) } }
+            RibbonMenu("Sound", "speaker.wave.2") {
+                ForEach(TabInstrument.sounds, id: \.0) { program, name in Button(name) { act { $0.setSound(program) } } }
+            }
+            .tip("Sound", "The staff's sound when it plays: piano, nylon, steel or electric guitar, bass…")
         }
         RibbonGroup("Analysis") {
             RibbonButton("Figured Bass (⌃F)", "textformat.123", large: true) { staff?.beginWords(.figures) }

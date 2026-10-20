@@ -2,11 +2,14 @@
 //  GuitarChords.swift
 //  MxNoteONE
 //
-//  Guitar chord diagrams for chord symbols: a fingering for C, Am7, F♯m,
-//  B♭maj7, Dsus4, G/B… — an open chord where there's a usual one, else a
-//  barre shape (on the 6th string's root or the 5th's, whichever is lower on
-//  the neck). With a capo, the chord shape that's played: the chord symbol
-//  moved down by the capo's frets (E♭ with capo 3 is played as a C shape).
+//  Chord diagrams for chord symbols: a fingering for C, Am7, F♯m, B♭maj7,
+//  Dsus4, G/B… — on guitar, the usual open chord where there is one, else a
+//  barre shape; in any tuning (drop and open tunings, bass, ukulele,
+//  mandolin, banjo), voicings found up the neck — several to choose from, or
+//  one drawn by hand. Fingers are numbered in the dots. With a capo, the shape
+//  that's played: the chord symbol moved down by the capo's frets (E♭ with
+//  capo 3 is played as a C shape). And the other way: a chord named from the
+//  notes sounding.
 //
 
 import AppKit
@@ -21,9 +24,17 @@ enum GuitarChords {
         var flats: Bool
     }
 
-    /// A fingering: each string's fret, low E first (nil = not played).
-    struct Shape: Equatable {
+    /// A fingering: each string's fret, the lowest string first (nil = not played), and the finger on each
+    /// (1 index … 4 little; nil: worked out).
+    struct Shape: Codable, Hashable {
         var frets: [Int?]
+        var fingers: [Int?]?
+
+        init(frets: [Int?], fingers: [Int?]? = nil) {
+            self.frets = frets
+            self.fingers = fingers
+        }
+
         /// The fret the diagram starts at (1 = the nut shows).
         var baseFret: Int {
             let played = frets.compactMap { $0 }.filter { $0 > 0 }
@@ -39,6 +50,29 @@ enum GuitarChords {
                   frets[first...last].allSatisfy({ ($0 ?? 0) >= low }) else { return nil }
             return (low, first, last)
         }
+
+        /// Fingers: a barre's fret is the first finger; the other notes take the next fingers, lowest fret first.
+        var fingering: [Int?] {
+            if let fingers, fingers.count == frets.count { return fingers }
+            var out = [Int?](repeating: nil, count: frets.count)
+            var next = 1
+            if let b = barre {
+                for s in b.from...b.to where frets[s] == b.fret { out[s] = 1 }
+                next = 2
+            }
+            let rest = frets.enumerated().compactMap { s, f -> (Int, Int)? in
+                guard let f, f > 0, out[s] == nil else { return nil }
+                return (s, f)
+            }.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0 < $1.0 }
+            for (s, _) in rest {
+                if next <= 4 { out[s] = next }
+                next += 1
+            }
+            return out
+        }
+
+        /// Written as frets ("x32010"; frets past 9 in brackets).
+        var text: String { frets.map { f in f.map { $0 > 9 ? "(\($0))" : "\($0)" } ?? "x" }.joined() }
     }
 
     private static let letters: [Character: Int] = ["C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11]
@@ -121,7 +155,7 @@ enum GuitarChords {
         "7sus4": [nil, 0, 2, 0, 3, 0],
     ]
 
-    /// A fingering for a chord.
+    /// A fingering for a chord on standard guitar (the usual open chord, else a barre shape).
     static func shape(_ chord: Chord) -> Shape? {
         if let text = open["\(chord.root)\(chord.quality)"] { return Shape(frets: frets(text)) }
         var options: [(Int, [Int?])] = []
@@ -129,6 +163,120 @@ enum GuitarChords {
         if let a = aShape[chord.quality] { options.append(((chord.root - 9 + 12) % 12, a)) }
         guard let best = options.min(by: { $0.0 < $1.0 }) else { return nil }
         return Shape(frets: best.1.map { $0.map { $0 + best.0 } })
+    }
+
+    /// Semitones above the root of each kind's notes; the ones that must sound, the rest left out if need be.
+    static let intervals: [String: (all: [Int], needed: [Int])] = [
+        "": ([0, 4, 7], [0, 4]), "m": ([0, 3, 7], [0, 3]), "7": ([0, 4, 7, 10], [0, 4, 10]), "maj7": ([0, 4, 7, 11], [0, 4, 11]),
+        "m7": ([0, 3, 7, 10], [0, 3, 10]), "sus2": ([0, 2, 7], [0, 2, 7]), "sus4": ([0, 5, 7], [0, 5, 7]), "7sus4": ([0, 5, 7, 10], [0, 5, 10]),
+        "dim": ([0, 3, 6], [0, 3, 6]), "dim7": ([0, 3, 6, 9], [0, 3, 6, 9]), "aug": ([0, 4, 8], [0, 4, 8]), "6": ([0, 4, 7, 9], [0, 4, 9]),
+        "m6": ([0, 3, 7, 9], [0, 3, 9]), "9": ([0, 4, 7, 10, 2], [0, 4, 10, 2]), "add9": ([0, 4, 7, 2], [0, 4, 2]),
+        "m7b5": ([0, 3, 6, 10], [0, 3, 6, 10]), "5": ([0, 7], [0, 7]),
+    ]
+
+    private static var voicingCache: [String: [Shape]] = [:]
+
+    /// Voicings of a chord on an instrument (open strings, lowest first), handiest first: every needed note there,
+    /// the bass (or root) lowest, the strings played next to each other, four fingers or fewer within four frets.
+    /// On standard guitar the usual shape comes first.
+    static func voicings(_ chord: Chord, strings: [Int], frets top: Int = 15, limit: Int = 8) -> [Shape] {
+        let key = "\(chord.root)|\(chord.quality)|\(chord.bass ?? -1)|\(strings)|\(top)|\(limit)"
+        if let hit = voicingCache[key] { return hit }
+        let table = intervals[chord.quality] ?? intervals[""]!
+        let pcs = Set(table.all.map { (chord.root + $0) % 12 }).union(chord.bass.map { [$0] } ?? [])
+        let needed = Set(table.needed.map { (chord.root + $0) % 12 })
+        let bassPC = chord.bass ?? chord.root
+        let n = strings.count
+        let minSounding = n <= 4 ? min(n, 3) : 4
+        var found: [(Shape, Double)] = []
+        var seen = Set<[Int?]>()
+        for base in 0...max(0, top - 3) {
+            let window = base == 0 ? Array(1...4) : Array(base...(base + 3))
+            let options: [[Int?]] = strings.map { open in
+                [nil] + ([0] + window).filter { pcs.contains((open + $0) % 12) }.map { Optional($0) }
+            }
+            var current = [Int?](repeating: nil, count: n)
+            func search(_ s: Int) {
+                if s == n {
+                    evaluate(current, base: base)
+                    return
+                }
+                for o in options[s] {
+                    current[s] = o
+                    search(s + 1)
+                }
+            }
+            func evaluate(_ f: [Int?], base: Int) {
+                guard !seen.contains(f) else { return }
+                let sounding = f.indices.filter { f[$0] != nil }
+                guard sounding.count >= minSounding, let low = sounding.first, let high = sounding.last else { return }
+                // The strings played are next to each other.
+                guard sounding.count == high - low + 1 else { return }
+                // The bass is the chord's bass (or root).
+                let notes = sounding.map { strings[$0] + f[$0]! }
+                guard let lowest = notes.min(), ((lowest % 12) + 12) % 12 == bassPC else { return }
+                let have = Set(notes.map { $0 % 12 })
+                guard needed.isSubset(of: have) else { return }
+                // Fingers: a barre on the lowest fret counts once.
+                let fretted = f.compactMap { $0 }.filter { $0 > 0 }
+                let shape = Shape(frets: f)
+                var fingers = fretted.count
+                if let b = shape.barre { fingers -= f[b.from...b.to].filter { $0 == b.fret }.count - 1 }
+                guard fingers <= 4 else { return }
+                if let lo = fretted.min(), let hi = fretted.max(), hi - lo > 3 { return }
+                seen.insert(f)
+                let opens = f.filter { $0 == 0 }.count
+                let score = Double(sounding.count) * 3 + Double(have.count) * 2 + Double(opens) * (base == 0 ? 0.8 : 0)
+                    - Double(fretted.min() ?? 0) * 0.35 - Double(fingers) * 0.3 - (shape.barre != nil ? 0.5 : 0)
+                found.append((shape, score))
+            }
+            search(0)
+        }
+        var result = found.sorted { $0.1 > $1.1 }.map(\.0)
+        if strings == TabInstrument.guitar.strings, let usual = shape(chord), chord.bass == nil {
+            result.removeAll { $0.frets == usual.frets }
+            result.insert(usual, at: 0)
+        }
+        result = Array(result.prefix(limit))
+        if voicingCache.count > 500 { voicingCache.removeAll() }
+        voicingCache[key] = result
+        return result
+    }
+
+    /// The diagram for a chord symbol: with a capo, the shape that's played (and its name); the voicing chosen for
+    /// it, else the handiest.
+    static func diagram(for symbol: String, capo: Int, strings: [Int] = TabInstrument.guitar.strings, frets: Int = 15,
+                        chosen: [String: Shape]? = nil) -> (name: String, shape: Shape)? {
+        let played = capo > 0 ? transposed(symbol, by: -capo) : symbol
+        if let mine = chosen?[played], mine.frets.count == strings.count { return (played, mine) }
+        guard let chord = parse(played) else { return nil }
+        if strings == TabInstrument.guitar.strings, let usual = shape(chord), chord.bass == nil { return (played, usual) }
+        guard let first = voicings(chord, strings: strings, frets: frets).first else { return nil }
+        return (played, first)
+    }
+
+    // MARK: Naming chords from their notes
+
+    /// A chord symbol for the pitches sounding (MIDI): the root and kind that account for every note — the bass as
+    /// the root when it can be, else a slash chord.
+    static func name(_ midis: [Int], flats: Bool) -> String? {
+        let pcs = Set(midis.map { (($0 % 12) + 12) % 12 })
+        guard pcs.count >= 2, let bass = midis.min().map({ (($0 % 12) + 12) % 12 }) else { return nil }
+        let names = flats ? flatNames : sharpNames
+        let order = ["", "m", "7", "maj7", "m7", "5", "sus4", "sus2", "dim", "dim7", "m7b5", "aug", "6", "m6", "7sus4", "add9", "9"]
+        var best: (String, Int)?
+        for root in pcs.sorted(by: { $0 == bass ? true : $1 == bass ? false : $0 < $1 }) {
+            for (rank, kind) in order.enumerated() {
+                guard let t = intervals[kind] else { continue }
+                let chordPCs = Set(t.all.map { (root + $0) % 12 }), need = Set(t.needed.map { (root + $0) % 12 })
+                guard pcs.isSubset(of: chordPCs), need.isSubset(of: pcs) else { continue }
+                // Fewer left-out notes, the bass as root, the plainer kind.
+                let score = (chordPCs.count - pcs.count) * 10 + (root == bass ? 0 : 50) + rank
+                let text = names[root] + kind + (root == bass ? "" : "/" + names[bass])
+                if best == nil || score < best!.1 { best = (text, score) }
+            }
+        }
+        return best?.0
     }
 
     private static let sharpNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]
@@ -144,29 +292,26 @@ enum GuitarChords {
         return root + chord.suffix + bass
     }
 
-    /// The diagram for a chord symbol (with a capo: the shape that's played) and its name.
-    static func diagram(for symbol: String, capo: Int) -> (name: String, shape: Shape)? {
-        let played = capo > 0 ? transposed(symbol, by: -capo) : symbol
-        guard let chord = parse(played), let shape = shape(chord) else { return nil }
-        return (played, shape)
-    }
-
     // MARK: Drawing
 
-    /// A diagram's size (six strings, four or five frets, the open/muted marks above).
-    static func size(space: CGFloat) -> NSSize { NSSize(width: space * 4.6, height: space * 5.6) }
+    /// A diagram's size (its strings, four or five frets, the open/muted marks above).
+    static func size(space: CGFloat, strings: Int = 6) -> NSSize {
+        NSSize(width: space * 0.72 * CGFloat(max(1, strings - 1)) + space * 1.0 + space * 0.9, height: space * 5.6)
+    }
 
-    /// Draws a diagram with its top-left at a point: strings, frets (the nut, or "5fr"), dots, barre, ○ and ×.
-    static func draw(_ shape: Shape, at origin: NSPoint, space: CGFloat, color: NSColor) {
+    /// Draws a diagram with its top-left at a point: strings, frets (the nut, or "5fr"), dots with their fingers,
+    /// the barre, ○ and ×.
+    static func draw(_ shape: Shape, at origin: NSPoint, space: CGFloat, color: NSColor, fingers: Bool = true) {
         let gap = space * 0.72, fret = space * 0.9
+        let n = shape.frets.count
         let rows = max(4, (shape.frets.compactMap { $0 }.max() ?? 0) - shape.baseFret + 1)
         let markY = origin.y + space * 0.45
         let top = origin.y + space * 1.1
         let left = origin.x + space * 0.5
-        let width = gap * 5, height = fret * CGFloat(min(rows, 5))
+        let width = gap * CGFloat(max(1, n - 1)), height = fret * CGFloat(min(rows, 5))
         color.set()
         // Strings and frets.
-        for s in 0..<6 {
+        for s in 0..<n {
             NSRect(x: left + CGFloat(s) * gap - 0.4, y: top, width: 0.8, height: height).fill()
         }
         for f in 0...min(rows, 5) {
@@ -179,16 +324,27 @@ enum GuitarChords {
             let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 8), .foregroundColor: color]
             label.draw(at: NSPoint(x: left + width + 2, y: top + fret * 0.1), withAttributes: attrs)
         }
+        let fingering = fingers ? shape.fingering : Array(repeating: nil, count: n)
+        let digitAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: max(6, gap * 0.78), weight: .bold), .foregroundColor: NSColor.white]
+        func digit(_ d: Int?, at p: NSPoint) {
+            guard let d else { return }
+            let t = "\(d)" as NSString
+            let size = t.size(withAttributes: digitAttrs)
+            t.draw(at: NSPoint(x: p.x - size.width / 2, y: p.y - size.height / 2), withAttributes: digitAttrs)
+        }
         // A barre across the strings it holds.
         if let barre = shape.barre {
             let y = top + (CGFloat(barre.fret - shape.baseFret) + 0.5) * fret
             let bar = NSBezierPath(roundedRect: NSRect(x: left + CGFloat(barre.from) * gap - gap * 0.35, y: y - fret * 0.28,
                                                        width: CGFloat(barre.to - barre.from) * gap + gap * 0.7, height: fret * 0.56),
                                    xRadius: fret * 0.28, yRadius: fret * 0.28)
+            color.set()
             bar.fill()
+            digit(fingering[barre.from], at: NSPoint(x: left + CGFloat(barre.from) * gap, y: y))
         }
         for (s, f) in shape.frets.enumerated() {
             let x = left + CGFloat(s) * gap
+            color.set()
             switch f {
             case nil:
                 let d = gap * 0.32
@@ -204,9 +360,10 @@ enum GuitarChords {
                 ring.stroke()
             case let n?:
                 if let barre = shape.barre, barre.fret == n, (barre.from...barre.to).contains(s) { continue }
-                let r = gap * 0.38
+                let r = gap * 0.42
                 let y = top + (CGFloat(n - shape.baseFret) + 0.5) * fret
                 NSBezierPath(ovalIn: NSRect(x: x - r, y: y - r, width: r * 2, height: r * 2)).fill()
+                digit(fingering[s], at: NSPoint(x: x, y: y))
             }
         }
     }

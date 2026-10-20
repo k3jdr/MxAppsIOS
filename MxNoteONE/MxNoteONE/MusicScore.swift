@@ -18,7 +18,13 @@
 //  Chords: ⇧A–G adds a note to the chord; ⌃K types chord symbols (C, Am7,
 //  G/B) above the staff. ⌃L types lyrics under the notes (Space or Tab: next
 //  note, - : next syllable). Guitar Tab adds a TAB staff with each note's
-//  string and fret (standard tuning); ⌥↑ / ⌥↓ move a note to another string.
+//  string and fret (any tuning — guitar, bass, ukulele, mandolin, banjo —
+//  and a capo; GuitarTab.swift), or shows TAB only, with the rhythm under it.
+//  Click the TAB (or ⌃T) to type frets onto its strings: ↑ / ↓ change string,
+//  digits are frets, ⇧3–⇧7 lengths; ⌥ with a letter marks a technique (⌥H
+//  hammer-on / pull-off, ⌥S slide, ⌥B bend, ⌥V vibrato, ⌥M palm mute…).
+//  ⌥↑ / ⌥↓ move a note to another string. Chord diagrams (GuitarChords.swift)
+//  show the voicing chosen for each chord, or a chart of every chord used.
 //
 
 import AppKit
@@ -115,6 +121,8 @@ struct ScoreNote: Codable, Hashable, Identifiable {
     /// Cross-staff: drawn on the staff below (1) or above (−1) — a piano's hands sharing a passage — while still
     /// counted, beamed and played with its own staff.
     var crossStaff: Int?
+    /// How it's played on a fretted instrument: hammer-ons, slides, bends, vibrato, palm muting, harmonics…
+    var guitar: GuitarMarks?
 
     /// Length in quarter notes.
     var beats: Double {
@@ -137,6 +145,8 @@ struct ChordTone: Codable, Hashable {
     var alter: Int?
     /// A drum played with the note (hi-hat with a kick).
     var drum: String?
+    /// Its string on the TAB staff (as `ScoreNote.tabString`); nil: chosen with the rest.
+    var tabString: Int?
     var diatonic: Int { octave * 7 + step }
 }
 
@@ -149,6 +159,8 @@ struct ScoreStaff: Codable, Hashable {
     /// A transposing instrument's interval ([steps, semitones]: sounding = written + it) and which instrument it is.
     var transpose: [Int]?
     var instrument: String?
+    /// Its General MIDI sound (nil: piano).
+    var program: Int?
 }
 
 /// What happens at a bar: a new key from it, a repeat starting there, or ending at its end.
@@ -192,10 +204,22 @@ struct ScoreData: Codable, Hashable {
     var voices: [[ScoreNote]]?
     /// A guitar TAB staff under the music.
     var showTab: Bool?
+    /// TAB only: the TAB staff (with the rhythm under it) instead of the music.
+    var tabOnly: Bool?
+    /// The fretted instrument (TabInstrument id) and its strings when they're tuned otherwise (MIDI, the TAB's
+    /// bottom line first).
+    var tabInstrument: String?
+    var tabTuning: [Int]?
     /// A capo on this fret (guitar): TAB frets count from it; chord names and diagrams show the shapes played.
     var capo: Int?
     /// Guitar chord diagrams over the chord symbols.
     var chordDiagrams: Bool?
+    /// The voicing chosen for a chord (by the chord as it's played — with a capo, the shape's name).
+    var chordShapes: [String: GuitarChords.Shape]?
+    /// A chart of every chord's diagram under the title.
+    var chordChart: Bool?
+    /// The first staff's General MIDI sound (nil: piano, or with TAB its instrument's).
+    var program: Int?
     /// Under the title, at the right (a lead sheet's composer, arranger…).
     var composer: String?
     /// So many bars on each line (lead sheets: 4); nil fits as many as there's room for.
@@ -240,8 +264,10 @@ struct ScoreData: Codable, Hashable {
             copy.voices = staff.voices
             copy.staffName = staff.name
             copy.showTab = nil
+            copy.tabOnly = nil
             copy.transpose = staff.transpose
             copy.instrument = staff.instrument
+            copy.program = staff.program
         }
         if let t = copy.transposition { copy.useWrittenKeys(for: t) }
         return copy
@@ -256,12 +282,13 @@ struct ScoreData: Codable, Hashable {
             staffName = view.staffName
             transpose = view.transpose
             instrument = view.instrument
+            program = view.program
             return
         }
         var more = staves ?? []
         while more.count < i { more.append(ScoreStaff()) }
         more[i - 1] = ScoreStaff(name: view.staffName, clef: view.clef, notes: view.notes, voices: view.voices,
-                                 transpose: view.transpose, instrument: view.instrument)
+                                 transpose: view.transpose, instrument: view.instrument, program: view.program)
         staves = more
     }
 
@@ -600,37 +627,6 @@ struct ScoreData: Codable, Hashable {
         return [main] + tones
     }
 
-    /// Guitar strings in standard tuning (low E to high E), as MIDI numbers.
-    static let tuning = [40, 45, 50, 55, 59, 64]
-
-    /// Each pitch's string and fret for the TAB staff (guitar sounds an octave below treble-clef notation).
-    func tab(_ index: Int) -> [(string: Int, fret: Int)] {
-        // Guitar sounds an octave below treble-clef notation (the pitches include a transposing staff's shift); with
-        // a capo, frets count from it.
-        let shift = (clef == .treble ? 12 : 0) + soundingShift + (capo ?? 0)
-        guard notes[index].slash == nil else { return [] }
-        let pitches = midis(index).map { $0 - shift }
-        guard !pitches.isEmpty else { return [] }
-        var used = Set<Int>(), result: [(Int, Int)] = []
-        // The note's own string when chosen (and playable there).
-        if let chosen = notes[index].tabString, Self.tuning.indices.contains(chosen) {
-            let fret = pitches[0] - Self.tuning[chosen]
-            if fret >= 0, fret <= 24 {
-                result.append((chosen, fret))
-                used.insert(chosen)
-            }
-        }
-        // The rest, highest first, each on the free string with the lowest fret.
-        let rest = result.isEmpty ? pitches : Array(pitches.dropFirst())
-        for pitch in rest.sorted(by: >) {
-            let options = Self.tuning.indices.filter { !used.contains($0) && pitch - Self.tuning[$0] >= 0 && pitch - Self.tuning[$0] <= 20 }
-            guard let string = options.min(by: { pitch - Self.tuning[$0] < pitch - Self.tuning[$1] }) else { continue }
-            result.append((string, pitch - Self.tuning[string]))
-            used.insert(string)
-        }
-        return result
-    }
-
     // MARK: Articulations and ornaments
 
     /// (id, name, key) — the keys as in MuseScore.
@@ -791,7 +787,9 @@ struct ScoreData: Codable, Hashable {
 
 // MARK: - Playback
 
-/// Plays scores with the Mac's General MIDI piano.
+/// Plays scores with the Mac's General MIDI instruments (each staff its sound: piano, guitars, bass…), and how
+/// fretted notes are played — bends and vibrato with pitch bend, slides as quick runs, hammer-ons without a fresh
+/// pick, palm muting, dead notes, harmonics, let ring.
 final class ScorePlayer {
     static let shared = ScorePlayer()
 
@@ -802,7 +800,13 @@ final class ScorePlayer {
     private var soundingDrums: Set<UInt8> = []
     private var started = false
     private var work: [DispatchWorkItem] = []
-    private var sounding: Set<UInt8> = []
+    /// Keys sounding: program, channel and key.
+    private var sounding: Set<[Int]> = []
+    /// Samplers for sounds other than the piano, by General MIDI program.
+    private var samplers: [Int: AVAudioUnitSampler] = [:]
+    private let bank = URL(fileURLWithPath: "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls")
+    /// Channels taken in turn by notes that bend (so a bend bends only its note).
+    private var nextChannel: UInt8 = 1
     /// The note being played (for highlighting), and the view playing.
     private(set) weak var view: ScoreView?
     var isPlaying: Bool { !work.isEmpty }
@@ -813,7 +817,6 @@ final class ScorePlayer {
         engine.connect(sampler, to: engine.mainMixerNode, format: nil)
         engine.attach(drums)
         engine.connect(drums, to: engine.mainMixerNode, format: nil)
-        let bank = URL(fileURLWithPath: "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls")
         if FileManager.default.fileExists(atPath: bank.path) {
             try? sampler.loadSoundBankInstrument(at: bank, program: 0, bankMSB: UInt8(kAUSampler_DefaultMelodicBankMSB), bankLSB: 0)
             try? drums.loadSoundBankInstrument(at: bank, program: 0, bankMSB: UInt8(kAUSampler_DefaultPercussionBankMSB), bankLSB: 0)
@@ -843,13 +846,39 @@ final class ScorePlayer {
         }
     }
 
-    func preview(_ midis: [Int]) {
+    func preview(_ midis: [Int], program: Int = 0) {
         start()
+        let s = instrument(program)
         let keys = midis.map { UInt8(max(0, min(127, $0))) }
-        for key in keys { sampler.startNote(key, withVelocity: 80, onChannel: 0) }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            for key in keys { self?.sampler.stopNote(key, onChannel: 0) }
+        for key in keys { s.startNote(key, withVelocity: 80, onChannel: 0) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            for key in keys { s.stopNote(key, onChannel: 0) }
         }
+    }
+
+    /// A chord strummed, lowest string first.
+    func strum(_ midis: [Int], program: Int) {
+        start()
+        let s = instrument(program)
+        for (k, m) in midis.enumerated() {
+            let key = UInt8(max(0, min(127, m)))
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(k) * 0.03) { s.startNote(key, withVelocity: 85, onChannel: 0) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { s.stopNote(key, onChannel: 0) }
+        }
+    }
+
+    /// The sampler for a General MIDI sound (made when it's first wanted).
+    private func instrument(_ program: Int) -> AVAudioUnitSampler {
+        if program == 0 { return sampler }
+        if let s = samplers[program] { return s }
+        let s = AVAudioUnitSampler()
+        engine.attach(s)
+        engine.connect(s, to: engine.mainMixerNode, format: nil)
+        if FileManager.default.fileExists(atPath: bank.path) {
+            try? s.loadSoundBankInstrument(at: bank, program: UInt8(max(0, min(127, program))), bankMSB: UInt8(kAUSampler_DefaultMelodicBankMSB), bankLSB: 0)
+        }
+        samplers[program] = s
+        return s
     }
 
     /// Plays every voice from a point (in quarter notes from the start) to the end, highlighting the notes sounding.
@@ -868,6 +897,7 @@ final class ScorePlayer {
         if let first = order.firstIndex(of: startBar) { order = Array(order[first...]) }
         #if DEBUG
         Self.plan = []
+        Self.bends = []
         #endif
         // 1. What sounds: each voice's notes in playing order (tied notes as one), with when and how long (in beats).
         struct Sound {
@@ -877,6 +907,10 @@ final class ScorePlayer {
             var quick: Double?
         }
         var sounds: [Sound] = []
+        // Each line's sound, and how far it plays from where it's written (guitar sounds an octave under its music).
+        let programs = lines.map(\.sound)
+        let playShift = lines.map { $0.showTab == true ? -($0.tabOffset - ($0.capo ?? 0)) : 0 }
+        let plans = lines.map { $0.hasGuitarMarks ? $0.tabPlan() : [] }
         for v in lines.indices {
             let line = lines[v]
             let onsets = line.onsets
@@ -949,23 +983,45 @@ final class ScorePlayer {
         func delay(_ t: Double) -> Double {
             holds.reduce(0) { $0 + ($1.0 + $1.1 <= t + 1e-6 ? seconds($1.0 + $1.1) - seconds($1.0) : 0) }
         }
-        // 4. Schedule: articulations shape length and loudness; ornaments play their notes.
+        // Let ring: a note sounds on to the end of its run.
+        var ringEnds: [Int: Double] = [:]   // sound → when its run ends (beats)
+        for v in lines.indices where lines[v].hasGuitarMarks {
+            for run in lines[v].runs({ $0.letRing == true }) {
+                let inRun = sounds.indices.filter { sounds[$0].voice == v && run.contains(sounds[$0].index) }
+                let end = inRun.map { sounds[$0].time + sounds[$0].length }.max() ?? 0
+                for k in inRun { ringEnds[k] = end }
+            }
+        }
+        // 4. Schedule: articulations shape length and loudness; ornaments play their notes; guitar techniques theirs.
         var end = 0.0
-        for sound in sounds {
+        for (k, sound) in sounds.enumerated() {
             let line = lines[sound.voice]
             let note = line.notes[sound.index]
+            let g = note.guitar
             let ref = NoteRef(voice: parts[sound.voice].voice, index: sound.index, staff: parts[sound.voice].staff)
             let start = max(0, seconds(sound.time) + delay(sound.time) - sound.early)
-            let span = sound.quick ?? (seconds(sound.time + sound.length) - seconds(sound.time)) * (note.fermata == true ? 2 : 1)
+            var span = sound.quick ?? (seconds(sound.time + sound.length) - seconds(sound.time)) * (note.fermata == true ? 2 : 1)
             let marks = Set(note.articulations ?? [])
             let inSlur = line.slurs.contains { $0.0 <= sound.index && sound.index < $0.1 }
-            let sounding = marks.contains("staccatissimo") ? 0.3 : marks.contains("staccato") ? 0.5
+            var sounding = marks.contains("staccatissimo") ? 0.3 : marks.contains("staccato") ? 0.5
                 : marks.contains("tenuto") || inSlur ? 1.0 : 0.95
             var velocity = sound.velocity
             if marks.contains("accent") { velocity += 18 }
             if marks.contains("marcato") { velocity += 28 }
+            // The note before hammered on or pulled off to this one: no fresh pick.
+            let previous = sounds[..<k].last { $0.voice == sound.voice }
+            if let previous, line.notes[previous.index].guitar?.legato == true { velocity = Int(Double(velocity) * 0.65) }
+            if g?.legato == true || g?.slide == "next" { sounding = 1.0 }
+            if g?.palmMute == true { sounding = min(sounding, 0.35); velocity -= 12 }
+            if g?.ghost == true { velocity -= 30 }
+            if let ringEnd = ringEnds[k] { span = max(span, seconds(ringEnd) - seconds(sound.time)); sounding = 1.0 }
+            if g?.dead == true { velocity = Int(Double(velocity) * 0.6) }
             let vel = UInt8(max(1, min(127, velocity)))
-            let keys = line.midis(sound.index).map { UInt8(max(0, min(127, $0))) }
+            var keys = line.midis(sound.index).map { UInt8(max(0, min(127, $0 + playShift[sound.voice]))) }
+            // A harmonic sounds its overtone.
+            if let h = g?.harmonic, let spot = plans[sound.voice].indices.contains(sound.index) ? plans[sound.voice][sound.index].first : nil {
+                keys = [UInt8(max(0, min(127, line.harmonicPitch(spot, artificial: h == "artificial") + (line.capo ?? 0))))]
+            }
             // The highlight lasts the whole note.
             let on = DispatchWorkItem { [weak self] in self?.view?.playing.insert(ref) }
             let off = DispatchWorkItem { [weak self] in self?.view?.playing.remove(ref) }
@@ -975,10 +1031,10 @@ final class ScorePlayer {
             end = max(end, start + span)
             guard !keys.isEmpty else { continue }
             // The pitches: the note (and chord) as written, or an ornament's quick notes on the main pitch.
-            var parts: [(keys: [UInt8], at: Double, length: Double)] = [(keys, 0, span * sounding)]
+            var parts: [(keys: [UInt8], at: Double, length: Double)] = [(keys, 0, g?.dead == true ? min(0.06, span) : span * sounding)]
             if let ornament = note.ornament, let main = keys.first {
-                let up = line.neighbor(sound.index, 1).map { UInt8(max(0, min(127, $0))) } ?? main
-                let down = line.neighbor(sound.index, -1).map { UInt8(max(0, min(127, $0))) } ?? main
+                let up = line.neighbor(sound.index, 1).map { UInt8(max(0, min(127, $0 + playShift[sound.voice]))) } ?? main
+                let down = line.neighbor(sound.index, -1).map { UInt8(max(0, min(127, $0 + playShift[sound.voice]))) } ?? main
                 let quick = min(0.09, span / 4)
                 let others = Array(keys.dropFirst())
                 var run: [UInt8]
@@ -993,20 +1049,51 @@ final class ScorePlayer {
                 if ornament != "trill", after < span { parts.append(([main], after, (span - after) * sounding)) }
                 if !others.isEmpty { parts.append((others, 0, span * sounding)) }
             }
+            // Slides: a quick run up or down to the next note; in from below; away downward.
+            if let main = keys.first, let slide = g?.slide {
+                let quick = 0.04
+                switch slide {
+                case "next":
+                    if let nextSound = sounds[(k + 1)...].first(where: { $0.voice == sound.voice }), let target = line.midis(nextSound.index).first.map({ $0 + playShift[sound.voice] }) {
+                        let steps = Array(Swift.stride(from: Int(main), to: target, by: target > Int(main) ? 1 : -1).dropFirst())
+                        let runStart = max(span * 0.55, span - Double(steps.count) * quick)
+                        parts[0].length = runStart
+                        for (j, m) in steps.enumerated() where runStart + Double(j) * quick < span {
+                            parts.append(([UInt8(max(0, min(127, m)))], runStart + Double(j) * quick, quick))
+                        }
+                    }
+                case "in":
+                    parts.insert(([UInt8(max(0, Int(main) - 3))], -0.08, 0.04), at: 0)
+                    parts.insert(([UInt8(max(0, Int(main) - 1))], -0.04, 0.04), at: 1)
+                case "out":
+                    parts[0].length = span * 0.55
+                    for j in 1...4 { parts.append(([UInt8(max(0, Int(main) - j))], span * 0.55 + Double(j - 1) * quick, quick)) }
+                default: break
+                }
+            }
             #if DEBUG
             Self.plan.append((ref, start, span, parts.map { ($0.keys, $0.at, $0.length) }))
             #endif
-            // A percussion staff plays the General MIDI drums.
+            // A percussion staff plays the General MIDI drums; a bend or vibrato plays on a channel of its own.
             let isDrum = line.clef == .percussion
+            let program = programs[sound.voice]
+            let player = instrument(program)
+            var channel: UInt8 = 0
+            if g?.bend != nil || g?.vibrato == true {
+                channel = nextChannel
+                nextChannel = nextChannel >= 8 ? 1 : nextChannel + 1
+                scheduleBend(g!, channel: channel, on: player, start: start, span: span)
+            }
             for part in parts {
+                let ch = channel
                 let down = DispatchWorkItem { [weak self] in
                     for key in part.keys {
                         if isDrum {
                             self?.drums.startNote(key, withVelocity: vel, onChannel: 9)
                             self?.soundingDrums.insert(key)
                         } else {
-                            self?.sampler.startNote(key, withVelocity: vel, onChannel: 0)
-                            self?.sounding.insert(key)
+                            player.startNote(key, withVelocity: vel, onChannel: ch)
+                            self?.sounding.insert([program, Int(ch), Int(key)])
                         }
                     }
                 }
@@ -1016,13 +1103,13 @@ final class ScorePlayer {
                             self?.drums.stopNote(key, onChannel: 9)
                             self?.soundingDrums.remove(key)
                         } else {
-                            self?.sampler.stopNote(key, onChannel: 0)
-                            self?.sounding.remove(key)
+                            player.stopNote(key, onChannel: ch)
+                            self?.sounding.remove([program, Int(ch), Int(key)])
                         }
                     }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + start + part.at, execute: down)
-                DispatchQueue.main.asyncAfter(deadline: .now() + start + part.at + max(0.03, part.length), execute: up)
+                DispatchQueue.main.asyncAfter(deadline: .now() + max(0, start + part.at), execute: down)
+                DispatchQueue.main.asyncAfter(deadline: .now() + max(0, start + part.at) + max(0.03, part.length), execute: up)
                 work += [down, up]
             }
         }
@@ -1039,10 +1126,48 @@ final class ScorePlayer {
     nonisolated(unsafe) static var plan: [(ref: NoteRef, start: Double, span: Double, parts: [(keys: [UInt8], at: Double, length: Double)])] = []
     #endif
 
+    /// A bend (up, held, and let back down for a release) or vibrato, as pitch bend on the note's channel (two
+    /// semitones each way: a full bend is the most).
+    private func scheduleBend(_ g: GuitarMarks, channel: UInt8, on player: AVAudioUnitSampler, start: Double, span: Double) {
+        var events: [(Double, Double)] = [(0, 0)]   // (seconds from the note's start, semitones)
+        if let bend = g.bend {
+            let amount = min(2, bend)
+            for k in 0...8 { events.append((span * (0.2 + 0.25 * Double(k) / 8), amount * Double(k) / 8)) }
+            if g.release == true { for k in 0...8 { events.append((span * (0.62 + 0.25 * Double(k) / 8), amount * (1 - Double(k) / 8))) } }
+        }
+        if g.vibrato == true {
+            let base = events.last?.1 ?? 0
+            var t = span * 0.2
+            while t < span * 0.98 {
+                events.append((t, base + 0.3 * sin((t - span * 0.2) * 2 * .pi * 5.5)))
+                t += 0.03
+            }
+        }
+        events.append((span + 0.02, 0))
+        #if DEBUG
+        Self.bends.append((channel, events))
+        #endif
+        for (at, semis) in events {
+            let value = UInt16(max(0, min(16383, 8192 + Int(semis / 2 * 8191))))
+            let item = DispatchWorkItem { player.sendPitchBend(value, onChannel: channel) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + start + at, execute: item)
+            work.append(item)
+        }
+    }
+
+    #if DEBUG
+    /// Self-tests: the pitch bends the last play scheduled (channel, and semitones over time).
+    nonisolated(unsafe) static var bends: [(UInt8, [(Double, Double)])] = []
+    #endif
+
     func stop() {
         work.forEach { $0.cancel() }
         work = []
-        for key in sounding { sampler.stopNote(key, onChannel: 0) }
+        for k in sounding { instrument(k[0]).stopNote(UInt8(k[2]), onChannel: UInt8(k[1])) }
+        for ch in UInt8(0)...8 {
+            sampler.sendPitchBend(8192, onChannel: ch)
+            for s in samplers.values { s.sendPitchBend(8192, onChannel: ch) }
+        }
         for key in soundingDrums { drums.stopNote(key, onChannel: 9) }
         soundingDrums = []
         sounding = []
@@ -1115,6 +1240,11 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     }
     /// The voice being written (0 = voice 1, stems up; 1 = voice 2, stems down).
     private(set) var voice = 0
+    /// Typing frets into the TAB, and the string the next fret goes on (0 = the bottom line).
+    private(set) var tabInput = false
+    private(set) var tabString = 0
+    /// The last fret typed (two digits quickly make one fret: 1 then 2 is 12).
+    private var lastFret: (index: Int, string: Int, value: Int, at: Date)?
     /// The score as the current voice sees it.
     var cur: ScoreData { score.forVoice(voice) }
 
@@ -1137,13 +1267,40 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     /// Room for the title (and the composer under it, at the right).
     private var titleHeight: CGFloat {
         let full = fullScore
-        if full.title.isEmpty && (full.composer ?? "").isEmpty { return showsConcertLabel ? 18 : 0 }
-        return 26 + ((full.composer ?? "").isEmpty ? 0 : 14)
+        let chart = chordChartHeight
+        if full.title.isEmpty && (full.composer ?? "").isEmpty { return (showsConcertLabel ? 18 : 0) + chart }
+        return 26 + ((full.composer ?? "").isEmpty ? 0 : 14) + chart
+    }
+
+    /// The chord chart under the title: each chord used, with its diagram, in the order they come.
+    var chartChords: [String] {
+        let full = fullScore
+        guard full.chordChart == true else { return [] }
+        var seen = Set<String>(), out: [String] = []
+        for st in 0..<full.staffCount {
+            for n in full.forStaff(st).notes {
+                guard let sym = n.chordSymbol, !sym.isEmpty else { continue }
+                let played = (full.capo ?? 0) > 0 ? GuitarChords.transposed(sym, by: -(full.capo ?? 0)) : sym
+                if seen.insert(played).inserted { out.append(sym) }
+            }
+        }
+        return out
+    }
+    private var chartItem: NSSize {
+        let d = GuitarChords.size(space: space, strings: fullScore.stringCount)
+        return NSSize(width: d.width + space * 1.6, height: d.height + space * 2.4)
+    }
+    private var chartColumns: Int { max(1, Int((bounds.width - space * 2) / chartItem.width)) }
+    private var chordChartHeight: CGFloat {
+        let n = chartChords.count
+        guard n > 0 else { return 0 }
+        let rows = (n + chartColumns - 1) / chartColumns
+        return CGFloat(rows) * chartItem.height + space
     }
     // Room around a staff (for the staff being drawn; the functions take any staff's score).
     private func chordBand(_ st: ScoreData) -> CGFloat {
         guard st.hasChordSymbols else { return 0 }
-        return space * 2.6 + (st.chordDiagrams == true ? GuitarChords.size(space: space).height + space * 0.4 : 0)
+        return space * 2.6 + (st.chordDiagrams == true ? GuitarChords.size(space: space, strings: st.stringCount).height + space * 0.4 : 0)
     }
     private func lyricBand(_ st: ScoreData) -> CGFloat { st.hasLyrics ? space * 2.8 : 0 }
     /// Figured bass (as many rows as the deepest stack) and Roman numerals, under the lyrics.
@@ -1154,12 +1311,27 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     private func numeralBand(_ st: ScoreData) -> CGFloat { st.hasNumerals ? space * 3.6 : 0 }
     /// Room for figures and numerals pushed down by low notes.
     private func analysisRoom(_ st: ScoreData) -> CGFloat { st.hasFigures || st.hasNumerals ? space * 2.2 : 0 }
-    private func tabBand(_ st: ScoreData) -> CGFloat { st.showTab == true ? space * 10 : 0 }
+    /// The TAB staff under the music (its strings, room for techniques over it); none when it's TAB only.
+    private func tabBand(_ st: ScoreData) -> CGFloat {
+        st.showTab == true && st.tabOnly != true ? tabGap * CGFloat(st.stringCount - 1) + space * 3.5 + techniqueRoom(st) : 0
+    }
+    /// Room over the TAB for bends, P.M., let ring and vibrato.
+    private func techniqueRoom(_ st: ScoreData) -> CGFloat {
+        st.showTab == true && st.notes.contains(where: { g in g.guitar.map { $0.bend != nil || $0.palmMute == true || $0.letRing == true || $0.vibrato == true || $0.harmonic == "artificial" || $0.tap == true } ?? false }) ? space * 5.4 : 0
+    }
+    /// TAB only: the TAB in place of the music, with the rhythm under it.
+    private func tabOnly(_ st: ScoreData) -> Bool { st.showTab == true && st.tabOnly == true }
+    /// The height of a staff's lines: five lines, or (TAB only) the TAB's strings and its rhythm.
+    private func bodyHeight(_ st: ScoreData) -> CGFloat {
+        tabOnly(st) ? tabGap * CGFloat(st.stringCount - 1) + space * 3.4 : space * 4
+    }
+    private var bodyHeight: CGFloat { bodyHeight(score) }
     private func dynamicBand(_ st: ScoreData) -> CGFloat { st.hasDynamics ? space * 3 : 0 }
     private func markBandAbove(_ st: ScoreData) -> CGFloat {
         let endings = (st.barMarks ?? [:]).values.contains { $0.ending != nil } ? space * 2.2 : 0
         let ottava = (st.notes + st.line(1)).contains { ($0.ottava ?? 0) > 0 } ? space * 2.4 : 0
-        return endings + ottava + (st.notes.contains { $0.fermata == true || $0.ornament != nil || (st.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0)
+        let guitar = st.notes.contains { n in n.guitar.map { $0.vibrato == true || $0.palmMute == true || $0.letRing == true || $0.bend != nil || $0.tap == true } ?? false } ? space * 3.6 : 0
+        return endings + ottava + guitar + (st.notes.contains { $0.fermata == true || $0.ornament != nil || (st.hasSecondVoice && $0.articulations != nil) } ? space * 2.6 : 0)
     }
     private func markBandBelow(_ st: ScoreData) -> CGFloat {
         let ottava = (st.notes + st.line(1)).contains { ($0.ottava ?? 0) < 0 } ? space * 2.4 : 0
@@ -1188,12 +1360,13 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         staffClefs = (0..<fullScore.staffCount).map { fullScore.forStaff($0).clef }
         for i in 0..<fullScore.staffCount {
             let st = shownStaff(i)
-            let above = space * 4.5 + chordBand(st) + markBandAbove(st)
-            let below = space * 4.5 + lyricBand(st) + figureBand(st) + numeralBand(st) + analysisRoom(st) + tabBand(st) + dynamicBand(st) + markBandBelow(st)
+            let tabOnly = tabOnly(st)
+            let above = (tabOnly ? space * 1.5 + techniqueRoom(st) : space * 4.5 + markBandAbove(st)) + chordBand(st)
+            let below = (tabOnly ? space * 1.2 : space * 4.5 + tabBand(st) + markBandBelow(st)) + lyricBand(st) + figureBand(st) + numeralBand(st) + analysisRoom(st) + dynamicBand(st)
             // Staves after the first sit a little closer (a grand staff's two hands most of all).
             let tighten: CGFloat = i == 0 ? 0 : (fullScore.grandStaff == true && i == 1 ? space * 2.2 : space * 1.2)
             offsets.append(y + above - tighten)
-            y += above + space * 4 + below - tighten
+            y += above + bodyHeight(st) + below - tighten
         }
         staffOffsets = offsets
         cachedSystemHeight = y
@@ -1461,20 +1634,26 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             + (staffOffsets.indices.contains(drawingStaff) ? staffOffsets[drawingStaff] : tempoBand + space * 4.5)
     }
 
-    private func lyricY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.4 + dynamicBand + markBandBelow }
+    private func lyricY(_ system: Int) -> CGFloat {
+        staffTop(system) + bodyHeight + (tabOnly(score) ? space * 0.8 : space * 3.4 + markBandBelow) + dynamicBand
+    }
 
     /// The middle of the dynamics band (under the staff, clear of stems and ledger lines).
-    private func dynamicY(_ system: Int) -> CGFloat { staffTop(system) + space * 4 + space * 3.6 + markBandBelow }
+    private func dynamicY(_ system: Int) -> CGFloat {
+        staffTop(system) + bodyHeight + (tabOnly(score) ? space * 1.2 : space * 3.6 + markBandBelow)
+    }
 
-    /// The TAB staff's top line (high E).
+    /// The TAB staff's top line (the highest string): the staff's place when it's TAB only.
     private func tabTop(_ system: Int) -> CGFloat {
-        staffTop(system) + space * 4 + space * 4.2 + lyricBand + figureBand(score) + numeralBand(score) + analysisRoom(score) + dynamicBand + markBandBelow
+        if tabOnly(score) { return staffTop(system) }
+        return staffTop(system) + space * 4 + space * 4.2 + lyricBand + figureBand(score) + numeralBand(score) + analysisRoom(score) + dynamicBand + markBandBelow
+            + techniqueRoom(score)
     }
 
     /// The top of the figured bass under the staff (under any lyrics, and clear of low notes and their stems),
     /// and of the Roman numerals under that.
     private func figureTop(_ system: Int) -> CGFloat {
-        let base = staffTop(system) + space * 4 + space * 3.0 + dynamicBand + markBandBelow + lyricBand
+        let base = staffTop(system) + bodyHeight + (tabOnly(score) ? space * 1.0 : space * 3.0 + markBandBelow) + dynamicBand + lyricBand
         guard lyricBand == 0, let lowest = lowestOnStaff[drawingStaff]?[system] else { return base }
         return min(max(base, lowest + space * 1.0), base + space * 2.2)
     }
@@ -1548,9 +1727,20 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let size = (composer as NSString).size(withAttributes: attrs)
             (composer as NSString).draw(at: NSPoint(x: bounds.width - space * 1.5 - size.width, y: 26), withAttributes: attrs)
         }
+        drawChordChart(ink: ink)
         // Each staff in turn (the code below draws "the staff"), then what joins them, then the tempo marks.
+        fretSpots = []
+        diagramSpots = []
         for st in 0..<fullScore.staffCount {
             useStaff(st)
+            // TAB only: the TAB in the music's place.
+            if tabOnly(score) {
+                shapes = [:]
+                drawDynamics(ink: ink)
+                drawWords(ink: ink)
+                drawTab(ink: ink)
+                continue
+            }
             for s in 0..<systemCount { drawStaff(s, ink: ink) }
             for bar in barLines {
                 let top = staffTop(bar.system), bottom = top + space * 4
@@ -1582,6 +1772,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             drawOttavas(ink: ink)
             drawSlurs(ink: ink)
             drawMarks(ink: ink)
+            drawGuitarMarks(ink: ink)
             drawDynamics(ink: ink)
             drawWords(ink: ink)
             if score.showTab == true { drawTab(ink: ink) }
@@ -2136,11 +2327,13 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             let color = colorFor(NoteRef(voice: 0, index: p.index), ink: ink)
             if let symbol = note.chordSymbol, !symbol.isEmpty {
                 let attrs: [NSAttributedString.Key: Any] = [.font: Self.chordFont, .foregroundColor: color]
-                let top = staffTop(p.system) - space * 2 - chordBand - markBandAbove + space * 0.2
+                let top = staffTop(p.system) - space * 2 - chordBand - (tabOnly(score) ? techniqueRoom(score) - space * 1.5 : markBandAbove) + space * 0.2
                 (score.chordLabel(symbol) as NSString).draw(at: NSPoint(x: p.x - space * 0.2, y: top), withAttributes: attrs)
-                // The chord's diagram under its name (with a capo, the shape played).
-                if score.chordDiagrams == true, let diagram = GuitarChords.diagram(for: symbol, capo: score.capo ?? 0) {
-                    GuitarChords.draw(diagram.shape, at: NSPoint(x: p.x - space * 0.9, y: top + space * 2.2), space: space, color: color)
+                // The chord's diagram under its name (with a capo, the shape played): the voicing chosen for it.
+                if score.chordDiagrams == true, let diagram = chordDiagram(symbol) {
+                    let origin = NSPoint(x: p.x - space * 0.9, y: top + space * 2.2)
+                    GuitarChords.draw(diagram.shape, at: origin, space: space, color: color)
+                    diagramSpots.append((NSRect(origin: origin, size: GuitarChords.size(space: space, strings: diagram.shape.frets.count)), symbol, NoteRef(voice: 0, index: p.index, staff: drawingStaff)))
                 }
             }
             // Figured bass, stacked under the note; the Roman numeral under that.
@@ -2166,41 +2359,426 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         }
     }
 
-    /// The TAB staff: six strings (high E on top) with each note's fret.
+    // MARK: Guitar TAB
+
+    /// Where frets were drawn (for clicks): the note, its string and the fret's box.
+    private var fretSpots: [(rect: NSRect, ref: NoteRef, string: Int)] = []
+    /// Where chord diagrams were drawn (a click plays the chord): the box, the chord symbol and its note.
+    private var diagramSpots: [(rect: NSRect, symbol: String, ref: NoteRef?)] = []
+
+    /// A chord symbol's diagram, as this score plays it: in its instrument's tuning, with a capo the shape played,
+    /// and the voicing chosen for it.
+    func chordDiagram(_ symbol: String) -> (name: String, shape: GuitarChords.Shape)? {
+        let full = fullScore
+        return GuitarChords.diagram(for: symbol, capo: full.capo ?? 0, strings: full.openStrings, frets: min(15, full.maxFret), chosen: full.chordShapes)
+    }
+
+    /// The chart of every chord used, under the title.
+    private func drawChordChart(ink: NSColor) {
+        let chords = chartChords
+        guard !chords.isEmpty else { return }
+        let item = chartItem, columns = chartColumns
+        let top = titleHeight - chordChartHeight
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.chordFont, .foregroundColor: ink]
+        let rowWidth = CGFloat(min(columns, chords.count)) * item.width
+        let left = max(space, (bounds.width - rowWidth) / 2)
+        for (k, symbol) in chords.enumerated() {
+            guard let diagram = chordDiagram(symbol) else { continue }
+            let x = left + CGFloat(k % columns) * item.width, y = top + CGFloat(k / columns) * item.height
+            let name = fullScore.chordLabel(symbol) as NSString
+            let size = name.size(withAttributes: attrs)
+            let d = GuitarChords.size(space: space, strings: diagram.shape.frets.count)
+            name.draw(at: NSPoint(x: x + (d.width - size.width) / 2, y: y), withAttributes: attrs)
+            let origin = NSPoint(x: x, y: y + space * 1.9)
+            GuitarChords.draw(diagram.shape, at: origin, space: space, color: ink)
+            diagramSpots.append((NSRect(origin: origin, size: d), symbol, nil))
+        }
+    }
+
+    /// What's written for a fret: x for a dead note, (5) for a ghost note or a tied note's continuation, <12> for a
+    /// natural harmonic, 5<17> for an artificial one.
+    private func fretText(_ note: ScoreNote, _ spot: TabSpot, tied: Bool, in line: ScoreData) -> String {
+        let g = note.guitar
+        if g?.dead == true { return "x" }
+        if g?.harmonic == "natural" { return "<\(spot.fret)>" }
+        if g?.harmonic == "artificial" { return "\(spot.fret)<\(spot.fret + 12)>" }
+        if g?.ghost == true || tied { return "(\(spot.fret))" }
+        return "\(spot.fret)"
+    }
+
+    /// The TAB staff: a line for each string (the highest on top), each note's fret, how it's played — and, TAB
+    /// only, the rhythm under it.
     private func drawTab(ink: NSColor) {
+        let st = score
+        let n = st.stringCount
+        let only = tabOnly(st)
         let fretFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let left = only ? staffLeft : space
+        let height = tabGap * CGFloat(n - 1)
         for s in 0..<systemCount {
             let top = tabTop(s)
             ink.setFill()
-            for line in 0..<6 {
-                NSRect(x: space, y: top + CGFloat(line) * tabGap - 0.5, width: bounds.width - space * 2, height: 1).fill()
+            for line in 0..<n {
+                NSRect(x: left, y: top + CGFloat(line) * tabGap - 0.5, width: bounds.width - space - left, height: 1).fill()
             }
             // T A B down the left, over a white strip (as printed tab).
-            let tabAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: tabGap * 1.15), .foregroundColor: ink]
+            let letter = min(tabGap * 1.15, height / 3.3)
+            let tabAttrs: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: letter), .foregroundColor: ink]
+            let first = top + (height - letter * 3.6) / 2
             NSColor.white.setFill()
-            NSRect(x: space * 1.6, y: top + tabGap * 0.35, width: space * 1.9, height: tabGap * 4.3).fill()
-            for (i, letter) in ["T", "A", "B"].enumerated() {
-                let size = (letter as NSString).size(withAttributes: tabAttrs)
-                (letter as NSString).draw(at: NSPoint(x: space * 2.55 - size.width / 2, y: top + tabGap * (0.5 + CGFloat(i) * 1.4)),
-                                          withAttributes: tabAttrs)
+            NSRect(x: left + space * 0.6, y: first, width: space * 1.9, height: letter * 3.6).fill()
+            for (i, l) in ["T", "A", "B"].enumerated() {
+                let size = (l as NSString).size(withAttributes: tabAttrs)
+                (l as NSString).draw(at: NSPoint(x: left + space * 1.55 - size.width / 2, y: first + CGFloat(i) * letter * 1.2), withAttributes: tabAttrs)
+            }
+            // TAB only: the time signature on the first line.
+            if only, s == 0 {
+                let font = NSFont(name: "Georgia-Bold", size: space * 2.7) ?? .boldSystemFont(ofSize: space * 2.7)
+                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
+                NSColor.white.setFill()
+                NSRect(x: left + space * 3.7, y: top + 1, width: space * 2.2, height: height - 2).fill()
+                for (i, number) in ["\(st.beats)", "\(st.beatUnit)"].enumerated() {
+                    let size = (number as NSString).size(withAttributes: attrs)
+                    (number as NSString).draw(at: NSPoint(x: left + space * 3.9 + (space * 1.8 - size.width) / 2,
+                                                          y: top + height / 2 + (i == 0 ? -size.height * 0.82 : -size.height * 0.12)), withAttributes: attrs)
+                }
             }
         }
         for bar in barLines {
             ink.setFill()
-            NSRect(x: bar.x - 0.5, y: tabTop(bar.system), width: bar.style == .final || bar.style == .endRepeat ? 3 : 1, height: tabGap * 5).fill()
-        }
-        for p in placed where !score.forVoice(p.voice).notes[p.index].rest {
-            let color = colorFor(NoteRef(voice: p.voice, index: p.index), ink: ink)
-            let attrs: [NSAttributedString.Key: Any] = [.font: fretFont, .foregroundColor: color]
-            for spot in score.forVoice(p.voice).tab(p.index) {
-                let text = "\(spot.fret)"
-                let size = (text as NSString).size(withAttributes: attrs)
-                let cy = tabTop(p.system) + CGFloat(5 - spot.string) * tabGap
-                let box = NSRect(x: p.x + space * 0.62 - size.width / 2 - 1.5, y: cy - size.height / 2, width: size.width + 3, height: size.height)
-                NSColor.white.setFill()
-                box.fill()
-                (text as NSString).draw(at: NSPoint(x: box.minX + 1.5, y: box.minY), withAttributes: attrs)
+            let top = tabTop(bar.system)
+            switch bar.style {
+            case .final, .endRepeat:
+                NSRect(x: bar.x - space * 0.9, y: top, width: 1, height: height).fill()
+                NSRect(x: bar.x - space * 0.5, y: top, width: 3.5, height: height).fill()
+                if bar.style == .endRepeat {
+                    for k in [0.35, 0.65] { NSBezierPath(ovalIn: NSRect(x: bar.x - space * 1.6, y: top + height * k - 2, width: 4, height: 4)).fill() }
+                }
+            case .double:
+                NSRect(x: bar.x - space * 0.45, y: top, width: 1, height: height).fill()
+                NSRect(x: bar.x - 0.5, y: top, width: 1, height: height).fill()
+            case .single:
+                NSRect(x: bar.x - 0.5, y: top, width: 1, height: height).fill()
             }
+        }
+        if only {
+            for r in repeatStarts {
+                let top = tabTop(r.system)
+                ink.setFill()
+                NSRect(x: r.x - 0.5, y: top, width: 3.5, height: height).fill()
+                NSRect(x: r.x + space * 0.55, y: top, width: 1, height: height).fill()
+                for k in [0.35, 0.65] { NSBezierPath(ovalIn: NSRect(x: r.x + space * 0.95, y: top + height * k - 2, width: 4, height: 4)).fill() }
+            }
+        }
+        // Each voice's frets (chosen for the whole line at once).
+        var frets: [NoteRef: [(spot: TabSpot, center: NSPoint, width: CGFloat)]] = [:]
+        for v in 0..<ScoreData.voiceCount where !st.line(v).isEmpty {
+            let line = st.forVoice(v)
+            let plan = line.tabPlan()
+            for p in placed where p.voice == v {
+                let note = line.notes[p.index]
+                let color = colorFor(NoteRef(voice: v, index: p.index), ink: ink)
+                if note.rest {
+                    if only, v == 0 { drawRest(note, x: p.x, system: p.system, color: color, lift: height / 2 - space * 2) }
+                    continue
+                }
+                let tied = line.tiedFrom(p.index)
+                let small = note.grace != nil
+                let attrs: [NSAttributedString.Key: Any] = [.font: small ? NSFont.systemFont(ofSize: 8.5) : fretFont, .foregroundColor: color]
+                for spot in plan.indices.contains(p.index) ? plan[p.index] : [] {
+                    let text = fretText(note, spot, tied: tied, in: line)
+                    let size = (text as NSString).size(withAttributes: attrs)
+                    let cy = tabTop(p.system) + CGFloat(n - 1 - spot.string) * tabGap
+                    let cx = p.x + space * 0.62
+                    let box = NSRect(x: cx - size.width / 2 - 1.5, y: cy - size.height / 2, width: size.width + 3, height: size.height)
+                    NSColor.white.setFill()
+                    box.fill()
+                    (text as NSString).draw(at: NSPoint(x: box.minX + 1.5, y: box.minY), withAttributes: attrs)
+                    let ref = NoteRef(voice: v, index: p.index, staff: drawingStaff)
+                    frets[NoteRef(voice: v, index: p.index), default: []].append((spot, NSPoint(x: cx, y: cy), box.width))
+                    fretSpots.append((box.insetBy(dx: -3, dy: -2), ref, spot.string))
+                }
+            }
+            drawTabTechniques(line, voice: v, frets: frets, ink: ink)
+        }
+        if only { drawTabRhythm(ink: ink) }
+        // Typing frets: the string the next fret goes on, at the caret (or on the selected note).
+        if tabInput, ScoreView.active === self, drawingStaff == staffIndex {
+            var x: CGFloat?, system = 0
+            if let i = selected, let p = place(voice, i) { x = p.x + space * 0.62; system = p.system } else if cursor < caretSpots.count { x = caretSpots[cursor].x + space * 0.4; system = caretSpots[cursor].system }
+            if let x {
+                let y = tabTop(system) + CGFloat(n - 1 - tabString) * tabGap
+                NSColor.controlAccentColor.withAlphaComponent(0.35).setFill()
+                NSBezierPath(roundedRect: NSRect(x: x - space * 0.9, y: y - tabGap * 0.45, width: space * 1.8, height: tabGap * 0.9), xRadius: 3, yRadius: 3).fill()
+                NSColor.controlAccentColor.setFill()
+                NSRect(x: x - space * 0.9, y: y + tabGap * 0.45 - 1, width: space * 1.8, height: 2).fill()
+            }
+        }
+    }
+
+    /// Hammer-ons and pull-offs, slides, bends, vibrato, palm muting, let ring, harmonics and taps on the TAB.
+    private func drawTabTechniques(_ line: ScoreData, voice v: Int, frets: [NoteRef: [(spot: TabSpot, center: NSPoint, width: CGFloat)]], ink: NSColor) {
+        let markFont = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        let mine = placed.filter { $0.voice == v }
+        func spot(_ i: Int) -> (spot: TabSpot, center: NSPoint, width: CGFloat)? { frets[NoteRef(voice: v, index: i)]?.first }
+        func bendY(_ system: Int) -> CGFloat { tabTop(system) - space * 0.9 }
+        func vibratoY(_ system: Int) -> CGFloat { tabTop(system) - space * 2.6 }
+        func wordsY(_ system: Int) -> CGFloat { tabTop(system) - space * 3.3 }
+        for (k, p) in mine.enumerated() {
+            let note = line.notes[p.index]
+            guard let g = note.guitar, !note.rest, let here = spot(p.index) else { continue }
+            let color = colorFor(NoteRef(voice: v, index: p.index), ink: ink)
+            color.set()
+            let next = k + 1 < mine.count ? mine[k + 1] : nil
+            let there = next.flatMap { nx in nx.system == p.system && !line.notes[nx.index].rest ? spot(nx.index) : nil }
+            let up = next.map { (line.midi($0.index) ?? 0) >= (line.midi(p.index) ?? 0) } ?? true
+            // Hammer-on / pull-off: an arc to the next fret, H or P over it.
+            if g.legato == true, let there {
+                let a = NSPoint(x: here.center.x, y: here.center.y - tabGap * 0.55), b = NSPoint(x: there.center.x, y: there.center.y - tabGap * 0.55)
+                let arc = NSBezierPath()
+                arc.move(to: a)
+                arc.curve(to: b, controlPoint1: NSPoint(x: a.x + (b.x - a.x) * 0.25, y: min(a.y, b.y) - space * 1.1),
+                          controlPoint2: NSPoint(x: a.x + (b.x - a.x) * 0.75, y: min(a.y, b.y) - space * 1.1))
+                arc.lineWidth = 1
+                arc.stroke()
+                let letter = (up ? "H" : "P") as NSString
+                let attrs: [NSAttributedString.Key: Any] = [.font: markFont, .foregroundColor: color]
+                let size = letter.size(withAttributes: attrs)
+                letter.draw(at: NSPoint(x: (a.x + b.x) / 2 - size.width / 2, y: min(a.y, b.y) - space * 1.1 - size.height), withAttributes: attrs)
+            }
+            // Slides: a line to the next fret (rising or falling), or in from below, or away downward.
+            let sl = NSBezierPath()
+            sl.lineWidth = 1.1
+            switch g.slide {
+            case "next"?:
+                if let there {
+                    let dy = (up ? -1 : 1) * tabGap * 0.28
+                    sl.move(to: NSPoint(x: here.center.x + here.width / 2 + 1, y: here.center.y - dy))
+                    sl.line(to: NSPoint(x: there.center.x - there.width / 2 - 1, y: there.center.y + dy))
+                }
+            case "in"?:
+                sl.move(to: NSPoint(x: here.center.x - here.width / 2 - space * 1.3, y: here.center.y + tabGap * 0.3))
+                sl.line(to: NSPoint(x: here.center.x - here.width / 2 - 1, y: here.center.y - tabGap * 0.2))
+            case "out"?:
+                sl.move(to: NSPoint(x: here.center.x + here.width / 2 + 1, y: here.center.y - tabGap * 0.2))
+                sl.line(to: NSPoint(x: here.center.x + here.width / 2 + space * 1.3, y: here.center.y + tabGap * 0.3))
+            default: break
+            }
+            sl.stroke()
+            // A bend: a curved arrow up from the fret to over the staff, its size at the tip; a release comes back.
+            if let bend = g.bend {
+                let from = NSPoint(x: here.center.x + here.width / 2 + 1, y: here.center.y)
+                let tip = NSPoint(x: from.x + space * 1.5, y: bendY(p.system))
+                let curve = NSBezierPath()
+                curve.move(to: from)
+                curve.curve(to: tip, controlPoint1: NSPoint(x: tip.x, y: from.y), controlPoint2: NSPoint(x: tip.x, y: from.y))
+                if g.release == true {
+                    curve.move(to: tip)
+                    curve.curve(to: NSPoint(x: tip.x + space * 1.4, y: from.y - tabGap * 0.3), controlPoint1: NSPoint(x: tip.x + space * 1.2, y: tip.y), controlPoint2: NSPoint(x: tip.x + space * 1.4, y: tip.y))
+                }
+                curve.lineWidth = 1.1
+                curve.stroke()
+                let head = NSBezierPath()
+                head.move(to: tip)
+                head.line(to: NSPoint(x: tip.x - 2.8, y: tip.y + 5))
+                head.line(to: NSPoint(x: tip.x + 2.8, y: tip.y + 5))
+                head.close()
+                head.fill()
+                let label = GuitarMarks.bendLabel(bend) as NSString
+                let attrs: [NSAttributedString.Key: Any] = [.font: markFont, .foregroundColor: color]
+                let size = label.size(withAttributes: attrs)
+                label.draw(at: NSPoint(x: tip.x - size.width / 2, y: tip.y - size.height - 1), withAttributes: attrs)
+            }
+            // Vibrato: a wavy line over the staff.
+            if g.vibrato == true {
+                let width = max(space * 2.4, (next.map { $0.system == p.system ? $0.x - p.x : space * 3 } ?? space * 3) - space * 0.6)
+                wavy(from: NSPoint(x: p.x, y: vibratoY(p.system)), width: width, color: color)
+            }
+            // Taps and artificial harmonics: T and A.H. over the staff.
+            let words = [g.tap == true ? "T" : nil, g.harmonic == "artificial" ? "A.H." : nil].compactMap { $0 }
+            if !words.isEmpty {
+                let text = words.joined(separator: " ") as NSString
+                text.draw(at: NSPoint(x: p.x, y: wordsY(p.system) - space * 0.6), withAttributes: [.font: markFont, .foregroundColor: color])
+            }
+        }
+        // Palm muting and let ring: P.M. or "let ring" and a dashed line over the run (let ring a row higher).
+        drawRuns(line, mine, rowY: { tabTop($0) - space * 4.4 }, ink: ink)
+    }
+
+    /// P.M. and let ring over their runs of notes: the word, then a dashed line to a hook at the end.
+    private func drawRuns(_ line: ScoreData, _ mine: [Placed], rowY: (Int) -> CGFloat, ink: NSColor) {
+        let font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        let kinds: [(String, CGFloat, (GuitarMarks) -> Bool)] = [("P.M.", 0.3, { $0.palmMute == true }), ("let ring", -0.6, { $0.letRing == true })]
+        for (word, lift, mark) in kinds {
+            for run in line.runs(mark) {
+                let ps = mine.filter { run.contains($0.index) }
+                for system in Set(ps.map(\.system)).sorted() {
+                    let row = ps.filter { $0.system == system }
+                    guard let a = row.first, let b = row.last else { continue }
+                    let y = rowY(system) + space * lift
+                    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
+                    let label = word as NSString
+                    let size = label.size(withAttributes: attrs)
+                    label.draw(at: NSPoint(x: a.x, y: y - size.height / 2), withAttributes: attrs)
+                    let end = b.x + space * 1.6
+                    if end > a.x + size.width + space * 0.5 {
+                        let dash = NSBezierPath()
+                        dash.move(to: NSPoint(x: a.x + size.width + space * 0.3, y: y))
+                        dash.line(to: NSPoint(x: end, y: y))
+                        dash.line(to: NSPoint(x: end, y: y + space * 0.6))
+                        dash.setLineDash([3, 2], count: 2, phase: 0)
+                        dash.lineWidth = 0.8
+                        ink.setStroke()
+                        dash.stroke()
+                    }
+                }
+            }
+        }
+    }
+
+    /// A wavy line (vibrato) from a point, so wide.
+    private func wavy(from p: NSPoint, width: CGFloat, color: NSColor) {
+        let path = NSBezierPath()
+        path.move(to: p)
+        var x = p.x
+        let step = space * 0.55
+        var up = true
+        while x + step <= p.x + width {
+            path.curve(to: NSPoint(x: x + step, y: p.y), controlPoint1: NSPoint(x: x + step * 0.3, y: p.y + (up ? -1 : 1) * space * 0.45),
+                       controlPoint2: NSPoint(x: x + step * 0.7, y: p.y + (up ? -1 : 1) * space * 0.45))
+            x += step
+            up.toggle()
+        }
+        path.lineWidth = 1.2
+        color.setStroke()
+        path.stroke()
+    }
+
+    /// TAB only: the rhythm under the TAB — stems, beams and flags for voice 1, dots after them.
+    private func drawTabRhythm(ink: NSColor) {
+        let line = score.forVoice(0)
+        let mine = placed.filter { $0.voice == 0 }
+        let groups = beamGroups(line, mine)
+        var inGroup: [Int: [Int]] = [:]
+        for g in groups { for i in g { inGroup[i] = g } }
+        let n = line.stringCount
+        func stemX(_ p: Placed) -> CGFloat { p.x + space * 0.62 }
+        func stemTop(_ p: Placed) -> CGFloat { tabTop(p.system) + tabGap * CGFloat(n - 1) + space * 0.7 }
+        func stemBottom(_ p: Placed) -> CGFloat { stemTop(p) + space * 2.4 }
+        for p in mine {
+            let note = line.notes[p.index]
+            guard !note.rest, note.grace == nil, note.duration != .whole else { continue }
+            let color = colorFor(NoteRef(voice: 0, index: p.index), ink: ink)
+            color.setFill()
+            // A half note's stem is shorter (as printed tab tells it from a quarter).
+            let bottom = note.duration == .half ? stemTop(p) + space * 1.4 : stemBottom(p)
+            NSRect(x: stemX(p) - 0.6, y: stemTop(p), width: 1.2, height: bottom - stemTop(p)).fill()
+            if note.dotted { NSBezierPath(ovalIn: NSRect(x: stemX(p) + space * 0.4, y: bottom - space * 0.45, width: 3, height: 3)).fill() }
+            // Flags on eighths and sixteenths outside a beam.
+            if note.duration.rawValue >= 8, inGroup[p.index] == nil {
+                for f in 0..<(note.duration == .sixteenth ? 2 : 1) {
+                    let fy = bottom - CGFloat(f) * space * 0.6
+                    let flag = NSBezierPath()
+                    flag.move(to: NSPoint(x: stemX(p), y: fy))
+                    flag.line(to: NSPoint(x: stemX(p) + space * 0.9, y: fy - space * 0.8))
+                    flag.lineWidth = 1.4
+                    color.setStroke()
+                    flag.stroke()
+                }
+            }
+        }
+        // Beams along the bottom of the stems (a second one for sixteenths).
+        for g in groups {
+            let ps = g.compactMap { i in mine.first { $0.index == i } }
+            guard let a = ps.first, let b = ps.last else { continue }
+            ink.setFill()
+            let y = stemBottom(a)
+            NSRect(x: stemX(a) - 0.6, y: y - space * 0.45, width: stemX(b) - stemX(a) + 1.2, height: space * 0.45).fill()
+            for (k, p) in ps.enumerated() where line.notes[p.index].duration == .sixteenth {
+                let nextP = k + 1 < ps.count ? ps[k + 1] : nil
+                let to = nextP.flatMap { line.notes[$0.index].duration == .sixteenth ? stemX($0) : nil } ?? stemX(p) + (k == ps.count - 1 ? -space * 0.8 : space * 0.8)
+                NSRect(x: min(stemX(p), to) - 0.6, y: y - space * 1.1, width: abs(to - stemX(p)) + 1.2, height: space * 0.4).fill()
+            }
+            // A triplet's 3 under its beam.
+            if let actual = line.notes[a.index].tupletActual {
+                let t = "\(actual)" as NSString
+                t.draw(at: NSPoint(x: (stemX(a) + stemX(b)) / 2 - 3, y: y + space * 0.2), withAttributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: ink])
+            }
+        }
+    }
+
+    /// How a fretted note is played, on the music: x heads for dead notes, diamonds for harmonics, brackets for
+    /// ghost notes (drawn with the heads); H and P over hammer-ons and pull-offs, slide lines, bend arrows,
+    /// vibrato, P.M. and let ring over the staff.
+    private func drawGuitarMarks(ink: NSColor) {
+        for v in 0..<ScoreData.voiceCount where !score.line(v).isEmpty {
+            let line = score.forVoice(v)
+            guard line.hasGuitarMarks else { continue }
+            let mine = placed.filter { $0.voice == v }
+            func headY(_ p: Placed) -> CGFloat { y(position: position(line.notes[p.index]), system: p.system, of: line.notes[p.index]) }
+            let markFont = NSFont.systemFont(ofSize: 9, weight: .semibold)
+            func rowY(_ system: Int) -> CGFloat { staffTop(system) - space * 1.1 }
+            for (k, p) in mine.enumerated() {
+                let note = line.notes[p.index]
+                guard let g = note.guitar, !note.rest else { continue }
+                let color = colorFor(NoteRef(voice: v, index: p.index), ink: ink)
+                color.set()
+                let next = k + 1 < mine.count && mine[k + 1].system == p.system && !line.notes[mine[k + 1].index].rest ? mine[k + 1] : nil
+                let hx = p.x + space * 0.62, hy = headY(p)
+                if g.legato == true, let next {
+                    let nx = next.x + space * 0.62, ny = headY(next)
+                    let up = (line.midi(next.index) ?? 0) >= (line.midi(p.index) ?? 0)
+                    let top = min(hy, ny) - space * 1.4
+                    let arc = NSBezierPath()
+                    arc.move(to: NSPoint(x: hx, y: hy - space * 0.8))
+                    arc.curve(to: NSPoint(x: nx, y: ny - space * 0.8), controlPoint1: NSPoint(x: hx + (nx - hx) * 0.25, y: top), controlPoint2: NSPoint(x: hx + (nx - hx) * 0.75, y: top))
+                    arc.lineWidth = 1
+                    arc.stroke()
+                    let letter = (up ? "H" : "P") as NSString
+                    letter.draw(at: NSPoint(x: (hx + nx) / 2 - 3, y: top - space * 1.3), withAttributes: [.font: markFont, .foregroundColor: color])
+                }
+                let sl = NSBezierPath()
+                sl.lineWidth = 1.1
+                switch g.slide {
+                case "next"?:
+                    if let next {
+                        sl.move(to: NSPoint(x: hx + space * 0.9, y: hy))
+                        sl.line(to: NSPoint(x: next.x - space * 0.3, y: headY(next)))
+                    }
+                case "in"?:
+                    sl.move(to: NSPoint(x: p.x - space * 1.8, y: hy + space * 0.8))
+                    sl.line(to: NSPoint(x: p.x - space * 0.3, y: hy))
+                case "out"?:
+                    sl.move(to: NSPoint(x: hx + space * 0.9, y: hy))
+                    sl.line(to: NSPoint(x: hx + space * 2.4, y: hy + space * 0.8))
+                default: break
+                }
+                sl.stroke()
+                if let bend = g.bend {
+                    let from = NSPoint(x: hx + space * 0.8, y: hy)
+                    let tip = NSPoint(x: from.x + space * 1.2, y: hy - space * 2.2)
+                    let curve = NSBezierPath()
+                    curve.move(to: from)
+                    curve.curve(to: tip, controlPoint1: NSPoint(x: tip.x, y: from.y), controlPoint2: NSPoint(x: tip.x, y: from.y))
+                    curve.lineWidth = 1
+                    curve.stroke()
+                    let label = GuitarMarks.bendLabel(bend) + (g.release == true ? " ↘" : "")
+                    (label as NSString).draw(at: NSPoint(x: tip.x - 3, y: tip.y - space * 1.4), withAttributes: [.font: markFont, .foregroundColor: color])
+                }
+                if g.vibrato == true {
+                    let width = max(space * 2.4, (next.map { $0.x - p.x } ?? space * 3) - space * 0.6)
+                    wavy(from: NSPoint(x: p.x, y: rowY(p.system)), width: width, color: color)
+                }
+                if g.tap == true {
+                    ("T" as NSString).draw(at: NSPoint(x: hx - 3, y: rowY(p.system) - space * 1.9), withAttributes: [.font: markFont, .foregroundColor: color])
+                }
+                if g.ghost == true {
+                    let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: space * 1.6), .foregroundColor: color]
+                    ("(" as NSString).draw(at: NSPoint(x: p.x - space * 0.75, y: hy - space * 1.0), withAttributes: attrs)
+                    (")" as NSString).draw(at: NSPoint(x: p.x + space * 1.35, y: hy - space * 1.0), withAttributes: attrs)
+                }
+            }
+            drawRuns(line, mine, rowY: { staffTop($0) - space * 2.6 }, ink: ink)
         }
     }
 
@@ -2349,6 +2927,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
             if note.slash != nil {
                 // A slash across the middle of the staff (hollow for halves and wholes).
                 drawSlash(x: p.x, y: cy, filled: note.duration.rawValue >= 4, color: color)
+            } else if note.guitar?.dead == true || note.guitar?.harmonic != nil {
+                // A dead note: an x; a harmonic: a diamond.
+                DrumKit.drawHead(note.guitar?.dead == true ? .x : .diamond, x: p.x, y: cy, width: w, height: h, color: color,
+                                 filled: note.duration.rawValue >= 4 && note.guitar?.dead == true)
             } else if let drum = DrumKit.instrument(note.drum), drum.head != .normal {
                 // Cymbals and hi-hats: an x (the open hi-hat with a circle over it); the ride bell: a diamond.
                 DrumKit.drawHead(drum.head, x: p.x, y: cy, width: w, height: h, color: color, filled: note.duration.rawValue >= 4)
@@ -2965,7 +3547,10 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         guard cur.notes.indices.contains(i) else { return }
         let keys = cur.midis(i)
         guard !keys.isEmpty else { return }
-        if cur.clef == .percussion { ScorePlayer.shared.previewDrums(keys) } else { ScorePlayer.shared.preview(keys) }
+        if cur.clef == .percussion { ScorePlayer.shared.previewDrums(keys); return }
+        // In the staff's sound (guitar an octave under its music).
+        let shift = cur.showTab == true ? -(cur.tabOffset - (cur.capo ?? 0)) : 0
+        ScorePlayer.shared.preview(keys.map { $0 + shift }, program: cur.sound)
     }
 
     // MARK: Drums
@@ -3001,17 +3586,18 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         changeSelected("Remove Chord Notes") { $0.chord = nil }
     }
 
-    /// The selected note onto the next higher (+1) or lower (-1) guitar string, where it can be played.
+    /// The selected note onto the next higher (+1) or lower (-1) string, where it can be played.
     func moveString(by delta: Int) {
-        guard let i = target, !cur.notes[i].rest, let current = cur.tab(i).first?.string else { return NSSound.beep() }
-        let shift = score.clef == .treble ? 12 : 0
-        guard let pitch = cur.midi(i).map({ $0 - shift }) else { return }
-        var string = current + delta
-        while ScoreData.tuning.indices.contains(string) {
-            let fret = pitch - ScoreData.tuning[string]
-            if fret >= 0 && fret <= 24 {
+        guard let i = target, !cur.notes[i].rest, let current = cur.tab(i).first, let pitch = cur.midi(i) else { return NSSound.beep() }
+        let st = cur
+        let neck = pitch - st.tabOffset
+        var string = current.string + delta
+        while st.openStrings.indices.contains(string) {
+            let fret = neck - st.openStrings[string]
+            if (0...st.maxFret).contains(fret) {
                 let chosen = string
                 editVoice("Guitar String") { $0.notes[i].tabString = chosen }
+                if tabInput { tabString = chosen }
                 return
             }
             string += delta
@@ -3021,6 +3607,17 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     func toggleTab() {
         edit("Guitar Tab") { $0.showTab = $0.showTab == true ? nil : true }
+        if fullScore.showTab != true { tabInput = false }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// TAB only: the TAB staff (with the rhythm under it) in place of the music.
+    func toggleTabOnly() {
+        edit("TAB Only") { s in
+            s.tabOnly = s.tabOnly == true ? nil : true
+            if s.tabOnly == true { s.showTab = true }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
     /// Guitar chord diagrams over the chord symbols.
@@ -3029,10 +3626,326 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         NotebookStore.shared.editor.scoreInputChanged += 1
     }
 
+    /// A chart of every chord used, under the title.
+    func toggleChordChart() {
+        edit("Chord Chart") { $0.chordChart = $0.chordChart == true ? nil : true }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
     /// A capo (0: none): TAB counts frets from it; chord names and diagrams show the shapes played.
     func setCapo(_ fret: Int) {
         edit(fret == 0 ? "Remove Capo" : "Capo") { $0.capo = fret > 0 ? fret : nil }
         NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// A fretted instrument and its tuning (the TAB comes on; an empty staff takes the instrument's clef).
+    func setTuning(_ id: String) {
+        guard let preset = TabInstrument.preset(id) else { return }
+        edit("Tuning") { s in
+            s.tabInstrument = id
+            s.tabTuning = nil
+            s.showTab = true
+            if s.clef != preset.clef, !s.notes.contains(where: { !$0.rest }) { s.clef = preset.clef }
+        }
+        tabString = min(tabString, preset.strings.count - 1)
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Strings tuned otherwise: typed as notes, lowest first ("D A D G B E", "C2 G2 C3 F3 A3 D4").
+    func editTuning() {
+        let alert = NSAlert()
+        alert.messageText = "Tuning"
+        alert.informativeText = "The strings from the lowest (the TAB's bottom line) up, as notes — D A D G B E, or with octaves: C2 G2 C3 F3 A3 D4."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        field.stringValue = TabInstrument.letters(fullScore.openStrings)
+        alert.accessoryView = field
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard let strings = ScoreView.parseTuning(field.stringValue, near: fullScore.openStrings), strings.count >= 3 else { return NSSound.beep() }
+        edit("Tuning") { s in
+            s.tabTuning = strings == s.fretted.strings ? nil : strings
+            s.showTab = true
+        }
+        tabString = min(tabString, strings.count - 1)
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Notes typed as a tuning: each with its octave, else the octave nearest the string it replaces (or just
+    /// above the string under it).
+    static func parseTuning(_ text: String, near current: [Int]) -> [Int]? {
+        let letters: [Character: Int] = ["C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11]
+        var out: [Int] = []
+        let tokens = text.replacingOccurrences(of: ",", with: " ").split(separator: " ").map(String.init)
+        for (k, token) in tokens.enumerated() {
+            var t = Substring(token)
+            guard let first = t.first?.uppercased().first, var pc = letters[first] else { return nil }
+            t = t.dropFirst()
+            if let c = t.first, "#♯".contains(c) { pc += 1; t = t.dropFirst() } else if let c = t.first, "b♭".contains(c) { pc -= 1; t = t.dropFirst() }
+            if let octave = Int(t) {
+                out.append((octave + 1) * 12 + pc)
+                continue
+            }
+            guard t.isEmpty else { return nil }
+            let target = tokens.count == current.count ? current[k] : (out.last.map { $0 + 5 } ?? 40)
+            var best = 12 + pc
+            while abs(best + 12 - target) < abs(best - target) { best += 12 }
+            if tokens.count != current.count, let last = out.last { while best <= last { best += 12 } }
+            out.append(best)
+        }
+        return out.isEmpty ? nil : out
+    }
+
+    /// The staff's sound (General MIDI; nil: piano, or with TAB its instrument's).
+    func setSound(_ program: Int?) {
+        let st = staffIndex
+        edit("Sound") { full in
+            var view = full.forStaff(st)
+            view.program = program
+            full.setStaff(st, view)
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    // MARK: Typing frets into the TAB
+
+    /// Typing frets: on (the TAB comes on with it) or off.
+    func setTabInput(_ on: Bool) {
+        if on, fullScore.showTab != true { edit("Guitar Tab") { $0.showTab = true } }
+        if on, staffIndex != 0 { setStaff(0) }
+        tabInput = on
+        tabString = max(0, min(fullScore.stringCount - 1, tabString))
+        lastFret = nil
+        activate()
+        needsDisplay = true
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    func moveTabString(by delta: Int) {
+        tabString = max(0, min(fullScore.stringCount - 1, tabString + delta))
+        lastFret = nil
+        needsDisplay = true
+    }
+
+    /// A fret typed on the current string: onto the selected note (or the one just typed) — changing its note on
+    /// that string, or adding one there — else a new note after the caret. Two digits typed quickly make one fret.
+    func typeFret(_ digit: Int) {
+        let st = cur
+        let string = max(0, min(st.stringCount - 1, tabString))
+        let now = Date()
+        var fret = digit
+        var onto: Int? = selected ?? lastEntered.flatMap { $0 == cursor - 1 ? $0 : nil }
+        if let last = lastFret, now.timeIntervalSince(last.at) < 1.2, last.string == string, last.value > 0, last.value < 10,
+           last.value * 10 + digit <= st.maxFret, cur.notes.indices.contains(last.index) {
+            fret = last.value * 10 + digit
+            onto = last.index
+        }
+        guard fret <= st.maxFret else { return NSSound.beep() }
+        let pitch = st.notePitch(string: string, fret: fret)
+        if let i = onto, cur.notes.indices.contains(i) {
+            setFret(pitch, string: string, at: i)
+            lastFret = (i, string, fret, now)
+        } else {
+            let at = min(cursor, cur.notes.count)
+            insertPitch(pitch, string: string)
+            lastFret = (at, string, fret, now)
+        }
+    }
+
+    /// The note (or chord note) on a string set to a pitch; the note's other strings kept where they are.
+    private func setFret(_ pitch: Int, string: Int, at i: Int) {
+        let line = cur
+        let spots = line.tab(i)
+        let sp = line.spelled(pitch)
+        editVoice("Fret") { s in
+            var n = s.notes[i]
+            if n.rest {
+                n.rest = false
+                n.chord = nil
+                (n.step, n.octave, n.alter, n.tabString) = (sp.step, sp.octave, sp.alter, string)
+                s.notes[i] = n
+                return
+            }
+            // Pin what's there to its strings (so adding a note doesn't move the others).
+            if let first = spots.first { n.tabString = first.string }
+            var tones = n.chord ?? []
+            for (k, spot) in spots.dropFirst().enumerated() where k < tones.count { tones[k].tabString = spot.string }
+            if let k = spots.firstIndex(where: { $0.string == string }) {
+                if k == 0 {
+                    (n.step, n.octave, n.alter) = (sp.step, sp.octave, sp.alter)
+                } else if k - 1 < tones.count {
+                    tones[k - 1].step = sp.step
+                    tones[k - 1].octave = sp.octave
+                    tones[k - 1].alter = sp.alter
+                }
+            } else {
+                tones.append(ChordTone(step: sp.step, octave: sp.octave, alter: sp.alter, tabString: string))
+            }
+            n.chord = tones.isEmpty ? nil : tones
+            s.notes[i] = n
+        }
+        hear(i)
+    }
+
+    /// A new note (of the current length) at a pitch, on a string, after the caret.
+    private func insertPitch(_ pitch: Int, string: Int) {
+        let sp = cur.spelled(pitch)
+        var note = ScoreNote(duration: Self.inputDuration, dotted: Self.inputDotted, rest: false)
+        (note.step, note.octave, note.alter, note.tabString) = (sp.step, sp.octave, sp.alter, string)
+        if let ratio = Self.inputTuplet {
+            note.tuplet = true
+            note.tupletRatio = ratio == [3, 2] ? nil : ratio
+        }
+        let at = min(cursor, cur.notes.count)
+        note.ottava = ottava(joining: at)
+        editVoice("Add Note") { $0.notes.insert(note, at: at) }
+        selected = nil
+        lastEntered = at
+        cursor = at + 1
+        needsDisplay = true
+        hear(at)
+    }
+
+    /// Delete on the TAB: the selected note's note on the current string (the whole note when it's the only one).
+    func deleteFret() {
+        guard let i = selected ?? lastEntered, cur.notes.indices.contains(i), !cur.notes[i].rest else { return deleteSelected() }
+        let spots = cur.tab(i)
+        guard let k = spots.firstIndex(where: { $0.string == tabString }) else { return NSSound.beep() }
+        if spots.count <= 1 || (cur.notes[i].chord ?? []).isEmpty { return deleteSelected() }
+        editVoice("Delete Fret") { s in
+            var n = s.notes[i]
+            var tones = n.chord ?? []
+            if k == 0 {
+                let t = tones.removeFirst()
+                (n.step, n.octave, n.alter, n.tabString) = (t.step, t.octave, t.alter, t.tabString)
+            } else if k - 1 < tones.count {
+                tones.remove(at: k - 1)
+            }
+            n.chord = tones.isEmpty ? nil : tones
+            s.notes[i] = n
+        }
+    }
+
+    /// The string under a point on the TAB (the first staff's), if it's on the TAB.
+    private func tabStringAt(_ p: NSPoint) -> Int? {
+        guard fullScore.showTab == true, !isExport else { return nil }
+        layoutNotes()
+        return withStaff(0) {
+            let n = score.stringCount
+            for s in 0..<systemCount {
+                let top = tabTop(s)
+                if p.y >= top - tabGap * 0.5, p.y <= top + tabGap * (CGFloat(n - 1) + 0.5), p.x > space * 3.2 {
+                    return n - 1 - max(0, min(n - 1, Int(((p.y - top) / tabGap).rounded())))
+                }
+            }
+            return nil
+        }
+    }
+
+    // MARK: Playing techniques
+
+    /// A technique (GuitarMarks.kinds) on or off for the selected notes.
+    func toggleTechnique(_ kind: String) {
+        let targets = markTargets
+        guard let first = targets.first, cur.notes.indices.contains(first) else { return NSSound.beep() }
+        let on = !(cur.notes[first].guitar ?? GuitarMarks()).has(kind)
+        let name = GuitarMarks.kinds.first { $0.0 == kind }?.1 ?? "Technique"
+        editVoice(name) { s in
+            for i in targets where s.notes.indices.contains(i) && !s.notes[i].rest {
+                var g = s.notes[i].guitar ?? GuitarMarks()
+                if g.has(kind) != on { g.toggle(kind) }
+                s.notes[i].guitar = g.isEmpty ? nil : g
+            }
+        }
+        NotebookStore.shared.editor.scoreInputChanged += 1
+    }
+
+    /// Whether the selected note has a technique (for menus).
+    func hasTechnique(_ kind: String) -> Bool {
+        guard let i = target else { return false }
+        return (cur.notes[i].guitar ?? GuitarMarks()).has(kind)
+    }
+
+    // MARK: Chord diagrams
+
+    /// The chord symbol at the selected note (its own, else the one in effect).
+    var selectedChordSymbol: String? {
+        guard let i = target else { return nil }
+        return score.forVoice(0).notes.indices.contains(i) && voice == 0 ? score.chordSymbol(at: i) : nil
+    }
+
+    /// Voicings to choose from for a chord (the chosen one first).
+    func voicings(_ symbol: String) -> [GuitarChords.Shape] {
+        let full = fullScore
+        let played = (full.capo ?? 0) > 0 ? GuitarChords.transposed(symbol, by: -(full.capo ?? 0)) : symbol
+        guard let chord = GuitarChords.parse(played) else { return [] }
+        var list = GuitarChords.voicings(chord, strings: full.openStrings, frets: min(15, full.maxFret))
+        if let mine = full.chordShapes?[played], !list.contains(mine) { list.insert(mine, at: 0) }
+        return list
+    }
+
+    /// The voicing for a chord, wherever it comes (nil: the handiest, again).
+    func chooseVoicing(_ symbol: String, _ shape: GuitarChords.Shape?) {
+        let full = fullScore
+        let played = (full.capo ?? 0) > 0 ? GuitarChords.transposed(symbol, by: -(full.capo ?? 0)) : symbol
+        edit(shape == nil ? "Automatic Voicing" : "Chord Voicing") { s in
+            var all = s.chordShapes ?? [:]
+            all[played] = shape
+            s.chordShapes = all.isEmpty ? nil : all
+            if s.chordDiagrams != true, s.chordChart != true { s.chordDiagrams = true }
+        }
+        strum(symbol)
+    }
+
+    /// Draw a chord's diagram by hand.
+    func editDiagram(_ symbol: String) {
+        guard let diagram = chordDiagram(symbol) else { return NSSound.beep() }
+        ChordDiagramEditor.edit(name: diagram.name, shape: diagram.shape, strings: fullScore.openStrings, capo: fullScore.capo ?? 0,
+                                program: fullScore.sound, in: window) { [weak self] result in
+            switch result {
+            case .cancel: break
+            case .automatic: self?.chooseVoicing(symbol, nil)
+            case .shape(let shape): self?.chooseVoicing(symbol, shape)
+            }
+        }
+    }
+
+    /// Plays a chord's diagram, low string to high.
+    func strum(_ symbol: String) {
+        guard let diagram = chordDiagram(symbol) else { return }
+        let full = fullScore
+        let pitches = diagram.shape.frets.enumerated().compactMap { s, f in f.map { full.openStrings[s] + $0 + (full.capo ?? 0) } }
+        ScorePlayer.shared.strum(pitches, program: full.sound)
+    }
+
+    /// A chord symbol for the selected note, named from its notes (and voice 2's at the same time).
+    func nameChord() {
+        guard voice == 0, let i = target, !cur.notes[i].rest else { return NSSound.beep() }
+        let line = score
+        var pitches = line.midis(i)
+        let onset = line.onsets[i]
+        let second = line.forVoice(1)
+        for (k, t) in second.onsets.enumerated() where abs(t - onset) < 1e-6 { pitches += second.midis(k) }
+        guard let name = GuitarChords.name(pitches, flats: fullScore.keyFifths < 0) else { return NSSound.beep() }
+        editVoice("Name Chord") { $0.notes[i].chordSymbol = name }
+    }
+
+    /// Chord symbols for every chord in voice 1 that hasn't one (three notes or more).
+    func nameAllChords() {
+        let line = score
+        var names: [Int: String] = [:]
+        for i in line.notes.indices where !line.notes[i].rest && (line.notes[i].chordSymbol ?? "").isEmpty {
+            let pitches = line.midis(i)
+            guard Set(pitches.map { $0 % 12 }).count >= 3, let name = GuitarChords.name(pitches, flats: fullScore.keyFifths < 0) else { continue }
+            // The same chord again needs no new symbol.
+            if let prev = line.notes[..<i].lastIndex(where: { !$0.rest }), (names[prev] ?? line.chordSymbol(at: prev)) == name { continue }
+            names[i] = name
+        }
+        guard !names.isEmpty else { return NSSound.beep() }
+        let v = voice
+        if v != 0 { setVoice(0) }
+        editVoice("Name Chords") { s in for (i, name) in names { s.notes[i].chordSymbol = name } }
     }
 
     // MARK: Lyrics and chord symbols (typed under / above the notes)
@@ -3712,6 +4625,25 @@ final class ScoreView: NSView, NSTextFieldDelegate {
     override func keyDown(with event: NSEvent) {
         let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
         let command = event.modifierFlags.contains(.command)
+        let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        // Typing frets into the TAB: ↑ ↓ change string, digits are frets, ⇧3–⇧7 lengths, Esc stops.
+        if tabInput {
+            let digitKeys: [UInt16: Int] = [29: 0, 18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
+            if flags.isEmpty, event.keyCode == 126 { return moveTabString(by: 1) }
+            if flags.isEmpty, event.keyCode == 125 { return moveTabString(by: -1) }
+            if flags.isEmpty, event.keyCode == 53 { return setTabInput(false) }
+            if flags.isEmpty, event.keyCode == 51 || event.keyCode == 117 { return deleteFret() }
+            if let d = digitKeys[event.keyCode] {
+                if flags.isEmpty { return typeFret(d) }
+                if flags == .shift, let length = [3: ScoreNote.Duration.sixteenth, 4: .eighth, 5: .quarter, 6: .half, 7: .whole][d] { return setDuration(length) }
+            }
+        }
+        if flags == .control, chars == "t" { return setTabInput(!tabInput) }
+        // ⌥ with a letter: a playing technique (⌥H hammer-on / pull-off, ⌥S slide, ⌥B bend, ⌥V vibrato, ⌥M palm mute…).
+        if flags == .option, cur.clef != .percussion, let letter = chars.first, letter.isLetter,
+           let kind = GuitarMarks.kinds.first(where: { $0.2.lowercased() == String(letter) }) {
+            return toggleTechnique(kind.0)
+        }
         switch event.keyCode {
         case 123 where event.modifierFlags.contains(.shift): return extendSelection(by: -1)
         case 124 where event.modifierFlags.contains(.shift): return extendSelection(by: 1)
@@ -3806,6 +4738,7 @@ final class ScoreView: NSView, NSTextFieldDelegate {
 
     /// The note (head or rest) under a point.
     private func note(at p: NSPoint) -> NoteRef? {
+        if let hit = fretSpots.first(where: { $0.rect.contains(p) }) { return hit.ref }
         layoutNotes()
         // The staff and voice being written first (where notes overlap).
         let order = [staffIndex] + (0..<fullScore.staffCount).filter { $0 != staffIndex }
@@ -3857,6 +4790,27 @@ final class ScoreView: NSView, NSTextFieldDelegate {
         owner?.canvas?.selectedElement = nil
         activate()
         let p = convert(event.locationInWindow, from: nil)
+        // A chord diagram: play it.
+        if let d = diagramSpots.first(where: { $0.rect.contains(p) }) {
+            strum(d.symbol)
+            if let ref = d.ref { if ref.staff != staffIndex { setStaff(ref.staff) }; if ref.voice != voice { setVoice(ref.voice) }; select(ref.index) }
+            return
+        }
+        // A click on the TAB: type frets onto the string there (on the fret clicked, or where the caret goes).
+        if let string = tabStringAt(p) {
+            if staffIndex != 0 { setStaff(0); layoutNotes() }
+            tabString = string
+            if let hit = fretSpots.first(where: { $0.rect.contains(p) }) {
+                if hit.ref.voice != voice { setVoice(hit.ref.voice) }
+                select(hit.ref.index)
+                hear(hit.ref.index)
+            } else {
+                selected = nil
+                cursor = gap(at: p)
+            }
+            setTabInput(true)
+            return
+        }
         // A click on (or near) another staff writes there.
         if let ref = note(at: p), ref.staff != staffIndex {
             setStaff(ref.staff)
@@ -4012,6 +4966,75 @@ final class ScoreElementView: ElementView {
         }
     }
 
+    /// Guitar: TAB, tuning, capo, chord diagrams and voicings, techniques, sound.
+    private func guitarMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Guitar", action: nil, keyEquivalent: "")
+        let m = NSMenu()
+        let s = score
+        m.addItem(ClosureMenuItem("Guitar Tab", state: s.showTab == true) { [weak self] in self?.staff.toggleTab() })
+        m.addItem(ClosureMenuItem("TAB Only", state: s.tabOnly == true) { [weak self] in self?.staff.toggleTabOnly() })
+        m.addItem(ClosureMenuItem("Type Frets in the TAB  ⌃T", state: staff.tabInput) { [weak self] in guard let self else { return }; self.staff.setTabInput(!self.staff.tabInput) })
+        let tuning = NSMenuItem(title: "Tuning (\(TabInstrument.letters(s.openStrings)))", action: nil, keyEquivalent: "")
+        let tunings = NSMenu()
+        for family in ["Guitar", "Bass", "Other"] {
+            for t in TabInstrument.all where t.family == family {
+                tunings.addItem(ClosureMenuItem(t.name, state: s.tabTuning == nil && s.fretted.id == t.id) { [weak self] in self?.staff.setTuning(t.id) })
+            }
+            tunings.addItem(.separator())
+        }
+        tunings.addItem(ClosureMenuItem("Other Tuning…", state: s.tabTuning != nil) { [weak self] in self?.staff.editTuning() })
+        tuning.submenu = tunings
+        m.addItem(tuning)
+        let capo = NSMenuItem(title: s.capo.map { "Capo (fret \($0))" } ?? "Capo", action: nil, keyEquivalent: "")
+        let capos = NSMenu()
+        capos.addItem(ClosureMenuItem("No Capo", state: s.capo == nil) { [weak self] in self?.staff.setCapo(0) })
+        capos.addItem(.separator())
+        for fret in 1...9 {
+            capos.addItem(ClosureMenuItem("Capo \(fret)", state: s.capo == fret) { [weak self] in self?.staff.setCapo(fret) })
+        }
+        capo.submenu = capos
+        m.addItem(capo)
+        m.addItem(.separator())
+        m.addItem(ClosureMenuItem("Chord Diagrams", state: s.chordDiagrams == true) { [weak self] in self?.staff.toggleChordDiagrams() })
+        m.addItem(ClosureMenuItem("Chord Chart", state: s.chordChart == true) { [weak self] in self?.staff.toggleChordChart() })
+        if let symbol = staff.selectedChordSymbol {
+            let voicing = NSMenuItem(title: "\(symbol) Voicing", action: nil, keyEquivalent: "")
+            let vm = NSMenu()
+            let current = staff.chordDiagram(symbol)?.shape
+            for shape in staff.voicings(symbol) {
+                vm.addItem(ClosureMenuItem("\(shape.text)\(shape.baseFret > 1 ? "  (\(shape.baseFret)fr)" : "")", state: shape == current) { [weak self] in self?.staff.chooseVoicing(symbol, shape) })
+            }
+            vm.addItem(.separator())
+            vm.addItem(ClosureMenuItem("Automatic") { [weak self] in self?.staff.chooseVoicing(symbol, nil) })
+            voicing.submenu = vm
+            m.addItem(voicing)
+            m.addItem(ClosureMenuItem("Edit \(symbol) Diagram…") { [weak self] in self?.staff.editDiagram(symbol) })
+        }
+        m.addItem(ClosureMenuItem("Name Chord from Its Notes") { [weak self] in self?.staff.nameChord() })
+        m.addItem(ClosureMenuItem("Chord Symbols from the Notes") { [weak self] in self?.staff.nameAllChords() })
+        m.addItem(.separator())
+        let tech = NSMenuItem(title: "Technique", action: nil, keyEquivalent: "")
+        let tm = NSMenu()
+        for (id, name, key) in GuitarMarks.kinds {
+            tm.addItem(ClosureMenuItem(key.isEmpty ? name : "\(name)  ⌥\(key)", state: staff.hasTechnique(id)) { [weak self] in self?.staff.toggleTechnique(id) })
+        }
+        tech.submenu = tm
+        m.addItem(tech)
+        m.addItem(ClosureMenuItem("String Up  ⌥↑") { [weak self] in self?.staff.moveString(by: 1) })
+        m.addItem(ClosureMenuItem("String Down  ⌥↓") { [weak self] in self?.staff.moveString(by: -1) })
+        m.addItem(.separator())
+        let sound = NSMenuItem(title: "Sound", action: nil, keyEquivalent: "")
+        let sm = NSMenu()
+        let current = staff.score.sound
+        for (program, name) in TabInstrument.sounds {
+            sm.addItem(ClosureMenuItem(name, state: current == program) { [weak self] in self?.staff.setSound(program) })
+        }
+        sound.submenu = sm
+        m.addItem(sound)
+        item.submenu = m
+        return item
+    }
+
     override func contextMenu() -> NSMenu {
         let menu = super.contextMenu()
         menu.addItem(.separator())
@@ -4019,17 +5042,7 @@ final class ScoreElementView: ElementView {
         menu.addItem(ClosureMenuItem("Score Title…") { [weak self] in self?.editTitle() })
         menu.addItem(ClosureMenuItem("Chord Symbols…  ⌃K") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.chordSymbol) })
         menu.addItem(ClosureMenuItem("Lyrics…  ⌃L") { [weak self] in self?.staff.activate(); self?.staff.beginWords(.lyric) })
-        menu.addItem(ClosureMenuItem("Guitar Tab", state: score.showTab == true) { [weak self] in self?.staff.toggleTab() })
-        menu.addItem(ClosureMenuItem("Chord Diagrams", state: score.chordDiagrams == true) { [weak self] in self?.staff.toggleChordDiagrams() })
-        let capo = NSMenuItem(title: score.capo.map { "Capo (fret \($0))" } ?? "Capo", action: nil, keyEquivalent: "")
-        let capos = NSMenu()
-        capos.addItem(ClosureMenuItem("No Capo", state: score.capo == nil) { [weak self] in self?.staff.setCapo(0) })
-        capos.addItem(.separator())
-        for fret in 1...9 {
-            capos.addItem(ClosureMenuItem("Capo \(fret)", state: score.capo == fret) { [weak self] in self?.staff.setCapo(fret) })
-        }
-        capo.submenu = capos
-        menu.addItem(capo)
+        menu.addItem(guitarMenuItem())
         let clef = NSMenuItem(title: score.staffCount > 1 ? "Clef (\(score.staffTitle(staff.currentStaff)))" : "Clef", action: nil, keyEquivalent: "")
         let clefs = NSMenu()
         for c in ScoreData.Clef.allCases {

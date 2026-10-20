@@ -274,10 +274,14 @@ container's width (drag its edge). While a score is being edited the **Score** r
 | Add a note to the chord (above its top note) | **⇧A–G** | Score tab ▸ Chord Note |
 | Chord symbols above the staff (C, Am7, G/B) | **⌃K**, then Space for the next note, Return to finish | Score tab, right-click |
 | Lyrics under the notes | **⌃L**, then Space / Tab for the next note, **-** for the next syllable | Score tab, right-click |
-| Move the note to another guitar string | **⌥↑ / ⌥↓** | Score tab |
+| Move the note to another guitar string | **⌥↑ / ⌥↓** | Score tab ▸ Guitar |
+| Type frets into the TAB: click a string (or **⌃T**), **↑ ↓** change string, digits are frets (two quickly: 10 and up), **⇧3–⇧7** lengths, **→** next note, **Delete** the fret, **Esc** stops | **⌃T** | Score tab ▸ Guitar ▸ Type Frets |
+| Techniques: hammer-on / pull-off, slide, slide in / out, bend, bend and release, vibrato, palm mute, let ring, natural / artificial harmonic, dead note, ghost note, tap | **⌥H ⌥S ⌥I ⌥O ⌥B ⌥R ⌥V ⌥M ⌥L ⌥N ⌥A ⌥X ⌥G ⌥T** | Score tab ▸ Guitar ▸ Technique, right-click ▸ Guitar |
+| Tuning (guitar, drop and open tunings, DADGAD, seven-string, bass, ukulele, mandolin, banjo, or typed) / TAB Only / Sound | | Score tab ▸ Guitar, right-click ▸ Guitar |
+| Chord voicing (choose, or draw it) / chord chart / chord symbols named from the notes | | Score tab ▸ Guitar ▸ Voicing, Chord Chart, right-click ▸ Guitar |
 | On a drum staff: kick, snare, hi-hat, open / pedal hi-hat, crash, ride, ride bell, high / mid / floor tom, side stick (⇧: played with the note) | **K S H O P C R B T M F X** | Score tab ▸ Add ▸ Drum |
-| Guitar chord diagrams over the chord symbols | | Score tab ▸ Chord Diagrams, right-click |
-| Capo (fret 1–9) | | Score tab ▸ Capo, right-click ▸ Capo |
+| Guitar chord diagrams over the chord symbols | | Score tab ▸ Guitar ▸ Chord Diagrams, right-click ▸ Guitar |
+| Capo (fret 1–9) | | Score tab ▸ Guitar ▸ Capo, right-click ▸ Guitar ▸ Capo |
 | Slashes for the selection or bar (beat or rhythmic), Slash Entry | | Score tab ▸ Lead Sheet ▸ Slashes, right-click ▸ Lead Sheet |
 | 1st / 2nd / 3rd endings, bars per line, composer | | Score tab ▸ Lead Sheet, right-click ▸ Lead Sheet |
 | Transpose: a half step, an octave, an interval, steps in the key, to a key, or Transpose… | | Score tab ▸ Transpose, right-click ▸ Transpose |
@@ -291,11 +295,11 @@ container's width (drag its edge). While a score is being edited the **Score** r
 Eighths and sixteenths are beamed by the beat (a dotted quarter in 6/8, 9/8, 12/8); accidentals show only where the key
 and the bar don't already give them, and last to the end of the bar; ledger lines, ties and a final bar line are
 drawn. Chord notes share a stem (notes a step apart sit side by side) and sound together; lyrics are spaced so words
-don't run together, with hyphens between syllables. **Guitar Tab** (Score tab or right-click) adds a six-string TAB
-staff under the music with each note's string and fret in standard tuning (treble-clef guitar music sounds an
-octave lower), chosen automatically — lowest fret, one string per chord note — unless moved with ⌥↑ / ⌥↓. Clef, key (C to F♯ and G♭ major), time (4/4, 3/4, 2/4, 2/2, 6/8, 3/8, 9/8, 12/8, 5/4), tempo and title are on
-the Score tab and the right-click menu, as is Copy Score as Picture. Playback uses the Mac's General MIDI piano, and the
-note sounding is shown in orange. Every change can be undone. PDF and print show the score; Markdown export and OneNote
+don't run together, with hyphens between syllables. **Guitar Tab** (Score tab ▸ Guitar, or right-click ▸ Guitar)
+adds a TAB staff under the music — see *Guitar tablature* below. Clef, key (C to F♯ and G♭ major), time (4/4, 3/4, 2/4, 2/2, 6/8, 3/8, 9/8, 12/8, 5/4), tempo and title are on
+the Score tab and the right-click menu, as is Copy Score as Picture. Playback uses the Mac's General MIDI sounds — each
+staff its own (Score tab ▸ Guitar ▸ Sound: piano, nylon, steel or electric guitar, bass…; a TAB staff plays its
+instrument) — and the note sounding is shown in orange. Every change can be undone. PDF and print show the score; Markdown export and OneNote
 sync write its title, signatures and the notes by name.
 
 **Dynamics and slurs** — dynamics sit under the staff in bold italic, hairpins open (crescendo) or close
@@ -340,12 +344,32 @@ letter plays that drum with the note (hi-hat with kick); ↑ ↓ move a note to 
 voices (hands up, feet down with ⌥⌘2), dynamics, articulations, tuplets and repeats work as on any staff. It plays the
 General MIDI drum kit, and MusicXML keeps it (unpitched notes, noteheads, the kit's instruments).
 
-**Chord diagrams and capo** — **Chord Diagrams** draws a guitar diagram under each chord symbol: the usual open
-chord where there is one (C, G7, Am7, Dsus4, Gmaj7…), else a barre shape on the 6th or 5th string, whichever sits lower
-on the neck (F 133211, Bm x24432, E♭ at the 6th fret) — strings, frets, the nut or "6fr", dots, the barre, ○ open and ×
-not played. Extensions are drawn as the nearest shape (A13 as A7). A **Capo** (frets 1–9) is marked "Capo 3" over the
-music; chord names show the shape played after the sounding chord — E♭ (C) — the diagrams show that shape, and TAB
-counts frets from the capo. The music still sounds as written. MusicXML keeps both (staff-details capo, harmony frames).
+**Guitar tablature** — **Guitar Tab** adds a TAB staff under the music: a line for each string, each note's fret. The
+**Tuning** menu has guitar (standard, classical, electric, Drop D, half and full step down, Drop C, open G, D and E,
+DADGAD, seven-string), bass (four and five strings), ukulele, baritone ukulele, mandolin and banjo — or **Other
+Tuning…** typed as notes (D A D G B E, or C2 G2 C3 F3 A3 D4). Strings and frets are chosen for the whole passage at
+once, so chords sit under one hand and the hand moves as little as it can; ⌥↑ / ⌥↓ move a note to another string, and
+that choice is kept. **TAB Only** shows the TAB in place of the music, with the rhythm under it (stems, beams, dots),
+the time signature on it. **Type Frets** (⌃T, or click the TAB) types onto a string: ↑ ↓ change string, a digit is a
+fret (two typed quickly make 10 and up), another string's fret goes on the same beat (a chord), → moves on, ⇧3–⇧7
+set the length, Delete takes the fret off its string. **Technique** (⌥ with a letter) marks how notes are played:
+hammer-on / pull-off (an arc and H or P), slides to the next note, in and out, bends (½, full, 1½, with release),
+vibrato, palm mute (P.M. and a dashed line over the run), let ring, natural and artificial harmonics (<12>, A.H.),
+dead notes (x), ghost notes ((5)) and taps (T) — written on the TAB and the music (x and diamond noteheads, slides,
+arcs, bend arrows) and heard: bends and vibrato with pitch bend, slides as quick runs, hammer-ons without a fresh
+pick, palm-muted notes short, harmonics at their overtone, let ring sustaining. Tied notes show their fret in brackets.
+
+**Chord diagrams and capo** — **Chord Diagrams** draws a diagram under each chord symbol, in the instrument's tuning:
+on guitar the usual open chord where there is one (C, G7, Am7, Dsus4, Gmaj7…), else a barre shape (F 133211, Bm
+x24432); in any tuning, voicings found up the neck — fingers numbered in the dots, the nut or "6fr", the barre, ○ open
+and × not played. **Voicing** offers several for the selected chord, or **Edit Diagram…** to draw one (click the frets,
+over the nut for open or not played, set the fingers, hear it): the choice is used for that chord everywhere. Click a
+diagram to hear it strummed. **Chord Chart** puts every chord used, with its diagram, under the title. **Name Chord**
+names a chord from its notes (as typed into the TAB); **Chord Symbols from the Notes** does it for every chord. A
+**Capo** (frets 1–9) is marked "Capo 3" over the music; chord names show the shape played after the sounding chord —
+E♭ (C) — the diagrams show that shape, and TAB counts frets from the capo. The music still sounds as written. MusicXML
+keeps it all — the tuning (staff-tuning), capo, strings and frets, hammer-ons, pull-offs, bends, slides, harmonics,
+taps, vibrato, dead and ghost notes, P.M. and let ring, and the diagrams (frames with fingers).
 
 **Lead sheets and slash notation** — **Insert ▸ Lead Sheet** (or the Insert tab's Lead Sheet button) starts a
 lead sheet: title, composer, a style and tempo ("Medium Swing"), four bars a line, ready for a melody with chord

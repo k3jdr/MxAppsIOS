@@ -105,7 +105,7 @@ enum MusicXML {
                     out += "<time><beats>\(score.beats)</beats><beat-type>\(score.beatUnit)</beat-type></time>"
                     if group.count == 2 { out += "<staves>2</staves>" }
                     for (k, st) in group.enumerated() { out += clefXML(staffScores[st].clef, number: group.count == 2 ? k + 1 : nil) }
-                    if p == 0, let capo = score.capo, capo > 0 { out += "<staff-details><capo>\(capo)</capo></staff-details>" }
+                    if p == 0, score.showTab == true || (score.capo ?? 0) > 0 { out += staffDetailsXML(score) }
                     if group.count == 1, let t = partStaff.transposition { out += transposeXML(t) }
                     out += "</attributes>\n"
                     if p == 0 { out += tempoXML(score, bar: 0) }
@@ -177,10 +177,28 @@ enum MusicXML {
         return x + "</direction>\n"
     }
 
+    /// A fretted instrument's strings (lowest first, numbered from the bottom line) and its capo.
+    static func staffDetailsXML(_ score: ScoreData) -> String {
+        var x = "<staff-details>"
+        if score.showTab == true {
+            let steps = ["C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B"]
+            for (k, m) in score.openStrings.enumerated() {
+                let pc = ((m % 12) + 12) % 12
+                let alter = [1, 3, 6, 8, 10].contains(pc) ? "<tuning-alter>1</tuning-alter>" : ""
+                x += "<staff-tuning line=\"\(k + 1)\"><tuning-step>\(steps[pc])</tuning-step>\(alter)<tuning-octave>\(m / 12 - 1)</tuning-octave></staff-tuning>"
+            }
+        }
+        if let capo = score.capo, capo > 0 { x += "<capo>\(capo)</capo>" }
+        return x + "</staff-details>"
+    }
+
     /// One voice's notes in a bar (voice 2 after a <backup>).
     private static func notesXML(_ score: ScoreData, _ bar: Range<Int>, voice: Int, staff: Int? = nil, part: Int = 1) -> String {
         let steps = ["C", "D", "E", "F", "G", "A", "B"]
         var out = ""
+        let plan = score.showTab == true ? score.tabPlan() : []
+        // Palm muting and let ring start where their runs do (as words over the staff).
+        let runStarts = Set(score.runs { $0.palmMute == true }.map(\.lowerBound)), ringStarts = Set(score.runs { $0.letRing == true }.map(\.lowerBound))
         // In a part with two staves, each note and direction says which staff.
         let staffTag = staff.map { "<staff>\($0)</staff>" } ?? ""
         let stemDown = voice % 4 == 2
@@ -190,7 +208,8 @@ enum MusicXML {
         for i in bar {
             let note = score.notes[i]
             if let symbol = note.chordSymbol, !symbol.isEmpty {
-                let frame = score.chordDiagrams == true ? GuitarChords.diagram(for: symbol, capo: score.capo ?? 0)?.shape : nil
+                let frame = score.chordDiagrams == true || score.chordChart == true
+                    ? GuitarChords.diagram(for: symbol, capo: score.capo ?? 0, strings: score.openStrings, frets: min(15, score.maxFret), chosen: score.chordShapes)?.shape : nil
                 out += "      " + harmony(symbol, frame: frame) + "\n"
             }
             // A Roman numeral: harmony as a function (I, V7, V65/V), under the staff.
@@ -207,14 +226,21 @@ enum MusicXML {
                 out += "<voice>\(voice)</voice>\(staffTag)</direction>\n"
             }
             let tiedFrom = i > 0 && score.notes[i - 1].tie && !note.rest
-            let tab = score.showTab == true ? score.tab(i) : []
+            let tab = plan.indices.contains(i) ? plan[i] : []
+            if runStarts.contains(i) { out += "      <direction placement=\"above\"><direction-type><words>P.M.</words></direction-type><voice>\(voice)</voice>\(staffTag)</direction>\n" }
+            if ringStarts.contains(i) { out += "      <direction placement=\"above\"><direction-type><words>let ring</words></direction-type><voice>\(voice)</voice>\(staffTag)</direction>\n" }
+            let g = note.guitar
+            let previousLegato = i > 0 && score.notes[i - 1].guitar?.legato == true && !score.notes[i - 1].rest
+            let previousSlide = i > 0 && score.notes[i - 1].guitar?.slide == "next" && !score.notes[i - 1].rest
+            let rising = i + 1 < score.notes.count ? (score.midi(i + 1) ?? 0) >= (score.midi(i) ?? 0) : true
+            let fallingFrom = i > 0 ? (score.midi(i) ?? 0) < (score.midi(i - 1) ?? 0) : false
             // An ottava line starts here (MusicXML keeps the sounding pitch; 8va shows the notes shifted down).
             if let o = note.ottava, o != 0, i == 0 || score.notes[i - 1].ottava != o {
                 out += "      <direction placement=\"\(o > 0 ? "above" : "below")\"><direction-type><octave-shift type=\"\(o > 0 ? "down" : "up")\" size=\"\(abs(o) == 2 ? 15 : 8)\" number=\"1\"/></direction-type>\(staffTag)</direction>\n"
             }
             // A cross-staff note says which staff of the part it's drawn on.
             let noteStaffTag = staff.map { own in "<staff>\(note.crossStaff.map { max(1, min(2, own + $0)) } ?? own)</staff>" } ?? ""
-            func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: (string: Int, fret: Int)?,
+            func noteXML(chord: Bool, step: Int, octave: Int, alter: Int, accidental: Int?, main: Bool, tabSpot: TabSpot?,
                          drum: DrumInstrument? = nil) -> String {
                 var x = "      <note>"
                 if let grace = note.grace { x += grace == "acciaccatura" ? "<grace slash=\"yes\"/>" : "<grace/>" }
@@ -241,6 +267,8 @@ enum MusicXML {
                 if note.slash != nil, !note.rest { x += "<notehead>slash</notehead>" }
                 if let drum, !note.rest, drum.head != .normal {
                     x += "<notehead>\(drum.head == .x ? "x" : drum.head == .circleX ? "circle-x" : "diamond")</notehead>"
+                } else if !note.rest, let g {
+                    if g.dead == true { x += "<notehead>x</notehead>" } else if g.harmonic == "natural" { x += "<notehead>diamond</notehead>" } else if g.ghost == true { x += "<notehead parentheses=\"yes\">normal</notehead>" }
                 }
                 x += noteStaffTag
                 var notations = ""
@@ -256,13 +284,25 @@ enum MusicXML {
                     if let o = note.ornament, let x = ornamentXML[o] { notations += "<ornaments>\(x)</ornaments>" }
                     if note.fermata == true { notations += "<fermata type=\"\(stemDown ? "inverted" : "upright")\"/>" }
                 }
-                if let tabSpot { notations += "<technical><string>\(6 - tabSpot.string)</string><fret>\(tabSpot.fret)</fret></technical>" }
+                // How it's played, and its string and fret.
+                var technical = ""
+                if main, !note.rest {
+                    if previousLegato { technical += fallingFrom ? "<pull-off type=\"stop\"/>" : "<hammer-on type=\"stop\"/>" }
+                    if g?.legato == true { technical += rising ? "<hammer-on type=\"start\">H</hammer-on>" : "<pull-off type=\"start\">P</pull-off>" }
+                    if let bend = g?.bend { technical += "<bend><bend-alter>\(bend)</bend-alter>\(g?.release == true ? "<release/>" : "")</bend>" }
+                    if let h = g?.harmonic { technical += "<harmonic><\(h == "artificial" ? "artificial" : "natural")/></harmonic>" }
+                    if g?.tap == true { technical += "<tap/>" }
+                    if previousSlide { notations += "<slide type=\"stop\" number=\"1\"/>" }
+                    if g?.slide == "next" { notations += "<slide type=\"start\" number=\"1\" line-type=\"solid\"/>" }
+                    if g?.vibrato == true { notations += "<ornaments><wavy-line type=\"start\" number=\"1\"/><wavy-line type=\"stop\" number=\"1\"/></ornaments>" }
+                }
+                if let tabSpot { technical += "<string>\(score.stringCount - tabSpot.string)</string><fret>\(tabSpot.fret)</fret>" }
+                if !technical.isEmpty { notations += "<technical>\(technical)</technical>" }
                 if !notations.isEmpty { x += "<notations>\(notations)</notations>" }
                 if main, let lyric = note.lyric, !lyric.isEmpty { x += lyricXML(score, i) }
                 return x + "</note>\n"
             }
-            let shift = score.clef == .treble ? 12 : 0
-            func spot(_ midi: Int) -> (string: Int, fret: Int)? { tab.first { ScoreData.tuning[$0.string] + $0.fret == midi - shift } }
+            func spot(_ midi: Int) -> TabSpot? { tab.first { score.neckPitch($0) == midi - score.tabOffset } }
             let mainMidi = score.midi(i)
             // Figured bass goes just before its note.
             if let figures = note.figures, !figures.isEmpty { out += "      " + figuredBassXML(figures) + "\n" }
@@ -338,12 +378,29 @@ enum MusicXML {
     /// A chord diagram as MusicXML's harmony frame (strings 6 = low E … 1).
     private static func frameXML(_ shape: GuitarChords.Shape) -> String {
         let rows = max(4, (shape.frets.compactMap { $0 }.max() ?? 0) - shape.baseFret + 1)
-        var x = "<frame><frame-strings>6</frame-strings><frame-frets>\(min(rows, 5))</frame-frets>"
+        let n = shape.frets.count
+        var x = "<frame><frame-strings>\(n)</frame-strings><frame-frets>\(min(rows, 5))</frame-frets>"
         if shape.baseFret > 1 { x += "<first-fret>\(shape.baseFret)</first-fret>" }
+        let fingers = shape.fingering
         for (s, f) in shape.frets.enumerated() {
-            if let f { x += "<frame-note><string>\(6 - s)</string><fret>\(f)</fret></frame-note>" }
+            if let f { x += "<frame-note><string>\(n - s)</string><fret>\(f)</fret>\(f > 0 && fingers[s] != nil ? "<fingering>\(fingers[s]!)</fingering>" : "")</frame-note>" }
         }
         return x + "</frame>"
+    }
+
+    /// A frame read back as a shape (strings counted from the highest).
+    static func shape(fromFrame frame: XMLElement) -> GuitarChords.Shape? {
+        guard let n = frame.elements(forName: "frame-strings").first?.stringValue.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }), n >= 3 else { return nil }
+        var frets = [Int?](repeating: nil, count: n), fingers = [Int?](repeating: nil, count: n)
+        var anyFinger = false
+        for note in frame.elements(forName: "frame-note") {
+            guard let string = note.elements(forName: "string").first?.stringValue.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }),
+                  let fret = note.elements(forName: "fret").first?.stringValue.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }),
+                  (1...n).contains(string) else { continue }
+            frets[n - string] = fret
+            if let f = note.elements(forName: "fingering").first?.stringValue.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) { fingers[n - string] = f; anyFinger = true }
+        }
+        return GuitarChords.Shape(frets: frets, fingers: anyFinger ? fingers : nil)
     }
 
     private static func harmony(_ symbol: String, frame: GuitarChords.Shape? = nil) -> String {
@@ -439,6 +496,8 @@ enum MusicXML {
             var divisions = 1.0
             var seenAttributes = false
             var pendingSymbol: String?
+            // P.M. and let ring words: the next note starts the run.
+            var pendingPalmMute = false, pendingLetRing = false
             // A Roman numeral (harmony as a function) and figured bass for the next note.
             var pendingNumeral: String?, pendingFigures: String?
             // Dynamics and hairpins for the next note (by voice), slurs on the notes.
@@ -505,6 +564,20 @@ enum MusicXML {
                             }
                         }
                         if shared, let capo = text(e, "staff-details/capo").flatMap(Int.init), capo > 0 { score.capo = capo }
+                        // A fretted instrument's strings.
+                        if shared, let details = e.elements(forName: "staff-details").first {
+                            let letters: [String: Int] = ["C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11]
+                            let strings = details.elements(forName: "staff-tuning").compactMap { t -> (Int, Int)? in
+                                guard let line = t.attribute(forName: "line")?.stringValue.flatMap({ Int($0) }), let step = text(t, "tuning-step").flatMap({ letters[$0] }),
+                                      let octave = text(t, "tuning-octave").flatMap(Int.init) else { return nil }
+                                let alter = Int((text(t, "tuning-alter").flatMap(Double.init) ?? 0).rounded())
+                                return (line, (octave + 1) * 12 + step + alter)
+                            }.sorted { $0.0 < $1.0 }.map(\.1)
+                            if strings.count >= 3 {
+                                if let preset = TabInstrument.all.first(where: { $0.strings == strings }) { score.tabInstrument = preset.id; score.tabTuning = nil } else { score.tabTuning = strings }
+                                score.showTab = true
+                            }
+                        }
                         // This staff's clef (a two-staff part numbers them).
                         if !seenClef, let clef = e.elements(forName: "clef").first(where: {
                             ($0.attribute(forName: "number")?.stringValue ?? "1") == mine
@@ -518,6 +591,11 @@ enum MusicXML {
                         let second = firstVoice != nil && directionVoice != firstVoice && (secondVoice == nil || secondVoice == directionVoice)
                         // Dynamics and hairpins belong to their staff; tempo marks are read once, with the first staff.
                         let ownStaff = (text(e, "staff") ?? "1") == mine
+                        if ownStaff {
+                            let words = e.elements(forName: "direction-type").flatMap { $0.elements(forName: "words") }.map { $0.stringValue?.lowercased().trimmingCharacters(in: .whitespaces) ?? "" }
+                            if words.contains(where: { $0.hasPrefix("p.m") || $0 == "pm" || $0 == "palm mute" }) { pendingPalmMute = true }
+                            if words.contains(where: { $0.hasPrefix("let ring") }) { pendingLetRing = true }
+                        }
                         if ownStaff, let shift = e.elements(forName: "direction-type").flatMap({ $0.elements(forName: "octave-shift") }).first {
                             let size = Int(shift.attribute(forName: "size")?.stringValue ?? "8") ?? 8
                             switch shift.attribute(forName: "type")?.stringValue {
@@ -607,7 +685,19 @@ enum MusicXML {
                                 pendingSymbol = symbol(from: e)
                             }
                         }
-                        if shared, e.elements(forName: "frame").first != nil { score.chordDiagrams = true }
+                        if shared, let frame = e.elements(forName: "frame").first {
+                            score.chordDiagrams = true
+                            // A voicing other than the one that would be chosen is kept for its chord.
+                            if let symbol = pendingSymbol, let shape = shape(fromFrame: frame) {
+                                let played = (score.capo ?? 0) > 0 ? GuitarChords.transposed(symbol, by: -(score.capo ?? 0)) : symbol
+                                let automatic = GuitarChords.diagram(for: symbol, capo: score.capo ?? 0, strings: score.openStrings, frets: min(15, score.maxFret))?.shape
+                                if automatic?.frets != shape.frets || shape.fingers != nil {
+                                    var all = score.chordShapes ?? [:]
+                                    all[played] = shape
+                                    score.chordShapes = all
+                                }
+                            }
+                        }
                     case "figured-bass":
                         // Figures top to bottom (they go with the note that follows).
                         let names: [String: String] = ["sharp": "♯", "flat": "♭", "natural": "♮", "cross": "+", "back-slash": "\\", "slash": "\\",
@@ -668,7 +758,10 @@ enum MusicXML {
                         if isChord {
                             guard let step else { continue }
                             let written: Int? = hasAccidental || alter != ScoreData.keyAlter(step, fifths: key) ? alter : nil
-                            let tone = ChordTone(step: step, octave: octave, alter: drumID == nil ? written : nil, drum: drumID)
+                            var tone = ChordTone(step: step, octave: octave, alter: drumID == nil ? written : nil, drum: drumID)
+                            if let string = text(e, "notations/technical/string").flatMap(Int.init), (1...score.stringCount).contains(string) {
+                                tone.tabString = score.stringCount - string
+                            }
                             if inSecond {
                                 if var last = v2.popLast() { last.chord = (last.chord ?? []) + [tone]; v2.append(last) }
                             } else if var last = score.notes.popLast() {
@@ -749,10 +842,33 @@ enum MusicXML {
                             let syllabic = text(lyric, "syllabic") ?? "single"
                             note.lyric = words + (syllabic == "begin" || syllabic == "middle" ? "-" : "")
                         }
-                        if let string = text(e, "notations/technical/string").flatMap(Int.init), (1...6).contains(string) {
-                            note.tabString = 6 - string
+                        if let string = text(e, "notations/technical/string").flatMap(Int.init), (1...score.stringCount).contains(string) {
+                            note.tabString = score.stringCount - string
                             if shared { score.showTab = true }
                         }
+                        // How it's played.
+                        var g = GuitarMarks()
+                        for technical in e.elements(forName: "notations").flatMap({ $0.elements(forName: "technical") }) {
+                            for kind in ["hammer-on", "pull-off"] where technical.elements(forName: kind).contains(where: { $0.attribute(forName: "type")?.stringValue == "start" }) { g.legato = true }
+                            if let bend = technical.elements(forName: "bend").first {
+                                g.bend = text(bend, "bend-alter").flatMap(Double.init) ?? 2
+                                if bend.elements(forName: "release").first != nil { g.release = true }
+                            }
+                            if let h = technical.elements(forName: "harmonic").first { g.harmonic = h.elements(forName: "artificial").first != nil ? "artificial" : "natural" }
+                            if technical.elements(forName: "tap").first != nil { g.tap = true }
+                        }
+                        for notation in e.elements(forName: "notations") {
+                            if notation.elements(forName: "slide").contains(where: { $0.attribute(forName: "type")?.stringValue == "start" }) { g.slide = "next" }
+                            if notation.elements(forName: "ornaments").contains(where: { !$0.elements(forName: "wavy-line").isEmpty }) { g.vibrato = true }
+                        }
+                        if let head = e.elements(forName: "notehead").first {
+                            if head.stringValue == "x" { g.dead = true }
+                            if head.attribute(forName: "parentheses")?.stringValue == "yes" { g.ghost = true }
+                            if head.stringValue == "diamond", g.harmonic == nil { g.harmonic = "natural" }
+                        }
+                        if pendingPalmMute { g.palmMute = true; pendingPalmMute = false }
+                        if pendingLetRing { g.letRing = true; pendingLetRing = false }
+                        if !g.isEmpty, !note.rest { note.guitar = g }
                         if let symbol = pendingSymbol {
                             note.chordSymbol = symbol
                             pendingSymbol = nil
