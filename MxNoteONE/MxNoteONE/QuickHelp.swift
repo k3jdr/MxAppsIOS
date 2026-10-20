@@ -253,7 +253,7 @@ extension QuickHelp {
         "Map/Search": "Search for places and addresses, pin an address, or pin where you are.",
         "Map/Pins": "Drop pins with a click, pin the centre, edit, colour or delete the selected pin.",
         "Map/Link": "Link the selected pin to a page, a paragraph on a page, or a web address — and go there.",
-        "Map/Map": "The map's style (standard, muted, satellite, hybrid), 3D, points of interest, traffic, and grouping nearby pins.",
+        "Map/Map": "The map's style (standard, muted, satellite, hybrid), 3D, points of interest, traffic, and grouping nearby pins (all together, or by category).",
         "Map/Directions": "Driving or walking routes from one pin to another.",
         "Map/View": "The pin list, showing every pin, zooming, facing north, the title, and copying a picture of the map.",
         "Insert/3D": "A 3D model (parametric CAD): a new part, the sample bracket, or an STL / OBJ file. Double-click it on the page to edit it.",

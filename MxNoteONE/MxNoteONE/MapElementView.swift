@@ -62,7 +62,33 @@ final class ClosureButton: NSButton {
         target = self
         action = #selector(fire)
     }
+    /// A button with words (in a group's callout: a pin's name).
+    convenience init(title: String, tip: String?, handler: @escaping () -> Void) {
+        self.init(frame: .zero)
+        self.title = title
+        bezelStyle = .inline
+        isBordered = false
+        font = .systemFont(ofSize: 11)
+        contentTintColor = .controlAccentColor
+        alignment = .left
+        toolTip = tip
+        self.handler = handler
+        target = self
+        action = #selector(fire)
+    }
+
     @objc private func fire() { handler() }
+}
+
+/// A group of nearby pins (all of them, or one category's): their count, colour and category; its callout lists the
+/// pins, its right-click menu too.
+final class ClusterMarkerView: MKMarkerAnnotationView {
+    weak var owner: MapElementView?
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let owner, let cluster = annotation as? MKClusterAnnotation else { return nil }
+        owner.activate()
+        return owner.clusterMenu(cluster)
+    }
 }
 
 /// A pin's marker (its right-click menu is the pin's).
@@ -133,6 +159,7 @@ final class MapPanelModel {
     var addPin: () -> Void = {}
     var deleteRoute: (UUID) -> Void = { _ in }
     var copyLink: (UUID) -> Void = { _ in }
+    var colorCategory: (String, String) -> Void = { _, _ in }
 }
 
 final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegate {
@@ -177,7 +204,7 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         mapView.isRotateEnabled = true
         mapView.isPitchEnabled = true
         mapView.register(PinMarkerView.self, forAnnotationViewWithReuseIdentifier: "pin")
-        mapView.register(MKMarkerAnnotationView.self, forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier)
+        mapView.register(ClusterMarkerView.self, forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier)
         addSubview(mapView)
         searchField.placeholderString = "Search Maps"
         searchField.sendsWholeSearchString = true
@@ -195,6 +222,7 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         panel.addPin = { [weak self] in self?.pinAtCenter() }
         panel.deleteRoute = { [weak self] id in self?.deleteRoute(id) }
         panel.copyLink = { [weak self] id in self?.copyLink(id) }
+        panel.colorCategory = { [weak self] c, hex in self?.colorCategory(c, hex) }
         finishSetup()
         configure()
         mapView.camera = Self.camera(for: data)
@@ -281,8 +309,10 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         for pin in shown {
             if let a = annotations[pin.id] {
                 if a.pin != pin {
+                    // A pin moved to another category regroups with its new category.
+                    let moved = d.clustering == .category && a.pin.categoryName != pin.categoryName
                     a.update(pin)
-                    if let v = mapView.view(for: a) as? MKMarkerAnnotationView { style(v, pin) }
+                    if moved { regroup([a]) } else if let v = mapView.view(for: a) as? MKMarkerAnnotationView { style(v, pin) }
                 }
             } else {
                 let a = PinAnnotation(pin)
@@ -300,10 +330,62 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
             line.walking = r.transport == "walking"
             mapView.addOverlay(line, level: .aboveRoads)
         }
+        // Groups showing take their pins' new colours and names.
+        for case let cluster as MKClusterAnnotation in mapView.annotations {
+            if let v = mapView.view(for: cluster) as? MKMarkerAnnotationView { styleCluster(v, cluster) }
+        }
         panel.data = d
         panel.selected = selectedPin
         needsLayout = true
         layoutContent()
+    }
+
+    private var regrouping: [PinAnnotation] = []
+
+    /// Takes pins off the map and puts them back a moment later, so they group afresh: MapKit groups pins as they're
+    /// added, and changing how a marker on show groups (or taking it off and on at once) confuses it.
+    private func regroup(_ list: [PinAnnotation]) {
+        guard !list.isEmpty else { return }
+        mapView.removeAnnotations(list)
+        let first = regrouping.isEmpty
+        regrouping += list
+        guard first else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            var seen = Set<UUID>()
+            let back = self.regrouping.filter { a in self.annotations[a.id] === a && seen.insert(a.id).inserted }
+            self.regrouping = []
+            self.mapView.addAnnotations(back)
+        }
+    }
+
+    /// A group's marker: the count in its colour, its category under it, its pins in the callout.
+    private func styleCluster(_ v: MKMarkerAnnotationView, _ cluster: MKClusterAnnotation) {
+        let pins = cluster.memberAnnotations.compactMap { ($0 as? PinAnnotation)?.pin }
+        cluster.title = MapData.clusterTitle(pins)
+        v.markerTintColor = NSColor(hex: data.clusterColor(pins)) ?? .systemRed
+        v.glyphImage = nil
+        v.glyphText = "\(pins.count)"
+        v.displayPriority = .required
+        v.canShowCallout = true
+        v.toolTip = ([MapData.clusterTitle(pins)] + pins.prefix(12).map(\.title)).joined(separator: "\n")
+        let ids = pins.map(\.id)
+        v.rightCalloutAccessoryView = ClosureButton(symbol: "plus.magnifyingglass", tip: "Zoom in to these pins") { [weak self] in self?.zoom(to: ids) }
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 1
+        for p in pins.prefix(10) {
+            let id = p.id
+            stack.addArrangedSubview(ClosureButton(title: p.title, tip: p.address) { [weak self] in self?.goToPin(id) })
+        }
+        if pins.count > 10 {
+            let more = NSTextField(labelWithString: "and \(pins.count - 10) more")
+            more.font = .systemFont(ofSize: 11)
+            more.textColor = .secondaryLabelColor
+            stack.addArrangedSubview(more)
+        }
+        v.detailCalloutAccessoryView = stack
     }
 
     /// A marker's colour, symbol or letters, callout and grouping.
@@ -317,7 +399,7 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
             v.glyphImage = NSImage(systemSymbolName: pin.symbol ?? "mappin", accessibilityDescription: pin.title)
         }
         v.displayPriority = .required
-        v.clusteringIdentifier = data.clusters == true ? "pins" : nil
+        v.clusteringIdentifier = data.clusterID(for: pin)
         v.canShowCallout = true
         v.isDraggable = true
         v.toolTip = [pin.title, pin.linkTitle.map { "Links to " + $0 }].compactMap { $0 }.joined(separator: "\n")
@@ -338,7 +420,22 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
 
     // MARK: MKMapViewDelegate
 
+    func mapView(_ mapView: MKMapView, clusterAnnotationForMemberAnnotations memberAnnotations: [any MKAnnotation]) -> MKClusterAnnotation {
+        let cluster = MKClusterAnnotation(memberAnnotations: memberAnnotations)
+        let pins = memberAnnotations.compactMap { ($0 as? PinAnnotation)?.pin }
+        cluster.title = MapData.clusterTitle(pins)
+        cluster.subtitle = pins.prefix(5).map(\.title).joined(separator: ", ") + (pins.count > 5 ? "…" : "")
+        return cluster
+    }
+
     func mapView(_ mapView: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
+        if let cluster = annotation as? MKClusterAnnotation {
+            let id = MKMapViewDefaultClusterAnnotationViewReuseIdentifier
+            let v = mapView.dequeueReusableAnnotationView(withIdentifier: id, for: cluster) as? ClusterMarkerView ?? ClusterMarkerView(annotation: cluster, reuseIdentifier: id)
+            v.owner = self
+            styleCluster(v, cluster)
+            return v
+        }
         guard let a = annotation as? PinAnnotation else { return nil }
         let v = mapView.dequeueReusableAnnotationView(withIdentifier: "pin", for: a) as? PinMarkerView ?? PinMarkerView(annotation: a, reuseIdentifier: "pin")
         v.owner = self
@@ -418,11 +515,8 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         guard new != old else { return }
         element.map = new
         if old.style != new.style || old.realistic != new.realistic || old.pointsOfInterest != new.pointsOfInterest || old.traffic != new.traffic { configure() }
-        if old.clusters != new.clusters {
-            for a in annotations.values { if let v = mapView.view(for: a) as? MKMarkerAnnotationView { v.clusteringIdentifier = new.clusters == true ? "pins" : nil } }
-            mapView.removeAnnotations(Array(annotations.values))
-            mapView.addAnnotations(Array(annotations.values))
-        }
+        // Grouped afresh (all together, by category, or not at all).
+        if old.clustering != new.clustering { regroup(Array(annotations.values)) }
         sync()
         controller?.markDirty()
         controller?.undoManager?.registerUndo(withTarget: self) { view in
@@ -596,8 +690,13 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
             switch result {
             case .cancel: break
             case .delete: self?.deletePin(pin.id)
-            case .save(let p):
-                self?.update("Edit Pin") { d in if let i = d.pins.firstIndex(where: { $0.id == p.id }) { d.pins[i] = p } }
+            case .save(var p):
+                self?.update("Edit Pin") { d in
+                    guard let i = d.pins.firstIndex(where: { $0.id == p.id }) else { return }
+                    // Moved to a category with a colour (and not given another): its colour.
+                    if p.categoryName != d.pins[i].categoryName, p.color == d.pins[i].color, let c = d.categoryColors?[p.categoryName] { p.color = c }
+                    d.pins[i] = p
+                }
                 DispatchQueue.main.async { self?.selectPin(p.id, center: false) }
             }
         }
@@ -669,7 +768,58 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
     func toggle3D() { update("3D Map") { $0.realistic = $0.realistic == true ? nil : true } }
     func togglePointsOfInterest() { update("Points of Interest") { $0.pointsOfInterest = $0.pointsOfInterest == false ? nil : false } }
     func toggleTraffic() { update("Traffic") { $0.traffic = $0.traffic == true ? nil : true } }
-    func toggleClusters() { update("Group Nearby Pins") { $0.clusters = $0.clusters == true ? nil : true } }
+    func setClustering(_ c: MapClustering) { update(c.title) { $0.clustering = c } }
+
+    /// A category's colour: its pins take it (and its groups show it).
+    func colorCategory(_ category: String, _ hex: String) {
+        update("Category Color") { d in
+            var colors = d.categoryColors ?? [:]
+            colors[category] = hex
+            d.categoryColors = colors
+            for i in d.pins.indices where d.pins[i].categoryName == category { d.pins[i].color = hex }
+        }
+    }
+
+    /// Close in on some pins (a group's).
+    func zoom(to ids: [UUID]) {
+        let coords = data.pins.filter { ids.contains($0.id) }.map(\.coordinate)
+        fit(coords.map { MKMapPoint($0) })
+    }
+
+    /// Close enough to a pin that it leaves its group (its nearest neighbour in the group well apart on the map), and
+    /// select it.
+    func goToPin(_ id: UUID) {
+        let d = data
+        guard let pin = d.pins.first(where: { $0.id == id }) else { return }
+        let here = mapView.convert(pin.coordinate, toPointTo: mapView)
+        let key = d.clusterID(for: pin)
+        // How far apart on the map (points) its nearest neighbour in the group is now; that grows as the camera nears.
+        let apart = d.pins.filter { $0.id != id && d.isShown($0) && (key == nil || d.clusterID(for: $0) == key) }
+            .map { other -> CGFloat in let p = mapView.convert(other.coordinate, toPointTo: mapView); return hypot(p.x - here.x, p.y - here.y) }.min()
+        let now = mapView.camera.centerCoordinateDistance
+        var distance = min(now / 5, 1500)
+        if let apart, apart > 0.01 { distance = min(distance, now * Double(apart) / 110) }
+        go(to: pin.coordinate, distance: max(120, distance))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in self?.selectPin(id, center: false) }
+    }
+
+    func clusterMenu(_ cluster: MKClusterAnnotation) -> NSMenu {
+        let pins = cluster.memberAnnotations.compactMap { ($0 as? PinAnnotation)?.pin }
+        let menu = NSMenu()
+        let ids = pins.map(\.id)
+        menu.addItem(ClosureMenuItem("Zoom In to \(MapData.clusterTitle(pins))") { [weak self] in self?.zoom(to: ids) })
+        menu.addItem(.separator())
+        for p in pins.prefix(20) {
+            let item = ClosureMenuItem("Go to \(p.title)") { [weak self] in self?.goToPin(p.id) }
+            item.image = Self.swatch(p.color)
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        for c in MapClustering.allCases {
+            menu.addItem(ClosureMenuItem(c.title, state: data.clustering == c) { [weak self] in self?.setClustering(c) })
+        }
+        return menu
+    }
     func toggleList() {
         update("Pin List") { $0.showsList = $0.showsList == true ? nil : true }
     }
@@ -694,6 +844,10 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         let d = data
         var points = d.pins.filter { d.isShown($0) }.map { MKMapPoint($0.coordinate) }
         for r in d.routes ?? [] { points += r.points.map { MKMapPoint(CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1])) } }
+        fit(points)
+    }
+
+    private func fit(_ points: [MKMapPoint]) {
         guard !points.isEmpty else { return NSSound.beep() }
         var rect = MKMapRect(origin: points[0], size: MKMapSize(width: 0, height: 0))
         for p in points.dropFirst() { rect = rect.union(MKMapRect(origin: p, size: MKMapSize(width: 0, height: 0))) }
@@ -901,11 +1055,16 @@ final class MapElementView: ElementView, MKMapViewDelegate, NSSearchFieldDelegat
         sm.addItem(ClosureMenuItem("Points of Interest", state: d.pointsOfInterest != false) { [weak self] in self?.togglePointsOfInterest() })
         sm.addItem(ClosureMenuItem("Traffic", state: d.traffic == true) { [weak self] in self?.toggleTraffic() })
         style.submenu = sm
+        let group = NSMenuItem(title: "Group Nearby Pins", action: nil, keyEquivalent: "")
+        let gm = NSMenu()
+        for c in MapClustering.allCases { gm.addItem(ClosureMenuItem(c.title, state: d.clustering == c) { [weak self] in self?.setClustering(c) }) }
+        group.submenu = gm
         return [
             ClosureMenuItem("Pin at Center") { [weak self] in self?.pinAtCenter() },
             ClosureMenuItem("Pin an Address…") { [weak self] in self?.pinAtAddress() },
             ClosureMenuItem("Search Maps…") { [weak self] in self?.focusSearch() },
             style,
+            group,
             ClosureMenuItem("Pin List", state: d.showsList == true) { [weak self] in self?.toggleList() },
             ClosureMenuItem("Show All Pins") { [weak self] in self?.fitPins() },
             ClosureMenuItem("Directions…") { [weak self] in self?.directions() },
@@ -1027,12 +1186,38 @@ enum MapPicture {
                 (NSColor(hex: r.color) ?? .systemBlue).setStroke()
                 path.stroke()
             }
-            for pin in d.pins where d.isShown(pin) { drawMarker(pin, at: at(pin.coordinate)) }
+            drawPins(d, at: at)
         }
         NSGraphicsContext.current?.flushGraphics()
         let image = NSImage(size: size)
         image.addRepresentation(rep)
         return image
+    }
+
+    /// The pins — grouped as the map groups them (near each other, all together or by category) into one marker with
+    /// their count.
+    static func drawPins(_ d: MapData, at: (CLLocationCoordinate2D) -> NSPoint) {
+        let shown = d.pins.filter { d.isShown($0) }
+        guard d.clustering != .off else { return shown.forEach { drawMarker($0, at: at($0.coordinate)) } }
+        var groups: [(key: String, pins: [MapPin], point: NSPoint)] = []
+        for pin in shown {
+            let p = at(pin.coordinate)
+            let key = d.clusterID(for: pin) ?? pin.id.uuidString
+            if let i = groups.firstIndex(where: { $0.key == key && hypot($0.point.x - p.x, $0.point.y - p.y) < 34 }) {
+                let n = CGFloat(groups[i].pins.count)
+                groups[i].point = NSPoint(x: (groups[i].point.x * n + p.x) / (n + 1), y: (groups[i].point.y * n + p.y) / (n + 1))
+                groups[i].pins.append(pin)
+            } else {
+                groups.append((key, [pin], p))
+            }
+        }
+        for g in groups {
+            if g.pins.count == 1 { drawMarker(g.pins[0], at: g.point); continue }
+            var group = MapPin(title: MapData.clusterTitle(g.pins), latitude: 0, longitude: 0)
+            group.color = d.clusterColor(g.pins)
+            group.label = "\(g.pins.count)"
+            drawMarker(group, at: g.point)
+        }
     }
 
     /// A marker: a coloured balloon pointing at the place, with its symbol or letters in white.
@@ -1147,9 +1332,20 @@ struct MapPinList: View {
                                 Button { model.toggleCategory(category) } label: { Image(systemName: hidden ? "eye.slash" : "eye") }
                                     .buttonStyle(.borderless)
                                     .help(hidden ? "Show this category's pins" : "Hide this category's pins")
+                                if let hex = d.categoryColors?[category] {
+                                    Circle().fill(Color(nsColor: NSColor(hex: hex) ?? .gray)).frame(width: 8, height: 8)
+                                }
                                 Text(category)
                                 Spacer()
                                 Text("\(d.pins.filter { $0.categoryName == category }.count)").foregroundStyle(.secondary)
+                            }
+                            .contextMenu {
+                                Menu("Category Color") {
+                                    ForEach(MapPin.palette, id: \.1) { name, hex in
+                                        Button { model.colorCategory(category, hex) } label: { Label { Text(name) } icon: { Image(nsImage: MapElementView.swatch(hex)) } }
+                                    }
+                                }
+                                Button(hidden ? "Show \(category)" : "Hide \(category)") { model.toggleCategory(category) }
                             }
                         }
                     }

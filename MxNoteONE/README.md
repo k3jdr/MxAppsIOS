@@ -582,11 +582,19 @@ card names the pin, its page, and the pin's address and notes.
 
 **The pin list** (Map tab ▸ Pin List) shows the pins beside the map, grouped by category, like Google My Maps'
 layers: click a pin to go to it, double-click to edit it, the arrow to follow its link, and the eye beside a category
-to show or hide all its pins. Routes are listed there too, with their distance and time.
+to show or hide all its pins (right-click a category for its colour). Routes are listed there too, with their distance and time.
 
 **The map's look** — **Map Style**: Standard, Muted, Satellite or Hybrid (satellite with roads and labels); **3D**
-(terrain and buildings in relief); **Points of Interest**; **Traffic**; **Group Nearby Pins** (pins close together show
-as one with a count when zoomed out). **Directions…** draws a driving or walking route from one pin to another (each
+(terrain and buildings in relief); **Points of Interest**; **Traffic**.
+
+**Grouping pins** — **Group Pins** (Map tab, or right-click the map ▸ Group Nearby Pins): when zoomed out, pins
+close together show as one marker with their count — **all pins together**, or **by category**, each category grouped
+on its own so restaurants and hotels near each other stay apart. A category's group is drawn in its colour with the
+category's name under it ("Food · 4 pins"); click it for a callout listing its pins (click one to go to it — the map
+zooms in until it leaves the group — or the magnifier to zoom in on them all), or right-click it for the same.
+Zoom in and the pins separate. Give a category its colour by right-clicking its name in the pin list ▸ Category Color:
+its pins take it, so do its groups, and so do pins moved into it later. Printed and exported pictures group the pins
+the same way. **Directions…** draws a driving or walking route from one pin to another (each
 route its own colour; walking routes dotted). **Show All Pins** fits every pin and route in view; **Face North**,
 **Zoom In / Out**, **Map Title…**, **Copy Picture**. Where the map looks is kept with the page; every other change can
 be undone.

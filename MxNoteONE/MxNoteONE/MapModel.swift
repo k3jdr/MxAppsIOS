@@ -26,8 +26,11 @@ struct MapData: Codable, Hashable {
     /// Points of interest (shops, restaurants…) on the map — shown unless false.
     var pointsOfInterest: Bool?
     var traffic: Bool?
-    /// Nearby pins group into one when zoomed out.
+    /// Nearby pins group into one when zoomed out — all together, or each category on its own.
     var clusters: Bool?
+    var clusterByCategory: Bool?
+    /// A colour for each category (its pins and its groups), "#RRGGBB".
+    var categoryColors: [String: String]?
     /// The pin list beside the map.
     var showsList: Bool?
     /// Categories whose pins are hidden.
@@ -49,6 +52,38 @@ struct MapData: Codable, Hashable {
 
     func isShown(_ pin: MapPin) -> Bool { !(hiddenCategories ?? []).contains(pin.categoryName) }
 
+    var clustering: MapClustering {
+        get { clusters == true ? (clusterByCategory == true ? .category : .all) : .off }
+        set {
+            clusters = newValue == .off ? nil : true
+            clusterByCategory = newValue == .category ? true : nil
+        }
+    }
+
+    /// The group a pin joins when it's near others (nil: it stays on its own).
+    func clusterID(for pin: MapPin) -> String? {
+        switch clustering {
+        case .off: nil
+        case .all: "pins"
+        case .category: "category:" + pin.categoryName
+        }
+    }
+
+    /// A group's colour: its category's, else the colour most of its pins have.
+    func clusterColor(_ pins: [MapPin]) -> String {
+        let categories = Set(pins.map(\.categoryName))
+        if categories.count == 1, let c = categoryColors?[categories.first!] { return c }
+        var counts: [String: Int] = [:]
+        for p in pins { counts[p.color, default: 0] += 1 }
+        return counts.max { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) }?.key ?? MapPin.palette[0].1
+    }
+
+    /// A group's name: its category and how many ("Food · 4 pins"), else "6 pins".
+    static func clusterTitle(_ pins: [MapPin]) -> String {
+        let categories = Set(pins.map(\.categoryName))
+        return categories.count == 1 ? "\(categories.first!) · \(pins.count) pins" : "\(pins.count) pins"
+    }
+
     /// Words for search: the title, and each pin's title, notes, address, category and link.
     var searchText: String {
         ([title ?? ""] + pins.flatMap { [$0.title, $0.notes ?? "", $0.address ?? "", $0.category ?? "", $0.linkTitle ?? ""] })
@@ -63,6 +98,18 @@ struct MapData: Codable, Hashable {
             if let notes = p.notes, !notes.isEmpty { line += ": " + notes.replacingOccurrences(of: "\n", with: " ") }
             if let t = p.linkTitle, !t.isEmpty { line += " (→ \(t))" }
             return line
+        }
+    }
+}
+
+enum MapClustering: String, CaseIterable, Identifiable {
+    case off, all, category
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .off: "Don't Group Pins"
+        case .all: "Group Nearby Pins"
+        case .category: "Group Nearby Pins by Category"
         }
     }
 }

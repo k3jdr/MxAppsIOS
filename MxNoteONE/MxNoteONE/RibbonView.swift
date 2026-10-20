@@ -1221,8 +1221,14 @@ struct MapRibbon: View {
             RibbonButton("Points of Interest", "building.2", active: d?.pointsOfInterest != false) { act { $0.togglePointsOfInterest() } }
                 .tip("Points of Interest", "Shops, restaurants, parks and other places on the map.")
             RibbonButton("Traffic", "car.2", active: d?.traffic == true) { act { $0.toggleTraffic() } }
-            RibbonButton("Group Nearby Pins", "circle.grid.2x2", active: d?.clusters == true) { act { $0.toggleClusters() } }
-                .tip("Group Nearby Pins", "Pins close together show as one with a count when zoomed out.")
+            RibbonMenu(d?.clustering == .category ? "Grouped by Category" : d?.clustering == .all ? "Grouped" : "Group Pins", "circle.grid.2x2") {
+                ForEach(MapClustering.allCases) { c in
+                    Button { act { $0.setClustering(c) } } label: {
+                        if d?.clustering == c { Label(c.title, systemImage: "checkmark") } else { Text(c.title) }
+                    }
+                }
+            }
+            .tip("Group Pins", "Pins close together show as one marker with their count when zoomed out — all pins together, or each category on its own (in its colour, named under it). Click a group for its pins; zoom in and they separate.")
         }
         RibbonGroup("Directions") {
             RibbonButton("Directions…", "arrow.triangle.turn.up.right.diamond", large: true) { act { $0.directions() } }
