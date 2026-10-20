@@ -16,6 +16,10 @@ final class TitleView: NSScrollView, NSTextViewDelegate {
     final class Editor: NSTextView {
         var placeholder = "Page Title"
 
+        // Outside the title, the pointer isn't the title's to set (the window sends it every move while typing).
+        override func mouseMoved(with event: NSEvent) { if pointerInside(event) { super.mouseMoved(with: event) } }
+        override func cursorUpdate(with event: NSEvent) { if pointerInside(event) { super.cursorUpdate(with: event) } }
+
         override func draw(_ dirtyRect: NSRect) {
             super.draw(dirtyRect)
             guard string.isEmpty, let font else { return }

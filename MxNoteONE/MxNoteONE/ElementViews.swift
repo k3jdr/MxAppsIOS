@@ -343,12 +343,15 @@ final class NoteTextView: NSTextView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        // The window sends every move to the text view being typed in; outside it, the pointer isn't its to set.
+        guard pointerInside(event) else { hoverLink(event); return }
         super.mouseMoved(with: event)
         showLinkCursor(event)
         hoverLink(event)
     }
 
     override func cursorUpdate(with event: NSEvent) {
+        guard pointerInside(event) else { return }
         if !showLinkCursor(event) { super.cursorUpdate(with: event) }
     }
 

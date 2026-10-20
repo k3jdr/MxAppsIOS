@@ -1001,6 +1001,9 @@ final class EditorScrollView: NSScrollView {
 final class PythonTextView: NSTextView {
     static let font = NSFont(name: "Menlo", size: 12.5) ?? .monospacedSystemFont(ofSize: 12.5, weight: .regular)
 
+    override func mouseMoved(with event: NSEvent) { if pointerInside(event) { super.mouseMoved(with: event) } }
+    override func cursorUpdate(with event: NSEvent) { if pointerInside(event) { super.cursorUpdate(with: event) } }
+
     override func insertTab(_ sender: Any?) {
         insertText("    ", replacementRange: selectedRange())
     }

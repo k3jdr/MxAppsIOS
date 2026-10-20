@@ -876,7 +876,7 @@ final class TableModel {
 // MARK: - Grid view
 
 /// The editable table. Cells are drawn here; one rich-text editor moves to the cell being typed in.
-final class TableGridView: NSView, NSTextViewDelegate {
+final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
     static let padX: CGFloat = 6
     static let padY: CGFloat = 4
     static let minRowHeight: CGFloat = 24
@@ -1390,8 +1390,10 @@ final class TableGridView: NSView, NSTextViewDelegate {
     }
 
     private func updateCursor(_ event: NSEvent) {
-        guard !isExport, NotebookStore.shared.editor.tool == .type else { return }
+        guard !isExport, NotebookStore.shared.editor.tool == .type, event.window === window else { return }
         let p = convert(event.locationInWindow, from: nil)
+        // As the first responder it hears every move in the window: outside the table the pointer isn't its to set.
+        guard visibleRect.contains(p) else { return }
         // A formula cell shows its formula as a tip.
         if let cell = cell(at: p), cell != editing, Formula.isFormula(model.text(cell)) {
             if toolTip != model.text(cell) { toolTip = model.text(cell) }

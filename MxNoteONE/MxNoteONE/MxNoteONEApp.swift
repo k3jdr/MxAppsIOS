@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         OfficeFonts.load()
         // ⌘[ / ⌘] and a mouse's back and forward buttons go Back and Forward (⌃← / ⌃→ are in the Go menu).
         NavigationKeys.install()
+        // The text cursor doesn't stick after the pointer leaves text.
+        PointerGuard.install()
         // ⌃Z / ⌃Y (as in OneNote for Windows) also undo and redo; ⌘Z / ⇧⌘Z are the Mac keys.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             // The Scripts window's run and debug keys.

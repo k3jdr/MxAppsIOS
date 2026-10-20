@@ -163,6 +163,9 @@ final class TipEditorBox {
 final class TipTextView: NSTextView {
     weak var box: TipEditorBox?
 
+    override func mouseMoved(with event: NSEvent) { if pointerInside(event) { super.mouseMoved(with: event) } }
+    override func cursorUpdate(with event: NSEvent) { if pointerInside(event) { super.cursorUpdate(with: event) } }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard window?.firstResponder === self, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else {
             return super.performKeyEquivalent(with: event)
