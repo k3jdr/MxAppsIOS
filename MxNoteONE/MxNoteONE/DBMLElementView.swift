@@ -1040,15 +1040,21 @@ final class DBMLDiagramView: NSView, SetsOwnPointer {
         tracking = area
     }
 
+    // The pointer is set here only where the diagram is on top: over the container's resize edge (which covers the
+    // diagram's right side) the edge's ↔ stays, instead of the two taking turns on every move.
     override func mouseMoved(with event: NSEvent) {
-        guard let owner, pointerInside(event) else { return }
+        guard let owner else { return }
+        guard isUnderPointer(event) else {
+            owner.hoverLine = nil
+            return
+        }
         let p = point(event)
         owner.hoverLine = owner.line(near: p, within: 5 / zoom)
         owner.cursor(at: p).set()
     }
 
     override func cursorUpdate(with event: NSEvent) {
-        guard let owner, pointerInside(event) else { return }
+        guard let owner, isUnderPointer(event) else { return }
         owner.cursor(at: point(event)).set()
     }
 

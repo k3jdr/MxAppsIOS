@@ -22,6 +22,14 @@ extension NSView {
         let p = convert(event.locationInWindow, from: nil)
         return bounds.contains(p) && visibleRect.contains(p)
     }
+
+    /// Whether the view is the one under the pointer — not covered there by another view (a container's resize
+    /// edge over its content, a note being typed in).
+    func isUnderPointer(_ event: NSEvent) -> Bool {
+        guard pointerInside(event), let frame = window?.contentView?.superview,
+              let hit = frame.hitTest(frame.convert(event.locationInWindow, from: nil)) else { return false }
+        return hit === self || hit.isDescendant(of: self)
+    }
 }
 
 @MainActor
