@@ -4,7 +4,7 @@
 //
 //  Document-based app: each window is a workspace (*.mxworkspace).
 //  DocumentGroup provides the File menu (New, Open, Save, ...);
-//  TableCommands adds the Table menu.
+//  TableCommands adds the Table menu, DiagramCommands the Diagram menu.
 //
 
 import SwiftUI
@@ -20,6 +20,7 @@ struct MxDataSQLApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             TableCommands()
+            DiagramCommands()
             QuickHelpCommands()
         }
 
@@ -29,6 +30,14 @@ struct MxDataSQLApp: App {
             TableWindowView(id: id)
         }
         .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
+        // Diagram ▸ Write DBML / Open DBML. Not restored at launch: the diagram is handed over in memory.
+        WindowGroup("Diagram", for: DiagramWindowID.self) { $id in
+            DiagramWindowView(id: id)
+        }
+        .defaultSize(width: 1300, height: 860)
         .restorationBehavior(.disabled)
         .commandsRemoved()
     }

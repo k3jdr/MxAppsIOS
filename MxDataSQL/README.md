@@ -198,6 +198,43 @@ Reload, View… and Update…. The **Table** menu acts on whichever window is in
 - Table windows are not reopened when the app relaunches. The password is handed to them in memory only
   and is never written to window state.
 
+## Schema diagrams (Diagram menu)
+
+**Diagram ▸ Write DBML…** (⌥⌘D, while connected) writes the connected database's schema as
+[DBML](https://dbml.dbdiagram.io), the text format read by dbdiagram.io and its VS Code extension. A Save panel asks
+where; under it, tick the **schemas** to include (all user schemas with tables are ticked) and whether to **open the
+diagram after writing**. The file has:
+
+- every table with its columns (type, `pk`, `increment`, `not null`, `unique`, defaults) and the table and column
+  comments as notes; tables in `public` unqualified, others as `schema.table`;
+- indexes (expression indexes in backticks; GIN / GiST and partial indexes say so in a note); check and
+  exclusion constraints as comments;
+- every foreign key as a `Ref` (with its `ON DELETE` action), and one `TableGroup` per schema when there are several.
+
+Writing over a diagram you have already arranged keeps its table positions, curves and notes.
+
+**Diagram ▸ Open DBML…** (⌥⌘O) opens any `.dbml` file in a **Diagram window** (no connection needed):
+
+- Tables are drawn with their columns and types (🔑 primary key, 🔗 foreign key; hover a column for its constraints and
+  note); each schema has its own header colour and a dashed panel. Relationships run from column to column, with a
+  crow's foot at the "many" end and a bar at the "one" end. Tables are arranged by schema with related tables
+  together; **Arrange** does it again.
+- **Drag a table** to move it. Click a table to highlight its relationships.
+- **Click a relationship** to select it, then choose its curve in the toolbar (or right-click it): **Automatic**,
+  **Straight Line**, **Quadratic Bézier** (one control point) or **Cubic Bézier** (two). Bézier curves show their
+  control points; **drag the round handles** to reshape the curve. Control points move with the tables. Delete
+  sets a selected relationship back to Automatic.
+- **Notes**: **Add Note** (toolbar or Diagram menu), or double-click empty canvas. Drag a note to move it, drag its
+  corner to resize it, double-click it to edit; right-click ▸ Delete Note (or select it and press Delete). Sticky
+  notes that came with the file (written by another tool) are shown in grey and are read-only.
+- **Zoom** with the toolbar or Diagram ▸ Zoom In / Zoom Out / Actual Size (⌘+, ⌘−, ⌘0).
+- **Save** (⌘S in the diagram window, or Diagram ▸ Save Diagram / Save Diagram As…) writes the notes and layout into the
+  same `.dbml` file. Closing a diagram with unsaved changes asks first.
+
+The layout lives at the end of the file, after a `// ===== MxDataSQL diagram …` line: the notes as standard DBML sticky
+notes, and the positions and curves as one `// @mxdatasql-layout {…}` comment that other DBML tools ignore. The rest of
+the file is never rewritten, so a hand-written DBML file keeps its enums, settings and comments.
+
 ## Quick Help
 
 **View ▸ Quick Help** (⌥⌘/) shows a panel above the status bar, as in MxNoteONE, telling what's under the pointer in
@@ -212,6 +249,8 @@ remembered. While it's docked, the window's minimum height grows by the panel's,
 
 - **File**: New, Open, Save (plus the standard Save As, Duplicate, Revert and Open Recent). Files are workspaces.
 - **View ▸ Quick Help** (⌥⌘/) and **Float / Dock Quick Help**.
+- **Diagram ▸ Write DBML…** (⌥⌘D), **Open DBML…** (⌥⌘O), Save Diagram / Save Diagram As…, Add Note, Arrange Tables and
+  zoom (see [Schema diagrams](#schema-diagrams-diagram-menu)).
 - **Table ▸ View…** (⌥⌘L): columns fitted across the grid, rows guaranteed visible, and how many rows to fetch.
 - **Table ▸ Update…** (⌥⌘U): the same dialog as the **Update…** button on the DB Table form. It:
   - lists every changed cell (old value → new value);
@@ -262,6 +301,11 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `JSONFormatter.swift`, `JSONViewer.swift` | View JSON…: formatting and colouring like VS Code, and the sheet |
 | `SQLHighlighter.swift` | SQL syntax colouring (PostgreSQL-aware scanner, VS Code colours) |
 | `SQLFiles.swift` | SQL files: folder and recent files (bookmarks), open / save / revert, the SQL box's right-click menu |
+| `DBMLWriter.swift` | Diagram ▸ Write DBML: catalog query and DBML text |
+| `DBMLDocument.swift` | DBML model and parser; the diagram section (notes and layout) at the end of a .dbml file |
+| `DiagramModel.swift` | A Diagram window's state: positions, relationship curves, notes, arrangement, saving |
+| `DiagramCanvas.swift`, `DiagramWindow.swift` | The diagram drawing and its window (toolbar, close prompt) |
+| `DiagramCommands.swift` | The Diagram menu, the Write DBML Save panel and Open DBML |
 | `SQLQuickHelp.swift` | What Quick Help says: the forms and dialogs, the selection, grid cells and column headers |
 | `../Shared/QuickHelp/` | The Quick Help panel, shared with MxDataHUB and MxJobsWMS (the only part of `../Shared` this app compiles) |
 

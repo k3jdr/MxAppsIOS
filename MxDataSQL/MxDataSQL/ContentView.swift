@@ -70,7 +70,14 @@ struct ContentView: View {
         .quickHelpScreen(screen.name, screen.item, selection: SQLHelp.selection(session))
         .onAppear { SQLHelp.install() }
         .focusedSceneValue(\.workspaceSession, session)
-        .task { session.loadSavedPassword(for: document.workspace.connection) }
+        .task {
+            session.loadSavedPassword(for: document.workspace.connection)
+            #if DEBUG
+            await DiagramDemo.run(session: session, settings: document.workspace.connection) {
+                openWindow(value: DiagramWindows.register($0))
+            }
+            #endif
+        }
         .onDisappear {
             widthSink.save = nil
             let session = session
