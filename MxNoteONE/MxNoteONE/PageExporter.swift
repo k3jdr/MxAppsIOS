@@ -202,6 +202,25 @@ enum PageExporter {
                 lines.append("*Map: \(name)*")
                 if !map.pins.isEmpty { lines.append("") }
                 lines += map.pinLines(markdown: true)
+            case .dbml:
+                // A DBML diagram: its picture, a .dbml file beside the Markdown, and its DBML in a code block.
+                guard let d = element.dbml else { continue }
+                let name = d.title ?? "Database diagram"
+                let base = safeName(d.title ?? "Diagram") + "-" + String(element.id.uuidString.prefix(4))
+                try? FileManager.default.createDirectory(at: assetsFolder, withIntermediateDirectories: true)
+                if let png = DBMLDrawing.picture(d, scale: 2).pngData {
+                    try? png.write(to: assetsFolder.appending(path: base + ".png"))
+                    let link = (assetsName + "/" + base + ".png").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? base
+                    lines.append("![\(name)](\(link))")
+                    lines.append("")
+                }
+                try? d.exportText.write(to: assetsFolder.appending(path: base + ".dbml"), atomically: true, encoding: .utf8)
+                let file = (assetsName + "/" + base + ".dbml").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? base
+                lines.append("*Database diagram: [\(base).dbml](\(file))*")
+                lines.append("")
+                lines.append("```dbml")
+                lines += d.exportText.trimmingCharacters(in: .newlines).components(separatedBy: "\n")
+                lines.append("```")
             }
             lines.append("")
         }

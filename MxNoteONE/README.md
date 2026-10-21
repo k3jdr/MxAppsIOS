@@ -13,8 +13,8 @@ Open `MxNoteONE.xcodeproj` in Xcode, then Run. There are no package dependencies
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Sidebar**   | Open notebooks, each with its**sections** (coloured tabs) and **section groups** (folders, can nest). Right-click a notebook, section or group to rename, recolour, move up/down or into a group, password protect, export or delete it. **Drag** a section or group (from anywhere on its row) to reorder it — a line shows where it'll go; drop it on a group to put it inside (hold it over a closed group and it springs open), or on the notebook's name to put it last. Drop a page on a section to move it there (with its subpages), in this or another notebook. **+** adds a section, section group or notebook; the tag and trash buttons open the Tag Summary and Recycle Bin. The search field searches every open notebook.                                                                                                                                                             |
 | **Page list** | Pages of the selected section with date and first line. Subpages are indented (two levels) and can be collapsed; drag a page (selected or not) to reorder it — a line shows where it'll go, and its subpages move with it; dropped next to a subpage it becomes one, and dropped below the list it goes last. Drag it onto a section in the sidebar to move it there. Dragged into a note, a page (or section) becomes a link to it. Right-click for New Page / Subpage, Make Subpage, Promote, Move or Copy…, Duplicate, Copy Link to Page, Export as PDF / Markdown, Print, Delete. While the search field has text, this column shows the search results instead.                                                                                                                                                                   |
-| **Ribbon**    | **Home**: font and size boxes showing the selected text's font and size ("Mixed" / "–" when the selection mixes several; with table cells selected, the cells' font), bold / italic / underline / strikethrough buttons lit when the selection has them, then font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: draw.io diagrams — new, from a template, insert or link a .drawio.svg file, edit, export, the editor (online / offline) and its theme; old ink can be turned into a diagram. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
-| **Page**      | A title, and under it the date and time the page was created │ **Updated** and when it was last changed (hover for both in words), then a free-form canvas: click anywhere to start a text container there (or double-click, or not at all — Settings ▸ General ▸ Page, or right-click the page ▸ Clicking the Page). Right-click an empty part of the page for New Text Box Here, Paste Here, and Insert Here (a table, picture, file, map, score, 3D model or diagram where you clicked). Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper.                                                                                 |
+| **Ribbon**    | **Home**: font and size boxes showing the selected text's font and size ("Mixed" / "–" when the selection mixes several; with table cells selected, the cells' font), bold / italic / underline / strikethrough buttons lit when the selection has them, then font, size, bold, italic, underline, strikethrough, superscript/subscript, highlight and font colours, clear formatting, bullets, numbering, indent, alignment, line spacing, styles (Heading 1–4, Title, Quote, Code), tags. **Insert**: table, DBML database diagram, picture, file attachment, screen clipping, audio recording, link, date / time stamps, page templates. **Draw**: draw.io diagrams — new, from a template, insert or link a .drawio.svg file, edit, export, the editor (online / offline) and its theme; old ink can be turned into a diagram. **View**: page colour, rule lines and grids, zoom, full page view, Tag Summary, Recycle Bin. |
+| **Page**      | A title, and under it the date and time the page was created │ **Updated** and when it was last changed (hover for both in words), then a free-form canvas: click anywhere to start a text container there (or double-click, or not at all — Settings ▸ General ▸ Page, or right-click the page ▸ Clicking the Page). Right-click an empty part of the page for New Text Box Here, Paste Here, and Insert Here (a table, picture, file, map, DBML diagram, score, 3D model or diagram where you clicked). Drag a container by its top bar, resize it from its right edge, right-click the bar for Cut / Copy / Delete / Bring to Front / Send to Back. Click a container's bar (or press Escape while typing) to select it; then Delete removes it and the arrow keys nudge it. Drop pictures and files onto the page. Pinch or use View ▸ Zoom. The page is always drawn as light paper.                                                                                 |
 
 ## Pages
 
@@ -618,6 +618,43 @@ Maps print, export to PDF and go to OneNote as a picture with their pins (and a 
 writes the picture and the pins, each linked to its place on Apple Maps. Search finds a map by its title and its pins'
 titles, notes, addresses and categories.
 
+## DBML database diagrams
+
+**Insert ▸ DBML Diagram** (⌃⌘B, or the Insert tab's DBML button) puts a database diagram on the page, written in
+[DBML](https://dbml.dbdiagram.io/docs) — the Database Markup Language of dbdiagram.io. It starts with a small sample
+and its DBML showing beside it; **Insert ▸ DBML Diagram from File…** (or the DBML File button) starts from a .dbml file.
+Click the diagram to work on it: the **DBML** tab appears.
+
+- **The DBML** (Show DBML / Hide DBML): `Table name [headercolor: #hex, note: '…'] { column type [pk, increment, not
+  null, unique, default: …, note: '…', ref: > other.id] }` with `Note` and `indexes` (a composite `[pk]` marks its
+  columns), `Enum`, `Ref` (`>` many-to-one, `<` one-to-many, `-` one-to-one, `<>` many-to-many; short, long and
+  composite forms, inline refs, aliases and `schema.table` names), `TableGroup`, sticky `Note name { '…' }` and
+  `Project`. It's coloured as you type and the diagram follows; problems (an unknown word, a Ref to a missing table or
+  column) show under the DBML — click one to go to its line. Typing is one undo step when you leave the DBML.
+- **Tables**: each table shows its columns and types (a key marks the primary key, `!` not null, a dot a note — hover
+  for it; the header's bubble means the table has a note). **Drag a table** (or an enum, or a sticky note) to move it;
+  its lines follow, and the container grows to fit. ⇧ / arrow keys nudge the selected table. New tables are placed
+  in columns, each to the right of the tables it refers to; **Arrange** places them all afresh. Double-click a table
+  to see its DBML. Table groups are drawn around their tables.
+- **Relationship lines** run from column to column, marked `1` and `*` at their ends (many-to-many dashed). Click a
+  line to select it: its **control points** show, with guides to the ends they pull from. A **quadratic Bézier curve**
+  has one control point, a **cubic Bézier curve** two (new lines are cubic); **straight** lines have none. Drag a
+  control point to bend the line — it keeps its shape as the tables move. Right-click a line (or use the Lines
+  group) for Straight / Quadratic / Cubic, **Reset Curve**, **Sides** (start or end on a table's left or right side)
+  and **Line Color**; with no line selected, the style buttons set every line.
+- **Notes over the diagram**: double-click empty space, right-click ▸ Add Note Here, or Add Note — then type. Drag a
+  note to move it, drag its corner to resize it, right-click for its colour; Delete removes the selected one.
+- **View**: Fit Width (the default — as wide as the container, up to its own size), Zoom In / Out (wider diagrams
+  scroll across), Column Types, Copy Picture, Export Picture….
+- **Export DBML…** saves a .dbml file — the DBML as written, with the notes over the diagram as DBML sticky notes —
+  for dbdiagram.io, dbdocs or database tools; **Import DBML…** replaces the DBML with a file's (tables keep their
+  places while their names stay).
+
+Where each table sits, each line's curve and the notes are saved with the page, and every change can be undone. DBML
+diagrams print and export to PDF as drawn, go to OneNote as a picture with their DBML, and Markdown export writes the
+picture, a .dbml file and the DBML in a code block. Search finds a diagram by its tables, columns, enums, groups and
+notes. Copying the container copies its picture and its DBML.
+
 ## Microsoft Office fonts
 
 Office for Mac keeps its fonts (Calibri, Consolas, Cambria, Aptos, Segoe UI…) inside the Office apps, so other apps
@@ -787,6 +824,7 @@ Ignore and Learn; F7 again goes on to the next one. When there are none, a messa
 | Insert Table / Picture / Screen Clipping / Record Audio | ⌃⌘T / ⌃⌘P / ⌃⇧⌘S / ⌃⌘R            |
 | Insert 3D Model                                         | ⌃⌘3                                      |
 | Insert Map                                              | ⌃⌘M                                      |
+| Insert DBML Diagram                                     | ⌃⌘B                                      |
 | 3D editor: standard views / fit all (in the 3D view)    | 0 – 6 / F                                |
 | 3D editor: Leave Sketch                                 | ⌘↩                                       |
 | Back / Forward (pages visited)                          | ⌃← / ⌃→, or ⌘[ / ⌘]                    |

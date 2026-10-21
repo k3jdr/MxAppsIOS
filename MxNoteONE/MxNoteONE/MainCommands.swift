@@ -221,6 +221,10 @@ struct MainCommands: Commands {
             Button("Map") { canvas?.insertMap() }
                 .keyboardShortcut("m", modifiers: [.command, .control])
             Divider()
+            Button("DBML Diagram") { canvas?.insertDBML() }
+                .keyboardShortcut("b", modifiers: [.command, .control])
+            Button("DBML Diagram from File…") { canvas?.importDBMLFile() }
+            Divider()
             Button("3D Model") { canvas?.insertModel() }
                 .keyboardShortcut("3", modifiers: [.command, .control])
             Button("3D Model (Sample Bracket)") { canvas?.insertModel(sample: true) }

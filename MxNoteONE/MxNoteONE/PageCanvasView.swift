@@ -259,6 +259,8 @@ final class PageCanvasView: NSView {
             view = CADElementView(element: element)
         case .map:
             view = MapElementView(element: element)
+        case .dbml:
+            view = DBMLElementView(element: element)
         }
         view.canvas = self
         if isExport { view.prepareForExport() }
@@ -440,6 +442,7 @@ final class PageCanvasView: NSView {
         here("File Attachment…", "paperclip") { $0.chooseAttachments() }
         im.addItem(.separator())
         here("Map", "map") { $0.insertMap() }
+        here("DBML Diagram", "cylinder.split.1x2") { $0.insertDBML() }
         here("Music Score", "music.note.list") { $0.insertScore() }
         here("3D Model", "cube") { $0.insertModel() }
         here("Diagram (draw.io)", "point.3.connected.trianglepath.dotted") { $0.newDiagram() }

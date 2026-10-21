@@ -88,6 +88,18 @@ enum OneNoteHTML {
                 }
                 if !map.pins.isEmpty { body += "<ul>" + map.pinLines(markdown: false).map { "<li>\(escape($0))</li>" }.joined() + "</ul>" }
                 body += "</div>\n"
+            case .dbml:
+                // OneNote has no DBML diagrams: its picture, and its DBML.
+                guard let d = element.dbml else { continue }
+                let picture = DBMLDrawing.picture(d, scale: 1)
+                body += "<div style=\"position:absolute;left:\(x)px;top:\(y)px;width:\(w)px\">"
+                if let png = picture.pngData {
+                    let name = "img\(parts.count)"
+                    parts.append(GraphClient.Part(name: name, contentType: "image/png", data: png))
+                    let width = min(Double(w), picture.size.width)
+                    body += "<img width=\"\(Int(width))\" height=\"\(Int((picture.size.height * width / max(picture.size.width, 1)).rounded()))\" src=\"name:\(name)\" />"
+                }
+                body += "<pre style=\"font-family:Consolas,Menlo,monospace;font-size:9pt\">\(escape(d.exportText))</pre></div>\n"
             case .score:
                 // OneNote has no scores: its title, signatures and notes in letter names.
                 guard let score = element.score else { continue }

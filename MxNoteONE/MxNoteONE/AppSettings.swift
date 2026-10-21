@@ -104,7 +104,7 @@ enum Prefs {
 }
 
 enum RibbonTab: String, CaseIterable, Identifiable {
-    case home = "Home", insert = "Insert", draw = "Draw", view = "View", table = "Table", score = "Score", map = "Map"
+    case home = "Home", insert = "Insert", draw = "Draw", view = "View", table = "Table", score = "Score", map = "Map", dbml = "DBML"
     var id: String { rawValue }
 }
 
@@ -171,6 +171,9 @@ final class EditorState {
     var mapActive = false
     var mapDropping = false
     var mapChanged = 0
+    /// A DBML diagram is being worked on (the DBML ribbon tab shows); bumped when it or its selection changes.
+    var dbmlActive = false
+    var dbmlChanged = 0
     var showRibbon = true
     var tool: CanvasTool = .type {
         didSet { NotebookStore.shared.canvas?.toolChanged() }

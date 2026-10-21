@@ -18,7 +18,7 @@ struct RibbonView: View {
     /// The tab shown (Table and Score only while a table or score is being worked on).
     private var shownTab: RibbonTab {
         switch editor.ribbonTab {
-        case .table where !editor.tableActive, .score where !editor.scoreActive, .map where !editor.mapActive: .home
+        case .table where !editor.tableActive, .score where !editor.scoreActive, .map where !editor.mapActive, .dbml where !editor.dbmlActive: .home
         default: editor.ribbonTab
         }
     }
@@ -26,13 +26,13 @@ struct RibbonView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 2) {
-                ForEach(RibbonTab.allCases.filter { ($0 != .table || editor.tableActive) && ($0 != .score || editor.scoreActive) && ($0 != .map || editor.mapActive) }) { tab in
+                ForEach(RibbonTab.allCases.filter { ($0 != .table || editor.tableActive) && ($0 != .score || editor.scoreActive) && ($0 != .map || editor.mapActive) && ($0 != .dbml || editor.dbmlActive) }) { tab in
                     Button {
                         editor.ribbonTab = tab
                     } label: {
                         Text(tab.rawValue)
                             .font(.system(size: 12, weight: editor.ribbonTab == tab ? .semibold : .regular))
-                            .foregroundStyle(tab == .table || tab == .score || tab == .map ? Color.accentColor : Color.primary)
+                            .foregroundStyle(tab == .table || tab == .score || tab == .map || tab == .dbml ? Color.accentColor : Color.primary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
                             .background(editor.ribbonTab == tab ? Color.accentColor.opacity(0.16) : .clear,
@@ -443,6 +443,10 @@ struct InsertRibbon: View {
                 Divider()
                 Button("Insert Table…") { store.sheet = .insertTable }
             }
+            RibbonButton("DBML", "cylinder.split.1x2", large: true) { canvas?.insertDBML() }
+                .tip("DBML Diagram", "A database diagram written in DBML (as on dbdiagram.io): tables, columns and relationships. Drag the tables, bend the lines through their control points, add notes, and export it as a .dbml file. ⌃⌘B.")
+            RibbonButton("DBML File", "square.and.arrow.down", large: true) { canvas?.importDBMLFile() }
+                .tip("DBML File", "A database diagram from a .dbml file (exported from dbdiagram.io, or your own).")
         }
         RibbonGroup("Music") {
             RibbonButton("Score", "music.note.list", large: true) { canvas?.insertScore() }
@@ -1245,6 +1249,84 @@ struct MapRibbon: View {
             RibbonButton("Face North", "location.north.line") { act { $0.faceNorth() } }
             RibbonButton("Map Title…", "textformat") { act { $0.editTitle() } }
             RibbonButton("Copy Picture", "photo.on.rectangle") { act { $0.copyPicture() } }
+        }
+    }
+}
+
+// MARK: - DBML
+
+struct DBMLRibbon: View {
+    @Bindable private var editor = NotebookStore.shared.editor
+    private var diagram: DBMLElementView? { DBMLElementView.active }
+
+    /// Runs a command on the diagram.
+    private func act(_ body: (DBMLElementView) -> Void) {
+        guard let diagram else { return NSSound.beep() }
+        body(diagram)
+    }
+
+    var body: some View {
+        let _ = editor.dbmlChanged
+        let d = diagram?.data
+        let line = diagram?.selectedLineInfo
+        let note = diagram?.selectedNote
+        RibbonGroup("DBML") {
+            RibbonButton(diagram?.showsSource == true ? "Hide DBML" : "Show DBML", "chevron.left.forwardslash.chevron.right", large: true,
+                         active: diagram?.showsSource == true) { act { $0.toggleSource() } }
+                .tip("Show DBML", "The diagram's DBML beside it — tables, columns, enums, Refs, groups and notes, coloured as you type; the diagram follows. Problems show under it: click one to go to its line.")
+            RibbonButton("Import DBML…", "square.and.arrow.down") { act { $0.importDBML() } }
+                .tip("Import DBML", "Replaces the DBML with a .dbml file's (from dbdiagram.io or your own); tables keep their places when their names stay.")
+            RibbonButton("Export DBML…", "square.and.arrow.up") { act { $0.exportDBML() } }
+                .tip("Export DBML", "Saves the DBML as a .dbml file — for dbdiagram.io, dbdocs or database tools — with the notes on the diagram as DBML sticky notes.")
+        }
+        RibbonGroup("Tables") {
+            RibbonButton("Arrange", "rectangle.3.group", large: true) { act { $0.arrange() } }
+                .tip("Arrange Tables", "Places every table afresh, in columns: each table to the right of the tables it refers to. (Drag a table to put it anywhere.)")
+            RibbonButton("Column Types", "textformat.abc", active: d?.hidesTypes != true) { act { $0.toggleTypes() } }
+                .tip("Column Types", "Each column's type beside its name (! marks not null; a key marks the primary key).")
+        }
+        RibbonGroup("Lines") {
+            ForEach(DBMLCurve.allCases) { c in
+                RibbonButton(c == .straight ? "Straight" : c == .quadratic ? "Quadratic" : "Cubic", c.symbol, active: (line?.curve ?? d?.defaultCurve) == c) {
+                    act { $0.setCurve(c) }
+                }
+                .tip(c.title, line == nil ? "Draws every relationship line this way (click a line first for just that one)."
+                     : c == .straight ? "The selected line, straight." : c == .quadratic ? "The selected line as a quadratic Bézier curve: drag its one control point to bend it."
+                     : "The selected line as a cubic Bézier curve: drag its two control points to shape it.")
+            }
+            RibbonButton("Reset Curve", "arrow.uturn.backward") { act { $0.resetLine() } }
+                .tip("Reset Curve", "The selected line's curve and sides as they were (its control points back to their places).")
+                .disabled(line == nil)
+            RibbonMenu("Line Color", "paintpalette") {
+                Button("Automatic") { act { $0.setLineColor(nil) } }
+                ForEach(DBMLElementView.lineColors, id: \.1) { name, hex in
+                    Button(name) { act { $0.setLineColor(hex) } }
+                }
+            }
+            .tip("Line Color", "The selected relationship line's colour.")
+            .disabled(line == nil)
+        }
+        RibbonGroup("Notes") {
+            RibbonButton("Add Note", "note.text.badge.plus", large: true) { act { $0.addNote() } }
+                .tip("Add Note", "A note over the diagram, to type in (or double-click empty space). Drag it, resize it from its corner; it's exported as a DBML sticky note.")
+            RibbonMenu("Note Color", "paintpalette") {
+                ForEach(DBMLNote.palette, id: \.1) { name, hex in
+                    Button(name) { act { $0.setNoteColor(hex) } }
+                }
+            }
+            .tip("Note Color", "The selected note's colour.")
+            .disabled(note == nil)
+            RibbonButton("Delete Note", "trash") { act { $0.deleteNote() } }
+                .tip("Delete Note", "Removes the selected note (Delete does too).")
+                .disabled(note == nil)
+        }
+        RibbonGroup("View") {
+            RibbonButton("Zoom In", "plus.magnifyingglass") { act { $0.zoom(by: 1.25) } }
+            RibbonButton("Zoom Out", "minus.magnifyingglass") { act { $0.zoom(by: 0.8) } }
+            RibbonButton("Fit Width", "arrow.left.and.right", active: d?.zoom == nil) { act { $0.setZoom(nil) } }
+                .tip("Fit Width", "The diagram as wide as its container (up to its own size); zoom in or out to set a size of your own.")
+            RibbonButton("Copy Picture", "doc.on.doc") { act { $0.copyPicture() } }
+            RibbonButton("Export Picture…", "photo") { act { $0.exportPicture() } }
         }
     }
 }

@@ -1577,6 +1577,9 @@ enum PageIndexer {
             case .map:
                 // A map's title and its pins' titles, notes, addresses and categories.
                 if let m = element.map { texts.append(m.searchText) }
+            case .dbml:
+                // A database diagram's tables, columns, enums, groups and notes.
+                if let d = element.dbml { texts.append(d.searchText) }
             }
         }
         return index(texts: texts)

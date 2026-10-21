@@ -122,6 +122,11 @@ final class QuickHelp {
             return staff.quickHelp(at: p)
         case let grid as TableGridView:
             return grid.quickHelp(at: p)
+        case let diagram as DBMLDiagramView:
+            return diagram.quickHelp(at: p)
+        case is DBMLSourceTextView:
+            return QuickHelpItem(title: "DBML", detail: "The diagram's DBML: Table name { column type [pk, not null, unique, note: '…', ref: > other.id] }, Enum, Ref: a.b > c.d (> many-to-one, < one-to-many, - one-to-one, <> many-to-many), TableGroup and Note. The diagram follows as you type; problems show below.",
+                                 shortcut: nil, symbol: "chevron.left.forwardslash.chevron.right")
         case let tv as NoteTextView:
             if let spot = tv.linkSpot(at: p) {
                 let info = LinkInfo(spot.url, tip: NoteRichText.tip(in: tv.textStorage ?? NSAttributedString(), at: spot.range.location))

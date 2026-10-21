@@ -435,7 +435,7 @@ struct CellSpan: Codable, Hashable {
 
 /// A container placed anywhere on the page.
 struct PageElement: Codable, Identifiable {
-    enum Kind: String, Codable { case text, image, file, audio, table, chart, score, diagram, model, map }
+    enum Kind: String, Codable { case text, image, file, audio, table, chart, score, diagram, model, map, dbml }
 
     var id = UUID()
     var kind: Kind
@@ -463,6 +463,8 @@ struct PageElement: Codable, Identifiable {
     var cad: CADModel?
     /// A map: where it looks, its style, and its pins (`preview` a picture of it, for printing and exports).
     var map: MapData?
+    /// A DBML database diagram: its DBML, where its tables were dragged, its lines' curves and its notes.
+    var dbml: DBMLData?
 
     var frame: CGRect { CGRect(x: x, y: y, width: width, height: height) }
 }

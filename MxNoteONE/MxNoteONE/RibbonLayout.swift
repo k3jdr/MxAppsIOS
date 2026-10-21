@@ -43,6 +43,7 @@ final class RibbonLayout {
         (.table, ["Automation", "Insert", "Merge", "Delete", "Shading", "Cell Text", "Table"]),
         (.score, ["Notes", "Expression", "Articulation", "Staves", "Transpose", "Lead Sheet", "Bars", "Voice", "Add", "Selected Note", "Chords & Lyrics", "Analysis", "Score"]),
         (.map, ["Search", "Pins", "Link", "Map", "Directions", "View"]),
+        (.dbml, ["DBML", "Tables", "Lines", "Notes", "View"]),
     ]
 
     static func key(_ tab: RibbonTab, _ title: String) -> String { tab.rawValue + "/" + title }
@@ -140,6 +141,7 @@ struct RibbonTabContent: View {
         case .table: TableRibbon()
         case .score: ScoreRibbon()
         case .map: MapRibbon()
+        case .dbml: DBMLRibbon()
         }
     }
 }
@@ -298,6 +300,7 @@ struct RibbonPaletteView: View {
         case .table: editor.tableActive
         case .score: editor.scoreActive
         case .map: editor.mapActive
+        case .dbml: editor.dbmlActive
         default: true
         }
     }
@@ -310,7 +313,7 @@ struct RibbonPaletteView: View {
         .environment(\.ribbonPaletteKey, key)
         .disabled(!available)
         .opacity(available ? 1 : 0.45)
-        .help(available ? "" : (tab == .score ? "Click in a music score to use these" : tab == .map ? "Click a map to use these" : "Click in a table to use these"))
+        .help(available ? "" : (tab == .score ? "Click in a music score to use these" : tab == .map ? "Click a map to use these" : tab == .dbml ? "Click a DBML diagram to use these" : "Click in a table to use these"))
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .fixedSize()
