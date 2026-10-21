@@ -11,7 +11,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum DBMLFile {
-    static let type = UTType(filenameExtension: "dbml", conformingTo: .plainText) ?? .plainText
+    /// The type macOS gives .dbml files. No app declares one, so it is a dynamic type; asking for one that
+    /// conforms to plain text would make a different dynamic type that no .dbml file has, and the Open
+    /// panel would grey them all out.
+    static let type = UTType(filenameExtension: "dbml") ?? .plainText
 }
 
 /// Identifies a Diagram window; the model is handed over in memory (DiagramWindows).
