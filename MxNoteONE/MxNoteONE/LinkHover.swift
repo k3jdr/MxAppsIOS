@@ -5,9 +5,10 @@
 //  Resting the pointer on a link shows a card, as in Word and OneNote:
 //  where the link goes (a page's title and notebook › section, a web
 //  address, an email address), "Click to follow", and buttons to edit
-//  the link (the Edit Link dialog), copy its address or remove it. The card
-//  goes away when the pointer leaves the link and the card, or on a click
-//  or key press elsewhere.
+//  the link (the Edit Link dialog), copy its address or remove it. Links in
+//  the link's hover text open from the card. The card goes away when the
+//  pointer leaves the link and the card, or on a click or key press
+//  elsewhere.
 //
 
 import AppKit
@@ -93,7 +94,7 @@ final class LinkHover {
         let popover = NSPopover()
         popover.behavior = .applicationDefined
         popover.animates = false
-        let card = LinkCard(info: LinkInfo(url, tip: actions.tip, text: actions.text), edit: { [weak self] in
+        var card = LinkCard(info: LinkInfo(url, tip: actions.tip, text: actions.text), edit: { [weak self] in
             self?.close()
             actions.edit()
         }, copy: { [weak self] in
@@ -103,6 +104,11 @@ final class LinkHover {
             self?.close()
             actions.remove()
         })
+        // A link in the hover text goes where it leads.
+        card.open = { [weak self] target in
+            self?.close()
+            LinkInfo.follow(target)
+        }
         let host = NSHostingController(rootView: card)
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
@@ -243,6 +249,18 @@ struct LinkInfo {
         }
     }
 
+    /// Goes where a link leads: a page (or paragraph, pin…), a web page in the chosen browser, an email…
+    @MainActor
+    static func follow(_ url: URL) {
+        if url.scheme == NotebookStore.linkScheme {
+            NotebookStore.shared.openLink(url)
+        } else if url.scheme == OneNoteImport.missingScheme {
+            ImportActivity.shared.locateMissingPictures()
+        } else {
+            WebBrowser.open(url)
+        }
+    }
+
     static func copy(_ url: URL) {
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -260,13 +278,13 @@ struct LinkCard: View {
     let remove: () -> Void
 
     var preview = false
+    /// Opens a link in the hover text (none in the dialog's preview).
+    var open: ((URL) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let tip = info.tip {
-                Text(LinkCard.attributed(tip))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                TipText(text: tip, open: open)
                 Divider()
             }
             HStack(spacing: 6) {
@@ -326,25 +344,81 @@ struct LinkCard: View {
         .padding(10)
         .frame(minWidth: 250, maxWidth: 360, alignment: .leading)
     }
+}
 
-    /// Formatted hover text for SwiftUI: font size, bold, italic, underline, strikethrough and colour.
-    static func attributed(_ text: NSAttributedString) -> AttributedString {
-        var result = AttributedString()
-        text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attrs, range, _ in
-            var run = AttributedString((text.string as NSString).substring(with: range))
-            let font = attrs[.font] as? NSFont
-            let traits = font.map { NSFontManager.shared.traits(of: $0) } ?? []
-            var f = Font.system(size: font?.pointSize ?? 12)
-            if traits.contains(.boldFontMask) { f = f.bold() }
-            if traits.contains(.italicFontMask) { f = f.italic() }
-            run.font = f
-            if let color = attrs[.foregroundColor] as? NSColor { run.foregroundColor = Color(nsColor: color) }
-            if (attrs[.underlineStyle] as? Int ?? 0) != 0 { run.underlineStyle = .single }
-            if (attrs[.strikethroughStyle] as? Int ?? 0) != 0 { run.strikethroughStyle = .single }
-            result += run
+/// The hover text on the card, as written (fonts, colours, lines), with its links: a click opens one, and the
+/// pointer over one shows where it goes.
+struct TipText: NSViewRepresentable {
+    let text: NSAttributedString
+    var open: ((URL) -> Void)?
+
+    /// The widest the hover text gets on the card.
+    static let maxWidth: CGFloat = 340
+
+    /// The text as shown: addresses made into links, and the card's font and colour where none were chosen.
+    static func shown(_ text: NSAttributedString) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: NoteRichText.linked(text))
+        let all = NSRange(location: 0, length: result.length)
+        result.enumerateAttribute(.font, in: all) { value, range, _ in
+            if value == nil { result.addAttribute(.font, value: TipEditorBox.baseFont, range: range) }
+        }
+        result.enumerateAttribute(.foregroundColor, in: all) { value, range, _ in
+            if value == nil { result.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range) }
         }
         return result
     }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> TipCardTextView {
+        let tv = TipCardTextView(frame: .zero)
+        tv.isEditable = false
+        tv.isSelectable = true
+        tv.isRichText = true
+        tv.drawsBackground = false
+        tv.textContainerInset = .zero
+        tv.textContainer?.lineFragmentPadding = 0
+        tv.textContainer?.widthTracksTextView = true
+        tv.isVerticallyResizable = false
+        tv.isHorizontallyResizable = false
+        tv.displaysLinkToolTips = true
+        tv.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue,
+                                 .cursor: NSCursor.pointingHand]
+        tv.delegate = context.coordinator
+        tv.setAccessibilityLabel("Hover text")
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return tv
+    }
+
+    func updateNSView(_ tv: TipCardTextView, context: Context) {
+        context.coordinator.open = open
+        let shown = Self.shown(text)
+        if tv.textStorage?.isEqual(to: shown) != true { tv.textStorage?.setAttributedString(shown) }
+    }
+
+    /// As wide as the text's longest line (at most `maxWidth`), or the width offered; as tall as its lines.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: TipCardTextView, context: Context) -> CGSize? {
+        let offered = proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        let shown = Self.shown(text)
+        let bounds = shown.boundingRect(with: NSSize(width: offered ?? Self.maxWidth, height: .greatestFiniteMagnitude),
+                                        options: [.usesLineFragmentOrigin, .usesFontLeading])
+        return CGSize(width: offered ?? ceil(bounds.width), height: ceil(bounds.height))
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var open: ((URL) -> Void)?
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let url = link as? URL ?? (link as? String).flatMap({ URL(string: $0) }) else { return true }
+            open?(url)
+            return true
+        }
+    }
+}
+
+/// The card's hover text view: the first click on it (the card isn't the key window) follows a link.
+final class TipCardTextView: NSTextView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 extension NoteTextView {

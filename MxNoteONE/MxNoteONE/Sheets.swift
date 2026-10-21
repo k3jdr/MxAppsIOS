@@ -330,11 +330,7 @@ struct LinkSheet: View {
 
     private var url: URL? {
         if let page { return store.link(for: page) }
-        let trimmed = address.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return nil }
-        if trimmed.contains("://") || trimmed.hasPrefix("mailto:") { return URL(string: trimmed) }
-        if trimmed.contains("@"), !trimmed.contains(" ") { return URL(string: "mailto:" + trimmed) }
-        return URL(string: "https://" + trimmed)
+        return NoteRichText.url(fromAddress: address)
     }
 
     private var editing: Bool { store.linkExisting != nil }
@@ -369,7 +365,7 @@ struct LinkSheet: View {
             }
             TipEditor(text: $tip, box: tipBox)
                 .frame(height: 64)
-                .help("Your own description for the link's hover card (optional). Format it with the buttons or ⌘B ⌘I ⌘U.")
+                .help("Your own description for the link's hover card (optional). Format it with the buttons or ⌘B ⌘I ⌘U; ⌘K (or the link button) links words in it, and addresses typed in it become links.")
             if let url {
                 DisclosureGroup("Hover card preview") {
                     LinkCard(info: LinkInfo(url, tip: tip, text: text.isEmpty ? nil : text), edit: {}, copy: {}, remove: {}, preview: true)

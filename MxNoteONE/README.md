@@ -236,6 +236,14 @@ Section and New Section Group. Right-click a page for its own menu.
   and see it in **Hover card preview** before you Insert / Update. It's saved with the text (text boxes and table
   cells), found by search, and goes when the hover text is emptied or the link removed. The dialog's fields and
   buttons explain themselves when you hover over them.
+- **Links in hover text**: the hover text can link on to other places. Select words in it and press ⌘K (or the link
+  button) to give them an address — a web or email address, or a link copied with Copy Link to Page or Paragraph
+  (a link on the clipboard is filled in); with the caret in a link, the same button changes its address or removes
+  it, and with nothing selected it types the address in as a link. Addresses typed or pasted into the hover text
+  (https://…, www…, email addresses, mxnoteone://…) become links by themselves. On the card, the links show in the
+  link colour; the pointer over one shows where it goes, and a click opens it — a page, paragraph or map pin here,
+  a web page in the browser chosen in Settings, an email — and closes the card. In the dialog, a click in a link
+  puts the caret there to edit it (⌘-click follows it); Clear Formatting keeps links.
 - **Paste options** (Edit menu, or right-click ▸ Paste Options in a text box or table cell): **Paste as Plain Text**
   (⌥⇧⌘V) takes on the style where it goes; **Paste with Formatting** keeps the copied fonts, colours and styles. With
   table cells selected, Paste as Plain Text fills them from tab-separated text without formatting; on the page it makes
