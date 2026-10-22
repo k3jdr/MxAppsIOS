@@ -162,6 +162,7 @@ extension TableData {
         if shading != nil { shading = Self.padded(shading, rows: rows.count, columns: columns) }
         if rich != nil { rich = Self.padded(rich, rows: rows.count, columns: columns) }
         if align != nil { align = Self.padded(align, rows: rows.count, columns: columns) }
+        if fonts != nil { fonts = Self.padded(fonts, rows: rows.count, columns: columns) }
         if columnWidths.count != columns {
             let average = columnWidths.isEmpty ? 120 : columnWidths.reduce(0, +) / Double(columnWidths.count)
             columnWidths = Array(columnWidths.prefix(columns))
@@ -178,6 +179,14 @@ extension TableData {
         NoteRichText.data(text)
     }
 
+    /// A cell's own font as it's saved ("PostScriptName size"), and back.
+    static func saved(_ font: NSFont) -> String { "\(font.fontName) \(font.pointSize)" }
+
+    static func font(saved name: String) -> NSFont? {
+        guard let space = name.lastIndex(of: " "), let size = Double(name[name.index(after: space)...]) else { return nil }
+        return NSFont(name: String(name[..<space]), size: size)
+    }
+
     func richData(_ row: Int, _ column: Int) -> Data? {
         guard let rich, rich.indices.contains(row), rich[row].indices.contains(column) else { return nil }
         return rich[row][column]
@@ -192,6 +201,7 @@ extension TableData {
         shading?.insert(Array(repeating: nil, count: columns), at: i)
         rich?.insert(Array(repeating: nil, count: columns), at: i)
         align?.insert(Array(repeating: nil, count: columns), at: i)
+        fonts?.insert(Array(repeating: nil, count: columns), at: i)
         merges = merges?.map { span in
             var s = span
             if s.row >= i { s.row += 1 } else if i < s.row + s.rows { s.rows += 1 }
@@ -217,6 +227,9 @@ extension TableData {
         if align != nil {
             for r in align!.indices { align![r].insert(align![r].indices.contains(neighbor) ? align![r][neighbor] : nil, at: i) }
         }
+        if fonts != nil {
+            for r in fonts!.indices { fonts![r].insert(fonts![r].indices.contains(neighbor) ? fonts![r][neighbor] : nil, at: i) }
+        }
         let average = columnWidths.isEmpty ? 120 : columnWidths.reduce(0, +) / Double(columnWidths.count)
         columnWidths.insert(average, at: min(i, columnWidths.count))
         merges = merges?.map { span in
@@ -234,6 +247,7 @@ extension TableData {
             rows[index + 1][span.column] = rows[index][span.column]
             if rich != nil { rich![index + 1][span.column] = rich![index][span.column] }
             if align != nil { align![index + 1][span.column] = align![index][span.column] }
+            if fonts != nil { fonts![index + 1][span.column] = fonts![index][span.column] }
             if shading != nil { shading![index + 1][span.column] = shading![index][span.column] }
         }
         rows.remove(at: index)
@@ -241,6 +255,7 @@ extension TableData {
         _ = shading?.remove(at: index)
         _ = rich?.remove(at: index)
         _ = align?.remove(at: index)
+        _ = fonts?.remove(at: index)
         merges = merges?.compactMap { span in
             var s = span
             if s.row > index { s.row -= 1 } else if index < s.row + s.rows { s.rows -= 1 }
@@ -256,6 +271,7 @@ extension TableData {
             rows[span.row][index + 1] = rows[span.row][index]
             if rich != nil { rich![span.row][index + 1] = rich![span.row][index] }
             if align != nil { align![span.row][index + 1] = align![span.row][index] }
+            if fonts != nil { fonts![span.row][index + 1] = fonts![span.row][index] }
             if shading != nil { shading![span.row][index + 1] = shading![span.row][index] }
         }
         for r in rows.indices { rows[r].remove(at: index) }
@@ -269,6 +285,7 @@ extension TableData {
         if shading != nil { for r in shading!.indices { shading![r].remove(at: index) } }
         if rich != nil { for r in rich!.indices { rich![r].remove(at: index) } }
         if align != nil { for r in align!.indices { align![r].remove(at: index) } }
+        if fonts != nil { for r in fonts!.indices { fonts![r].remove(at: index) } }
         columnWidths.remove(at: index)
     }
 
@@ -296,6 +313,7 @@ extension TableData {
         if let shading { self.shading = order.map { shading[$0] } }
         if let rich { self.rich = order.map { rich[$0] } }
         if let align { self.align = order.map { align[$0] } }
+        if let fonts { self.fonts = order.map { fonts[$0] } }
         var newIndex = Array(repeating: 0, count: order.count)
         for (new, old) in order.enumerated() { newIndex[old] = new }
         remapRows(newIndex)
@@ -407,7 +425,7 @@ final class TableModel {
 
     /// Attributes for new text in the cell.
     func typingAttributes(_ cell: CellRef) -> [NSAttributedString.Key: Any] {
-        var attrs: [NSAttributedString.Key: Any] = [.font: baseFont(cell.row), .foregroundColor: autoColor(cell), .mxAutoColor: true]
+        var attrs: [NSAttributedString.Key: Any] = [.font: typingFont(cell), .foregroundColor: autoColor(cell), .mxAutoColor: true]
         // Text typed into the cell takes the cell's own alignment.
         if let a = cellAlign(cell), a != .left {
             let style = NSMutableParagraphStyle()
@@ -415,6 +433,29 @@ final class TableModel {
             attrs[.paragraphStyle] = style
         }
         return attrs
+    }
+
+    // MARK: Cell fonts
+
+    /// The font text typed into the cell takes: its own (an empty cell keeps the one it was given), or the table's.
+    func typingFont(_ cell: CellRef) -> NSFont { cellFont(cell) ?? baseFont(cell.row) }
+
+    func cellFont(_ cell: CellRef) -> NSFont? {
+        guard let f = data.fonts, f.indices.contains(cell.row), f[cell.row].indices.contains(cell.column),
+              let name = f[cell.row][cell.column] else { return nil }
+        return TableData.font(saved: name)
+    }
+
+    /// Sets cells' own font (the table's font clears it).
+    func setCellFont(_ font: NSFont?, _ cells: Set<CellRef>) {
+        guard font != nil || data.fonts != nil else { return }
+        data.fonts = TableData.padded(data.fonts, rows: rowCount, columns: columnCount)
+        for cell in cells where contains(cell) {
+            let base = baseFont(cell.row)
+            let own = font.flatMap { $0.fontName == base.fontName && abs($0.pointSize - base.pointSize) < 0.01 ? nil : $0 }
+            data.fonts![cell.row][cell.column] = own.map(TableData.saved)
+        }
+        if data.fonts!.allSatisfy({ $0.allSatisfy { $0 == nil } }) { data.fonts = nil }
     }
 
     // MARK: Cell alignment
@@ -557,10 +598,11 @@ final class TableModel {
             }
         }
         data.rows[cell.row][cell.column] = text.string
-        // The cell remembers its text's alignment (an emptied cell keeps it, for what's typed next).
+        // The cell remembers its text's alignment and font (an emptied cell keeps them, for what's typed next).
         if text.length > 0 {
             let style = text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
             setCellAlign(style?.alignment ?? .left, [cell])
+            setCellFont(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont, [cell])
         }
         let rtf = Self.isPlain(text, header: isHeader(cell.row)) ? nil : TableData.cellData(text)
         if rtf != nil || data.rich != nil {
@@ -1006,10 +1048,17 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         }
     }
 
-    /// Shows the selected cells' font in the ribbon.
+    /// Shows the selected cells' font in the ribbon (an empty cell's is the font it types in) and the Font panel.
     func reportCellFormatting() {
-        TextFormatter.reportFormatting(of: selection.sorted { ($0.row, $0.column) < ($1.row, $1.column) }
-            .map { model.displayText($0) })
+        let texts = selection.sorted { ($0.row, $0.column) < ($1.row, $1.column) }.map { cell in
+            let text = model.displayText(cell)
+            return text.length > 0 ? text : NSAttributedString(string: " ", attributes: model.typingAttributes(cell))
+        }
+        TextFormatter.reportFormatting(of: texts)
+        let fonts = texts.compactMap { $0.attribute(.font, at: 0, effectiveRange: nil) as? NSFont }
+        if let first = fonts.first {
+            NSFontManager.shared.setSelectedFont(first, isMultiple: fonts.contains { $0 != first })
+        }
     }
     private var anchor: CellRef?
     /// Row boundary where dragged rows would be dropped.
@@ -1066,6 +1115,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             self.resizePicture(hit, from: event)
             return true
         }
+        editor.textDragHandler = { [weak self] event in self?.dragFromEditor(event) ?? false }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -1264,7 +1314,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         if editing != cell, let cached = heightCache[cell] { return cached }
         let width = max(blockWidth(cell) - 2 * Self.padX, 10)
         let text = editing == cell ? (editor.textStorage ?? NSAttributedString()) : model.displayText(cell, fitting: width)
-        var height = text.length == 0 ? model.baseFont(cell.row).boundingRectForFont.height
+        var height = text.length == 0 ? model.typingFont(cell).boundingRectForFont.height
             : Self.hasBlocks(text) ? blockTextHeight(text, width: width)
             : text.boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
                                 options: [.usesLineFragmentOrigin, .usesFontLeading]).height
@@ -2376,7 +2426,11 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             scratch.typingAttributes = model.typingAttributes(cell)
             scratch.setSelectedRange(NSRange(location: 0, length: scratch.textStorage?.length ?? 0))
             body(scratch)
-            if let storage = scratch.textStorage { model.store(storage, in: cell) }
+            if let storage = scratch.textStorage {
+                model.store(storage, in: cell)
+                // An empty cell keeps the font it was given, for what's typed into it.
+                if storage.length == 0 { model.setCellFont(scratch.typingAttributes[.font] as? NSFont, [cell]) }
+            }
             heightCache[cell] = nil
         }
         model.checkpoint("Format")
@@ -2384,6 +2438,20 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         relayout()
         reportCellFormatting()
         return true
+    }
+
+    /// The Font panel (Format ▸ Show Fonts) and the Font menu's commands, on the selected cells.
+    @objc func changeFont(_ sender: NSFontManager?) {
+        let fm = sender ?? NSFontManager.shared
+        _ = applyToSelection { tv in
+            TextFormatter.changeAttributes(tv, actionName: "Font") { storage, range in
+                storage.enumerateAttribute(.font, in: range) { value, sub, _ in
+                    storage.addAttribute(.font, value: fm.convert(value as? NSFont ?? Prefs.defaultFont), range: sub)
+                }
+            } typing: { attrs in
+                attrs[.font] = fm.convert(attrs[.font] as? NSFont ?? Prefs.defaultFont)
+            }
+        }
     }
 
     // MARK: Mouse
@@ -2429,9 +2497,12 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             return
         }
         guard let start = cell(at: p) else { return }
+        // A press in selected whole rows that can move (the header row can't): dragged up or down, it moves them.
+        var press: RowPress?
         if event.modifierFlags.intersection([.shift, .command, .option]).isEmpty, let rows = selectedWholeRows,
-           selection.contains(start), dragRows(rows, from: event) {
-            return
+           selection.contains(start), model.canMoveRows(rows, by: -1) || model.canMoveRows(rows, by: 1) {
+            press = dragRows(rows, from: event)
+            if press == .moved { return }
         }
         owner.canvas?.selectedElement = nil
         becameActive()
@@ -2452,18 +2523,25 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         }
         var current = start
         var dragged = false
-        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
-                           mode: .eventTracking) { ev, stop in
-            guard let ev, ev.type == .leftMouseDragged else {
-                stop.pointee = true
-                return
-            }
-            guard let cell = self.cell(at: self.convert(ev.locationInWindow, from: nil)) else { return }
-            if cell != current || dragged {
-                if !dragged { self.endEditing() }
-                dragged = true
-                current = cell
-                self.selectRange(start, cell)
+        if case .cells(let cell) = press {
+            dragged = true
+            current = cell
+            selectRange(start, cell)
+        }
+        if press != .click {
+            window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
+                               mode: .eventTracking) { ev, stop in
+                guard let ev, ev.type == .leftMouseDragged else {
+                    stop.pointee = true
+                    return
+                }
+                guard let cell = self.cell(at: self.convert(ev.locationInWindow, from: nil)) else { return }
+                if cell != current || dragged {
+                    if !dragged { self.endEditing() }
+                    dragged = true
+                    current = cell
+                    self.selectRange(start, cell)
+                }
             }
         }
         if dragged {
@@ -2476,6 +2554,59 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         } else {
             beginEditing(start, at: p)
         }
+    }
+
+    /// A press in the cell being typed in: dragging selects its text while the pointer stays in the cell; dragged on
+    /// into another cell, the cells from this one are selected instead (as in OneNote and Excel). Double-clicks,
+    /// ⇧-clicks, links, pictures and dragging selected text are left to the text view.
+    private func dragFromEditor(_ event: NSEvent) -> Bool {
+        guard let start = editing, let window, event.clickCount == 1, !editor.hasMarkedText(),
+              event.modifierFlags.intersection([.shift, .command, .option, .control]).isEmpty else { return false }
+        let p = editor.convert(event.locationInWindow, from: nil)
+        if editor.link(at: p) != nil || picture(at: convert(event.locationInWindow, from: nil)) != nil { return false }
+        let from = editor.characterIndexForInsertion(at: p)
+        let selected = editor.selectedRange()
+        if selected.length > 0, let lm = editor.layoutManager, let tc = editor.textContainer {
+            let origin = editor.textContainerOrigin
+            let glyphs = lm.glyphRange(forCharacterRange: selected, actualCharacterRange: nil)
+            var onSelection = false
+            lm.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: glyphs, in: tc) { rect, stop in
+                if rect.offsetBy(dx: origin.x, dy: origin.y).contains(p) { onSelection = true; stop.pointee = true }
+            }
+            if onSelection { return false }
+        }
+        editor.setSelectedRange(NSRange(location: from, length: 0))
+        var cells = false
+        var current = start
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
+                           mode: .eventTracking) { ev, stop in
+            guard let ev, ev.type == .leftMouseDragged else {
+                stop.pointee = true
+                return
+            }
+            guard let cell = self.cell(at: self.convert(ev.locationInWindow, from: nil)) else { return }
+            if !cells, cell == start {
+                let to = self.editor.characterIndexForInsertion(at: self.editor.convert(ev.locationInWindow, from: nil))
+                self.editor.setSelectedRanges([NSValue(range: NSRange(location: min(from, to), length: abs(to - from)))],
+                                              affinity: to < from ? .upstream : .downstream, stillSelecting: true)
+                return
+            }
+            if !cells {
+                cells = true
+                self.endEditing()
+            }
+            current = cell
+            self.selectRange(start, cell)
+        }
+        if cells {
+            anchor = start
+            extent = current
+            window.makeFirstResponder(self)
+        } else {
+            // The selection is final: the ribbon shows its formatting.
+            editor.setSelectedRanges(editor.selectedRanges, affinity: editor.selectionAffinity, stillSelecting: false)
+        }
+        return true
     }
 
     // MARK: Pictures in cells
@@ -3823,11 +3954,22 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         return best
     }
 
-    /// Dragging selected whole rows moves them; a line shows where they'll go.
-    private func dragRows(_ rows: ClosedRange<Int>, from event: NSEvent) -> Bool {
-        guard let window else { return false }
-        let startY = convert(event.locationInWindow, from: nil).y
+    /// What a press in selected whole rows turned into.
+    private enum RowPress: Equatable {
+        case moved, click
+        /// Dragged sideways into another cell first: cells are selected from the pressed one to it.
+        case cells(CellRef)
+    }
+
+    /// Dragging selected whole rows up or down moves them; a line shows where they'll go. Dragged sideways into
+    /// another column first, it selects cells instead; let go without dragging, it's a click.
+    private func dragRows(_ rows: ClosedRange<Int>, from event: NSEvent) -> RowPress {
+        guard let window else { return .click }
+        let startPoint = convert(event.locationInWindow, from: nil)
+        let startY = startPoint.y
+        let startColumn = cell(at: startPoint)?.column
         var moved = false
+        var sideways: CellRef?
         var boundary: Int?
         window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration,
                            mode: .eventTracking) { ev, stop in
@@ -3835,8 +3977,15 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
                 stop.pointee = true
                 return
             }
-            let y = self.convert(ev.locationInWindow, from: nil).y
-            if !moved, abs(y - startY) < 4 { return }
+            let point = self.convert(ev.locationInWindow, from: nil)
+            let y = point.y
+            if !moved, abs(y - startY) < 4 {
+                if let cell = self.cell(at: point), cell.column != startColumn {
+                    sideways = cell
+                    stop.pointee = true
+                }
+                return
+            }
             moved = true
             NSCursor.closedHand.set()
             let b = self.dropBoundary(at: y)
@@ -3847,11 +3996,12 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         }
         dropLine = nil
         needsDisplay = true
-        guard moved else { return false }
+        if let sideways { return .cells(sideways) }
+        guard moved else { return .click }
         if let b = boundary {
             moveRows(rows, by: b <= rows.lowerBound ? b - rows.lowerBound : b - rows.upperBound - 1)
         }
-        return true
+        return .moved
     }
 
     private var selectedRows: [Int] { Set(targetCells.map(\.row)).sorted() }

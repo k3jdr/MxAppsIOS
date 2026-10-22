@@ -324,6 +324,9 @@ final class NoteTextView: NSTextView {
     var cursorHandler: ((NSEvent) -> NSCursor?)?
     /// Handles a click instead of the text view when it returns true (table cells: dragging a picture's edge).
     var mouseDownHandler: ((NSEvent) -> Bool)?
+    /// Handles a press on the text (after To Do boxes) when it returns true (table cells: dragging on into other cells
+    /// selects them).
+    var textDragHandler: ((NSEvent) -> Bool)?
 
     override func paste(_ sender: Any?) {
         if pasteHandler?() == true { return }
@@ -440,6 +443,7 @@ final class NoteTextView: NSTextView {
     override func mouseDown(with event: NSEvent) {
         if mouseDownHandler?(event) == true { return }
         if toggleCheckbox(at: event) { return }
+        if textDragHandler?(event) == true { return }
         super.mouseDown(with: event)
     }
 

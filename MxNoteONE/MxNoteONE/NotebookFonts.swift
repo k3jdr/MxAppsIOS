@@ -120,6 +120,10 @@ enum NotebookFonts {
                             }
                         }
                         table.rich = rich.contains(where: { $0.contains { $0 != nil } }) ? rich : nil
+                        // Cells' own fonts (empty cells type in them).
+                        table.fonts = table.fonts?.map { row in
+                            row.map { name in name.flatMap(TableData.font(saved:)).map { TableData.saved(change.convert($0)) } ?? name }
+                        }
                         content.elements[i].table = table
                         changed = true
                     default:

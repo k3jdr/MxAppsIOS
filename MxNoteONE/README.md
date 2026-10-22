@@ -32,12 +32,15 @@ Section and New Section Group. Right-click a page for its own menu.
   often? **Backspace** in the empty new cell removes the empty column (or row) again. Text after the paragraph moves
   below the table, and a growing table (or text container) pushes the container right under it down.
 - **Selecting cells**: click a cell to type in it; **drag** across cells, **⇧-click**, or **⇧-arrow keys** to select a
-  block, **⌘-click** to add single cells; selected cells are highlighted. With cells selected (press Escape while
+  block, **⌘-click** to add single cells; selected cells are highlighted. A drag selects from the cell it started in,
+  also from the cell being typed in (a header cell, say): inside that cell it selects text, and once it's dragged on
+  into the next cell, the cells are selected instead. With cells selected (press Escape while
   typing to get there): typing replaces the cell, Delete clears the cells, Return edits, ⌘C / ⌘X / ⌘V copy, cut and
   paste cells as tab-separated text, ⌘A selects the whole table; Escape again selects the table container.
 - **Formatting cells**: cell text is rich text — the Home ribbon (font, size, bold, italic, underline, colours,
   highlight, alignment…) formats the text you're typing, or every selected cell at once (select a column, then
-  Bold or a colour).
+  Bold or a colour). Format ▸ Show Fonts (the Font panel) works on selected cells too. An empty cell keeps the font
+  and size it's given, and what's typed into it later takes them.
 - **Table ribbon tab**: appears whenever you're in a table — insert rows above/below and columns left/right, delete
   rows, columns or the table, shading for cells, rows, columns, the header row and **banded rows**, cell text
   bold / italic / colour / alignment, header row, **hide borders**, sort, select table.
@@ -84,7 +87,8 @@ Section and New Section Group. Right-click a page for its own menu.
   fill down as far as the column beside has data.
 - **Moving rows**: right-click ▸ Move Row Up / Down, the Table ribbon's Row Up / Row Down, or ⌥⇧↑ / ⌥⇧↓ (also while
   typing in a cell). Or select whole rows (right-click ▸ Select Row, or drag across them) and drag them up or down; a
-  line shows where they'll go. The header row stays first.
+  line shows where they'll go (dragged sideways first, it selects cells instead; a click types in the cell). The
+  header row stays first, so a drag from a selected header row selects cells.
 - **Column widths**: drag a column border to resize that column (in the table or in the column letter bar); the table
   grows or shrinks with it. **Double-click a border to auto-fit** the column to its widest shown cell on one line
   (with whole columns selected, all of them fit). Also Auto-Fit Column Width / Auto-Fit All Columns by right-click.

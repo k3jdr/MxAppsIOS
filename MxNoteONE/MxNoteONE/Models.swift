@@ -296,6 +296,9 @@ struct TableData: Codable, Hashable {
     /// Each cell's own alignment ("center", "right"; nil = left), row by row — kept when the cell is emptied, and
     /// taken by text typed into it.
     var align: [[String?]]?
+    /// Each cell's own font ("PostScriptName size"; nil = the table's), row by row — kept when the cell is emptied
+    /// (or given to an empty cell), and taken by text typed into it.
+    var fonts: [[String?]]?
     /// Table borders hidden (OneNote: Hide Borders).
     var hideBorders: Bool?
     /// Merged cells: each span is drawn as one cell, its text kept in the top-left cell.
