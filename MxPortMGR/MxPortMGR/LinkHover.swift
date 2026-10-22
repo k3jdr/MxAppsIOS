@@ -18,6 +18,8 @@ struct LinkHoverActions {
     /// The link's own hover text (written in the Link dialog), and its words.
     var tip: NSAttributedString?
     var text: String?
+    /// For a link copied in MxNoteONE: the page's (paragraph's, section's…) title, copied with it.
+    var title: String?
 }
 
 @MainActor
@@ -87,7 +89,7 @@ final class LinkHover {
         let popover = NSPopover()
         popover.behavior = .applicationDefined
         popover.animates = false
-        var card = LinkCard(info: LinkInfo(url, tip: actions.tip, text: actions.text), edit: { [weak self] in
+        var card = LinkCard(info: LinkInfo(url, tip: actions.tip, text: actions.text, noteTitle: actions.title), edit: { [weak self] in
             self?.close()
             actions.edit()
         }, copy: { [weak self] in
@@ -161,9 +163,9 @@ final class LinkHover {
 /// Where a link goes, in words.
 struct LinkInfo {
     let url: URL
-    /// A web site's address or an email address.
+    /// A web site's address, an email address, or the title of what an MxNoteONE link opens.
     var title: String
-    /// The full address.
+    /// The full address, or (an MxNoteONE link) what it opens.
     var detail: String
     var symbol: String
     /// The hover text written for this link (Link ▸ Hover text).
@@ -171,12 +173,44 @@ struct LinkInfo {
     /// The link's words in the table.
     var text: String?
 
-    init(_ url: URL, tip: NSAttributedString? = nil, text: String? = nil) {
+    /// MxNoteONE's links (Copy Link to Page, Paragraph, Section, Notebook or Pin): mxnoteone://page/NOTEBOOK/PAGE
+    /// (?e=…&p=… a paragraph, ?e=…&pin=… a pin on a map), section/NOTEBOOK/SECTION, notebook/NOTEBOOK.
+    static let noteScheme = "mxnoteone"
+    /// What MxNoteONE puts on the pasteboard beside a copied link: its title.
+    static let noteTitleType = NSPasteboard.PasteboardType("com.k3jdr.mxnoteone.link-title")
+
+    var isNote: Bool { url.scheme == Self.noteScheme }
+
+    /// Where a link copied in MxNoteONE is found: the general pasteboard (a named one in Debug self-tests,
+    /// -linkPasteboard NAME, so tests leave the clipboard alone).
+    static var pasteboard: NSPasteboard {
+        #if DEBUG
+        if let name = UserDefaults.standard.string(forKey: "linkPasteboard") { return NSPasteboard(name: NSPasteboard.Name(name)) }
+        #endif
+        return .general
+    }
+
+    init(_ url: URL, tip: NSAttributedString? = nil, text: String? = nil, noteTitle: String? = nil) {
         self.url = url
         self.tip = tip?.length ?? 0 > 0 ? tip : nil
         let words = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.text = words?.isEmpty == false ? words : nil
-        if url.scheme == "mailto" {
+        if url.scheme == Self.noteScheme {
+            // MxPortMGR can't read MxNoteONE's notebooks: the title is the one copied with the link.
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let kind: String
+            switch url.host() {
+            case "section": (symbol, kind) = ("folder", "A section")
+            case "notebook": (symbol, kind) = ("book.closed", "A notebook")
+            default:
+                if query.contains(where: { $0.name == "pin" }) { (symbol, kind) = ("mappin.and.ellipse", "A pin on a map") }
+                else if query.contains(where: { $0.name == "e" }) { (symbol, kind) = ("text.alignleft", "A paragraph") }
+                else { (symbol, kind) = ("doc.text", "A page") }
+            }
+            let named = noteTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            title = named?.isEmpty == false ? named! : kind + " in MxNoteONE"
+            detail = kind + " in your MxNoteONE notebooks"
+        } else if url.scheme == "mailto" {
             symbol = "envelope"
             title = url.absoluteString.replacingOccurrences(of: "mailto:", with: "").components(separatedBy: "?").first ?? ""
             detail = "Email"
@@ -199,9 +233,21 @@ struct LinkInfo {
         return FileManager.default.displayName(atPath: app.path).replacingOccurrences(of: ".app", with: "")
     }
 
-    /// Goes where a link leads: a web page in the default browser, an email…
+    /// The app that opens this link, if any (MxNoteONE for its links, once it has registered them).
+    var opener: String? {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: url) else { return nil }
+        return FileManager.default.displayName(atPath: app.path).replacingOccurrences(of: ".app", with: "")
+    }
+
+    /// Goes where a link leads: a web page in the default browser, an email, a page in MxNoteONE…
     static func follow(_ url: URL) {
-        NSWorkspace.shared.open(url)
+        guard !NSWorkspace.shared.open(url) else { return }
+        let alert = NSAlert()
+        alert.messageText = "No app opens this link"
+        alert.informativeText = url.scheme == noteScheme
+            ? "Links copied in MxNoteONE open in MxNoteONE, from the version that opens links from other apps on. Install the updated MxNoteONE, open it once, and try again.\n\n\(url.absoluteString)"
+            : url.absoluteString
+        alert.runModal()
     }
 
     static func copy(_ url: URL) {
@@ -254,7 +300,9 @@ struct LinkCard: View {
                     .truncationMode(.tail)
             }
             Text(info.url.scheme == "mailto" ? "Click to write an email"
-                 : info.isWeb ? "Click to open in \(LinkInfo.browserName ?? "your browser")" : "Click to follow the link")
+                 : info.isWeb ? "Click to open in \(LinkInfo.browserName ?? "your browser")"
+                 : info.isNote ? (info.opener.map { "Click to open in \($0)" } ?? "Opens in MxNoteONE once it's updated")
+                 : "Click to follow the link")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
             Divider()

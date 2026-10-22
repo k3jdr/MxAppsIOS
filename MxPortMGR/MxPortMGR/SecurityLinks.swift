@@ -67,11 +67,13 @@ struct LinkTarget: Hashable, Identifiable {
     }
 }
 
-/// A link: where it goes, the words shown for it (the symbol or name when nil), and its hover text (RTF).
+/// A link: where it goes, the words shown for it (the symbol or name when nil), its hover text (RTF), and for a link
+/// copied in MxNoteONE the title copied with it (MxPortMGR can't read MxNoteONE's notebooks to look it up).
 nonisolated struct SecurityLink: Codable, Equatable, Sendable {
     var address: String
     var text: String?
     var tip: Data?
+    var title: String?
 
     var url: URL? { URL(string: address) }
     var tipText: NSAttributedString? { LinkRichText.text(tip) }
@@ -153,7 +155,7 @@ struct LinkedCell: View {
                         .foregroundStyle(Color(nsColor: .linkColor)).lineLimit(1)
                 }
                 .buttonStyle(.plain)
-                .background(LinkHoverAnchor(url: url, target: target, words: words, tip: link.tipText))
+                .background(LinkHoverAnchor(url: url, target: target, words: words, tip: link.tipText, title: link.title))
                 .accessibilityHint("Link to \(url.absoluteString)")
             } else if let help {
                 Text(target.cellText).font(font).fontWeight(bold ? .bold : .regular).foregroundStyle(color).lineLimit(1).help(help)
@@ -173,6 +175,7 @@ struct LinkHoverAnchor: NSViewRepresentable {
     let target: LinkTarget
     let words: String
     let tip: NSAttributedString?
+    let title: String?
 
     func makeNSView(context: Context) -> LinkAnchorView { LinkAnchorView() }
 
@@ -181,6 +184,7 @@ struct LinkHoverAnchor: NSViewRepresentable {
         view.target = target
         view.words = words
         view.tip = tip
+        view.title = title
         #if DEBUG
         SecurityLinks.shared.anchors[target.id] = { [weak view] in view }
         #endif
@@ -192,6 +196,7 @@ final class LinkAnchorView: NSView {
     var target: LinkTarget?
     var words: String?
     var tip: NSAttributedString?
+    var title: String?
 
     // Clicks go to the words in front (they open the link).
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -212,7 +217,7 @@ final class LinkAnchorView: NSView {
         LinkHover.shared.pointer(over: url, rect: bounds, in: self) { [weak self] in
             LinkHoverActions(edit: { SecurityLinks.shared.beginEdit(target) },
                              remove: { SecurityLinks.shared.set(nil, for: target) },
-                             tip: self?.tip, text: self?.words)
+                             tip: self?.tip, text: self?.words, title: self?.title)
         }
     }
 }
@@ -262,6 +267,11 @@ struct SecurityLinkSheet: View {
     /// The hover text shown on the link's card.
     @State private var tip = NSAttributedString()
     @State private var tipBox = TipEditorBox()
+    /// A link copied in MxNoteONE: its title, while the address is that link.
+    @State private var noteTitle: String?
+    @State private var noteAddress: String?
+    /// The pasteboard holds a link copied in MxNoteONE (seen from its types, without reading it).
+    @State private var noteOnPasteboard = false
 
     private var links: SecurityLinks { .shared }
     private var target: LinkTarget { initial.with(field) }
@@ -282,9 +292,25 @@ struct SecurityLinkSheet: View {
                 .help("The link goes on the \(initial.columns[0].lowercased()) or on the \(initial.columns[1].lowercased()); each can have its own")
                 TextField("Text to display:", text: $text)
                     .help("The words shown for the link in the table (leave as they are, or empty, to show the \(target.column.lowercased()))")
-                TextField("Address:", text: $address, prompt: Text("https://… or pick a page below"))
-                    .onChange(of: address) { if address != pages.first(where: { $0.id == page })?.address { page = nil } }
-                    .help("A web address (https://…) or an email address")
+                TextField("Address:", text: $address, prompt: Text("https://…, mxnoteone://…, or pick a page below"))
+                    .onChange(of: address) {
+                        if address != pages.first(where: { $0.id == page })?.address { page = nil }
+                        if address != noteAddress { noteTitle = nil; noteAddress = nil }
+                    }
+                    .help("A web address (https://…), an email address, or a link copied in MxNoteONE (Copy Link to Page, Paragraph, Section or Notebook)")
+            }
+            if noteOnPasteboard || url?.scheme == LinkInfo.noteScheme {
+                HStack(spacing: 8) {
+                    if noteOnPasteboard {
+                        Button { useCopiedNote() } label: { Label("Use the Link Copied in MxNoteONE", systemImage: "note.text") }
+                            .help("The link you copied in MxNoteONE (right-click a page, paragraph, section or notebook ▸ Copy Link to …), with its title")
+                    }
+                    if let url, url.scheme == LinkInfo.noteScheme {
+                        let info = LinkInfo(url, noteTitle: noteTitle)
+                        Label(info.title, systemImage: info.symbol).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            .help("Opens in MxNoteONE: \(info.detail.lowercased())")
+                    }
+                }
             }
             HStack {
                 Text("Hover text — shown when the pointer rests on the link:")
@@ -298,7 +324,7 @@ struct SecurityLinkSheet: View {
                 .help("Your own description for the link's hover card (optional). Format it with the buttons or ⌘B ⌘I ⌘U; ⌘K (or the link button) links words in it, and addresses typed in it become links.")
             if let url {
                 DisclosureGroup("Hover card preview") {
-                    LinkCard(info: LinkInfo(url, tip: tip, text: shownText), edit: {}, copy: {}, remove: {}, preview: true)
+                    LinkCard(info: LinkInfo(url, tip: tip, text: shownText, noteTitle: noteTitle), edit: {}, copy: {}, remove: {}, preview: true)
                         .background(.background, in: RoundedRectangle(cornerRadius: 8))
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
                         .padding(.vertical, 4)
@@ -346,8 +372,26 @@ struct SecurityLinkSheet: View {
         .onAppear {
             field = initial.field
             load()
+            checkPasteboard()
         }
         .onChange(of: field) { load() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in checkPasteboard() }
+    }
+
+    /// Whether MxNoteONE's Copy Link put a link on the pasteboard (its title type is there); the pasteboard itself is
+    /// read only when you use it.
+    private func checkPasteboard() {
+        noteOnPasteboard = LinkInfo.pasteboard.types?.contains(LinkInfo.noteTitleType) == true
+    }
+
+    /// The link copied in MxNoteONE and its title.
+    private func useCopiedNote() {
+        let pb = LinkInfo.pasteboard
+        let copied = (pb.readObjects(forClasses: [NSURL.self]) as? [URL])?.first?.absoluteString ?? pb.string(forType: .string)
+        guard let copied, copied.hasPrefix(LinkInfo.noteScheme + "://") else { return NSSound.beep() }
+        noteTitle = pb.string(forType: LinkInfo.noteTitleType)
+        noteAddress = copied
+        address = copied
     }
 
     /// The words the link shows: the text to display, or the symbol or name.
@@ -363,12 +407,15 @@ struct SecurityLinkSheet: View {
         address = link?.address ?? ""
         tip = link?.tipText ?? NSAttributedString()
         page = pages.first { $0.address == address }?.id
+        noteTitle = link?.title
+        noteAddress = link?.title == nil ? nil : link?.address
     }
 
     private func save() {
         guard let url else { return }
         let words = shownText
-        links.set(SecurityLink(address: url.absoluteString, text: words == target.cellText ? nil : words, tip: LinkRichText.data(tip)), for: target)
+        links.set(SecurityLink(address: url.absoluteString, text: words == target.cellText ? nil : words, tip: LinkRichText.data(tip),
+                               title: url.scheme == LinkInfo.noteScheme ? noteTitle : nil), for: target)
         dismiss()
     }
 }

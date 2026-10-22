@@ -21,18 +21,29 @@ nonisolated enum LinkRichText {
         data.flatMap { NSAttributedString(rtf: $0, documentAttributes: nil) }
     }
 
-    /// Hover text with its web and email addresses made into links. Words that are already a link keep theirs.
+    /// Hover text with its web and email addresses — and links copied in MxNoteONE (mxnoteone://…) — made into links.
+    /// Words that are already a link keep theirs.
     static func linked(_ tip: NSAttributedString) -> NSAttributedString {
+        let string = tip.string
         let all = NSRange(location: 0, length: tip.length)
-        guard tip.length > 0, let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return tip }
+        guard tip.length > 0 else { return tip }
+        var found: [(NSRange, URL)] = []
+        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
+            for match in detector.matches(in: string, range: all) { if let url = match.url { found.append((match.range, url)) } }
+        }
+        if let notes = try? NSRegularExpression(pattern: "mxnoteone://[^\\s<>\"]+") {
+            for match in notes.matches(in: string, range: all) {
+                let text = (string as NSString).substring(with: match.range).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:)]}"))
+                if let url = URL(string: text) { found.append((NSRange(location: match.range.location, length: (text as NSString).length), url)) }
+            }
+        }
         var result: NSMutableAttributedString?
-        for match in detector.matches(in: tip.string, range: all) {
-            guard let url = match.url else { continue }
+        for (range, url) in found {
             var linked = false
-            tip.enumerateAttribute(.link, in: match.range) { value, _, stop in if value != nil { linked = true; stop.pointee = true } }
-            if linked { continue }
+            tip.enumerateAttribute(.link, in: range) { value, _, stop in if value != nil { linked = true; stop.pointee = true } }
+            if linked || result?.attribute(.link, at: range.location, effectiveRange: nil) != nil { continue }
             if result == nil { result = NSMutableAttributedString(attributedString: tip) }
-            result!.addAttribute(.link, value: url, range: match.range)
+            result!.addAttribute(.link, value: url, range: range)
         }
         return result ?? tip
     }
@@ -335,11 +346,11 @@ struct TipToolbar: View {
     private var linkEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Link in the hover text").font(.headline)
-            TextField("Address:", text: $address, prompt: Text("https://… or an email address"))
+            TextField("Address:", text: $address, prompt: Text("https://…, an email address, or mxnoteone://…"))
                 .frame(width: 300)
                 .focused($addressFocused)
                 .onSubmit(applyLink)
-                .help("A web address or an email address")
+                .help("A web address, an email address, or a link copied in MxNoteONE (Copy Link to Page, Paragraph or Section)")
             HStack {
                 if hadLink {
                     Button("Remove Link", role: .destructive) {

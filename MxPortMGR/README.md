@@ -223,7 +223,14 @@ into `LinkHover.swift`, `LinkTips.swift` and `SecurityLinks.swift`):
   MxNoteONE's list of notebook pages it offers pages about the security: Nasdaq.com's quote and earnings pages (or the
   ETF / fund page), SEC EDGAR filings, Yahoo Finance, and a web search for the company's investor relations. A made-up
   security of the illustrative market has none, but any address works. *Remove Link* takes it off.
-* A linked symbol or name is shown as a link; **a click opens it** (in the default browser).
+* **Links to your notes in MxNoteONE**: right-click a page, paragraph, section or notebook in MxNoteONE ▸ *Copy Link
+  to …*, then in the Link dialog press **Use the Link Copied in MxNoteONE** (it shows when MxNoteONE's link is on the
+  clipboard) — or paste the `mxnoteone://…` address. The title copied with it (the page's, section's or paragraph's) is
+  kept with the link, since MxPortMGR can't read MxNoteONE's notebooks: the hover card shows it, with a page, paragraph,
+  pin, section or notebook symbol, and "Click to open in MxNoteONE". Clicking opens MxNoteONE there; MxNoteONE opens
+  `mxnoteone://` links from other apps from the version released with this (older ones don't, and MxPortMGR then says
+  that no app opens the link). Hover text can hold MxNoteONE links too.
+* A linked symbol or name is shown as a link; **a click opens it** (in the default browser, or in MxNoteONE).
 * **Resting the pointer** on it for 0.6 s shows the **hover card** (in the key window): the hover text with its links
   (a click opens one), where the link goes (site and address), the link's words, "Click to open in …", and **Edit
   Link…**, **Copy** and **Remove Link**. It closes when the pointer leaves the link and the card, or on a click or key
@@ -306,7 +313,8 @@ Launch arguments for demos and tests: `-mySource srm -srmAccount CODE` (My Portf
 id), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
 hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding MXTM` selects a holding in My Holdings. Debug builds only:
 `-linkEdit symbol` (or `name`) opens the Link dialog for the selected company or holding, and `-linkHoverTest ID`
-(e.g. `META|symbol`, `mx:MXTM|name`) shows a linked cell's hover card as if the pointer rested on it.
+(e.g. `META|symbol`, `mx:MXTM|name`) shows a linked cell's hover card as if the pointer rested on it, and
+`-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard).
 
 ## Files
 
