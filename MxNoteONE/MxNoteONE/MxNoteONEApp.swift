@@ -44,6 +44,13 @@ struct MxNoteONEApp: App {
         .defaultSize(width: 680, height: 420)
         .restorationBehavior(.disabled)
 
+        // Edit ▸ Show Clipboard, as in the Finder.
+        Window("Clipboard", id: "clipboard") {
+            ClipboardView()
+        }
+        .defaultSize(width: 520, height: 400)
+        .restorationBehavior(.disabled)
+
         Settings {
             SettingsView()
         }

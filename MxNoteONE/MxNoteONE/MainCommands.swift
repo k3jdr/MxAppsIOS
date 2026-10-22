@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MainCommands: Commands {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
 
     private var store: NotebookStore { .shared }
     private var canvas: CanvasController? { store.canvas }
@@ -98,6 +99,10 @@ struct MainCommands: Commands {
             }
             Button("Delete Page") {
                 if let ref = store.currentPageRef { store.deletePage(ref) }
+            }
+            Divider()
+            Button(ClipboardModel.shared.isShown ? "Hide Clipboard" : "Show Clipboard") {
+                if ClipboardModel.shared.isShown { dismissWindow(id: "clipboard") } else { openWindow(id: "clipboard") }
             }
         }
         CommandGroup(replacing: .textEditing) {

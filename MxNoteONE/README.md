@@ -793,6 +793,25 @@ its hover text); a text box, picture, attachment, recording, chart, the page tit
 it can describe, it tells about what's being worked on — the selected notes, the cell being typed in, the text being
 typed. Every toolbar tool has a short one- or two-word tooltip; Quick Help has the details.
 
+## Clipboard
+
+**Edit ▸ Show Clipboard** opens a window showing what's on the clipboard, as the Finder's does, and keeps up as new
+things are copied. **Edit ▸ Hide Clipboard** closes it. It shows:
+
+- text, with its formatting;
+- pictures, at their size or fitted to the window;
+- files and folders, with their icons and where they are;
+- links and colours.
+
+MxNoteONE's own copies are described: a table's rows and columns, a DBML diagram's tables and relationships (with its
+picture), or how many containers a selection holds and what they are. The bar along the bottom gives the kind
+("Clipboard contents: styled text") and its size; its ⓘ button lists every kind of data on the clipboard with its size.
+
+macOS may ask before an app reads what *another* app copied. So that it doesn't ask at every copy, the window reads
+those copies only when it opens or when you click **Show Contents**; until then it names just the kind. To see them as
+they're made, allow MxNoteONE under System Settings ▸ Privacy & Security ▸ Paste from Other Apps. MxNoteONE's own
+copies are always shown.
+
 ## Web links
 
 **Settings ▸ General ▸ Web Links ▸ Open web links in:** chooses the browser MxNoteONE opens web links in — for example
