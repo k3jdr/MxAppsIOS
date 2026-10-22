@@ -73,7 +73,10 @@ CATEGORIES = [
     {"id": "universe", "name": "Listed universe & issuers", "loaders": ["nasdaqtrader", "sec-tickers"],
      "description": "US listed securities, listings and tickers; issuers with CIKs.", "cadence": "daily"},
     {"id": "constituents", "name": "Benchmark constituents", "loaders": ["ssga", "nasdaq100"],
-     "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members.", "cadence": "daily"},
+     "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members.", "cadence": "daily",
+     # State Street publishes a day's holdings the next business morning, so the newest SPDR file is dated a business
+     # day back (two overnight, before the next one appears): freshness allows that lag.
+     "dataLagDays": 1},
     {"id": "identifiers", "name": "Identifiers & issuer data", "loaders": ["openfigi", "fmp-profiles", "sec-submissions", "gleif"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
     {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "nasdaq-prices", "trust-navs", "fmp-index-levels"],
@@ -218,7 +221,9 @@ class SRM:
                 last = {r["loader"]: r for r in rows(cur)}
                 cur.execute("SELECT max(price_date) FROM srm.price")
                 price_date = cur.fetchone()[0]
-                cur.execute("SELECT min(as_of_date), max(as_of_date) FROM srm.v_benchmark_summary")
+                # Only the benchmarks the loaders refresh: custom ones built in MxDataHUB keep their build date.
+                cur.execute("""SELECT min(as_of_date), max(as_of_date) FROM srm.v_benchmark_summary
+                                WHERE provider IS DISTINCT FROM 'MxDataHUB'""")
                 bench_min, bench_max = cur.fetchone()
                 portfolio_min = None
                 if table_exists(cur, "srm.v_snapshot_coverage"):
@@ -243,7 +248,9 @@ class SRM:
             basis = data_date or (last_run.date() if last_run else None)
             ok, due = limits[cat["cadence"]]
             age = business_days_between(basis, today) if cat["cadence"] == "daily" and basis else ((today - basis).days if basis else None)
-            state = "never" if basis is None else "fresh" if age <= ok else "due" if age <= due else "stale"
+            # Age beyond what the source's publication lag explains (a data date, not the load time, is the basis).
+            late = age - (cat.get("dataLagDays", 0) if data_date else 0) if age is not None else None
+            state = "never" if basis is None else "fresh" if late <= ok else "due" if late <= due else "stale"
             tolerated = set(cat.get("continueAfterFailure", []))
             if any(l["status"] == "failed" and l["loader"] not in tolerated for l in loaders):
                 state = "failed"
@@ -270,7 +277,7 @@ class SRM:
                 cur.execute("SELECT id_type, securities, total_securities, pct, sources FROM srm.v_identifier_coverage ORDER BY sort_order")
                 out["coverage"] = {r["id_type"]: r for r in rows(cur)}
                 cur.execute("""SELECT code, as_of_date, members, round(weight_sum, 6) AS weight_sum, last_level_date,
-                                      constituent_source FROM srm.v_benchmark_summary ORDER BY code""")
+                                      constituent_source, provider FROM srm.v_benchmark_summary ORDER BY code""")
                 out["benchmarks"] = {r["code"]: r for r in rows(cur)}
                 # Weight history (dated snapshots) that attribution uses month by month.
                 out["snapshotHistory"] = None
@@ -336,8 +343,9 @@ def quality_checks(status, stale_days):
 
     for code, b in status["benchmarks"].items():
         age = business_days_between(b["as_of_date"], today) if b["as_of_date"] else None
-        add("benchmark %s fresh" % code, age is not None and age <= stale_days,
-            "as of %s (%s business days old)" % (b["as_of_date"], age))
+        if b.get("provider") != "MxDataHUB":    # custom benchmarks are built on request, not refreshed
+            add("benchmark %s fresh" % code, age is not None and age <= stale_days,
+                "as of %s (%s business days old)" % (b["as_of_date"], age))
         weight = float(b["weight_sum"] or 0)
         add("benchmark %s weights sum to 1" % code, abs(weight - 1) < 0.001, "weight sum %.6f" % weight)
     last = status["prices"]["lastDate"]

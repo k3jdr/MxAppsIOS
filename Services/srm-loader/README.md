@@ -15,7 +15,7 @@ database and API-key configuration (environment, Keychain `SRM-postgres` / `SRM-
 | Endpoint | What it does |
 | -------- | ------------ |
 | `GET /health`, `GET /describe` | service status, SRM folder, whether a load is running; what the service is for |
-| `GET /categories` | the data categories (reference data, listed universe & issuers, benchmark constituents, identifiers & issuer data, prices & index levels, corporate actions, and the optional portfolio snapshots) with their loaders, last load, data date, `optional` and a state: `fresh`, `due`, `stale`, `failed`, `never` |
+| `GET /categories` | the data categories (reference data, listed universe & issuers, benchmark constituents, identifiers & issuer data, prices & index levels, corporate actions, and the optional portfolio snapshots) with their loaders, last load, data date, `optional` and a state: `fresh`, `due`, `stale`, `failed`, `never` — daily categories are fresh up to 1 business day old by their data date (benchmark constituents 2: SPDR files are published the next business morning; custom benchmarks don't count) |
 | `POST /refresh/<category>` | runs the category's loaders in order (stops at the first failure); honours `X-SRM-Dry-Run` |
 | `GET /loaders` | the 12 loaders in `srm.py`'s dependency order |
 | `POST /load/<loader>` | runs `srm.py load <loader>` and returns its `srm.load_run` rows, the worst status (`succeeded` / `partial` / `failed`), totals and the output tail |
