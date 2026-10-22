@@ -152,7 +152,8 @@ class ActivityLog:
                                     if loader in self.current["loaders"] else 0, loaderStarted=time.time())
 
     def end_run(self, run, name, status, seconds):
-        self.add("Refresh finished: %s — %s in %.1f s" % (name, status, seconds), "error" if status == "failed" else
+        self.add("%s finished: %s — %s in %.1f s" % ("Preview" if status == "dry-run" else "Refresh", name, status, seconds),
+                 "error" if status == "failed" else
                  "warning" if status in ("partial", "no-run") else "info", run=run, event="run-end",
                  name=name, status=status, seconds=seconds)
         with self.lock:
