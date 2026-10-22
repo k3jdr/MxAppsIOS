@@ -1283,17 +1283,19 @@ struct DBMLRibbon: View {
             RibbonButton("Arrange", "rectangle.3.group", large: true) { act { $0.arrange() } }
                 .tip("Arrange Tables", "Places every table afresh: each table group (or schema) a block of its own, side by side; in a block, columns — each table to the right of the tables it refers to. (Drag a table to put it anywhere.)")
             RibbonButton("File Layout", "square.grid.3x1.below.line.grid.1x2") { act { $0.arrangeFromFile() } }
-                .tip("Arrange as in the DBML File", "Puts the tables, notes and curves where the DBML file's own layout has them (a file written by MxDataSQL), spread out to fit these taller rows.")
+                .tip("Arrange as in the DBML File", "Puts the tables, notes and curves where the DBML file's own layout has them (a file written by MxDataSQL).")
                 .disabled(diagram?.hasFileLayout != true)
             RibbonButton("Column Types", "textformat.abc", active: d?.hidesTypes != true) { act { $0.toggleTypes() } }
                 .tip("Column Types", "Each column's type beside its name (! marks not null; a key marks the primary key).")
         }
         RibbonGroup("Lines") {
-            ForEach(DBMLCurve.allCases) { c in
-                RibbonButton(c == .straight ? "Straight" : c == .quadratic ? "Quadratic" : "Cubic", c.symbol, active: (line?.curve ?? d?.defaultCurve) == c) {
+            ForEach(DBMLCurveStyle.allCases) { c in
+                RibbonButton(c == .automatic ? "Automatic" : c == .straight ? "Straight" : c == .quadratic ? "Quadratic" : "Cubic", c.symbol,
+                             active: (line?.style ?? diagram?.diagramCanvas.diagram.defaultStyle) == c) {
                     act { $0.setCurve(c) }
                 }
                 .tip(c.title, line == nil ? "Draws every relationship line this way (click a line first for just that one)."
+                     : c == .automatic ? "The selected line as a smooth S-curve from its tables' places (as MxDataSQL draws them)."
                      : c == .straight ? "The selected line, straight." : c == .quadratic ? "The selected line as a quadratic Bézier curve: drag its one control point to bend it."
                      : "The selected line as a cubic Bézier curve: drag its two control points to shape it.")
             }
@@ -1302,7 +1304,7 @@ struct DBMLRibbon: View {
                 .disabled(line == nil)
             RibbonMenu("Line Color", "paintpalette") {
                 Button("Automatic") { act { $0.setLineColor(nil) } }
-                ForEach(DBMLElementView.lineColors, id: \.1) { name, hex in
+                ForEach(DBMLCanvasView.lineColors, id: \.1) { name, hex in
                     Button(name) { act { $0.setLineColor(hex) } }
                 }
             }
@@ -1313,7 +1315,7 @@ struct DBMLRibbon: View {
             RibbonButton("Add Note", "note.text.badge.plus", large: true) { act { $0.addNote() } }
                 .tip("Add Note", "A note over the diagram, to type in (or double-click empty space). Drag it, resize it from its corner; it's exported as a DBML sticky note.")
             RibbonMenu("Note Color", "paintpalette") {
-                ForEach(DBMLNote.palette, id: \.1) { name, hex in
+                ForEach(DBMLDiagramNote.palette, id: \.1) { name, hex in
                     Button(name) { act { $0.setNoteColor(hex) } }
                 }
             }

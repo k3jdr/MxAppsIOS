@@ -213,20 +213,29 @@ diagram after writing**. The file has:
 
 Writing over a diagram you have already arranged keeps its table positions, curves and notes.
 
-**Diagram ▸ Open DBML…** (⌥⌘O) opens any `.dbml` file in a **Diagram window** (no connection needed):
+**Diagram ▸ Open DBML…** (⌥⌘O) opens any `.dbml` file in a **Diagram window** (no connection needed). The diagram is
+the shared DBML library (`Shared/DBML`), the same as MxNoteONE's DBML diagrams: they read the same files and look and
+work the same.
 
 - Tables are drawn with their columns and types (🔑 primary key, 🔗 foreign key; hover a column for its constraints and
-  note); each schema has its own header colour and a dashed panel. Relationships run from column to column, with a
-  crow's foot at the "many" end and a bar at the "one" end. Tables are arranged by schema with related tables
-  together; **Arrange** does it again.
-- **Drag a table** to move it. Click a table to highlight its relationships.
+  note); each schema has its own header colour and a dashed panel. Enums are drawn too. Relationships run from column
+  to column, with a crow's foot at the "many" end and a bar at the "one" end. Tables are arranged by schema with
+  related tables together; **Arrange** does it again.
+- **Drag a table** to move it. Click a table to highlight its relationships; ⇧- or ⌘-click to select more tables, or
+  click a schema panel's name to select all its tables — dragging one of them moves them all. Arrow keys nudge the
+  selection, ⌘A selects every table.
+- **Schemas** (right-click a table or a schema panel, or **Diagram ▸ Export Schema**): **Select Schema**,
+  **Copy Schema** (its DBML with its layout, and a picture of it) and **Export Schema…** — the schema to a `.dbml`
+  file of its own: its tables and enums as written (refs to tables in other schemas taken off), the relationships
+  among them, its table group, and where they sit (with their curves and the notes over them).
 - **Click a relationship** to select it, then choose its curve in the toolbar (or right-click it): **Automatic**,
   **Straight Line**, **Quadratic Bézier** (one control point) or **Cubic Bézier** (two). Bézier curves show their
   control points; **drag the round handles** to reshape the curve. Control points move with the tables. Delete
-  sets a selected relationship back to Automatic.
+  sets a selected relationship back to Automatic. The right-click menu also chooses which **side** of each table a
+  line leaves and meets, and its **colour**; **All Lines** draws every relationship one way.
 - **Notes**: **Add Note** (toolbar or Diagram menu), or double-click empty canvas. Drag a note to move it, drag its
-  corner to resize it, double-click it to edit; right-click ▸ Delete Note (or select it and press Delete). Sticky
-  notes that came with the file (written by another tool) are shown in grey and are read-only.
+  corner to resize it, double-click it to edit; right-click for its colour, or ▸ Delete Note (or select it and press
+  Delete). Sticky notes that came with the file (written by another tool) are shown in grey and are read-only.
 - **Zoom** with the toolbar or Diagram ▸ Zoom In / Zoom Out / Actual Size (⌘+, ⌘−, ⌘0).
 - **Save** (⌘S in the diagram window, or Diagram ▸ Save Diagram / Save Diagram As…) writes the notes and layout into the
   same `.dbml` file. Closing a diagram with unsaved changes asks first.
@@ -302,9 +311,9 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `SQLHighlighter.swift` | SQL syntax colouring (PostgreSQL-aware scanner, VS Code colours) |
 | `SQLFiles.swift` | SQL files: folder and recent files (bookmarks), open / save / revert, the SQL box's right-click menu |
 | `DBMLWriter.swift` | Diagram ▸ Write DBML: catalog query and DBML text |
-| `DBMLDocument.swift` | DBML model and parser; the diagram section (notes and layout) at the end of a .dbml file |
-| `DiagramModel.swift` | A Diagram window's state: positions, relationship curves, notes, arrangement, saving |
-| `DiagramCanvas.swift`, `DiagramWindow.swift` | The diagram drawing and its window (toolbar, close prompt) |
+| `../Shared/DBML/` | The DBML library shared with MxNoteONE: the parser, MxDataSQL's diagram section (notes and layout), layout and arranging, drawing and pictures, the diagram canvas (dragging, curves, notes, the Schema menu) |
+| `DiagramModel.swift` | A Diagram window's state: the diagram, the selection, saving, Export Schema |
+| `DiagramCanvas.swift`, `DiagramWindow.swift` | The shared canvas in the window (toolbar, status line, close prompt) |
 | `DiagramCommands.swift` | The Diagram menu, the Write DBML Save panel and Open DBML |
 | `SQLQuickHelp.swift` | What Quick Help says: the forms and dialogs, the selection, grid cells and column headers |
 | `../Shared/QuickHelp/` | The Quick Help panel, shared with MxDataHUB and MxJobsWMS (the only part of `../Shared` this app compiles) |

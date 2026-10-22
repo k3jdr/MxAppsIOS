@@ -91,7 +91,7 @@ enum OneNoteHTML {
             case .dbml:
                 // OneNote has no DBML diagrams: its picture, and its DBML.
                 guard let d = element.dbml else { continue }
-                let picture = DBMLDrawing.picture(d, scale: 1)
+                let picture = DBMLRenderer.picture(d.diagram, scale: 1)
                 let png = (picture.representations.first as? NSBitmapImageRep)?.representation(using: .png, properties: [:])
                 body += "<div style=\"position:absolute;left:\(x)px;top:\(y)px;width:\(w)px\">"
                 if let png {

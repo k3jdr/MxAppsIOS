@@ -17,6 +17,12 @@
 			path = MxNoteONE;
 			sourceTree = "<group>";
 		};
+		8D4C6A2A30A1B2C3004D5E6F /* Shared DBML */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = "Shared DBML";
+			path = ../Shared/DBML;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +39,7 @@
 			children = (
 				8D4C6A0830A1B2C3004D5E6F /* README.md */,
 				8D4C6A1630A1B2C3004D5E6F /* MxNoteONE */,
+				8D4C6A2A30A1B2C3004D5E6F /* Shared DBML */,
 				8D4C6A1530A1B2C3004D5E6F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,6 +67,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				8D4C6A1630A1B2C3004D5E6F /* MxNoteONE */,
+				8D4C6A2A30A1B2C3004D5E6F /* Shared DBML */,
 			);
 			name = MxNoteONE;
 			productName = MxNoteONE;

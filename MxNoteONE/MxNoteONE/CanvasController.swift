@@ -800,7 +800,7 @@ final class CanvasController: NSObject {
             if let m = element.map { item.setString(m.pinLines(markdown: false).joined(separator: "\n"), forType: .string) }
         case .dbml:
             if let d = element.dbml {
-                DBMLDrawing.add(d, to: item)
+                DBMLRenderer.add(d.diagram, to: item)
                 item.setString(d.exportText, forType: .string)
             }
         }

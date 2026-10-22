@@ -2,9 +2,9 @@
 //  DiagramWindow.swift
 //  MxDataSQL
 //
-//  A Diagram window (Diagram ▸ Write DBML / Open DBML): the canvas, a toolbar (relationship
-//  curve, add note, arrange, zoom, save) and a status line. Closing it with unsaved changes asks
-//  whether to save them into the .dbml file.
+//  A Diagram window (Diagram ▸ Write DBML / Open DBML): the canvas (the shared DBML canvas, as in
+//  MxNoteONE), a toolbar (relationship curve, add note, arrange, zoom, save) and a status line.
+//  Closing it with unsaved changes asks whether to save them into the .dbml file.
 //
 
 import AppKit
@@ -54,19 +54,16 @@ private struct DiagramContent: View {
         }
     }
 
-    private var selectedRef: DBMLRef? {
-        if case .ref(let id) = model.selection { return model.document.refs.first { $0.id == id } }
-        return nil
-    }
+    private var selectedRef: DBMLSchema.Ref? { model.selectedRef }
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             Picker("Curve", selection: Binding(
-                get: { selectedRef.map { model.curve($0).style } ?? .automatic },
+                get: { selectedRef.map { model.diagram.style($0) } ?? .automatic },
                 set: { style in if let ref = selectedRef { model.setStyle(style, for: ref.id) } })
             ) {
-                ForEach(CurveStyle.allCases) { Text($0.title).tag($0) }
+                ForEach(DBMLCurveStyle.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.menu)
             .disabled(selectedRef == nil)
@@ -78,7 +75,7 @@ private struct DiagramContent: View {
             Button("Add Note", systemImage: "note.text.badge.plus") { model.addNoteAtVisibleCenter() }
                 .help("Add a sticky note (or double-click empty canvas)")
             Button("Arrange", systemImage: "square.grid.3x2") { model.autoArrange() }
-                .help("Arrange the tables by schema, related tables together (resets curves)")
+                .help("Arrange the tables by schema, related tables together (resets curves). Right-click a schema to select, copy or export it.")
             Button("Zoom Out", systemImage: "minus.magnifyingglass") { model.zoom = max(0.2, model.zoom / 1.25) }
             Text("\(Int((model.zoom * 100).rounded()))%")
                 .monospacedDigit()
@@ -94,7 +91,7 @@ private struct DiagramContent: View {
 
     private var statusLine: some View {
         HStack(spacing: 10) {
-            Text("\(model.document.tables.count) tables · \(model.document.refs.count) relationships · \(model.notes.count) notes")
+            Text("\(model.schema.tables.count) tables · \(model.schema.refs.count) relationships · \(model.diagram.notes.count + model.schema.notes.count) notes")
             if let selection = selectionText { Text("— \(selection)").foregroundStyle(.secondary).lineLimit(1) }
             Spacer()
             if model.dirty { Text("Edited").foregroundStyle(.secondary) }
@@ -106,18 +103,15 @@ private struct DiagramContent: View {
     }
 
     private var selectionText: String? {
-        switch model.selection {
-        case .table(let id):
-            let n = model.refs(touching: id).count
-            return "\(id): \(model.document.table(id)?.columns.count ?? 0) columns, \(n) relationship\(n == 1 ? "" : "s")"
-        case .ref(let id):
-            guard let r = model.document.refs.first(where: { $0.id == id }) else { return nil }
-            return "\(r.from.table).\(r.from.columns.joined(separator: ",")) \(r.relation.rawValue) \(r.to.table).\(r.to.columns.joined(separator: ",")) (\(model.curve(r).style.title))"
-        case .note(let id):
-            return "note \(id)"
-        case nil:
-            return "Drag tables and notes; click a relationship to reshape it; double-click empty space for a note"
+        let s = model.selection
+        if s.tables.count == 1, let id = s.tables.first {
+            let n = model.refs(touching: id)
+            return "\(id): \(model.schema.table(id)?.columns.count ?? 0) columns, \(n) relationship\(n == 1 ? "" : "s")"
         }
+        if s.tables.count > 1 { return "\(s.tables.count) tables selected (drag one to move them all)" }
+        if let r = model.selectedRef { return "\(r.text) (\(model.diagram.style(r).title))" }
+        if let id = s.note { return "note \(id)" }
+        return "Drag tables and notes; click a relationship to reshape it; double-click empty space for a note; right-click a schema to select, copy or export it"
     }
 }
 

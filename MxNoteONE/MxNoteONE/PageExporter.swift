@@ -208,7 +208,7 @@ enum PageExporter {
                 let name = d.title ?? "Database diagram"
                 let base = safeName(d.title ?? "Diagram") + "-" + String(element.id.uuidString.prefix(4))
                 try? FileManager.default.createDirectory(at: assetsFolder, withIntermediateDirectories: true)
-                if let png = DBMLDrawing.bitmap(d)?.representation(using: .png, properties: [:]) {
+                if let png = DBMLRenderer.bitmap(d.diagram)?.representation(using: .png, properties: [:]) {
                     try? png.write(to: assetsFolder.appending(path: base + ".png"))
                     let link = (assetsName + "/" + base + ".png").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? base
                     lines.append("![\(name)](\(link))")

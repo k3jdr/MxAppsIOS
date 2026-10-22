@@ -68,6 +68,12 @@ struct DiagramCommands: Commands {
                 .disabled(diagram == nil)
             Button("Arrange Tables") { diagram?.autoArrange() }
                 .disabled(diagram == nil)
+            Menu("Export Schema") {
+                ForEach(diagram?.schema.schemas ?? [], id: \.self) { name in
+                    Button(name) { diagram?.exportSchema(name) }
+                }
+            }
+            .disabled(diagram == nil)
 
             Divider()
 
@@ -153,18 +159,14 @@ enum DBMLExport {
             let result = DBMLWriter.generate(catalog, source: source, schemas: schemas)
             // Rewriting a diagram that was already arranged keeps its notes and layout.
             var text = result.text
-            if let old = try? String(contentsOf: url, encoding: .utf8), DBMLDocument.split(old).section != nil,
-               let previous = try? DBMLParser.parse(old) {
-                var doc = previous
-                doc.body = text
-                text = doc.fileText(notes: previous.notes, layout: previous.layout)
+            if let old = try? String(contentsOf: url, encoding: .utf8), DBMLFileLayout.split(old).section != nil {
+                var previous = DBMLDiagram(fileText: old)
+                previous.source = text
+                text = previous.fileText()
             }
             try text.write(to: url, atomically: true, encoding: .utf8)
             session.infoMessage = "Wrote \(url.lastPathComponent): \(result.tables) tables, \(result.refs) relationships"
-            if openAfter {
-                let doc = try DBMLParser.parse(text)
-                open(DiagramModel(document: doc, fileURL: url))
-            }
+            if openAfter { open(DiagramModel(fileText: text, fileURL: url)) }
         } catch {
             session.errorMessage = "Could not write the DBML file.\n\n\(DatabaseError.from(error).message)"
         }
@@ -179,12 +181,12 @@ enum DBMLExport {
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         do {
             let text = try String(contentsOf: url, encoding: .utf8)
-            let doc = try DBMLParser.parse(text)
-            guard !doc.tables.isEmpty else {
-                showError("\(url.lastPathComponent) has no tables.")
+            let model = DiagramModel(fileText: text, fileURL: url)
+            guard !model.schema.tables.isEmpty else {
+                showError("\(url.lastPathComponent) has no tables." + (model.schema.problems.first.map { "\n\nLine \($0.line): \($0.message)" } ?? ""))
                 return nil
             }
-            return DiagramModel(document: doc, fileURL: url)
+            return model
         } catch {
             showError("Could not open \(url.lastPathComponent).\n\n\(error.localizedDescription)")
             return nil
@@ -242,24 +244,24 @@ enum DiagramDemo {
         await DBMLExport.write(session: session, service: service, database: database, schemas: schemas,
                                to: url, openAfter: true) { model in
             // Two relationships near the top left, one per Bézier kind, the cubic one selected.
-            let near = model.document.refs.filter {
-                let a = model.frame(of: $0.from.table), b = model.frame(of: $0.to.table)
+            let geometry = DBMLGeometry(model.diagram)
+            let near = model.schema.refs.filter {
+                guard let a = geometry.box($0.from.table)?.rect, let b = geometry.box($0.to.table)?.rect else { return false }
                 return a.maxX < 1100 && b.maxX < 1100 && a.minY < 700 && b.minY < 700 && $0.from.table != $0.to.table
             }
             if near.count >= 2 {
                 model.setStyle(.quadratic, for: near[0].id)
                 model.setStyle(.cubic, for: near[1].id)
-                model.moveControl(0, of: near[1].id, to: {
-                    let g = model.geometry(of: near[1])
-                    return CGPoint(x: g.controls[0].x + 40, y: g.controls[0].y - 90)
-                }())
-                model.selection = .ref(near[1].id)
+                if let line = DBMLGeometry(model.diagram).line(near[1].id) {
+                    model.diagram.moveControl(0, of: near[1].id, to: CGPoint(x: line.controls[0].x + 40, y: line.controls[0].y - 90))
+                }
+                model.selection = DBMLSelection(ref: near[1].id)
             }
             model.addNote(at: CGPoint(x: 40, y: 8))
-            if let note = model.notes.last {
-                model.setNoteText(note.id, "Diagram demo: drag tables, click a relationship to pick its curve, drag the round handles.")
+            if let i = model.diagram.notes.indices.last {
+                model.diagram.notes[i].text = "Diagram demo: drag tables, click a relationship to pick its curve, drag the round handles; right-click a schema to export it."
             }
-            model.editingNote = nil
+            model.editNoteRequest = nil
             open(model)
         }
     }

@@ -122,7 +122,7 @@ final class QuickHelp {
             return staff.quickHelp(at: p)
         case let grid as TableGridView:
             return grid.quickHelp(at: p)
-        case let diagram as DBMLDiagramView:
+        case let diagram as DBMLCanvasView:
             return diagram.quickHelp(at: p)
         case is DBMLSourceTextView:
             return QuickHelpItem(title: "DBML", detail: "The diagram's DBML: Table name { column type [pk, not null, unique, note: '…', ref: > other.id] }, Enum, Ref: a.b > c.d (> many-to-one, < one-to-many, - one-to-one, <> many-to-many), TableGroup and Note. The diagram follows as you type; problems show below.",
