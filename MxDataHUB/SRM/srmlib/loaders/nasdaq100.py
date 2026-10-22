@@ -18,7 +18,7 @@ def run(conn, cfg, args):
     with LoadRun(conn, "NASDAQ_COM", "nasdaq100") as run, conn.cursor() as cur:
         data = http(URL, headers=HEADERS)["data"]
         run.api_calls += 1
-        as_of = datetime.datetime.strptime(data["date"], "%b %d, %Y").date() if data.get("date") else datetime.date.today()
+        as_of = datetime.datetime.strptime(" ".join(data["date"].split()[:3]), "%b %d, %Y").date() if data.get("date") else datetime.date.today()
         debug(f"Nasdaq.com list: {len(data['data']['rows'])} rows, dated {data.get('date') or 'today (no date given)'}")
         cur.execute("SELECT benchmark_id FROM srm.benchmark WHERE code = 'NDX'")
         benchmark_id = cur.fetchone()[0]
