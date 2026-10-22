@@ -51,14 +51,7 @@ struct ContentView: View {
         .quickHelpScreen(store.section.rawValue, HubHelp.screen(store), selection: HubHelp.selection(store))
         .task { await start() }
         .onOpenURL { url in open(AppLink(url: url)) }
-        .alert("MxDataHUB", isPresented: Binding(
-            get: { store.errorMessage != nil },
-            set: { if !$0 { store.errorMessage = nil } })
-        ) {
-            Button("OK") { store.errorMessage = nil }
-        } message: {
-            Text(store.errorMessage ?? "")
-        }
+        .errorDialog("MxDataHUB", message: $store.errorMessage)
     }
 
     @ViewBuilder

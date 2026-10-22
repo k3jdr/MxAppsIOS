@@ -31,6 +31,13 @@ python3 Services/mxservices.py install-agents   # optional: start them at login 
 Logs: `~/Library/Logs/MxServices/<id>.log`. Python services need `numpy` and `psycopg2` (the analytics and SRM
 loader services read the security master with SRM's own connection settings — see `MxDataHUB/SRM/README.md`).
 
+**"No route to host" for the database (192.168.0.223) while MxDataHUB connects fine**: macOS's Local Network privacy.
+A service gets local-network access through the app it was started from; started in a terminal app that doesn't have
+the permission, every connection to a 192.168.x.x address fails with *No route to host* (seen 2026-10-22, after a
+`restart` in such a terminal). Turn that app on in System Settings ▸ Privacy & Security ▸ Local Network, then
+`python3 Services/mxservices.py restart srm-loader analytics accounts` from it. The services' errors say so
+(`srmlib.common.local_network_hint`).
+
 ## The services
 
 | Service | Language | Port | What it is for | Use it for |

@@ -14,6 +14,7 @@ identifier results, a load's parameters and time — and 2 (trace) also every HT
 its time. Detail lines are tagged [debug] or [trace] so a reader (the SRM loader service) can tell them apart.
 """
 
+import ipaddress
 import json
 import logging
 import os
@@ -95,13 +96,38 @@ class Config:
         if VERBOSITY >= 2:
             # Every SQL statement with its time, through psycopg2's logging connection.
             kwargs["connection_factory"] = psycopg2.extras.MinTimeLoggingConnection
-        conn = psycopg2.connect(**kwargs)
+        try:
+            conn = psycopg2.connect(**kwargs)
+        except psycopg2.OperationalError as e:
+            hint = local_network_hint(self.host, str(e))
+            if hint:
+                raise psycopg2.OperationalError(str(e).rstrip() + "\n\n" + hint) from e
+            raise
         if VERBOSITY >= 2:
             conn.initialize(_SQL_LOGGER, mintime=0)
         conn.autocommit = False
         debug(f"connected in {time.monotonic() - started:.2f}s: PostgreSQL {conn.server_version // 10000}."
               f"{conn.server_version % 10000}, backend pid {conn.get_backend_pid()}")
         return conn
+
+
+def local_network_hint(host, error):
+    """Why a database on this network can be 'No route to host' for one program while others reach it: macOS's
+    Local Network privacy. A program gets local-network access through the app that started it (Terminal, iTerm,
+    MxDataHUB…); started from an app without that permission — as the Layer 3 services are when `mxservices.py start`
+    runs in such a terminal — its connections to 192.168.x.x addresses fail with EHOSTUNREACH."""
+    if "No route to host" not in error:
+        return None
+    try:
+        local = ipaddress.ip_address(host).is_private
+    except ValueError:
+        local = host.endswith(".local")
+    if not local:
+        return None
+    return (f"{host} is on your local network. If other apps on this Mac reach it (MxDataHUB's own connection, "
+            "psql), macOS is blocking this program's local network access: it was started from an app without the "
+            "Local Network permission, e.g. Terminal. Turn that app on in System Settings > Privacy & Security > "
+            "Local Network, then restart the services from it: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py restart")
 
 
 def log(message):

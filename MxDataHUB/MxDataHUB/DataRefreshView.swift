@@ -238,11 +238,7 @@ struct DataRefreshView: View {
         }
         .task { await refresh.load() }
         .task { await refresh.followActivity() }
-        .alert("Data Refresh", isPresented: Binding(get: { refresh.error != nil }, set: { if !$0 { refresh.error = nil } })) {
-            Button("OK") { refresh.error = nil }
-        } message: {
-            Text(refresh.error ?? "")
-        }
+        .errorDialog("Data Refresh", message: $refresh.error)
     }
 
     private var header: some View {
