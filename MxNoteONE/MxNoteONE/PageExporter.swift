@@ -219,7 +219,7 @@ enum PageExporter {
                 lines.append("*Database diagram: [\(base).dbml](\(file))*")
                 lines.append("")
                 lines.append("```dbml")
-                lines += d.exportText.trimmingCharacters(in: .newlines).components(separatedBy: "\n")
+                lines += d.dbmlText(includingLayout: false).trimmingCharacters(in: .newlines).components(separatedBy: "\n")
                 lines.append("```")
             }
             lines.append("")

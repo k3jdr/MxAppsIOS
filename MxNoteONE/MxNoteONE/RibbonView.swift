@@ -1281,7 +1281,10 @@ struct DBMLRibbon: View {
         }
         RibbonGroup("Tables") {
             RibbonButton("Arrange", "rectangle.3.group", large: true) { act { $0.arrange() } }
-                .tip("Arrange Tables", "Places every table afresh, in columns: each table to the right of the tables it refers to. (Drag a table to put it anywhere.)")
+                .tip("Arrange Tables", "Places every table afresh: each table group (or schema) a block of its own, side by side; in a block, columns — each table to the right of the tables it refers to. (Drag a table to put it anywhere.)")
+            RibbonButton("File Layout", "square.grid.3x1.below.line.grid.1x2") { act { $0.arrangeFromFile() } }
+                .tip("Arrange as in the DBML File", "Puts the tables, notes and curves where the DBML file's own layout has them (a file written by MxDataSQL), spread out to fit these taller rows.")
+                .disabled(diagram?.hasFileLayout != true)
             RibbonButton("Column Types", "textformat.abc", active: d?.hidesTypes != true) { act { $0.toggleTypes() } }
                 .tip("Column Types", "Each column's type beside its name (! marks not null; a key marks the primary key).")
         }

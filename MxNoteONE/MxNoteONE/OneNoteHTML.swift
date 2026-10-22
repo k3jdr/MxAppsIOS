@@ -99,7 +99,7 @@ enum OneNoteHTML {
                     let width = min(Double(w), picture.size.width)
                     body += "<img width=\"\(Int(width))\" height=\"\(Int((picture.size.height * width / max(picture.size.width, 1)).rounded()))\" src=\"name:\(name)\" />"
                 }
-                body += "<pre style=\"font-family:Consolas,Menlo,monospace;font-size:9pt\">\(escape(d.exportText))</pre></div>\n"
+                body += "<pre style=\"font-family:Consolas,Menlo,monospace;font-size:9pt\">\(escape(d.dbmlText(includingLayout: false)))</pre></div>\n"
             case .score:
                 // OneNote has no scores: its title, signatures and notes in letter names.
                 guard let score = element.score else { continue }

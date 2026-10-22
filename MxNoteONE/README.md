@@ -634,8 +634,14 @@ Click the diagram to work on it: the **DBML** tab appears.
 - **Tables**: each table shows its columns and types (a key marks the primary key, `!` not null, a dot a note — hover
   for it; the header's bubble means the table has a note). **Drag a table** (or an enum, or a sticky note) to move it;
   its lines follow, and the container grows to fit. ⇧ / arrow keys nudge the selected table. New tables are placed
-  in columns, each to the right of the tables it refers to; **Arrange** places them all afresh. Double-click a table
-  to see its DBML. Table groups are drawn around their tables.
+  block by block — each table group, or (without groups) each schema, a block of its own, the blocks side by side
+  and in rows, so schemas never lie over each other — and in a block in columns, each table to the right of the
+  tables it refers to; **Arrange** places them all afresh that way. Double-click a table to see its DBML. Table
+  groups are drawn around their tables.
+- **Files from MxDataSQL** (Diagram ▸ Write DBML) end with its diagram section: its sticky notes and a
+  `// @mxdatasql-layout {…}` comment with where each table sits and how each line curves. A diagram made from such
+  a file is laid out as it is there — spread out a little for these taller rows — with its curves; **File Layout**
+  (right-click ▸ Arrange as in the DBML File) puts everything back that way after other arranging.
 - **Relationship lines** run from column to column, marked `1` and `*` at their ends (many-to-many dashed). Click a
   line to select it: its **control points** show, with guides to the ends they pull from. A **quadratic Bézier curve**
   has one control point, a **cubic Bézier curve** two (new lines are cubic); **straight** lines have none. Drag a
@@ -646,9 +652,11 @@ Click the diagram to work on it: the **DBML** tab appears.
   note to move it, drag its corner to resize it, right-click for its colour; Delete removes the selected one.
 - **View**: Fit Width (the default — as wide as the container, up to its own size), Zoom In / Out (wider diagrams
   scroll across), Column Types, Copy Picture, Export Picture….
-- **Export DBML…** saves a .dbml file — the DBML as written, with the notes over the diagram as DBML sticky notes —
-  for dbdiagram.io, dbdocs or database tools; **Import DBML…** replaces the DBML with a file's (tables keep their
-  places while their names stay).
+- **Export DBML…** saves a .dbml file — the DBML as written, then MxDataSQL's diagram section: the notes over the
+  diagram as DBML sticky notes, and the layout comment with where every table sits here and each line's curve — so
+  MxDataSQL opens it laid out the same, and dbdiagram.io, dbdocs or database tools read the DBML (the comment is
+  just a comment to them). **Import DBML…** replaces the DBML with a file's (a file with its own layout is laid out
+  that way; otherwise tables keep their places while their names stay).
 
 Where each table sits, each line's curve and the notes are saved with the page, and every change can be undone. DBML
 diagrams print and export to PDF as drawn, go to OneNote as a picture with their DBML, and Markdown export writes the

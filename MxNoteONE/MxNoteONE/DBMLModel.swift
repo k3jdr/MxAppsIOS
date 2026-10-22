@@ -338,8 +338,19 @@ enum DBMLParser {
         return lines.map { String($0.dropFirst(min(indent, $0.prefix { $0 == " " || $0 == "\t" }.count))) }.joined(separator: "\n")
     }
 
+    /// The last few DBML texts read (a diagram is laid out again on every move while dragging).
+    private static var parsed: [(source: String, schema: DBMLSchema)] = []
+
     /// Reads DBML. What it can't read is listed in `problems` (by line); the rest still shows.
     static func parse(_ source: String) -> DBMLSchema {
+        if let hit = parsed.first(where: { $0.source == source }) { return hit.schema }
+        let schema = read(source)
+        parsed.insert((source, schema), at: 0)
+        if parsed.count > 6 { parsed.removeLast() }
+        return schema
+    }
+
+    private static func read(_ source: String) -> DBMLSchema {
         var p = Reader(tokens: tokens(source))
         p.run()
         var schema = p.schema
@@ -728,19 +739,64 @@ enum DBMLParser {
 // MARK: - Writing DBML
 
 extension DBMLData {
-    /// The diagram as a .dbml file: its DBML, then the notes laid over it as DBML sticky notes.
-    var exportText: String {
-        var text = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        let schema = DBMLParser.parse(source)
-        var taken = Set(schema.notes.map(\.name))
-        for (n, note) in (notes ?? []).enumerated() where !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            var name = "note_\(n + 1)"
+    /// The diagram as a .dbml file: its DBML as written, then a diagram section as MxDataSQL writes one — the
+    /// notes laid over the diagram as DBML sticky notes, and a comment line with where every table sits and how
+    /// each line is curved (MxDataSQL shows the diagram laid out the same; other DBML tools skip the comment).
+    var exportText: String { dbmlText(includingLayout: true) }
+
+    func dbmlText(includingLayout: Bool) -> String {
+        let (body, section) = DBMLFileLayout.split(source)
+        var text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The section's own sticky notes (written by MxDataSQL or an earlier export) stay.
+        let kept = section.map { DBMLParser.parse($0).notes } ?? []
+        var taken = Set(DBMLParser.parse(source).notes.map(\.name))
+        var written: [(name: String, text: String)] = kept.map { ($0.name, $0.text) }
+        var frames: [String: DBMLFileLayout.Frame] = [:]
+        for note in notes ?? [] where !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            var name = "note_\(written.count + 1)"
             while taken.contains(name) { name += "_" }
             taken.insert(name)
-            let body = note.text.replacingOccurrences(of: "'''", with: "\\'\\'\\'")
-            text += "\n\nNote \(name) {\n'''\n\(body)\n'''\n}"
+            written.append((name, note.text))
+            frames[name] = .init(x: note.x, y: note.y, width: note.width, height: note.height)
         }
-        return text + "\n"
+        guard includingLayout || !written.isEmpty else { return text + "\n" }
+        text += "\n\n" + DBMLFileLayout.sectionMarker + "\n"
+        for note in written {
+            text += "Note \(note.name) {\n  '''\n\(note.text.replacingOccurrences(of: "'''", with: "\\'\\'\\'"))\n  '''\n}\n"
+        }
+        guard includingLayout else { return text }
+        let layout = DBMLLayout(self)
+        var file = DBMLFileLayout.Layout()
+        for box in layout.boxes {
+            switch box.kind {
+            case .table: file.tables[box.key] = .init(x: box.rect.minX, y: box.rect.minY)
+            case .sticky: frames[box.title] = .init(x: box.rect.minX, y: box.rect.minY, width: box.rect.width, height: box.rect.height)
+            case .enumeration: break
+            }
+        }
+        file.notes = frames
+        for line in layout.lines {
+            let mid = CGPoint(x: (line.start.x + line.end.x) / 2, y: (line.start.y + line.end.y) / 2)
+            let custom = lines?[line.ref.key]
+            switch line.curve {
+            case .straight:
+                file.refs[DBMLFileLayout.refID(line.ref)] = .init(style: "straight")
+            case .quadratic:
+                file.refs[DBMLFileLayout.refID(line.ref)] = .init(style: "quadratic", c1: .init(line.controls[0] - mid))
+            case .cubic where custom?.c1 != nil || custom?.c2 != nil:
+                file.refs[DBMLFileLayout.refID(line.ref)] = .init(style: "cubic", c1: .init(line.controls[0] - line.start), c2: .init(line.controls[1] - line.end))
+            case .cubic:
+                break   // MxDataSQL's automatic S-curve
+            }
+        }
+        file.zoom = section.flatMap(DBMLFileLayout.layout(in:))?.zoom
+        file.mxnoteone = true
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        if let data = try? encoder.encode(file), let json = String(data: data, encoding: .utf8) {
+            text += DBMLFileLayout.prefix + json + "\n"
+        }
+        return text
     }
 
     var searchText: String {
@@ -830,14 +886,14 @@ struct DBMLLayout {
         var unplaced: [Int] = []
         for t in schema.tables {
             let rows = t.columns.map { ($0.name, $0.type, $0.pk, $0.notNull, $0.unique, $0.note) }
-            let size = Self.size(title: t.name, rows: rows.map { ($0.0, showTypes ? $0.1 : "") })
+            let size = Self.size(title: t.name, rows: rows.map { ($0.0, showTypes ? $0.1 : "", $0.2) })
             let color = t.headerColor.flatMap { NSColor(hex: $0) } ?? Self.defaultHeader
             boxes.append(Box(key: t.name, kind: .table, title: t.name, rows: rows, note: t.note, color: color,
                              rect: CGRect(origin: .zero, size: size), line: t.line))
         }
         for e in schema.enums {
             let rows = e.values.map { ($0.name, "", false, false, false, $0.note) }
-            let size = Self.size(title: "enum " + e.name, rows: rows.map { ($0.0, "") })
+            let size = Self.size(title: "enum " + e.name, rows: rows.map { ($0.0, "", false) })
             boxes.append(Box(key: "enum:" + e.name, kind: .enumeration, title: e.name, rows: rows, note: nil, color: Self.enumHeader,
                              rect: CGRect(origin: .zero, size: size), line: e.line))
         }
@@ -846,9 +902,24 @@ struct DBMLLayout {
             boxes.append(Box(key: "note:" + n.name, kind: .sticky, title: n.name, rows: [], note: n.text,
                              color: NSColor(hex: DBMLNote.palette[0].1) ?? .yellow, rect: CGRect(origin: .zero, size: size), line: n.line))
         }
+        // A box's own place; else where the DBML file's layout (MxDataSQL's) puts it; else placed here.
+        let file = DBMLFileLayout.layout(in: data.source)
+        let scale = file.map { Self.fileScale($0, schema) } ?? CGSize(width: 1, height: 1)
+        var fromFile: [Int] = []
         for (k, box) in boxes.enumerated() {
-            if let p = data.positions[box.key] { boxes[k].rect.origin = p.cg } else { unplaced.append(k) }
+            if let p = data.positions[box.key] {
+                boxes[k].rect.origin = p.cg
+            } else if let p = file.flatMap({ Self.filePosition(box, $0) }) {
+                boxes[k].rect.origin = CGPoint(x: (p.x * scale.width).rounded(), y: (p.y * scale.height).rounded())
+                if box.kind == .sticky, let f = file?.notes[box.title], let w = f.width, let h = f.height {
+                    boxes[k].rect.size = CGSize(width: max(80, w), height: max(40, h))
+                }
+                fromFile.append(k)
+            } else {
+                unplaced.append(k)
+            }
         }
+        if !fromFile.isEmpty { separate(fromFile) }
         if !unplaced.isEmpty { place(unplaced) }
         // Groups around their tables.
         for g in schema.groups {
@@ -862,7 +933,7 @@ struct DBMLLayout {
         for ref in schema.refs {
             guard let a = boxes.first(where: { $0.kind == .table && $0.key == ref.from.table }),
                   let b = boxes.first(where: { $0.kind == .table && $0.key == ref.to.table }) else { continue }
-            let saved = data.lines?[ref.key] ?? DBMLLine()
+            let saved = data.lines?[ref.key] ?? file?.refs[DBMLFileLayout.refID(ref)].map(\.line) ?? DBMLLine()
             let ya = Self.rowY(a, ref.from.columns.first), yb = Self.rowY(b, ref.to.columns.first)
             var sides: (DBMLSide, DBMLSide)
             if b.rect.minX > a.rect.maxX + 16 { sides = (.right, .left) } else if b.rect.maxX < a.rect.minX - 16 { sides = (.left, .right) } else { sides = (.right, .right) }
@@ -889,13 +960,21 @@ struct DBMLLayout {
         size = CGSize(width: ceil(extent.maxX + Self.margin - overflow.x), height: ceil(extent.maxY + Self.margin - overflow.y))
     }
 
-    static func size(title: String, rows: [(String, String)]) -> CGSize {
+    /// Box sizes measured before (measuring every column's text on every drag move is slow for big diagrams).
+    private static var sizes: [String: CGSize] = [:]
+
+    static func size(title: String, rows: [(String, String, Bool)]) -> CGSize {
+        let key = title + "\u{1}" + rows.map { $0.0 + "\u{2}" + $0.1 + ($0.2 ? "\u{3}" : "") }.joined(separator: "\u{1}")
+        if let known = sizes[key] { return known }
         var width = (title as NSString).size(withAttributes: [.font: titleFont]).width + 2 * pad + 20
-        for (name, type) in rows {
+        for (name, type, pk) in rows {
             let w = (name as NSString).size(withAttributes: [.font: nameFont]).width + (type as NSString).size(withAttributes: [.font: typeFont]).width
-            width = max(width, w + 2 * pad + 40)
+            width = max(width, w + 2 * pad + 40 + (pk ? 16 : 0))
         }
-        return CGSize(width: max(minWidth, ceil(width)), height: headerHeight + CGFloat(max(rows.count, 1)) * rowHeight + 4)
+        let size = CGSize(width: max(minWidth, ceil(width)), height: headerHeight + CGFloat(max(rows.count, 1)) * rowHeight + 4)
+        if sizes.count > 4000 { sizes.removeAll() }
+        sizes[key] = size
+        return size
     }
 
     static func noteSize(_ text: String) -> CGSize {
@@ -938,57 +1017,256 @@ struct DBMLLayout {
         }
     }
 
-    /// New boxes go in columns: each table right of the tables it points to (a many-to-one Ref's "one" side first).
+    /// New boxes, placed: each table group — or, without groups, each schema — a block of its own, the blocks side
+    /// by side (and in rows when they get wide), so groups and schemas don't lie over each other. In a block, the
+    /// tables go in columns, each table to the right of the tables it refers to. Enums and sticky notes go below.
     private mutating func place(_ indices: [Int]) {
-        var placed = boxes.indices.filter { !indices.contains($0) }.map { boxes[$0].rect }
+        let placed = boxes.indices.filter { !indices.contains($0) }.map { boxes[$0].rect }
         let tables = indices.filter { boxes[$0].kind == .table }
-        var rank: [String: Int] = [:]
-        for k in tables { rank[boxes[k].key] = 0 }
-        // Longest path from the referenced tables (a few passes are enough for a page's diagram).
-        for _ in 0..<tables.count {
-            var changed = false
-            for r in schema.refs {
-                let (child, parent): (String, String) = r.op == "<" ? (r.to.table, r.from.table) : (r.from.table, r.to.table)
-                guard child != parent, let pr = rank[parent], let cr = rank[child], cr < pr + 1, pr + 1 < 8 else { continue }
-                rank[child] = pr + 1
-                changed = true
+        var blocks: [[Int]] = []
+        var taken = Set<Int>()
+        for g in schema.groups {
+            let members = tables.filter { !taken.contains($0) && g.tables.contains(boxes[$0].key) }
+            if !members.isEmpty { blocks.append(members); taken.formUnion(members) }
+        }
+        var bySchema: [String: [Int]] = [:], schemaOrder: [String] = []
+        for k in tables where !taken.contains(k) {
+            let key = boxes[k].key
+            let schemaName = key.lastIndex(of: ".").map { String(key[..<$0]) } ?? ""
+            if bySchema[schemaName] == nil { schemaOrder.append(schemaName) }
+            bySchema[schemaName, default: []].append(k)
+        }
+        blocks += schemaOrder.compactMap { bySchema[$0] }
+        // Blocks left to right (room above each for its group's name), onto a new row past a width.
+        let startX = (placed.map(\.maxX).max() ?? 0) + (placed.isEmpty ? Self.margin : 90)
+        let top = Self.margin + 26
+        var x = startX, y = top, rowBottom = top, widest = startX
+        let rowWidth = max(2400, CGFloat(tables.count).squareRoot() * 420)
+        for block in blocks {
+            let size = arrange(block)
+            if x > startX, x + size.width > startX + rowWidth {
+                x = startX
+                y = rowBottom + 100
             }
-            if !changed { break }
-        }
-        let startX = (placed.map(\.maxX).max() ?? 0) + (placed.isEmpty ? Self.margin : 60)
-        var columnTop: [Int: CGFloat] = [:]
-        var columnX: [Int: CGFloat] = [:]
-        let ranks = Set(tables.map { rank[boxes[$0].key] ?? 0 }).sorted()
-        var x = startX
-        for r in ranks {
-            columnX[r] = x
-            let width = tables.filter { rank[boxes[$0].key] == r }.map { boxes[$0].rect.width }.max() ?? Self.minWidth
-            x += width + 90
-        }
-        for k in tables {
-            let r = rank[boxes[k].key] ?? 0
-            let y = columnTop[r] ?? Self.margin
-            boxes[k].rect.origin = CGPoint(x: columnX[r] ?? startX, y: y)
-            columnTop[r] = y + boxes[k].rect.height + 40
-            placed.append(boxes[k].rect)
+            for k in block { boxes[k].rect.origin = CGPoint(x: boxes[k].rect.minX + x, y: boxes[k].rect.minY + y) }
+            x += size.width + 110
+            widest = max(widest, x)
+            rowBottom = max(rowBottom, y + size.height)
         }
         // Enums and sticky notes below.
-        var bottom = (placed.map(\.maxY).max() ?? 0) + (placed.isEmpty ? Self.margin : 50)
+        let allBottom = max(rowBottom, placed.map(\.maxY).max() ?? 0)
+        var bottom = tables.isEmpty && placed.isEmpty ? Self.margin : allBottom + 60
         var rowX = Self.margin, rowHeight: CGFloat = 0
         for k in indices where boxes[k].kind != .table {
-            if rowX + boxes[k].rect.width > max(900, x) { rowX = Self.margin; bottom += rowHeight + 40; rowHeight = 0 }
+            if rowX > Self.margin, rowX + boxes[k].rect.width > max(900, widest) { rowX = Self.margin; bottom += rowHeight + 40; rowHeight = 0 }
             boxes[k].rect.origin = CGPoint(x: rowX, y: bottom)
             rowX += boxes[k].rect.width + 40
             rowHeight = max(rowHeight, boxes[k].rect.height)
         }
     }
 
-    /// Every box where the layout puts it (for Arrange: start afresh).
+    /// One block's tables in columns from (0, 0): by how far down the block's references they are, a column split
+    /// when it gets too tall. Returns the block's size.
+    private mutating func arrange(_ block: [Int]) -> CGSize {
+        let keys = Set(block.map { boxes[$0].key })
+        var rank: [String: Int] = [:]
+        for k in block { rank[boxes[k].key] = 0 }
+        for _ in 0..<block.count {
+            var changed = false
+            for r in schema.refs {
+                let (child, parent): (String, String) = r.op == "<" ? (r.to.table, r.from.table) : (r.from.table, r.to.table)
+                guard child != parent, keys.contains(child), keys.contains(parent), let pr = rank[parent], let cr = rank[child],
+                      cr < pr + 1, pr + 1 < 10 else { continue }
+                rank[child] = pr + 1
+                changed = true
+            }
+            if !changed { break }
+        }
+        let area = block.reduce(CGFloat(0)) { $0 + (boxes[$1].rect.width + 70) * (boxes[$1].rect.height + 40) }
+        let tallest = max(900, area.squareRoot() * 1.15, block.map { boxes[$0].rect.height }.max() ?? 0)
+        var columns: [[Int]] = []
+        for r in Set(rank.values).sorted() {
+            var column: [Int] = [], height: CGFloat = 0
+            for k in block where rank[boxes[k].key] == r {
+                if !column.isEmpty, height + boxes[k].rect.height > tallest {
+                    columns.append(column)
+                    column = []
+                    height = 0
+                }
+                column.append(k)
+                height += boxes[k].rect.height + 40
+            }
+            if !column.isEmpty { columns.append(column) }
+        }
+        var x: CGFloat = 0, height: CGFloat = 0
+        for column in columns {
+            var y: CGFloat = 0
+            for k in column {
+                boxes[k].rect.origin = CGPoint(x: x, y: y)
+                y += boxes[k].rect.height + 40
+            }
+            height = max(height, y - 40)
+            x += (column.map { boxes[$0].rect.width }.max() ?? Self.minWidth) + 70
+        }
+        return CGSize(width: max(0, x - 70), height: height)
+    }
+
+    /// Boxes placed from another tool's layout: moved down off any box they'd cover (with a little room between).
+    private mutating func separate(_ indices: [Int]) {
+        let gap: CGFloat = 20
+        for _ in 0..<12 {
+            var moved = false
+            for k in indices.sorted(by: { (boxes[$0].rect.minY, boxes[$0].rect.minX) < (boxes[$1].rect.minY, boxes[$1].rect.minX) }) {
+                for j in boxes.indices where j != k {
+                    let other = boxes[j].rect, mine = boxes[k].rect
+                    guard other.insetBy(dx: -gap / 2, dy: -gap / 2).intersects(mine),
+                          other.minY < mine.minY || (other.minY == mine.minY && j < k) else { continue }
+                    boxes[k].rect.origin.y = other.maxY + gap
+                    moved = true
+                }
+            }
+            if !moved { break }
+        }
+    }
+
+    /// How much bigger this diagram's boxes are than MxDataSQL's (its rows are taller): its layout is spread out by that.
+    static func fileScale(_ file: DBMLFileLayout.Layout, _ schema: DBMLSchema) -> CGSize {
+        var sx: CGFloat = 1, sy: CGFloat = 1
+        if file.mxnoteone == true { return CGSize(width: 1, height: 1) }
+        for t in schema.tables where file.tables[t.name] != nil {
+            let theirs = DBMLFileLayout.size(t)
+            let mine = size(title: t.name, rows: t.columns.map { ($0.name, $0.type, $0.pk) })
+            sx = max(sx, mine.width / theirs.width)
+            sy = max(sy, mine.height / theirs.height)
+        }
+        return CGSize(width: min(sx, 2), height: min(sy, 2))
+    }
+
+    static func filePosition(_ box: Box, _ file: DBMLFileLayout.Layout) -> CGPoint? {
+        switch box.kind {
+        case .table: file.tables[box.key].map { CGPoint(x: $0.x, y: $0.y) }
+        case .sticky: file.notes[box.title].map { CGPoint(x: $0.x, y: $0.y) }
+        case .enumeration: nil
+        }
+    }
+
+    /// Every box placed afresh here (Arrange): a block for each table group or schema.
     static func arranged(_ data: DBMLData) -> [String: DBMLPoint] {
+        var fresh = data
+        fresh.positions = [:]
+        let parts = DBMLFileLayout.split(data.source)
+        fresh.source = parts.body + (parts.section.map(DBMLFileLayout.withoutLayout) ?? "")
+        let layout = DBMLLayout(fresh)
+        return Dictionary(layout.boxes.map { ($0.key, DBMLPoint($0.rect.origin)) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Every box where the DBML file's own layout (MxDataSQL's) puts it — any others placed here.
+    static func fileArranged(_ data: DBMLData) -> [String: DBMLPoint] {
         var fresh = data
         fresh.positions = [:]
         let layout = DBMLLayout(fresh)
         return Dictionary(layout.boxes.map { ($0.key, DBMLPoint($0.rect.origin)) }, uniquingKeysWith: { a, _ in a })
+    }
+}
+
+// MARK: - MxDataSQL's diagram section
+
+/// The end of a .dbml file written by MxDataSQL (Diagram ▸ Write DBML): after a marker line, its sticky notes and
+/// one comment line with the diagram's layout — where each table sits, each relationship's curve, each note's frame.
+enum DBMLFileLayout {
+    static let sectionMarker = "// ===== MxDataSQL diagram: notes and layout (rewritten when the diagram is saved) ====="
+    static let prefix = "// @mxdatasql-layout "
+
+    struct Point: Codable, Equatable {
+        var x: Double
+        var y: Double
+        init(x: Double, y: Double) { self.x = x; self.y = y }
+        init(_ p: CGPoint) { x = p.x; y = p.y }
+    }
+
+    struct Curve: Codable, Equatable {
+        var style: String?
+        var c1: Point?
+        var c2: Point?
+
+        /// As a line here (MxDataSQL's automatic curve is this diagram's own smooth curve).
+        var line: DBMLLine {
+            switch style {
+            case "straight": DBMLLine(curve: .straight)
+            case "quadratic": DBMLLine(curve: .quadratic, c1: c1.map { DBMLPoint(x: $0.x, y: $0.y) })
+            case "cubic": DBMLLine(curve: .cubic, c1: c1.map { DBMLPoint(x: $0.x, y: $0.y) }, c2: c2.map { DBMLPoint(x: $0.x, y: $0.y) })
+            default: DBMLLine()
+            }
+        }
+    }
+
+    struct Frame: Codable, Equatable {
+        var x: Double
+        var y: Double
+        var width: Double?
+        var height: Double?
+    }
+
+    struct Layout: Codable, Equatable {
+        var tables: [String: Point] = [:]
+        var refs: [String: Curve] = [:]
+        var notes: [String: Frame] = [:]
+        var zoom: Double?
+        /// Written by MxNoteONE: positions for its own (taller) boxes, used as they are. (MxDataSQL ignores the key,
+        /// and leaves it out when it writes its own layout.)
+        var mxnoteone: Bool?
+
+        init() {}
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            tables = (try? c.decode([String: Point].self, forKey: .tables)) ?? [:]
+            refs = (try? c.decode([String: Curve].self, forKey: .refs)) ?? [:]
+            notes = (try? c.decode([String: Frame].self, forKey: .notes)) ?? [:]
+            zoom = try? c.decode(Double.self, forKey: .zoom)
+            mxnoteone = try? c.decode(Bool.self, forKey: .mxnoteone)
+        }
+    }
+
+    /// The file's DBML, and its diagram section (from the marker line on), if it has one.
+    static func split(_ text: String) -> (body: String, section: String?) {
+        guard let range = text.range(of: sectionMarker) else { return (text, nil) }
+        let lineStart = text[..<range.lowerBound].lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+        return (String(text[..<lineStart]), String(text[lineStart...]))
+    }
+
+    private static var read: [(text: String, layout: Layout?)] = []
+
+    /// The layout in a file's diagram section (nil without one).
+    static func layout(in text: String) -> Layout? {
+        if let hit = read.first(where: { $0.text == text }) { return hit.layout }
+        var found: Layout?
+        if let section = split(text).section,
+           let line = section.split(separator: "\n").first(where: { $0.hasPrefix(prefix) }),
+           let data = line.dropFirst(prefix.count).data(using: .utf8) {
+            found = try? JSONDecoder().decode(Layout.self, from: data)
+        }
+        read.insert((text, found), at: 0)
+        if read.count > 6 { read.removeLast() }
+        return found
+    }
+
+    /// A section without its layout line (its sticky notes only).
+    static func withoutLayout(_ section: String) -> String {
+        section.split(separator: "\n", omittingEmptySubsequences: false).filter { !$0.hasPrefix(prefix) }.joined(separator: "\n")
+    }
+
+    /// How MxDataSQL names a relationship: from.(columns) op to.(columns).
+    static func refID(_ r: DBMLSchema.Ref) -> String {
+        "\(r.from.table).(\(r.from.columns.joined(separator: ",")))\(r.op)\(r.to.table).(\(r.to.columns.joined(separator: ",")))"
+    }
+
+    /// The size MxDataSQL gives a table's box (its layout was made for these).
+    static func size(_ t: DBMLSchema.Table) -> CGSize {
+        let nameChars = max(t.columns.map(\.name.count).max() ?? 0, 4)
+        let typeChars = t.columns.map(\.type.count).max() ?? 0
+        let body = 34 + CGFloat(nameChars) * 7 + 14 + CGFloat(typeChars) * 6.4
+        let width = min(420, max(170, body, 40 + CGFloat(t.name.count) * 7.4))
+        return CGSize(width: width, height: 28 + CGFloat(max(t.columns.count, 1)) * 19 + 6)
     }
 }
 

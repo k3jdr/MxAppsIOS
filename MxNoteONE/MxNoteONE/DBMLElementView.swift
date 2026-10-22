@@ -560,9 +560,23 @@ final class DBMLElementView: ElementView, NSTextViewDelegate {
 
     // MARK: Tables
 
-    /// Every box placed afresh (columns by relationship: a table right of the tables it points to).
+    /// Every box placed afresh: a block for each table group (or schema), side by side; in a block, columns by
+    /// relationship (a table right of the tables it points to).
     func arrange() {
         update("Arrange Tables") { d in d.positions = DBMLLayout.arranged(d) }
+    }
+
+    /// The DBML has a layout of its own (written by MxDataSQL): where its tables were put there.
+    var hasFileLayout: Bool { DBMLFileLayout.layout(in: data.source).map { !$0.tables.isEmpty } ?? false }
+
+    /// Every box where the DBML file's layout puts it (spread out for this diagram's taller rows), curves too.
+    func arrangeFromFile() {
+        guard let file = DBMLFileLayout.layout(in: data.source) else { return NSSound.beep() }
+        update("Arrange as in the DBML File") { d in
+            d.positions = DBMLLayout.fileArranged(d)
+            let ids = Set(file.refs.keys)
+            d.lines = d.lines?.filter { key, _ in !DBMLParser.parse(d.source).refs.contains { $0.key == key && ids.contains(DBMLFileLayout.refID($0)) } }
+        }
     }
 
     func toggleTypes() {
@@ -731,7 +745,15 @@ final class DBMLElementView: ElementView, NSTextViewDelegate {
 
     func importDBML() {
         guard let text = Self.chooseDBML() else { return }
-        update("Import DBML") { d in d.source = text.source; if d.title == nil { d.title = text.name } }
+        update("Import DBML") { d in
+            d.source = text.source
+            if d.title == nil { d.title = text.name }
+            // The file's own layout (MxDataSQL's) places its tables, not where tables of the same names were.
+            if let file = DBMLFileLayout.layout(in: text.source) {
+                d.positions = d.positions.filter { file.tables[$0.key] == nil && !$0.key.hasPrefix("note:") }
+                d.lines = nil
+            }
+        }
     }
 
     static let dbmlType = UTType(filenameExtension: "dbml") ?? .plainText
@@ -821,6 +843,9 @@ final class DBMLElementView: ElementView, NSTextViewDelegate {
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem(showsSource ? "Hide DBML" : "Show DBML") { [weak self] in self?.toggleSource() })
         menu.addItem(ClosureMenuItem("Arrange Tables") { [weak self] in self?.arrange() })
+        if hasFileLayout {
+            menu.addItem(ClosureMenuItem("Arrange as in the DBML File") { [weak self] in self?.arrangeFromFile() })
+        }
         menu.addItem(ClosureMenuItem("Show Column Types", state: data.hidesTypes != true) { [weak self] in self?.toggleTypes() })
         let newLines = NSMenuItem(title: "Lines", action: nil, keyEquivalent: "")
         let nm = NSMenu()
