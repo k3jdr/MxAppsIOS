@@ -1328,9 +1328,8 @@ enum DBMLDrawing {
         let title = box.kind == .enumeration ? "enum " + box.title : box.title
         (title as NSString).draw(in: CGRect(x: r.minX + DBMLLayout.pad, y: r.minY + 7, width: r.width - 2 * DBMLLayout.pad - (box.note == nil ? 0 : 16), height: 18),
                                  withAttributes: [.font: DBMLLayout.titleFont, .foregroundColor: titleColor])
-        if box.note != nil, let icon = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: "Note")?
-            .withSymbolConfiguration(.init(pointSize: 11, weight: .regular).applying(.init(paletteColors: [titleColor]))) {
-            icon.draw(in: CGRect(x: r.maxX - DBMLLayout.pad - 13, y: r.minY + 8, width: 14, height: 13))
+        if box.note != nil, let icon = symbol("text.bubble", pointSize: 11, color: titleColor) {
+            icon.draw(in: CGRect(x: r.maxX - DBMLLayout.pad - 13, y: r.minY + 8, width: 14, height: 13), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         }
         // Rows.
         for (k, row) in box.rows.enumerated() {
@@ -1340,9 +1339,8 @@ enum DBMLDrawing {
                 CGRect(x: r.minX + 1, y: y, width: r.width - 2, height: DBMLLayout.rowHeight).fill()
             }
             var x = r.minX + DBMLLayout.pad
-            if row.pk, let key = NSImage(systemSymbolName: "key.fill", accessibilityDescription: "Primary key")?
-                .withSymbolConfiguration(.init(pointSize: 9, weight: .regular).applying(.init(paletteColors: [NSColor(hex: "#C9A227") ?? .systemYellow]))) {
-                key.draw(in: CGRect(x: x, y: y + 6, width: 12, height: 11))
+            if row.pk, let key = symbol("key.fill", pointSize: 9, color: NSColor(hex: "#C9A227") ?? .systemYellow) {
+                key.draw(in: CGRect(x: x, y: y + 6, width: 12, height: 11), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
                 x += 16
             }
             let nameAttrs: [NSAttributedString.Key: Any] = [.font: row.pk ? NSFont.systemFont(ofSize: 12, weight: .semibold) : DBMLLayout.nameFont,
@@ -1365,6 +1363,30 @@ enum DBMLDrawing {
         outline.lineWidth = selected ? 2 : 1
         (selected ? NSColor.controlAccentColor : NSColor(white: 0.78, alpha: 1)).setStroke()
         outline.stroke()
+    }
+
+    private static var symbols: [String: NSImage] = [:]
+
+    /// A symbol as a small bitmap in its colour (drawn as a symbol, it prints and copies to PDF as a solid square).
+    static func symbol(_ name: String, pointSize: CGFloat, color: NSColor) -> NSImage? {
+        let key = "\(name) \(pointSize) \(color.usingColorSpace(.sRGB).map { "\($0.redComponent) \($0.greenComponent) \($0.blueComponent)" } ?? "")"
+        if let known = symbols[key] { return known }
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular).applying(.init(paletteColors: [color]))
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) else { return nil }
+        let size = symbol.size, k: CGFloat = 4
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(ceil(size.width * k)), pixelsHigh: Int(ceil(size.height * k)),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        symbol.draw(in: CGRect(x: 0, y: 0, width: CGFloat(rep.pixelsWide), height: CGFloat(rep.pixelsHigh)))
+        NSGraphicsContext.restoreGraphicsState()
+        rep.size = size
+        let image = NSImage(size: size)
+        image.addRepresentation(rep)
+        symbols[key] = image
+        return image
     }
 
     static func drawStickyBox(_ box: DBMLLayout.Box, selected: Bool) {
@@ -1451,20 +1473,78 @@ enum DBMLDrawing {
         }
     }
 
-    /// The whole diagram as a picture (pages, exports, copies), at a scale.
-    static func picture(_ data: DBMLData, scale: CGFloat = 1) -> NSImage {
+    /// The whole diagram as a picture (pages, exports, copies): a real bitmap, its size the diagram's in points.
+    static func picture(_ data: DBMLData, scale: CGFloat = 2) -> NSImage {
         let layout = DBMLLayout(data)
-        let size = CGSize(width: layout.size.width * scale, height: layout.size.height * scale)
-        return NSImage(size: size, flipped: true) { _ in
-            NSColor.white.setFill()
-            CGRect(origin: .zero, size: size).fill()
-            let t = NSAffineTransform()
-            t.scale(by: scale)
-            t.translateX(by: -layout.overflow.x, yBy: -layout.overflow.y)
-            t.concat()
-            draw(layout, data)
-            return true
+        let image = NSImage(size: layout.size)
+        if let rep = bitmap(data, scale: scale, layout: layout) { image.addRepresentation(rep) }
+        return image
+    }
+
+    /// The most pixels a picture of a diagram gets (a big diagram is drawn at a lower scale to stay under it).
+    static let maxPixels: CGFloat = 24_000_000
+
+    /// The diagram drawn into a bitmap at `scale` pixels per point (less for a very big one), white behind it.
+    static func bitmap(_ data: DBMLData, scale: CGFloat = 2, layout: DBMLLayout? = nil) -> NSBitmapImageRep? {
+        let layout = layout ?? DBMLLayout(data)
+        let size = layout.size
+        let s = max(0.2, min(scale, (maxPixels / max(size.width * size.height, 1)).squareRoot()))
+        let w = Int((size.width * s).rounded(.up)), h = Int((size.height * s).rounded(.up))
+        guard w > 0, h > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h, bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        render(layout, data, into: context.cgContext, height: CGFloat(h), scale: s)
+        // Its size in points is the diagram's, so it pastes as big as it is on the page (sharper on Retina screens).
+        rep.size = size
+        return rep
+    }
+
+    /// The diagram as PDF: sharp at any size where it's pasted.
+    static func pdf(_ data: DBMLData) -> Data? {
+        let layout = DBMLLayout(data)
+        var box = CGRect(origin: .zero, size: layout.size)
+        let out = NSMutableData()
+        guard let consumer = CGDataConsumer(data: out as CFMutableData), let cg = CGContext(consumer: consumer, mediaBox: &box, nil) else { return nil }
+        cg.beginPDFPage(nil)
+        render(layout, data, into: cg, height: box.height, scale: 1)
+        cg.endPDFPage()
+        cg.closePDF()
+        return out as Data
+    }
+
+    /// Draws into a Core Graphics context, top down, as the diagram view does.
+    private static func render(_ layout: DBMLLayout, _ data: DBMLData, into cg: CGContext, height: CGFloat, scale: CGFloat) {
+        cg.saveGState()
+        cg.translateBy(x: 0, y: height)
+        cg.scaleBy(x: scale, y: -scale)
+        cg.translateBy(x: -layout.overflow.x, y: -layout.overflow.y)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: cg, flipped: true)
+        NSColor.white.setFill()
+        CGRect(origin: layout.overflow, size: layout.size).fill()
+        draw(layout, data)
+        NSGraphicsContext.restoreGraphicsState()
+        cg.restoreGState()
+    }
+
+    /// The picture for the clipboard: PDF, PNG and TIFF of it, on a pasteboard item.
+    static func add(_ data: DBMLData, to item: NSPasteboardItem) {
+        if let pdf = pdf(data) { item.setData(pdf, forType: .pdf) }
+        if let rep = bitmap(data) {
+            if let png = rep.representation(using: .png, properties: [:]) { item.setData(png, forType: .png) }
+            if let tiff = rep.tiffRepresentation(using: .lzw, factor: 0) { item.setData(tiff, forType: .tiff) }
         }
+    }
+
+    /// Copy Picture: the diagram on the clipboard (false if it couldn't be drawn or written).
+    @discardableResult
+    static func copy(_ data: DBMLData, to pasteboard: NSPasteboard = .general) -> Bool {
+        let item = NSPasteboardItem()
+        add(data, to: item)
+        guard !item.types.isEmpty else { return false }
+        pasteboard.clearContents()
+        return pasteboard.writeObjects([item])
     }
 }
 

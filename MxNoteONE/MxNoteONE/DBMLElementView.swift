@@ -780,16 +780,20 @@ final class DBMLElementView: ElementView, NSTextViewDelegate {
 
     func image(scale: CGFloat = 2) -> NSImage { DBMLDrawing.picture(data, scale: scale) }
 
+    /// Where Copy Picture puts the picture (the clipboard; self-tests use a pasteboard of their own).
+    static var pasteboard = NSPasteboard.general
+
+    /// Copy Picture: the diagram on the clipboard as PDF (sharp at any size), PNG and TIFF.
     func copyPicture() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([image()])
+        if !DBMLDrawing.copy(data, to: Self.pasteboard) { NSSound.beep() }
     }
 
     func exportPicture() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = Self.safeName(data.title ?? "Diagram") + ".png"
-        guard panel.runModal() == .OK, let url = panel.url, let png = image().pngData else { return }
+        guard panel.runModal() == .OK, let url = panel.url,
+              let png = DBMLDrawing.bitmap(data)?.representation(using: .png, properties: [:]) else { return }
         do { try png.write(to: url) } catch { NotebookStore.shared.report("Couldn't save the picture.", error) }
     }
 

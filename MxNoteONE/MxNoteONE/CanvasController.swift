@@ -799,8 +799,10 @@ final class CanvasController: NSObject {
             if let tiff = (view as? MapElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
             if let m = element.map { item.setString(m.pinLines(markdown: false).joined(separator: "\n"), forType: .string) }
         case .dbml:
-            if let tiff = (view as? DBMLElementView)?.image().tiffRepresentation { item.setData(tiff, forType: .tiff) }
-            if let d = element.dbml { item.setString(d.exportText, forType: .string) }
+            if let d = element.dbml {
+                DBMLDrawing.add(d, to: item)
+                item.setString(d.exportText, forType: .string)
+            }
         }
         let pb = NSPasteboard.general
         pb.clearContents()

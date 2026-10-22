@@ -651,7 +651,9 @@ Click the diagram to work on it: the **DBML** tab appears.
 - **Notes over the diagram**: double-click empty space, right-click ▸ Add Note Here, or Add Note — then type. Drag a
   note to move it, drag its corner to resize it, right-click for its colour; Delete removes the selected one.
 - **View**: Fit Width (the default — as wide as the container, up to its own size), Zoom In / Out (wider diagrams
-  scroll across), Column Types, Copy Picture, Export Picture….
+  scroll across), Column Types, **Copy Picture** (the whole diagram on the clipboard — as PDF, sharp at any size in
+  Keynote, Pages or Word, and as PNG and TIFF, at the diagram's size; a very big diagram's bitmap is drawn at a lower
+  resolution), Export Picture….
 - **Export DBML…** saves a .dbml file — the DBML as written, then MxDataSQL's diagram section: the notes over the
   diagram as DBML sticky notes, and the layout comment with where every table sits here and each line's curve — so
   MxDataSQL opens it laid out the same, and dbdiagram.io, dbdocs or database tools read the DBML (the comment is
@@ -661,7 +663,7 @@ Click the diagram to work on it: the **DBML** tab appears.
 Where each table sits, each line's curve and the notes are saved with the page, and every change can be undone. DBML
 diagrams print and export to PDF as drawn, go to OneNote as a picture with their DBML, and Markdown export writes the
 picture, a .dbml file and the DBML in a code block. Search finds a diagram by its tables, columns, enums, groups and
-notes. Copying the container copies its picture and its DBML.
+notes. Copying the container copies its picture (PDF, PNG and TIFF) and its DBML.
 
 ## Microsoft Office fonts
 
