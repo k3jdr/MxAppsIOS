@@ -18,7 +18,7 @@ struct SRMBenchmarksView: View {
     @State private var filter = ""
 
     var body: some View {
-        HSplitView {
+        SplitPanes(id: "benchmarks", widths: 300...390, ideal: 380, trailingMinimum: 520) {
             VStack(spacing: 8) {
                 Table(store.benchmarks, selection: $store.selectedBenchmarkID) {
                     TableColumn("Code", value: \.code).width(min: 50, ideal: 56)
@@ -49,10 +49,8 @@ struct SRMBenchmarksView: View {
                 }
             }
             .padding(10)
-            .frame(minWidth: 300, idealWidth: 380, maxWidth: 390)
-
+        } trailing: {
             detail
-                .frame(minWidth: 520)
         }
         .task { await store.refreshBenchmarks() }
         .task(id: store.selectedBenchmarkID) { await store.loadBenchmark() }

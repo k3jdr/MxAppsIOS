@@ -14,11 +14,10 @@ struct SRMSecuritiesView: View {
     @Bindable var store: SRMStore
 
     var body: some View {
-        HSplitView {
+        SplitPanes(id: "securities", widths: 460...720, ideal: 560, trailingMinimum: 440) {
             searchPanel
-                .frame(minWidth: 460, idealWidth: 600, maxWidth: 720)
+        } trailing: {
             detailPanel
-                .frame(minWidth: 440, idealWidth: 540)
                 .quickHelpArea(store.selectedSecurityID == nil ? nil : HubHelp.securityDetail)
         }
         .task { if store.results.isEmpty { await store.search() } }

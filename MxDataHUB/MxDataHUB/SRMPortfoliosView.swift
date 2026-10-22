@@ -22,11 +22,10 @@ struct SRMPortfoliosView: View {
     @State private var panel = 0
 
     var body: some View {
-        HSplitView {
+        SplitPanes(id: "portfolios", widths: 200...300, ideal: 230, trailingMinimum: 560) {
             portfolioList
-                .frame(minWidth: 200, idealWidth: 230, maxWidth: 300)
+        } trailing: {
             holdingsPanel
-                .frame(minWidth: 560)
         }
         .task { await store.refreshPortfolios() }
         .task(id: store.selectedPortfolioID) { await store.loadSnapshots() }

@@ -23,9 +23,10 @@ struct ContentView: View {
                     .quickHelpArea(HubHelp.about(section))
                     .tag(section)
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
             // Quick Help: what's under the pointer, at the bottom of the sidebar.
             .quickHelpDock()
+            .fixedColumnMinimum(width: 180, height: 420)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             VStack(spacing: 0) {
                 screen
@@ -42,7 +43,11 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 1360, minHeight: 720)
+        // The window's minimum: the widest sidebar (260) and the widest screen (Data Refresh, about 1017; each
+        // screen's panes have fixed minimums). It used to be 1360 while Load History alone needed over 1200, so the
+        // split view was wider than the window and centred in it: the sidebar fell off the left edge and the
+        // screen's right side was cut off, worst after showing a hidden sidebar.
+        .frame(minWidth: 1280, minHeight: 720)
         .quickHelpScreen(store.section.rawValue, HubHelp.screen(store), selection: HubHelp.selection(store))
         .task { await start() }
         .onOpenURL { url in open(AppLink(url: url)) }
@@ -144,6 +149,17 @@ struct ContentView: View {
         if let name = defaults.string(forKey: "section"), let section = SRMSection(rawValue: name) {
             store.section = section
         }
+    }
+}
+
+extension View {
+    /// Gives a split-view column or pane a constant minimum size, as MxJobsWMS does: one taken from the content
+    /// (a console's longest line, a text that wraps) changes as the content does, and widened the window or made
+    /// AppKit loop on updating constraints. Content that needs more is clipped on the right. Not for the detail
+    /// column itself: there it made hiding the sidebar on Securities loop and abort.
+    func fixedColumnMinimum(width: CGFloat, height: CGFloat) -> some View {
+        frame(minWidth: width, maxWidth: .infinity, minHeight: height, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
     }
 }
 

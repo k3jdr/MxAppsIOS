@@ -15,6 +15,9 @@ Endpoints (JSON):
                                       runs `srm.py load <loader> ...` and returns its srm.load_run rows
     GET  /status                      read-only: migrations, row counts, identifier coverage, benchmarks,
                                       snapshot history, price freshness, recent loads and data-quality checks
+    GET  /log?after=<seq>&limit=      live activity: every line srm.py prints while a load runs, and when each
+                                      refresh and loader starts and ends (numbered; poll with the last seq seen),
+                                      plus what is running now. In memory, the last 5,000 lines.
 
 Send the header `X-SRM-Dry-Run: 1` (the sample jobspace's subscription does) to get the command a load would
 run without running it. Only srm.py's own loaders and options are accepted, loads run one at a time, and the
@@ -23,6 +26,7 @@ and API keys come from srm.py's own configuration (environment, Keychain, config
 """
 
 import argparse
+import collections
 import datetime as dt
 import decimal
 import json
@@ -54,6 +58,7 @@ DESCRIBE = {
         {"method": "POST", "path": "/refresh/{category}", "summary": "Run every loader of a category in order"},
         {"method": "GET", "path": "/status", "summary": "Coverage, benchmarks, snapshot history, price freshness, recent loads, quality checks"},
         {"method": "GET", "path": "/loaders", "summary": "Loaders in dependency order"},
+        {"method": "GET", "path": "/log", "summary": "Live loader output and refresh events (?after=<seq>), and what runs now"},
     ],
     "samples": ["srm-daily-refresh"],
 }
@@ -95,6 +100,64 @@ DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(
                                                 "..", "..", "MxDataHUB", "SRM"))
 SEVERITY = {"succeeded": 0, "dry-run": 0, "no-run": 1, "partial": 1, "failed": 2}
 LOAD_LOCK = threading.Lock()
+ERROR_LINE = re.compile(r"\b(failed|error|exception|traceback)\b|^\s*\w+Error:", re.I)
+WARNING_LINE = re.compile(r"\b(warn(ing)?|partial|skipp(ed|ing)|retry(ing)?|timed out|rate.?limit|429)\b|\brejected [1-9]", re.I)
+
+
+class ActivityLog:
+    """What the loaders are doing, for GET /log: every line srm.py prints while a load runs, and when each refresh
+    and loader starts and ends. Entries are numbered so a client polls for what is new (?after=<seq>); the last
+    5,000 are kept in memory. `current` is the refresh or load running now."""
+
+    def __init__(self, size=5000):
+        self.lock = threading.Lock()
+        self.entries = collections.deque(maxlen=size)
+        self.seq = 0
+        self.runs = 0
+        self.current = None
+
+    def add(self, text, level=None, loader=None, run=None, event=None):
+        if level is None:
+            level = "error" if ERROR_LINE.search(text) else "warning" if WARNING_LINE.search(text) else "info"
+        with self.lock:
+            self.seq += 1
+            self.entries.append({"seq": self.seq, "time": dt.datetime.now().isoformat(timespec="milliseconds"),
+                                 "level": level, "loader": loader, "run": run, "event": event, "text": text})
+
+    def start_run(self, name, loaders, category=None, dry=False):
+        with self.lock:
+            self.runs += 1
+            run = self.runs
+            # A preview runs beside a real load (it takes no lock); it doesn't replace that load as `current`.
+            if not (dry and self.current and not self.current["dryRun"]):
+                self.current = {"run": run, "category": category, "name": name, "loaders": list(loaders),
+                                "loader": None, "index": 0, "dryRun": dry, "started": time.time(), "loaderStarted": None}
+        self.add("%s %s: %s" % ("Preview" if dry else "Refresh", name, ", ".join(loaders)), "info", run=run,
+                 event="run-start")
+        return run
+
+    def start_loader(self, run, loader):
+        with self.lock:
+            if self.current and self.current["run"] == run:
+                self.current.update(loader=loader, index=self.current["loaders"].index(loader) + 1
+                                    if loader in self.current["loaders"] else 0, loaderStarted=time.time())
+
+    def end_run(self, run, name, status, seconds):
+        self.add("%s: %s in %.1f s" % (name, status, seconds), "error" if status == "failed" else
+                 "warning" if status in ("partial", "no-run") else "info", run=run, event="run-end")
+        with self.lock:
+            if self.current and self.current["run"] == run:
+                self.current = None
+
+    def since(self, after, limit):
+        with self.lock:
+            entries = [e for e in self.entries if e["seq"] > after][-limit:]
+            first = self.entries[0]["seq"] if self.entries else self.seq + 1
+            return {"entries": entries, "last": self.seq, "first": first,
+                    "running": dict(self.current) if self.current else None}
+
+
+ACTIVITY = ActivityLog()
 
 
 class SRM:
@@ -329,6 +392,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"loaders": Handler.srm.loaders})
             if url.path == "/status" and method == "GET":
                 return self.send_json(200, Handler.srm.status(Handler.stale_days))
+            if url.path == "/log" and method == "GET":
+                after, limit = q.get("after", "0"), q.get("limit", "2000")
+                if not (after.isdigit() and limit.isdigit()):
+                    raise ValueError("after and limit must be whole numbers")
+                return self.send_json(200, ACTIVITY.since(int(after), min(int(limit), 5000)))
             m = re.fullmatch(r"/load/([a-z0-9-]+)", url.path)
             if m and method == "POST":
                 return self.load(m.group(1), q)
@@ -344,14 +412,17 @@ class Handler(BaseHTTPRequestHandler):
     def load(self, loader, q):
         if loader not in Handler.srm.loaders:
             raise ValueError("unknown loader %r; one of %s" % (loader, ", ".join(Handler.srm.loaders)))
-        if self.dry_run():
-            return self.send_json(200, run_loader(loader, q, dry=True))
-        if not LOAD_LOCK.acquire(blocking=False):
+        dry = self.dry_run()
+        if not dry and not LOAD_LOCK.acquire(blocking=False):
             return self.send_json(409, {"error": "another load is running; try again when it finishes"})
         try:
-            return self.send_json(200, run_loader(loader, q))
+            run = ACTIVITY.start_run(loader, [loader], dry=dry)
+            result = run_loader(loader, q, dry=dry, run=run)
+            ACTIVITY.end_run(run, loader, result["status"], result.get("seconds") or 0)
+            return self.send_json(200, dict(result, run=run))
         finally:
-            LOAD_LOCK.release()
+            if not dry:
+                LOAD_LOCK.release()
 
     def refresh(self, category, q):
         """Runs every loader of a category in order; stops at the first failure, except after a loader the category
@@ -364,17 +435,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(409, {"error": "another load is running; try again when it finishes"})
         try:
             started, results = time.time(), []
+            run = ACTIVITY.start_run(cat["name"], cat["loaders"], category=category, dry=dry)
             tolerated = set(cat.get("continueAfterFailure", []))
             for loader in cat["loaders"]:
-                result = run_loader(loader, q, dry=dry)
+                result = run_loader(loader, q, dry=dry, run=run)
                 results.append(result)
                 if result["status"] == "failed" and loader not in tolerated:
+                    skipped = cat["loaders"][len(results):]
+                    if skipped:
+                        ACTIVITY.add("%s failed, so %s did not run" % (loader, ", ".join(skipped)), "error", run=run)
                     break
             statuses = ["partial" if r["status"] == "failed" and r.get("loader") in tolerated else r["status"] for r in results]
+            status, seconds = worst(statuses), round(time.time() - started, 1)
+            ACTIVITY.end_run(run, cat["name"], status, seconds)
             return self.send_json(200, {
-                "category": category, "name": cat["name"], "dryRun": dry,
-                "status": worst(statuses),
-                "seconds": round(time.time() - started, 1),
+                "category": category, "name": cat["name"], "dryRun": dry, "run": run,
+                "status": status,
+                "seconds": seconds,
                 "loaders": results,
             })
         finally:
@@ -393,30 +470,54 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write("%s %s\n" % (dt.datetime.now().strftime("%H:%M:%S"), fmt % args))
 
 
-def run_loader(loader, q, dry=False):
-    """Runs `srm.py load <loader>` and returns its srm.load_run rows (the command only when `dry`)."""
+def run_loader(loader, q, dry=False, run=None):
+    """Runs `srm.py load <loader>` and returns its srm.load_run rows (the command only when `dry`). Each line it
+    prints goes to the activity log as it is printed (GET /log)."""
     command = [sys.executable, "srm.py", "load", loader] + options(q)
+    ACTIVITY.start_loader(run, loader)
     if dry:
+        ACTIVITY.add("would run: " + " ".join(command[1:]), "info", loader, run, "loader-start")
         return {"loader": loader, "status": "dry-run", "dryRun": True, "command": " ".join(command[1:]), "runs": []}
+    ACTIVITY.add(" ".join(command[1:]), "info", loader, run, "loader-start")
     before = Handler.srm.max_load_id()
     started = time.time()
     timeout = int(q.get("timeout", 3000))
+    tail = collections.deque(maxlen=25)
+    # Unbuffered, with stderr in line, so the log shows each line when it happens and in order.
+    proc = subprocess.Popen(command, cwd=Handler.srm.folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1, env=dict(os.environ, PYTHONUNBUFFERED="1"))
+    killer = threading.Timer(timeout, proc.kill)
+    killer.start()
     try:
-        proc = subprocess.run(command, cwd=Handler.srm.folder, capture_output=True, text=True, timeout=timeout)
-        exit_code, output = proc.returncode, proc.stdout + proc.stderr
-    except subprocess.TimeoutExpired as e:
-        exit_code, output = -1, "timed out after %d s\n%s" % (timeout, e.stdout or "")
+        for line in iter(proc.stdout.readline, ""):
+            line = line.rstrip("\n")
+            tail.append(line)
+            ACTIVITY.add(line, loader=loader, run=run)
+        exit_code = proc.wait()
+    finally:
+        killer.cancel()
+    if exit_code != 0 and time.time() - started >= timeout:
+        exit_code = -1
+        tail.append("timed out after %d s" % timeout)
+        ACTIVITY.add(tail[-1], "error", loader, run)
     runs = Handler.srm.runs_after(before)
     status = worst([r["status"] for r in runs])
     if exit_code != 0 and status != "failed":
         status = "failed"
+    totals = {k: sum(r[k] or 0 for r in runs) for k in
+              ("rows_read", "rows_inserted", "rows_updated", "rows_rejected", "api_calls")}
+    seconds = round(time.time() - started, 1)
+    ACTIVITY.add("%s %s in %.1f s (exit %d): read %d, inserted %d, updated %d, rejected %d, API calls %d"
+                 % (loader, status, seconds, exit_code, totals["rows_read"], totals["rows_inserted"],
+                    totals["rows_updated"], totals["rows_rejected"], totals["api_calls"]),
+                 "error" if status == "failed" else "warning" if status in ("partial", "no-run") else "info",
+                 loader, run, "loader-end")
     return {
         "loader": loader, "status": status, "exitCode": exit_code,
-        "seconds": round(time.time() - started, 1), "command": " ".join(command[1:]),
+        "seconds": seconds, "command": " ".join(command[1:]),
         "runs": runs,
-        "totals": {k: sum(r[k] or 0 for r in runs) for k in
-                   ("rows_read", "rows_inserted", "rows_updated", "rows_rejected", "api_calls")},
-        "outputTail": output.strip().splitlines()[-25:],
+        "totals": totals,
+        "outputTail": list(tail),
     }
 
 

@@ -30,7 +30,8 @@ enum HubHelp {
         case .refresh:
             detail = "Every category of market data in the security master: how fresh it is, when it was last loaded, and Refresh to run its srm.py loaders now through "
                 + "the SRM loader service on this Mac (127.0.0.1:8770). Refresh All runs them in dependency order; Preview only shows the commands. "
-                + "Automate in MxJobsWMS… opens the scheduled, checked and approved SRM Daily Refresh."
+                + "Automate in MxJobsWMS… opens the scheduled, checked and approved SRM Daily Refresh. "
+                + "Activity, on the right, streams what the loaders print as they run — from here or from MxJobsWMS — with warnings and errors marked."
         case .loads:
             detail = "Where the data came from: how many securities have each identifier and from which sources, the data sources with their plan limits, "
                 + "the dated benchmark and portfolio weight snapshots attribution uses (a gap over a month shows in orange), and every load run with its row counts."
