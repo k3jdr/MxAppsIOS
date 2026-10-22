@@ -6,7 +6,7 @@ import re
 
 import psycopg2.extras
 
-from ..common import LoadRun, http, log
+from ..common import LoadRun, debug, http, log
 from ..model import security_by_identifier, security_by_us_ticker, normalize_ticker, source_id
 
 URL = "https://api.nasdaq.com/api/quote/list-type/nasdaq100"
@@ -19,6 +19,7 @@ def run(conn, cfg, args):
         data = http(URL, headers=HEADERS)["data"]
         run.api_calls += 1
         as_of = datetime.datetime.strptime(data["date"], "%b %d, %Y").date() if data.get("date") else datetime.date.today()
+        debug(f"Nasdaq.com list: {len(data['data']['rows'])} rows, dated {data.get('date') or 'today (no date given)'}")
         cur.execute("SELECT benchmark_id FROM srm.benchmark WHERE code = 'NDX'")
         benchmark_id = cur.fetchone()[0]
         src = source_id(cur, "NASDAQ_COM")

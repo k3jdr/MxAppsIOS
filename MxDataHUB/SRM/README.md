@@ -105,6 +105,15 @@ The per-symbol loaders (FMP, SEC submissions) work on securities that are in a b
 `--symbols` picks others, `--all-securities` takes every active security (about 13,000 calls, roughly an hour
 at 250 calls/minute), `--max N` caps the calls, `--force` refreshes recent rows.
 
+### Logging
+
+`-v` (verbose) also prints what each step does: the connection (and where the password came from, never the
+password), downloads and cache hits, rate-limit waits, retries, every reject, identifier results per source, a
+load's parameters and time, and a failing loader's full traceback. `-vv` (trace) also prints every HTTP request
+with its status, size and time, and every SQL statement with its time. Give it before or after the command
+(`./srm.py -v load ssga`, `./srm.py load fmp-prices -vv`), or set `SRM_VERBOSITY=1`. Detail lines are tagged
+`[debug]` or `[trace]`; MxDataHUB's Data Refresh ▸ Log detail sets it for the refreshes it starts.
+
 ## Source limits (probed 2026-10-16)
 
 | Source | Limit / availability |

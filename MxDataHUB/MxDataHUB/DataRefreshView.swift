@@ -93,9 +93,13 @@ final class RefreshStore {
     var serviceUp: Bool?
     var running: String?
     var dryRun = false
+    /// srm.py's log detail for the refreshes started here: 0 normal, 1 verbose (-v), 2 trace (-vv). Remembered.
+    var verbosity = UserDefaults.standard.integer(forKey: "refreshVerbosity") {
+        didSet { UserDefaults.standard.set(verbosity, forKey: "refreshVerbosity") }
+    }
     var results: [RefreshResult] = []
     var error: String?
-    /// The service's activity log as far as it has been read (the last 5,000 lines).
+    /// The service's activity log as far as it has been read (the last 20,000 lines).
     var activity: [ActivityEntry] = []
     var lastSeq = 0
     /// What the service is running now, whoever started it (this window, another, or MxJobsWMS).
@@ -125,7 +129,7 @@ final class RefreshStore {
 
     /// Runs one category's loaders, in order.
     func refresh(_ id: String) async {
-        guard running == nil, let url = URL(string: base + "/refresh/" + id) else { return }
+        guard running == nil, let url = URL(string: base + "/refresh/" + id + (verbosity > 0 ? "?verbosity=\(verbosity)" : "")) else { return }
         running = id
         defer { running = nil }
         var request = URLRequest(url: url, timeoutInterval: 3 * 3600)   // the long loads take tens of minutes
@@ -159,7 +163,7 @@ final class RefreshStore {
                 return await pollActivity()
             }
             activity.append(contentsOf: page.entries)
-            if activity.count > 5000 { activity.removeFirst(activity.count - 5000) }
+            if activity.count > 20000 { activity.removeFirst(activity.count - 20000) }
             lastSeq = page.last
             current = page.running
             lastPoll = Date()
@@ -237,6 +241,17 @@ struct DataRefreshView: View {
                 .toggleStyle(.checkbox)
                 .help("Show the srm.py command each loader would run, without loading")
                 .quickHelp("Preview Only", "Refresh and Refresh All show the srm.py command each loader would run, without loading anything.")
+            Picker("Log detail", selection: $refresh.verbosity) {
+                Text("Normal").tag(0)
+                Text("Verbose (-v)").tag(1)
+                Text("Trace (-vv)").tag(2)
+            }
+            .fixedSize()
+            .help("How much the loaders print in Activity for the refreshes you start here")
+            .quickHelp("Log Detail", "How much srm.py prints in Activity for the refreshes you start here. Normal: the progress lines. "
+                       + "Verbose (-v): also what each step does — connection, downloads and cache hits, rate-limit waits, retries, every reject, "
+                       + "identifier results, timings, and a failing loader's traceback. Trace (-vv): also every HTTP request and SQL statement with its time. "
+                       + "The extra lines show as DBG; Level ▸ Info hides them.")
             Button {
                 Task { await refresh.refreshAll() }
             } label: {
@@ -301,7 +316,8 @@ private struct ActivityPanel: View {
     var refresh: RefreshStore
     var store: SRMStore
 
-    enum Level: String, CaseIterable { case all = "All", warnings = "Warnings", errors = "Errors" }
+    /// All lines; Info hides the -v / -vv detail lines; Warnings and Errors.
+    enum Level: String, CaseIterable { case all = "All", info = "Info", warnings = "Warnings", errors = "Errors" }
 
     @State private var level = Level.all
     @State private var search = ""
@@ -309,6 +325,7 @@ private struct ActivityPanel: View {
     @State private var follow = true
     /// Lines up to here are hidden (Clear); the service keeps them.
     @State private var clearedThrough = 0
+    @State private var console = ConsoleHandle()
 
     var body: some View {
         let lines = visible
@@ -323,8 +340,9 @@ private struct ActivityPanel: View {
                     .quickHelp("Follow", "Scrolls to each new line as it arrives. Turn it off to read back while a load runs.")
                 Button { copy(lines) } label: { Image(systemName: "doc.on.doc") }
                     .disabled(lines.isEmpty)
-                    .help("Copy the lines shown")
-                    .quickHelp("Copy", "Copies the lines shown, with their times, levels and loaders, for a ticket or a chat.")
+                    .help("Copy the selected lines, or all the lines shown when none are selected")
+                    .quickHelp("Copy", "Copies the lines you selected in the console (drag across them, or ⌘A), or every line shown when none are; "
+                               + "with their times, levels and loaders, for a ticket or a chat. ⌘C copies a selection too.")
                 Button { clearedThrough = refresh.lastSeq } label: { Image(systemName: "trash") }
                     .disabled(lines.isEmpty)
                     .help("Clear the lines shown (the service keeps them)")
@@ -342,7 +360,7 @@ private struct ActivityPanel: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .quickHelp("Level", "All lines, only warnings and errors, or only errors.")
+                .quickHelp("Level", "All lines; Info hides the Verbose / Trace detail lines (DBG); only warnings and errors; or only errors.")
                 Picker("Run", selection: $runFilter) {
                     Text("All runs").tag(Int?.none)
                     ForEach(runs, id: \.run) { run in
@@ -368,33 +386,10 @@ private struct ActivityPanel: View {
                                             : "No lines match the run, level or filter."))
                     .frame(maxHeight: .infinity)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(lines) { ActivityLine(entry: $0) }
-                            Color.clear.frame(height: 1).id(Self.end)
-                        }
-                        .textSelection(.enabled)
-                        .padding(.vertical, 4)
-                    }
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .onChange(of: lines.last?.seq) { if follow { scrollToEnd(proxy) } }
-                    .onChange(of: follow) { _, on in if on { scrollToEnd(proxy) } }
-                    .onAppear { scrollToEnd(proxy) }
-                }
+                ActivityConsole(lines: lines, follow: follow, handle: console)
             }
             Divider()
             footer(lines)
-        }
-    }
-
-    private static let end = "end"
-
-    /// Scrolls to the last line once the new lines are laid out (a lazy stack only estimates heights before that).
-    private func scrollToEnd(_ proxy: ScrollViewProxy) {
-        Task {
-            await Task.yield()
-            proxy.scrollTo(Self.end, anchor: .bottom)
         }
     }
 
@@ -443,7 +438,8 @@ private struct ActivityPanel: View {
         return refresh.activity.filter { e in
             e.seq > clearedThrough
                 && (runFilter == nil || e.run == runFilter)
-                && (level == .all || e.level == "error" || (level == .warnings && e.level == "warning"))
+                && (level == .all || e.level == "error" || (level == .info && e.level != "debug")
+                    || (level == .warnings && e.level == "warning"))
                 && (text.isEmpty || e.text.localizedCaseInsensitiveContains(text) || (e.loader ?? "").localizedCaseInsensitiveContains(text))
         }
     }
@@ -460,8 +456,9 @@ private struct ActivityPanel: View {
         }
     }
 
+    /// The console's selection, or else every line shown with its date, level and loader.
     private func copy(_ lines: [ActivityEntry]) {
-        let text = lines.map { e in
+        let text = console.selection ?? lines.map { e in
             [e.time, e.level.uppercased(), e.loader ?? "-", e.text].joined(separator: "\t")
         }.joined(separator: "\n")
         NSPasteboard.general.clearContents()
@@ -469,37 +466,111 @@ private struct ActivityPanel: View {
     }
 }
 
-/// One console line: time, level or event mark, loader, text.
-private struct ActivityLine: View {
-    var entry: ActivityEntry
+/// Gives the Copy button the console's selection.
+final class ConsoleHandle {
+    weak var textView: NSTextView?
 
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(entry.clock).foregroundStyle(.tertiary)
-            // A space, not "": an empty Text has no baseline and made plain lines taller.
-            Text(mark.isEmpty ? " " : mark).foregroundStyle(color).frame(width: 34, alignment: .leading)
-            Text(entry.loader ?? " ").foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                .frame(width: 112, alignment: .leading)
-            Text(entry.text)
-                .fontWeight(entry.event == nil ? .regular : .semibold)
-                .foregroundStyle(entry.level == "error" ? Color.red : .primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .font(.system(size: 11, design: .monospaced))
-        .padding(.horizontal, 8).padding(.vertical, 1)
-        .background(entry.level == "error" ? Color.red.opacity(0.08) : entry.level == "warning" ? Color.orange.opacity(0.08) : .clear)
+    /// The selected text, or nil when nothing is selected.
+    var selection: String? {
+        guard let view = textView, view.selectedRange().length > 0 else { return nil }
+        return (view.string as NSString).substring(with: view.selectedRange())
+    }
+}
+
+/// The lines in a read-only text view, so any run of them can be selected: drag across lines (or ⌘A) and ⌘C,
+/// right-click ▸ Copy, or ⌘F to find. Columns are tab-separated, so a copied selection pastes into a spreadsheet.
+/// New lines are appended without disturbing a selection, and Follow keeps the end in view unless text is selected.
+private struct ActivityConsole: NSViewRepresentable {
+    var lines: [ActivityEntry]
+    var follow: Bool
+    var handle: ConsoleHandle
+
+    final class Coordinator {
+        var first: Int?
+        var last: Int?
+        var count = 0
+        var follow = false
     }
 
-    private var mark: String {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        let text = scroll.documentView as! NSTextView
+        text.isEditable = false
+        text.isSelectable = true
+        text.usesFindBar = true
+        text.isIncrementalSearchingEnabled = true
+        text.textContainerInset = NSSize(width: 4, height: 6)
+        text.backgroundColor = .textBackgroundColor
+        handle.textView = text
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let text = scroll.documentView as? NSTextView, let storage = text.textStorage else { return }
+        handle.textView = text
+        let state = context.coordinator
+        // The same lines with new ones after them (the usual poll): append those. Anything else (a filter): rebuild.
+        let appends = state.count > 0 && lines.count >= state.count
+            && lines.first?.seq == state.first && lines[state.count - 1].seq == state.last
+        let changed = !(appends && lines.count == state.count)
+        if changed {
+            let chunk = NSMutableAttributedString()
+            for entry in appends ? lines[state.count...] : lines[...] { chunk.append(Self.format(entry)) }
+            storage.beginEditing()
+            if appends { storage.append(chunk) } else { storage.setAttributedString(chunk) }
+            storage.endEditing()
+            state.first = lines.first?.seq
+            state.last = lines.last?.seq
+            state.count = lines.count
+        }
+        if follow && (changed || !state.follow) && text.selectedRange().length == 0 {
+            text.scrollToEndOfDocument(nil)
+        }
+        state.follow = follow
+    }
+
+    private static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+    private static let boldFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+    /// Time, mark, loader, then the text; wrapped text continues under the text column.
+    private static let paragraph: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [64, 100, 232].map { NSTextTab(textAlignment: .left, location: $0) }
+        style.headIndent = 232
+        return style
+    }()
+
+    private static func format(_ entry: ActivityEntry) -> NSAttributedString {
+        let line = NSMutableAttributedString()
+        func add(_ text: String, _ color: NSColor, _ font: NSFont = Self.font) {
+            line.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]))
+        }
+        let loader = entry.loader.map { $0.count > 20 ? String($0.prefix(19)) + "…" : $0 } ?? ""
+        add(entry.clock + "\t", .tertiaryLabelColor)
+        add(mark(entry) + "\t", markColor(entry))
+        add(loader + "\t", .secondaryLabelColor)
+        add(entry.text + "\n",
+            entry.level == "error" ? .systemRed : entry.level == "debug" ? .secondaryLabelColor : .labelColor,
+            entry.event == nil ? font : boldFont)
+        return line
+    }
+
+    private static func mark(_ entry: ActivityEntry) -> String {
         switch entry.event {
         case "run-start", "loader-start": "▶"
         case "run-end", "loader-end": "■"
-        default: entry.level == "error" ? "ERR" : entry.level == "warning" ? "WARN" : ""
+        default: ["error": "ERR", "warning": "WARN", "debug": "DBG"][entry.level] ?? ""
         }
     }
 
-    private var color: Color {
-        entry.level == "error" ? .red : entry.level == "warning" ? .orange : entry.event != nil ? .accentColor : .secondary
+    private static func markColor(_ entry: ActivityEntry) -> NSColor {
+        switch entry.level {
+        case "error": .systemRed
+        case "warning": .systemOrange
+        case "debug": .tertiaryLabelColor
+        default: entry.event != nil ? .controlAccentColor : .secondaryLabelColor
+        }
     }
 }
 

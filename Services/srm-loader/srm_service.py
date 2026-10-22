@@ -17,7 +17,10 @@ Endpoints (JSON):
                                       snapshot history, price freshness, recent loads and data-quality checks
     GET  /log?after=<seq>&limit=      live activity: every line srm.py prints while a load runs, and when each
                                       refresh and loader starts and ends (numbered; poll with the last seq seen),
-                                      plus what is running now. In memory, the last 5,000 lines.
+                                      plus what is running now. In memory, the last 20,000 lines.
+
+`verbosity=1` or `2` on /load and /refresh runs srm.py with -v or -vv: what each step does, then also every HTTP
+request and SQL statement; those lines come back in /log with level `debug`.
 
 Send the header `X-SRM-Dry-Run: 1` (the sample jobspace's subscription does) to get the command a load would
 run without running it. Only srm.py's own loaders and options are accepted, loads run one at a time, and the
@@ -100,6 +103,7 @@ DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(
                                                 "..", "..", "MxDataHUB", "SRM"))
 SEVERITY = {"succeeded": 0, "dry-run": 0, "no-run": 1, "partial": 1, "failed": 2}
 LOAD_LOCK = threading.Lock()
+DEBUG_LINE = re.compile(r"^\d\d:\d\d:\d\d \[(debug|trace)\] ")
 ERROR_LINE = re.compile(r"\b(failed|error|exception|traceback)\b|^\s*\w+Error:", re.I)
 WARNING_LINE = re.compile(r"\b(warn(ing)?|partial|skipp(ed|ing)|retry(ing)?|timed out|rate.?limit|429)\b|\brejected [1-9]", re.I)
 
@@ -107,9 +111,9 @@ WARNING_LINE = re.compile(r"\b(warn(ing)?|partial|skipp(ed|ing)|retry(ing)?|time
 class ActivityLog:
     """What the loaders are doing, for GET /log: every line srm.py prints while a load runs, and when each refresh
     and loader starts and ends. Entries are numbered so a client polls for what is new (?after=<seq>); the last
-    5,000 are kept in memory. `current` is the refresh or load running now."""
+    20,000 are kept in memory (a -vv run prints many). `current` is the refresh or load running now."""
 
-    def __init__(self, size=5000):
+    def __init__(self, size=20000):
         self.lock = threading.Lock()
         self.entries = collections.deque(maxlen=size)
         self.seq = 0
@@ -118,13 +122,15 @@ class ActivityLog:
 
     def add(self, text, level=None, loader=None, run=None, event=None):
         if level is None:
-            level = "error" if ERROR_LINE.search(text) else "warning" if WARNING_LINE.search(text) else "info"
+            # srm.py's -v / -vv detail lines are tagged; they never count as warnings or errors.
+            level = ("debug" if DEBUG_LINE.match(text) else "error" if ERROR_LINE.search(text)
+                     else "warning" if WARNING_LINE.search(text) else "info")
         with self.lock:
             self.seq += 1
             self.entries.append({"seq": self.seq, "time": dt.datetime.now().isoformat(timespec="milliseconds"),
                                  "level": level, "loader": loader, "run": run, "event": event, "text": text})
 
-    def start_run(self, name, loaders, category=None, dry=False):
+    def start_run(self, name, loaders, category=None, dry=False, verbosity=0):
         with self.lock:
             self.runs += 1
             run = self.runs
@@ -132,7 +138,8 @@ class ActivityLog:
             if not (dry and self.current and not self.current["dryRun"]):
                 self.current = {"run": run, "category": category, "name": name, "loaders": list(loaders),
                                 "loader": None, "index": 0, "dryRun": dry, "started": time.time(), "loaderStarted": None}
-        self.add("%s %s: %s" % ("Preview" if dry else "Refresh", name, ", ".join(loaders)), "info", run=run,
+        detail = {1: " (verbose)", 2: " (trace)"}.get(verbosity, "")
+        self.add("%s %s%s: %s" % ("Preview" if dry else "Refresh", name, detail, ", ".join(loaders)), "info", run=run,
                  event="run-start")
         return run
 
@@ -416,7 +423,7 @@ class Handler(BaseHTTPRequestHandler):
         if not dry and not LOAD_LOCK.acquire(blocking=False):
             return self.send_json(409, {"error": "another load is running; try again when it finishes"})
         try:
-            run = ACTIVITY.start_run(loader, [loader], dry=dry)
+            run = ACTIVITY.start_run(loader, [loader], dry=dry, verbosity=verbosity(q))
             result = run_loader(loader, q, dry=dry, run=run)
             ACTIVITY.end_run(run, loader, result["status"], result.get("seconds") or 0)
             return self.send_json(200, dict(result, run=run))
@@ -435,7 +442,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(409, {"error": "another load is running; try again when it finishes"})
         try:
             started, results = time.time(), []
-            run = ACTIVITY.start_run(cat["name"], cat["loaders"], category=category, dry=dry)
+            run = ACTIVITY.start_run(cat["name"], cat["loaders"], category=category, dry=dry, verbosity=verbosity(q))
             tolerated = set(cat.get("continueAfterFailure", []))
             for loader in cat["loaders"]:
                 result = run_loader(loader, q, dry=dry, run=run)
@@ -521,9 +528,17 @@ def run_loader(loader, q, dry=False, run=None):
     }
 
 
+def verbosity(q):
+    """srm.py's -v count from ?verbosity=0|1|2."""
+    value = q.get("verbosity", "0") or "0"
+    if value not in ("0", "1", "2"):
+        raise ValueError("verbosity must be 0, 1 (verbose) or 2 (trace)")
+    return int(value)
+
+
 def options(q):
     """srm.py load options from query parameters (only the ones srm.py defines)."""
-    out = []
+    out = ["-v"] * verbosity(q)
     if q.get("asOf"):
         dt.date.fromisoformat(q["asOf"])    # raises ValueError when not YYYY-MM-DD
         out += ["--as-of", q["asOf"]]

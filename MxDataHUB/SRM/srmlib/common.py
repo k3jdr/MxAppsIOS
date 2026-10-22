@@ -7,10 +7,17 @@ Secrets are never stored in the repository. They are looked up, in order, from:
      service "SRM-api", accounts "openfigi" and "fmp"),
   3. SRM/config.local.json (untracked, see config.local.json.example),
 and for the database also libpq's own ~/.pgpass.
+
+How much the loaders print is set by srm.py -v / -vv (or SRM_VERBOSITY): 0 prints the progress lines, 1 (verbose)
+also what each step does — the connection, downloads and cache hits, rate-limit waits, retries, every reject,
+identifier results, a load's parameters and time — and 2 (trace) also every HTTP request and SQL statement with
+its time. Detail lines are tagged [debug] or [trace] so a reader (the SRM loader service) can tell them apart.
 """
 
 import json
+import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -23,6 +30,12 @@ import psycopg2.extras
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR = os.path.expanduser("~/Library/Caches/com.k3jdr.MxDataHUB.loaders")
+VERBOSITY = int(os.environ.get("SRM_VERBOSITY") or 0)
+
+
+def set_verbosity(level):
+    global VERBOSITY
+    VERBOSITY = max(0, int(level or 0))
 
 
 def _local_config():
@@ -55,9 +68,17 @@ class Config:
                                or "MxDataHUB SRM loader (John Callahan)")
 
     def password(self):
-        return (os.environ.get("PGPASSWORD")
-                or keychain("SRM-postgres", f"{self.user}@{self.host}/{self.dbname}")
-                or self.local.get("database", {}).get("password"))   # else libpq tries ~/.pgpass
+        return self.password_and_source()[0]
+
+    def password_and_source(self):
+        """The database password and where it came from (never logged itself)."""
+        if os.environ.get("PGPASSWORD"):
+            return os.environ["PGPASSWORD"], "PGPASSWORD"
+        found = keychain("SRM-postgres", f"{self.user}@{self.host}/{self.dbname}")
+        if found:
+            return found, "Keychain"
+        found = self.local.get("database", {}).get("password")
+        return (found, "config.local.json") if found else (None, "~/.pgpass or none")
 
     def api_key(self, name):
         env = {"openfigi": "OPENFIGI_API_KEY", "fmp": "FMP_API_KEY"}[name]
@@ -66,16 +87,50 @@ class Config:
     def connect(self):
         kwargs = dict(host=self.host, port=self.port, user=self.user, dbname=self.dbname,
                       application_name="srm-loaders", connect_timeout=10)
-        password = self.password()
+        password, source = self.password_and_source()
         if password:
             kwargs["password"] = password
+        debug(f"connecting to {self.user}@{self.host}:{self.port}/{self.dbname} (password from {source})")
+        started = time.monotonic()
+        if VERBOSITY >= 2:
+            # Every SQL statement with its time, through psycopg2's logging connection.
+            kwargs["connection_factory"] = psycopg2.extras.MinTimeLoggingConnection
         conn = psycopg2.connect(**kwargs)
+        if VERBOSITY >= 2:
+            conn.initialize(_SQL_LOGGER, mintime=0)
         conn.autocommit = False
+        debug(f"connected in {time.monotonic() - started:.2f}s: PostgreSQL {conn.server_version // 10000}."
+              f"{conn.server_version % 10000}, backend pid {conn.get_backend_pid()}")
         return conn
 
 
 def log(message):
     print(time.strftime("%H:%M:%S"), message, flush=True)
+
+
+def debug(message, level=1):
+    """A detail line: printed with -v (level 1, tagged [debug]) or -vv (level 2, tagged [trace])."""
+    if VERBOSITY >= level:
+        print(time.strftime("%H:%M:%S"), "[debug]" if level == 1 else "[trace]", message, flush=True)
+
+
+def trace(message):
+    debug(message, 2)
+
+
+class _SQLTrace(logging.Handler):
+    """Prints psycopg2's statement log at trace level, shortened: bulk inserts carry thousands of values."""
+
+    def emit(self, record):
+        text = " ".join(record.getMessage().split())
+        text = re.sub(r"\s*\(execution time: ([\d.]+) ms\)$", lambda m: f" ({float(m.group(1)):.1f} ms)", text)
+        trace("sql: " + (text if len(text) <= 400 else text[:300] + " … " + text[-80:]))
+
+
+_SQL_LOGGER = logging.getLogger("srm.sql")
+_SQL_LOGGER.addHandler(_SQLTrace())
+_SQL_LOGGER.setLevel(logging.DEBUG)
+_SQL_LOGGER.propagate = False
 
 
 class RateLimiter:
@@ -88,7 +143,9 @@ class RateLimiter:
         now = time.monotonic()
         self.times = [t for t in self.times if now - t < self.period]
         if len(self.times) >= self.calls:
-            time.sleep(self.period - (now - self.times[0]) + 0.01)
+            pause = self.period - (now - self.times[0]) + 0.01
+            debug(f"rate limit: {self.calls} calls per {self.period:g}s reached; waiting {pause:.1f}s")
+            time.sleep(pause)
         self.times.append(time.monotonic())
 
 
@@ -114,16 +171,21 @@ def http(url, *, data=None, headers=None, limiter=None, retries=4, timeout=60, r
         body = json.dumps(data).encode()
         headers.setdefault("Content-Type", "application/json")
     headers.setdefault("User-Agent", "MxDataHUB-SRM-loader/1.0")
+    method = "POST" if body is not None else "GET"
     for attempt in range(retries + 1):
         if limiter:
             limiter.wait()
         request = urllib.request.Request(url, data=body, headers=headers)
+        started = time.monotonic()
+        trace(f"{method} {redact(url)}" + (f" ({len(body):,} bytes)" if body else "") + (f", attempt {attempt + 1}" if attempt else ""))
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 payload = response.read()
+                trace(f"  {response.status} {len(payload):,} bytes in {time.monotonic() - started:.2f}s")
                 return payload if raw else json.loads(payload or b"null")
         except urllib.error.HTTPError as e:
             text = e.read().decode("utf-8", "replace")
+            debug(f"{method} {redact(url)}: HTTP {e.code} after {time.monotonic() - started:.2f}s: {text[:200]}")
             if e.code in (429, 500, 502, 503, 504) and attempt < retries:
                 delay = int(e.headers.get("Retry-After") or 0) or min(60, 5 * 2 ** attempt)
                 log(f"  {e.code} from {urllib.parse.urlsplit(url).netloc}; retrying in {delay}s")
@@ -132,7 +194,9 @@ def http(url, *, data=None, headers=None, limiter=None, retries=4, timeout=60, r
             raise HTTPError(e.code, text, url)
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             if attempt < retries:
-                time.sleep(5 * 2 ** attempt)
+                delay = 5 * 2 ** attempt
+                log(f"  network error from {urllib.parse.urlsplit(url).netloc} ({e}); retrying in {delay}s")
+                time.sleep(delay)
                 continue
             raise
     raise RuntimeError("unreachable")
@@ -141,7 +205,11 @@ def http(url, *, data=None, headers=None, limiter=None, retries=4, timeout=60, r
 def download(url, path, headers=None, max_age_hours=20):
     """Downloads `url` to `path` unless a fresh copy is cached. Returns the path."""
     if os.path.exists(path) and time.time() - os.path.getmtime(path) < max_age_hours * 3600:
+        debug(f"using the cached {os.path.basename(path)} ({(time.time() - os.path.getmtime(path)) / 3600:.1f} h old, "
+              f"{os.path.getsize(path):,} bytes; downloaded again after {max_age_hours} h)")
         return path
+    debug(f"downloading {redact(url)}")
+    started = time.monotonic()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     headers = dict(headers or {})
     headers.setdefault("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) MxDataHUB-SRM-loader/1.0")
@@ -154,6 +222,7 @@ def download(url, path, headers=None, max_age_hours=20):
                 break
             out.write(chunk)
     os.replace(tmp, path)
+    debug(f"downloaded {os.path.getsize(path):,} bytes in {time.monotonic() - started:.1f}s to {path}")
     return path
 
 
@@ -176,11 +245,14 @@ class LoadRun:
             cur.execute("SELECT srm.begin_load(%s, %s, %s)", (self.source, self.loader, json.dumps(self.parameters)))
             self.load_id = cur.fetchone()[0]
         self.conn.commit()
+        self.started = time.monotonic()
         log(f"{self.loader}: load {self.load_id} started")
+        debug(f"{self.loader}: source {self.source}, parameters {json.dumps(self.parameters, default=str)}")
         return self
 
     def reject(self, key, reason, payload=None):
         self.rejected += 1
+        debug(f"reject {key}: {reason}")
         with self.conn.cursor() as cur:
             cur.execute("INSERT INTO srm.load_reject (load_id, record_key, reason, payload) VALUES (%s, %s, %s, %s)",
                         (self.load_id, key, reason[:2000], json.dumps(payload, default=str) if payload is not None else None))
@@ -195,6 +267,7 @@ class LoadRun:
 
     def __exit__(self, exc_type, exc, tb):
         if exc_type is not None:
+            debug(f"{self.loader}: {exc_type.__name__} — rolling back load {self.load_id}")
             self.conn.rollback()
             self.status = "failed" if self.status != "partial" else "partial"
             self.message = f"{exc_type.__name__}: {exc}"[:2000]
@@ -205,6 +278,7 @@ class LoadRun:
         self.conn.commit()
         log(f"{self.loader}: {self.status} - read {self.read}, inserted {self.inserted}, updated {self.updated}, "
             f"rejected {self.rejected}, API calls {self.api_calls}" + (f" - {self.message}" if self.message else ""))
+        debug(f"{self.loader}: load {self.load_id} took {time.monotonic() - self.started:.1f}s")
         return False
 
 
@@ -224,9 +298,14 @@ def set_identifiers(cur, run, rows, source):
         out.sort()
         for (i, result), row in zip(out, chunk):
             results.append(result)
+            trace(f"identifier {row[1]} {row[2]} → security {row[0]}: {result}")
             if result == "invalid" or result.startswith("conflict"):
                 run.reject(f"{row[1]} {row[2]}", f"{result} (security {row[0]})")
     run.tally(results)
+    counts = {}
+    for r in results:
+        counts[r.split(":")[0]] = counts.get(r.split(":")[0], 0) + 1
+    debug(f"{source} identifiers: " + ", ".join(f"{n:,} {r}" for r, n in sorted(counts.items())))
     return results
 
 

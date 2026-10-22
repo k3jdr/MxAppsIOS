@@ -10,7 +10,7 @@ import re
 import psycopg2.extras
 
 from .. import xlsx
-from ..common import CACHE_DIR, LoadRun, download, log, set_identifiers
+from ..common import CACHE_DIR, LoadRun, debug, download, log, set_identifiers
 from ..model import (classification_node, create_security, normalize_ticker, security_by_identifier,
                      security_by_us_ticker, set_classification, source_id)
 
@@ -55,6 +55,7 @@ def run(conn, cfg, args):
             as_of, holdings = _holdings(path)
             if not as_of or not holdings:
                 raise RuntimeError(f"could not read holdings from {etf}.xlsx")
+            debug(f"{etf.upper()}: {len(holdings)} holding lines as of {as_of} in {os.path.basename(path)}")
             cur.execute("SELECT benchmark_id FROM srm.benchmark WHERE code = %s", (code,))
             benchmark_id = cur.fetchone()[0]
             ssga = source_id(cur, "SSGA")

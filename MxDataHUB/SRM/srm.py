@@ -13,13 +13,19 @@
 
 Connection: --host/--port/--user/--dbname, or SRM_PG* environment variables, or
 config.local.json; defaults postgres@192.168.0.223:5432/srm. Secrets: see srmlib/common.py.
+
+Logging: -v (verbose) also prints what each step does — connection, downloads, rate-limit waits, retries,
+rejects, identifier results, timings, and a loader's traceback when it fails; -vv (trace) also every HTTP request
+and SQL statement with its time. Before or after the command: ./srm.py -v load ssga, ./srm.py load ssga -vv.
 """
 
 import argparse
 import sys
+import time
+import traceback
 
-from srmlib import migrate
-from srmlib.common import Config, log
+from srmlib import common, migrate
+from srmlib.common import Config, debug, log
 from srmlib.loaders import (fmp, gleif, mutual_funds, nasdaq100, nasdaq_prices, nasdaqtrader, openfigi, portfolios,
                              reference, sec, ssga, trust_navs)
 
@@ -79,11 +85,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     for name in ("host", "port", "user", "dbname"):
         parser.add_argument(f"--{name}")
+    verbose_help = "print more: -v what each step does, -vv also every HTTP request and SQL statement"
+    parser.add_argument("-v", "--verbose", action="count", default=0, help=verbose_help)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate")
     sub.add_parser("status")
     load = sub.add_parser("load")
     load.add_argument("loader", choices=["all"] + list(LOADERS))
+    # Its own dest: a subcommand's default would otherwise overwrite a -v given before the command.
+    load.add_argument("-v", "--verbose", dest="load_verbose", action="count", default=0, help=verbose_help)
     load.add_argument("--max", type=int, help="at most this many API calls / securities (per-symbol loaders)")
     load.add_argument("--force", action="store_true", help="refresh even recently loaded rows")
     load.add_argument("--since", help="prices / index levels from this date (default: 2 years)")
@@ -102,6 +112,8 @@ def main():
     load.add_argument("--search", help="mutual-funds: add the funds a Nasdaq.com name search finds")
     load.add_argument("--file", help="trust-navs: the trusts file (default trusts.local.json)")
     args = parser.parse_args()
+    common.set_verbosity(max(args.verbose + getattr(args, "load_verbose", 0), common.VERBOSITY))
+    debug(f"srm.py {' '.join(sys.argv[1:])} (Python {sys.version.split()[0]}, verbosity {common.VERBOSITY})")
 
     cfg = Config(args)
     conn = cfg.connect()
@@ -114,14 +126,19 @@ def main():
             names = [n for n in LOADERS if n not in OPTIONAL] if args.loader == "all" else [args.loader]
             for name in names:
                 log(f"== {name}")
+                started = time.monotonic()
                 try:
                     LOADERS[name](conn, cfg, args)
                 except SystemExit:
                     raise
                 except Exception as e:   # recorded in srm.load_run; go on with the next loader
                     log(f"{name} failed: {e}")
+                    for line in traceback.format_exc().rstrip().splitlines():
+                        debug(line)
                     if args.loader != "all":
                         return 1
+                finally:
+                    debug(f"{name} took {time.monotonic() - started:.1f}s")
     finally:
         conn.close()
     return 0
