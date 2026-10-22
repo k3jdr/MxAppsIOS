@@ -2,9 +2,9 @@
 //  MxPortMGRApp.swift
 //  MxPortMGR
 //
-//  A portfolio-management IDE that teaches: one window with a guide in the sidebar — Start Here, Learn the Why, the
-//  Active Portfolio and Passive Index Portfolio paths, Market Reports walkthroughs and the Library — over sample
-//  accounts in an illustrative market. Optimization and attribution run built-in or through the shared Layer 3
+//  A portfolio-management IDE that teaches: one window with a guide in the sidebar — Start Here, My Portfolio, Market
+//  Reports (walkthroughs and real earnings), Learn the Why and the Library — over your own account, sample accounts in
+//  an illustrative market, or the security master. Optimization and attribution run built-in or through the shared Layer 3
 //  services (MXcodeIDE/Services). Educational only; never investment advice.
 //
 
@@ -25,9 +25,6 @@ struct MxPortMGRApp: App {
                 Button("Welcome") { store.go(.welcome) }
                     .keyboardShortcut("0", modifiers: .command)
                 Button("Choose Your Path") { store.go(.choosePath) }
-                Menu("Learn the Why") {
-                    ForEach([Screen.whyOptimize, .whyAttribution, .activeVsPassive]) { s in Button(s.title) { store.go(s) } }
-                }
                 Divider()
                 Section("My Portfolio") {
                     ForEach(Array(Screen.myPath.enumerated()), id: \.element) { i, s in
@@ -35,17 +32,10 @@ struct MxPortMGRApp: App {
                             .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: [.command, .option])
                     }
                 }
-                Section("Model Portfolio") {
-                    ForEach(Array(store.modelPath.enumerated()), id: \.element) { i, s in
-                        Button("\(i + 1). \(s.title)") { store.go(s) }
-                            .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: .command)
-                    }
-                    Picker("Model Type", selection: Binding(get: { store.modelApproach }, set: { store.setModelApproach($0) })) {
-                        Text("Active").tag(PortfolioStyle.active)
-                        Text("Passive Index").tag(PortfolioStyle.passive)
-                    }
-                }
                 Divider()
+                Menu("Learn the Why") {
+                    ForEach([Screen.whyOptimize, .whyAttribution, .activeVsPassive]) { s in Button(s.title) { store.go(s) } }
+                }
                 Button("Sample Portfolios") { store.go(.samples) }
                     .keyboardShortcut("l", modifiers: [.command, .shift])
                 Button("Layer 3 Services") { store.go(.services) }
@@ -56,18 +46,14 @@ struct MxPortMGRApp: App {
                     ForEach(store.portfolios) { p in Text(p.name).tag(p.id) }
                 }
                 Divider()
-                Button("Optimize (Active)") {
-                    store.go(.activeOptimize)
-                    Task { await store.optimize() }
+                // My Portfolio's step 4 follows its approach: optimize (active) or build the tracker (passive).
+                Button(store.myApproach == .active ? "Optimize My Portfolio" : "Build My Index Tracker") {
+                    store.go(.myImprove)
+                    Task { if store.myApproach == .active { await store.optimize() } else { await store.buildTracker() } }
                 }
                 .keyboardShortcut("r", modifiers: .command)
-                Button("Build Index Tracker (Passive)") {
-                    store.go(.passiveTrack)
-                    Task { await store.buildTracker() }
-                }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
                 Button("Run Attribution") {
-                    if store.screen != .passiveAttribution { store.go(.activeAttribution) }
+                    store.go(.myAttribution)
                     Task { await store.attribute() }
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
@@ -114,10 +100,18 @@ struct MxPortMGRApp: App {
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(store.screen != .reportWalkthrough)
             }
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                // As in MxNoteONE: add or edit the link of the selected company or holding (its symbol, or the name
+                // when the pointer rests there).
+                Button("Link…") { SecurityLinks.shared.beginEdit(SecurityLinks.shared.commandTarget(selected: store.linkSelection)) }
+                    .keyboardShortcut("k")
+                    .disabled(store.screen != .earningsDay && store.screen != .myPortfolio || SecurityLinks.shared.editing != nil)
+            }
             CommandGroup(after: .sidebar) {
-                Button("Previous Step") { if let p = store.screen.guidePrevious { store.go(p) } }
+                Button("Previous Step") { if let p = store.screen.previous { store.go(p) } }
                     .keyboardShortcut("[", modifiers: .command)
-                Button("Next Step") { if let n = store.screen.guideNext { store.go(n) } }
+                Button("Next Step") { if let n = store.screen.next { store.go(n) } }
                     .keyboardShortcut("]", modifiers: .command)
                 Divider()
             }

@@ -14,10 +14,9 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: Binding(get: { Optional(store.screen) }, set: { if let s = $0 { store.screen = s } })) {
-                ForEach(Screen.Group.allCases.filter { $0 != .passive }, id: \.self) { group in
-                    // Active and Passive are one Model Portfolio section whose steps follow the model type.
-                    Section(group == .active ? "Model Portfolio" : group.rawValue) {
-                        ForEach(group == .active ? store.modelPath : Screen.allCases.filter { $0.group == group }) { screen in
+                ForEach(Screen.Group.allCases, id: \.self) { group in
+                    Section(group.rawValue) {
+                        ForEach(Screen.allCases.filter { $0.group == group }) { screen in
                             Label(sidebarTitle(screen),
                                   systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -59,6 +58,7 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
         .alert("MxPortMGR", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
             if store.engine == .services || store.attributeMaster {
@@ -77,7 +77,6 @@ struct ContentView: View {
         case .whyOptimize: WhyOptimizeView(store: store)
         case .whyAttribution: WhyAttributionView(store: store)
         case .activeVsPassive: ActiveVsPassiveView(store: store)
-        case .activePortfolio, .passivePortfolio: PortfolioView(store: store)
         case .myPortfolio: PortfolioView(store: store, part: .holdings)
         case .myBenchmark: PortfolioView(store: store, part: .benchmark)
         case .myRisk: RiskView(store: store)
@@ -86,13 +85,6 @@ struct ContentView: View {
         case .myTrades:
             if store.myApproach == .active { TradesView(store: store) } else { BandsView(store: store) }
         case .myAttribution: AttributionView(store: store)
-        case .activeRisk: RiskView(store: store)
-        case .activeOptimize: OptimizeView(store: store)
-        case .activeTrades: TradesView(store: store)
-        case .activeAttribution, .passiveAttribution: AttributionView(store: store)
-        case .passiveDrift: DriftView(store: store)
-        case .passiveTrack: TrackView(store: store)
-        case .passiveBands: BandsView(store: store)
         case .reportLibrary: ReportLibraryView(store: store)
         case .morningBriefing: MorningBriefingView(store: store)
         case .earningsCalendar: EarningsCalendarView(store: store)
@@ -118,7 +110,7 @@ struct ContentView: View {
         .pickerStyle(.menu)
         .fixedSize()
         .disabled(store.screen.group == .mine)
-        .help(store.screen.group == .mine ? "The My Portfolio path always uses My Portfolio" : "The account every screen works on")
+        .help(store.screen.group == .mine ? "The My Portfolio path always uses My Portfolio" : "The account the report walkthroughs and the Morning Briefing work on")
         .quickHelpArea(PortHelp.samplePicker)
     }
 
@@ -134,7 +126,7 @@ struct ContentView: View {
         .quickHelpArea(PortHelp.engine)
     }
 
-    /// Launch arguments for testing and demos: `-screen activeOptimize -sample employer-stock`, and for a report
+    /// Launch arguments for testing and demos: `-screen myImprove -sample employer-stock`, and for a report
     /// walkthrough `-screen reportWalkthrough -report cpi -reportStep 5` (0–6; 5 simulates the long run) with `-reaction sell-all`;
     /// for the earnings screens `-earningsDate 2026-10-20` (Earnings by Day, and the month or week the calendar shows)
     /// with `-earningsSymbol PG` (the company selected), and `-earningsMode Week`.
@@ -144,6 +136,23 @@ struct ContentView: View {
         if let d = defaults.string(forKey: "earningsDate"), d.count == 10 { store.earnings.date = d; store.earnings.anchor = d }
         if let m = defaults.string(forKey: "earningsMode").flatMap(EarningsStore.Mode.init(rawValue:)) { store.earnings.mode = m }
         if let symbol = defaults.string(forKey: "earningsSymbol") { store.earnings.selection = EarningsParse.key(symbol) }
+        if let ticker = defaults.string(forKey: "holding") { store.holdingSelection = ticker }
+        #if DEBUG
+        // Self-tests of the links: open the Link dialog for the selected row (-linkEdit symbol|name), or show the hover
+        // card of a linked cell (-linkHoverTest ID, e.g. META|symbol) once the table is up.
+        if let field = defaults.string(forKey: "linkEdit").flatMap(LinkTarget.Field.init(rawValue:)) {
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                SecurityLinks.shared.beginEdit(store.linkSelection?.with(field))
+            }
+        }
+        if let id = defaults.string(forKey: "linkHoverTest") {
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                SecurityLinks.shared.testHover(id)
+            }
+        }
+        #endif
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
         if defaults.string(forKey: "mySource") == "srm" { Task { await store.openSRMAccount(store.srmCode) } }
         if defaults.bool(forKey: "addSecurities") { store.go(.myPortfolio); store.addingSecurities = true }

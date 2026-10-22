@@ -21,9 +21,9 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Six groups: Start Here, Learn the Why, **My Portfolio** (6 steps, your own account), **Model Portfolio** (5 steps on a sample; Active or Passive index), Market Reports, Library. |
+| **Sidebar — the guide** | Five groups: Start Here, **My Portfolio** (6 steps, your own account), Market Reports, Learn the Why, Library. |
 | **Quick Help** (bottom of the sidebar) | The shared MXcodeIDE Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
-| **Toolbar** | **Account** — the sample (or My Portfolio) every screen works on. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
+| **Toolbar** | **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the My Portfolio steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Back / Next** along the guide. |
 | **Status bar** | The account, its type, value and benchmark; the last action (e.g. "Optimized with Built-in (Swift) in 134 ms"); the educational-use banner. |
 
@@ -36,24 +36,19 @@ gives both.
 
 | Menu | Items |
 | --- | --- |
-| **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Model Portfolio steps 1–5 ⌘1–⌘5 and Model Type ▸ Active / Passive Index · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
-| **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize (Active) ⌘R · Build Index Tracker (Passive) ⇧⌘R · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
+| **Edit** | (the standard items) · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
+| **Guide** | Welcome ⌘0 · Choose Your Path · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
+| **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) · Previous Step ⌘[ · Next Step ⌘] |
 
 ## The guide
 
-### Start Here and Learn the Why
+### Start Here
 
 * **Welcome** — what the app teaches and how to use it.
 * **Choose Your Path** — four questions (edge after costs, tolerance for differing from the market, time, taxes) set
-  against each approach, and a start button for each path with its own sample. It does not choose for you.
-* **Why Optimize?** — two live demos: diversification (volatility of 1–36 equal-weighted companies falling to the
-  market's floor) and the stock / bond trade-off (the risk–return line of every mix); then what an optimizer does
-  with forecasts, a risk model and limits, and why limits matter ("error maximisation").
-* **Why Attribution?** — a two-sector Brinson-Fachler demo with sliders: allocation, selection and interaction recomputed
-  as you move the weights and returns.
-* **Active vs Passive** — what fees compound to over 30 years (fee and pre-fee alpha sliders) and a comparison table.
+  against each approach, and *Start My Portfolio*. It does not choose for you.
 
 ### My Portfolio path
 
@@ -70,16 +65,33 @@ coupon, maturity, rating, yield, duration, beta, model volatility and expected r
 is). Add it by dollar amount, shares or face value, optionally with a tax lot (cost basis and purchase date); adding a
 security already held adds to the position and its lots. Each holding row has a trash button to remove it.
 
-1. **My Holdings** — add, edit and remove holdings (shares, values, tax lots); asset mix; checks.
+1. **My Holdings** — add, edit and remove holdings (shares, values, tax lots); value, look-through securities,
+   weighted fee, unrealised gain; asset mix; *Check before you go on* (unknown or unpriced holdings, a single name over
+   20%, a sector more than twice the benchmark, asset classes the benchmark doesn't hold, idle cash, missing returns).
+   The ticker and the name of each holding can carry a link (⌘K; see *Links on symbols and names*).
 2. **My Benchmark** — choose the benchmark that matches your plan; sector and asset-mix comparison, overlap, active
    share, the names you hold in it and its 25 largest members.
-3. **Risk Today** — your account's volatility, tracking error, beta, VaR and where the risk comes from.
-4. **Optimize** (active) or **Build the Tracker** (passive).
-5. **Trades & Taxes** (active) or **Rebalance Bands** (passive).
-6. **Attribution** — read as an active or a passive account, by approach.
+3. **Risk Today** — volatility, tracking error, beta, one-month 95% VaR and expected shortfall in dollars, rate
+   sensitivity; weight vs share of risk; risk by sector; what drives tracking error.
+4. **Optimize** (active) — tracking-error target (or risk aversion), largest position, largest active weight, sector
+   band, turnover limit → decision (hold / rebalance / rebalance part of the way / relax a limit), tracking error,
+   information ratio, forecast active return, active share, turnover, names, binding limits, largest changes and sector
+   active weights. **Build the Tracker** (passive) — names (3 to all), stratified or largest-weight selection,
+   tracking-error budget → decision, the tracking-error-vs-names curve, sector gaps, *Three ways to be passive* (today's
+   account, the N-name tracker, one index fund — with tracking error, fee, trades and the tax of switching), trades.
+5. **Trades & Taxes** (active) — turnover, trading cost, realised long- and short-term gains, estimated tax; a *How far
+   to go* slider (part of the way); the trade list (direct, through a fund, new); taxes by lot with FIFO or
+   highest-cost-first and adjustable illustrative rates, tax-loss harvesting and wash-sale notes. **Rebalance Bands**
+   (passive) — ± points or ± 25% of target, trade back to the target or the band's edge; each class on its band; the
+   stock share through the year; holding-level trades and their taxes.
+6. **Attribution** — account, benchmark and active return; allocation, selection, interaction by sector (bars and
+   table) and month by month; top and bottom contributors; assumptions; *publish* or *review* with reasons. Read as a
+   check-up for a passive account: every effect should be close to zero.
 
 Steps 4 and 5 change name and screen with the approach (in the sidebar too). *Copy to My Portfolio* on a sample, the
-Portfolio menu's *Copy Account to My Portfolio* and Choose Your Path's *Start My Portfolio* all lead here.
+Portfolio menu's *Copy Account to My Portfolio*, *Start From a Sample* and Choose Your Path's *Start My Portfolio* all
+lead here: learning on a sample means copying it into My Portfolio. (The separate Model Portfolio section, with its
+Tracking Error & Drift screen, was retired on 2026-10-22.)
 
 #### My Portfolio in the security master
 
@@ -109,52 +121,6 @@ Securities whose tickers clash with the illustrative universe show as `TICKER:MI
 
 `mxportmgr://my-portfolio/CODE` (from MxDataHUB or MxJobsWMS ▸ Window ▸ Open MxPortMGR) opens My Portfolio on that
 security-master account.
-
-### Model Portfolio
-
-The Active and Passive paths are one **Model Portfolio** section that works on the sample accounts. A bar at the top of
-each step sets the **Model type** — *Active* or *Passive index* — and the **Sample**, and offers *Copy to My Portfolio*
-(continuing at the same My Portfolio step). The sidebar's five steps follow the type:
-
-| Step | Active | Passive index |
-| --- | --- | --- |
-| 1 | Portfolio & Benchmark | Portfolio & Index |
-| 2 | Risk Today | Tracking Error & Drift |
-| 3 | Optimize | Build the Tracker |
-| 4 | Trades & Taxes | Rebalance Bands |
-| 5 | Attribution | Attribution |
-
-Switching the type keeps you on the same step; choosing My Portfolio as the account moves to the same My Portfolio step.
-
-#### Active model type
-
-1. **Portfolio & Benchmark** — value, holdings, look-through securities, weighted fee, unrealised gain; benchmark
-   picker; *Check before you go on* (unknown or unpriced holdings, a single name over 20%, a sector more than twice
-   the benchmark, asset classes the benchmark doesn't hold, idle cash, missing returns); look-through sector and
-   asset-mix bars against the benchmark; the holdings table with tax lots (editable for My Portfolio).
-2. **Risk Today** — volatility, tracking error, beta, one-month 95% VaR and expected shortfall in dollars, rate
-   sensitivity; weight vs share of risk; risk by sector; what drives tracking error.
-3. **Optimize** — tracking-error target (or risk aversion), largest position, largest active weight, sector band,
-   turnover limit → decision (hold / rebalance / rebalance part of the way / relax a limit), tracking error,
-   information ratio, forecast active return, active share, turnover, names, binding limits, largest changes and
-   sector active weights.
-4. **Trades & Taxes** — turnover, trading cost, realised long- and short-term gains, estimated tax; a *How far to go*
-   slider (part of the way); the trade list (direct, through a fund, new); taxes by lot with FIFO or highest-cost-first
-   and adjustable illustrative rates, tax-loss harvesting and wash-sale notes.
-5. **Attribution** — account, benchmark and active return; allocation, selection, interaction by sector (bars and
-   table) and month by month; top and bottom contributors; assumptions; *publish* or *review* with reasons.
-
-#### Passive index model type
-
-1. **Portfolio & Index** — the same screen, read for tracking.
-2. **Tracking Error & Drift** — tracking error today and after a year untouched, month by month for the account and for
-   a 20-name tracker set up today; the six names that drift most; why trackers drift.
-3. **Build the Tracker** — names (3 to all), stratified or largest-weight selection, tracking-error budget → decision,
-   the tracking-error-vs-names curve, sector gaps, *Three ways to be passive* (today's account, the N-name tracker,
-   one index fund — with tracking error, fee, trades and the tax of switching), trades.
-4. **Rebalance Bands** — ± points or ± 25% of target, trade back to the target or the band's edge; each class on its
-   band; the stock share through the year; holding-level trades and their taxes.
-5. **Attribution** — read as a check-up: for a passive account every effect should be close to zero.
 
 ### Market Reports
 
@@ -243,7 +209,45 @@ costs**, **tracking error** against the plan, worst drop, and how much missing t
 It reports honestly when a reaction helps (selling a concentrated position into the index usually does; buying the dip
 sometimes does) — and that you can't know in advance which future you're in.
 
+### Links on symbols and names
+
+In **Earnings by Day** (the Symbol and Company columns) and **My Holdings** (Ticker and Name), any symbol or name can
+carry a link, made and shown the way MxNoteONE does it (its `LinkHover.swift`, `LinkTips.swift` and Link dialog, ported
+into `LinkHover.swift`, `LinkTips.swift` and `SecurityLinks.swift`):
+
+* **⌘K** (Edit ▸ Link…) on a selected row — or the row's context menu, *Add Link to Symbol… / Company…* — opens the
+  **Link** dialog (**Edit Link** when there is one): *Link on* Symbol or Company (Ticker or Name; ⌘K takes the column the
+  pointer rests on), *Text to display* (the symbol or name unless you change it), *Address* (a web address — https://
+  is added — or an email address), and **hover text**: formatted text (B I U S, size, colour, ⌘B ⌘I ⌘U) that can hold
+  links of its own (the link button or ⌘K; typed addresses become links), with a *Hover card preview*. In place of
+  MxNoteONE's list of notebook pages it offers pages about the security: Nasdaq.com's quote and earnings pages (or the
+  ETF / fund page), SEC EDGAR filings, Yahoo Finance, and a web search for the company's investor relations. A made-up
+  security of the illustrative market has none, but any address works. *Remove Link* takes it off.
+* A linked symbol or name is shown as a link; **a click opens it** (in the default browser).
+* **Resting the pointer** on it for 0.6 s shows the **hover card** (in the key window): the hover text with its links
+  (a click opens one), where the link goes (site and address), the link's words, "Click to open in …", and **Edit
+  Link…**, **Copy** and **Remove Link**. It closes when the pointer leaves the link and the card, or on a click or key
+  press elsewhere.
+
+A link belongs to the security and the column, not the table: a company's symbol link shows in Earnings by Day and,
+when you hold it in My Portfolio from the security master, in My Holdings. Real securities share links by ticker
+(BRK.B is BRK-B); the illustrative market's made-up ones keep their own. Links are kept on this Mac (the app's
+preferences, `securityLinks`), not in the security master.
+
+### Learn the Why
+
+* **Why Optimize?** — two live demos: diversification (volatility of 1–36 equal-weighted companies falling to the
+  market's floor) and the stock / bond trade-off (the risk–return line of every mix); then what an optimizer does
+  with forecasts, a risk model and limits, and why limits matter ("error maximisation").
+* **Why Attribution?** — a two-sector Brinson-Fachler demo with sliders: allocation, selection and interaction recomputed
+  as you move the weights and returns.
+* **Active vs Passive** — what fees compound to over 30 years (fee and pre-fee alpha sliders) and a comparison table.
+
 ## Sample portfolios (Library ▸ Sample Portfolios)
+
+Each sample is an edge case. *Use* makes it the account of the report walkthroughs and the Morning Briefing; *Copy to
+My Portfolio* (or My Portfolio's *Start From a Sample*) makes an editable copy to work through the six steps.
+
 
 | Sample | Account | Benchmark | Edge case |
 | --- | --- | --- | --- |
@@ -298,15 +302,17 @@ service catalog and view). Sandboxed with outgoing network connections (for the 
 configuration is compiled with `-O`: the optimizers and the simulator are numeric loops that are ~75× slower
 unoptimised.
 
-Launch arguments for demos and tests: `-mySource srm -srmAccount CODE` (My Portfolio from the security master), `-addSecurities YES` (open Add Securities), `-screen activeOptimize` (any `Screen` case), `-sample employer-stock` (a sample
+Launch arguments for demos and tests: `-mySource srm -srmAccount CODE` (My Portfolio from the security master), `-addSecurities YES` (open Add Securities), `-screen myImprove` (any `Screen` case), `-sample employer-stock` (a sample
 id), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
-hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week).
+hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding MXTM` selects a holding in My Holdings. Debug builds only:
+`-linkEdit symbol` (or `name`) opens the Link dialog for the selected company or holding, and `-linkHoverTest ID`
+(e.g. `META|symbol`, `mx:MXTM|name`) shows a linked cell's hover card as if the pointer rested on it.
 
 ## Files
 
 | File | Contents |
 | --- | --- |
-| `MxPortMGRApp.swift` | The window and the Guide, Portfolio and Reports menus |
+| `MxPortMGRApp.swift` | The window and the Guide, Portfolio and Reports menus, and Edit ▸ Link… |
 | `ContentView.swift` | Sidebar guide with Quick Help docked, toolbar pickers, status bar, launch arguments |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
 | `Universe.swift`, `Portfolio.swift`, `Samples.swift` | The illustrative market, accounts and checks, the samples |
@@ -316,5 +322,6 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
-| `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens |
+| `SecurityLinks.swift`, `LinkHover.swift`, `LinkTips.swift` | Links on symbols and names: the links kept on this Mac, the linked cell, the Link dialog and its pages about a security; the hover card; the hover text and its editor (after MxNoteONE's) |
+| `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; My Portfolio's steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

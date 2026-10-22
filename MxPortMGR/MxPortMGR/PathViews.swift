@@ -2,8 +2,8 @@
 //  PathViews.swift
 //  MxPortMGR
 //
-//  The screens both paths share and the active path's own: the account and its benchmark, today's risk, the active
-//  optimizer, the trades and their taxes, and attribution.
+//  My Portfolio's screens, active and passive alike, and the active approach's own: the holdings and the benchmark,
+//  today's risk, the active optimizer, the trades and their taxes, and attribution.
 //
 
 import Charts
@@ -11,12 +11,12 @@ import SwiftUI
 
 private func isPassive(_ store: PortStore) -> Bool { store.passiveContext }
 
-// MARK: - Portfolio & Benchmark / Portfolio & Index
+// MARK: - My Holdings / My Benchmark
 
 struct PortfolioView: View {
-    enum Part { case all, holdings, benchmark }
+    enum Part { case holdings, benchmark }
     @Bindable var store: PortStore
-    var part: Part = .all
+    var part: Part
 
     var body: some View {
         let p = store.portfolio
@@ -25,7 +25,7 @@ struct PortfolioView: View {
             if part == .holdings {
                 // The account's holdings first, as tall as they need.
                 if p.id == "mine" { addRow }
-                HoldingsTable(store: store, tall: true)
+                HoldingsTable(store: store)
             }
             if part != .benchmark {
                 HStack(spacing: 10) {
@@ -63,16 +63,7 @@ struct PortfolioView: View {
                     }
                     .frame(width: 340)
                 }
-                if part == .benchmark { constituents(p) } else {
-                    if p.id == "mine" { addRow }
-                    HoldingsTable(store: store)
-                }
-            }
-            if part == .all {
-                Box(title: "What this account teaches", symbol: p.symbol, help: "The edge case of this sample and what to look for on the next screens.") {
-                    Text(p.lesson).fixedSize(horizontal: false, vertical: true)
-                    ForEach(p.lookFor, id: \.self) { Label($0, systemImage: "eye").font(.callout) }
-                }
+                constituents(p)
             }
         }
         .task(id: p.benchmark) { if p.isSRM { await store.useSRMBenchmark(p.benchmark) } }
@@ -90,7 +81,6 @@ struct PortfolioView: View {
         switch part {
         case .holdings: store.portfolio.isSRM ? "What the account holds, from the security master: real securities, prices and tax lots." : "What the account holds: positions, values and tax lots."
         case .benchmark: "The portfolio the account is measured against — choose the one that matches your plan."
-        case .all: isPassive(store) ? "What the account holds, and the index it should follow." : "What the account holds, and the benchmark it is measured against."
         }
     }
 
@@ -105,15 +95,6 @@ struct PortfolioView: View {
             "A benchmark is the portfolio you would hold with no opinions; every difference from it is a bet — and a risk.",
             "Choose one that matches the plan: an all-stock index for an all-stock account; a blend for an account that also holds bonds and cash. Measured against the wrong one, sensible holdings look like big bets.",
             passive ? "For a passive account the benchmark is the index to follow; the next steps measure and close the gap." : "For an active account the benchmark is the starting point the optimizer departs from within a risk budget.",
-        ]
-        case .all: return passive ? [
-            "A passive account is judged by one thing: how closely it follows its index after costs. So start by naming the index — here \(p.benchmarkInfo.name).",
-            "Look through funds to what they hold: an index fund plus a few single stocks may already be most of the way there — or doubly exposed to the same names.",
-            "Fix the data first. An unknown or unpriced holding can't be tracked or rebalanced reliably.",
-        ] : [
-            "Active management starts from a benchmark: the portfolio you'd hold with no opinions. Every difference from it is a bet — and a risk.",
-            "Look through funds to see your real bets: the sector chart compares the account's look-through weights with the benchmark's.",
-            "Fix the data first. The optimizer can only reason about holdings it knows; the warnings below say what it can't see.",
         ]
         }
     }
@@ -193,19 +174,27 @@ struct SectorChart: View {
 
 struct HoldingsTable: View {
     @Bindable var store: PortStore
-    /// My Holdings: every row visible (up to 40) rather than the first 14.
-    var tall = false
 
     var body: some View {
         let p = store.portfolio
-        Box(title: "Holdings", symbol: "tablecells", help: "Each position: what it is, its value and weight, and in a taxable account its cost basis, gain and tax lots. In My Portfolio the values can be edited.") {
-            Table(p.holdings) {
+        Box(title: "Holdings", symbol: "tablecells", help: "Each position: what it is, its value and weight, and in a taxable account its cost basis, gain and tax lots. In My Portfolio the values can be edited. ⌘K (Edit ▸ Link…) or a row's context menu adds a link to the ticker or name, with its own hover text.") {
+            Table(p.holdings, selection: $store.holdingSelection) {
                 TableColumn("Ticker") { h in
-                    Text(h.security?.displayTicker ?? h.ticker).font(.body.monospaced()).foregroundStyle(h.security == nil || h.unpriced ? .red : .primary)
-                        .help(h.unpriced ? "No price in the security master yet: valued at cost" : h.security?.priceDate.map { "Priced \($0)" } ?? "")
+                    if let t = LinkTarget.holding(h) {
+                        LinkedCell(target: t, font: .body.monospaced(), color: h.security == nil || h.unpriced ? .red : .primary,
+                                   help: h.unpriced ? "No price in the security master yet: valued at cost" : h.security?.priceDate.map { "Priced \($0)" })
+                    } else {
+                        Text(h.ticker).font(.body.monospaced())
+                    }
                 }
                 .width(70)
-                TableColumn("Name") { h in Text(h.security?.name ?? "Unknown — not in the security master").foregroundStyle(h.security == nil ? .red : .primary) }
+                TableColumn("Name") { h in
+                    if let t = LinkTarget.holding(h, .name) {
+                        LinkedCell(target: t, color: h.security == nil ? .red : .primary)
+                    } else {
+                        Text(h.security?.name ?? "Cash")
+                    }
+                }
                 TableColumn("Sector / class") { h in Text(h.security.map { $0.lookThrough != nil ? "Fund · \($0.assetClass.rawValue)" : $0.issuer.map { "Bond · \($0)" } ?? $0.sector } ?? "—") }
                     .width(170)
                 TableColumn("Shares") { h in
@@ -259,7 +248,13 @@ struct HoldingsTable: View {
                 }
                 .width(28)
             }
-            .frame(minHeight: CGFloat(max(min(p.holdings.count, tall ? 40 : 14), tall ? 6 : 1)) * 26 + 34)
+            .contextMenu(forSelectionType: Holding.ID.self) { tickers in
+                if let ticker = tickers.first, let h = p.holdings.first(where: { $0.ticker == ticker }), let t = LinkTarget.holding(h) {
+                    linkMenu(t)
+                }
+            }
+            // Every row visible, up to 40.
+            .frame(minHeight: CGFloat(max(min(p.holdings.count, 40), 6)) * 26 + 34)
         }
     }
 }
@@ -356,7 +351,7 @@ struct OptimizeView: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Review the Trades and Taxes") { store.go(.activeTrades) }.buttonStyle(.borderedProminent)
+                    Button("Review the Trades and Taxes") { store.go(.myTrades) }.buttonStyle(.borderedProminent)
                 }
             } else {
                 ContentUnavailableView {
@@ -573,7 +568,7 @@ struct TradesView: View {
                 } description: {
                     Text("Optimize the account first.")
                 } actions: {
-                    Button("Optimize…") { store.go(.activeOptimize) }
+                    Button("Optimize…") { store.go(.myImprove) }
                 }
                 .frame(height: 220)
             }

@@ -2,89 +2,12 @@
 //  PassiveViews.swift
 //  MxPortMGR
 //
-//  The passive path's own screens: tracking error and how it drifts, building a tracker with fewer names (or one
-//  fund), and rebalance bands for the stock / bond / cash mix.
+//  The passive approach's own screens (My Portfolio steps 4 and 5): building a tracker with fewer names (or one fund),
+//  and rebalance bands for the stock / bond / cash mix.
 //
 
 import Charts
 import SwiftUI
-
-// MARK: - Tracking error & drift
-
-struct DriftView: View {
-    @Bindable var store: PortStore
-    @State private var trackerDrift: [Double] = []
-
-    var body: some View {
-        let p = store.portfolio
-        let drift = AttributionEngine.drift(p)
-        let te = zip(drift.account, drift.benchmark).map { AttributionEngine.trackingError($0, $1) }
-        let months = ["Today"] + MarketHistory.months.map { "+" + String(MarketHistory.months.firstIndex(of: $0)! + 1) + "m" }
-        let base = Universe.base
-        let endActive = base.indices.map { drift.account.last![$0] - drift.benchmark.last![$0] }
-        let movers = base.indices.sorted { abs(endActive[$0]) > abs(endActive[$1]) }.prefix(6)
-        StepPage(store: store, subtitle: "How far the account is from its index today — and how far it drifts if left alone.", lesson: [
-            "Tracking error measures how differently the account can behave from its index in a year. A broad index fund is around 0.05–0.2%; a sampled portfolio of a few dozen names 0.5–2%.",
-            "Even a perfect copy drifts: prices move, dividends arrive as cash, companies join and leave the index, and you add or withdraw money. A cap-weighted index rebalances itself as prices move; a fixed list of names does not keep up with changes in the index.",
-            "So passive is not 'do nothing': it is 'do little, by rule'. The next two steps set the rule — how many names, and when to trade back.",
-        ]) {
-            HStack(spacing: 10) {
-                MetricTile(title: "Tracking error today", value: pct(te.first!, 2), help: PortHelp.terms["Tracking error"]!)
-                MetricTile(title: "After a year untouched", value: pct(te.last!, 2), caption: "through the illustrative year", tint: te.last! > te.first! ? .orange : .green, help: "The account's tracking error after holding today's positions through the year without trading.")
-                MetricTile(title: "Active share today", value: pct(drift.account[0].indices.reduce(0) { $0 + abs(drift.account[0][$1] - drift.benchmark[0][$1]) / 2 }), help: PortHelp.terms["Active share"]!)
-                MetricTile(title: "Benchmark", value: p.benchmark, caption: p.benchmarkInfo.name, help: p.benchmarkInfo.summary)
-            }
-            HStack(alignment: .top, spacing: 14) {
-                Box(title: "Tracking error, month by month", symbol: "chart.line.uptrend.xyaxis", help: "Ex-ante tracking error of the account as its holdings drift, and of a 20-name tracker set up today and left alone; the dashed line is a 2% budget.") {
-                    Chart {
-                        ForEach(Array(te.enumerated()), id: \.offset) { i, v in
-                            LineMark(x: .value("Month", months[i]), y: .value("TE %", v * 100), series: .value("Who", "This account"))
-                                .foregroundStyle(by: .value("Who", "This account"))
-                        }
-                        ForEach(Array(trackerDrift.enumerated()), id: \.offset) { i, v in
-                            LineMark(x: .value("Month", months[i]), y: .value("TE %", v * 100), series: .value("Who", "20-name tracker from today"))
-                                .foregroundStyle(by: .value("Who", "20-name tracker from today"))
-                        }
-                        RuleMark(y: .value("Budget", 2)).lineStyle(StrokeStyle(dash: [4, 3])).foregroundStyle(.secondary)
-                    }
-                    .chartYAxisLabel("tracking error %")
-                    .frame(height: 280)
-                }
-                Box(title: "Where the drift goes", symbol: "arrow.up.and.down", help: "Active weight (account minus index) of the six names that drift most over the year.") {
-                    Chart {
-                        ForEach(Array(movers), id: \.self) { i in
-                            ForEach(Array(drift.account.indices), id: \.self) { t in
-                                LineMark(x: .value("Month", months[t]), y: .value("Active %", (drift.account[t][i] - drift.benchmark[t][i]) * 100), series: .value("Name", base[i].ticker))
-                                    .foregroundStyle(by: .value("Name", base[i].ticker))
-                            }
-                        }
-                    }
-                    .chartYAxisLabel("active weight %")
-                    .frame(height: 280)
-                }
-            }
-            Box(title: "Why it drifts", symbol: "wind", help: "The usual sources of tracking error in an index portfolio.") {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
-                    GridRow { Text("Missing names").bold(); Text("Holding fewer names than the index: their returns are missing. The biggest source for a direct-index portfolio.") }
-                    GridRow { Text("Price drift").bold(); Text("Fixed weights fall out of line as prices move unless the portfolio holds every name in proportion.") }
-                    GridRow { Text("Cash").bold(); Text("Dividends and deposits sitting uninvested.") }
-                    GridRow { Text("Index changes").bold(); Text("Companies join and leave; the index trades, you don't.") }
-                    GridRow { Text("Costs").bold(); Text("Fees and trading costs: a steady small shortfall every year.") }
-                }
-                .font(.callout)
-            }
-        }
-        .task(id: store.selectedID) {
-            let inputs = store.inputs
-            let tracker = await Task.detached { Engine.track(inputs, TrackingSettings()) }.value
-            var q = p
-            q.holdings = tracker.weights.map { Holding(ticker: $0.key, value: $0.value * 100_000) }
-            q.trading = "buyAndHold"
-            let d = AttributionEngine.drift(q)
-            trackerDrift = zip(d.account, d.benchmark).map { AttributionEngine.trackingError($0, $1) }
-        }
-    }
-}
 
 // MARK: - Build the tracker
 

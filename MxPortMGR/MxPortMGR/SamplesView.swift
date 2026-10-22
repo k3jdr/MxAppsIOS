@@ -3,7 +3,8 @@
 //  MxPortMGR
 //
 //  Library ▸ Sample Portfolios: every sample account, the edge case it teaches, what to look for, and where to go
-//  with it. Use makes it the account every screen works on; Copy to My Portfolio makes an editable copy.
+//  with it. Use makes it the account the report walkthroughs and the Morning Briefing work on; Copy to My Portfolio
+//  makes an editable copy to work through the My Portfolio steps.
 //
 
 import SwiftUI
@@ -12,9 +13,9 @@ struct SamplesView: View {
     @Bindable var store: PortStore
 
     var body: some View {
-        StepPage(store: store, subtitle: "Accounts built to show the cases real portfolios run into. Use each one on every screen to learn to read the results.", lesson: [
+        StepPage(store: store, subtitle: "Accounts built to show the cases real portfolios run into. Use one in the report walkthroughs, or copy it into My Portfolio, to learn to read the results.", lesson: [
             "Each sample is one edge case: what a tool should flag, and what its results look like when something is unusual.",
-            "Try the same sample on both paths, and in all three report walkthroughs — the same news lands very differently on a concentrated, an income and a cash-heavy account.",
+            "Use a sample in the report walkthroughs — the same news lands very differently on a concentrated, an income and a cash-heavy account — or copy it into My Portfolio to work through its steps.",
             "My Portfolio is yours to edit, in the same illustrative universe; it is remembered between launches.",
         ]) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 14)], alignment: .leading, spacing: 14) {
@@ -46,11 +47,6 @@ struct SamplesView: View {
                 Button(selected ? "In Use" : "Use") { store.selectedID = p.id }.disabled(selected)
                 if p.id == "mine" {
                     Button("My Portfolio Path") { store.go(.myPortfolio) }
-                } else {
-                    Button(p.style == .passive ? "Passive Path" : "Active Path") {
-                        store.selectedID = p.id
-                        store.go(p.style == .passive ? .passivePortfolio : .activePortfolio)
-                    }
                 }
                 if p.id != "mine" {
                     Button("Copy to My Portfolio") {

@@ -11,19 +11,17 @@ import Foundation
 import Observation
 
 enum Screen: String, CaseIterable, Identifiable {
+    // In the sidebar's order (Back and Next follow it).
     case welcome, choosePath
-    case whyOptimize, whyAttribution, activeVsPassive
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
-    case activePortfolio, activeRisk, activeOptimize, activeTrades, activeAttribution
-    case passivePortfolio, passiveDrift, passiveTrack, passiveBands, passiveAttribution
     case reportLibrary, morningBriefing, earningsCalendar, earningsDay, reportWalkthrough
+    case whyOptimize, whyAttribution, activeVsPassive
     case samples, services
 
     var id: String { rawValue }
 
     enum Group: String, CaseIterable {
-        case start = "Start Here", learn = "Learn the Why", mine = "My Portfolio", active = "Active Portfolio", passive = "Passive Index Portfolio"
-        case reports = "Market Reports", library = "Library"
+        case start = "Start Here", mine = "My Portfolio", reports = "Market Reports", learn = "Learn the Why", library = "Library"
     }
 
     var group: Group {
@@ -31,8 +29,6 @@ enum Screen: String, CaseIterable, Identifiable {
         case .welcome, .choosePath: .start
         case .whyOptimize, .whyAttribution, .activeVsPassive: .learn
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
-        case .activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution: .active
-        case .passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution: .passive
         case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .reportWalkthrough: .reports
         case .samples, .services: .library
         }
@@ -51,16 +47,6 @@ enum Screen: String, CaseIterable, Identifiable {
         case .myImprove: "Optimize or Track"
         case .myTrades: "Trades & Rebalancing"
         case .myAttribution: "Attribution"
-        case .activePortfolio: "Portfolio & Benchmark"
-        case .activeRisk: "Risk Today"
-        case .activeOptimize: "Optimize"
-        case .activeTrades: "Trades & Taxes"
-        case .activeAttribution: "Attribution"
-        case .passivePortfolio: "Portfolio & Index"
-        case .passiveDrift: "Tracking Error & Drift"
-        case .passiveTrack: "Build the Tracker"
-        case .passiveBands: "Rebalance Bands"
-        case .passiveAttribution: "Attribution"
         case .reportLibrary: "Report Library"
         case .morningBriefing: "Morning Briefing"
         case .earningsCalendar: "Earnings Calendar"
@@ -75,8 +61,6 @@ enum Screen: String, CaseIterable, Identifiable {
     var fullTitle: String {
         switch group {
         case .mine: "My Portfolio · \(step!). \(title)"
-        case .active: "Model Portfolio (Active) · \(step!). \(title)"
-        case .passive: "Model Portfolio (Passive) · \(step!). \(title)"
         default: title
         }
     }
@@ -94,14 +78,6 @@ enum Screen: String, CaseIterable, Identifiable {
         case .myImprove: "slider.horizontal.3"
         case .myTrades: "arrow.left.arrow.right"
         case .myAttribution: "chart.bar.doc.horizontal"
-        case .activePortfolio, .passivePortfolio: "briefcase"
-        case .activeRisk: "waveform.path.ecg"
-        case .activeOptimize: "wand.and.stars"
-        case .activeTrades: "list.bullet.rectangle"
-        case .activeAttribution, .passiveAttribution: "chart.bar.doc.horizontal"
-        case .passiveDrift: "arrow.left.and.right.righttriangle.left.righttriangle.right"
-        case .passiveTrack: "scope"
-        case .passiveBands: "rectangle.split.3x1"
         case .reportLibrary: "books.vertical"
         case .morningBriefing: "sunrise"
         case .earningsCalendar: "calendar"
@@ -112,18 +88,10 @@ enum Screen: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The step number on a path.
-    var step: Int? {
-        let path = Screen.myPath.firstIndex(of: self) ?? Screen.activePath.firstIndex(of: self) ?? Screen.passivePath.firstIndex(of: self)
-        return path.map { $0 + 1 }
-    }
-
-    /// A Model Portfolio step (the active or passive path).
-    var isModel: Bool { group == .active || group == .passive }
+    /// The step number on the My Portfolio path.
+    var step: Int? { Screen.myPath.firstIndex(of: self).map { $0 + 1 } }
 
     static let myPath: [Screen] = [.myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution]
-    static let activePath: [Screen] = [.activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution]
-    static let passivePath: [Screen] = [.passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution]
 
     /// The next and previous screens in the guide's order.
     var next: Screen? { Screen.allCases.firstIndex(of: self).flatMap { $0 + 1 < Screen.allCases.count ? Screen.allCases[$0 + 1] : nil } }
@@ -170,34 +138,17 @@ final class PortStore {
     var screen: Screen = .welcome {
         didSet {
             UserDefaults.standard.set(screen.rawValue, forKey: "screen")
-            // The My Portfolio path always works on the user's own account; the Model Portfolio on a sample.
+            // The My Portfolio path always works on the user's own account.
             if screen.group == .mine, selectedID != "mine" { selectedID = "mine" }
-            if screen.isModel {
-                modelApproach = screen.group == .active ? .active : .passive
-                if selectedID == "mine" { selectedID = modelApproach == .active ? "core-satellite" : "drifted-tracker" }
-            }
         }
     }
     /// How the user runs My Portfolio: active (optimize, trades & taxes) or passive (track, rebalance bands).
     var myApproach: PortfolioStyle = UserDefaults.standard.string(forKey: "myApproach") == PortfolioStyle.active.rawValue ? .active : .passive {
         didSet { UserDefaults.standard.set(myApproach.rawValue, forKey: "myApproach") }
     }
-    /// The Model Portfolio's type: its steps are the active path's or the passive path's.
-    var modelApproach: PortfolioStyle = UserDefaults.standard.string(forKey: "modelApproach") == PortfolioStyle.passive.rawValue ? .passive : .active {
-        didSet { UserDefaults.standard.set(modelApproach.rawValue, forKey: "modelApproach") }
-    }
-    /// The Model Portfolio's steps for its type.
-    var modelPath: [Screen] { modelApproach == .active ? Screen.activePath : Screen.passivePath }
 
-    /// Switches the Model Portfolio's type, staying on the same step.
-    func setModelApproach(_ a: PortfolioStyle) {
-        let step = screen.isModel ? screen.step : nil
-        modelApproach = a
-        if let step { screen = modelPath[step - 1] }
-    }
-
-    /// The passive reading of a shared screen: the passive path, or My Portfolio run passively.
-    var passiveContext: Bool { screen.group == .passive || (screen.group == .mine && myApproach == .passive) }
+    /// The passive reading of a shared screen: My Portfolio run passively.
+    var passiveContext: Bool { screen.group == .mine && myApproach == .passive }
 
     /// A screen's title as shown: My Portfolio's steps 3 and 4 follow the approach; the walkthrough shows its report.
     func title(_ s: Screen, full: Bool = true) -> String {
@@ -216,8 +167,6 @@ final class PortStore {
         didSet {
             UserDefaults.standard.set(selectedID, forKey: "sample")
             clearResults()
-            // Choosing My Portfolio on a Model Portfolio step moves to the same My Portfolio step.
-            if selectedID == "mine", screen.isModel, let step = screen.step { screen = Screen.myPath[step - 1] }
         }
     }
     var engine: EngineChoice = .builtIn {
@@ -261,6 +210,22 @@ final class PortStore {
         earnings.date = date
         earnings.selection = symbol
         screen = .earningsDay
+    }
+
+    /// The holding selected in My Holdings.
+    var holdingSelection: Holding.ID?
+
+    /// What Edit ▸ Link… (⌘K) links on this screen: the company selected in Earnings by Day, or the holding selected in
+    /// My Holdings.
+    var linkSelection: LinkTarget? {
+        switch screen {
+        case .earningsDay:
+            earnings.selection.flatMap { key in earnings.days[earnings.date]?.entries.first { $0.key == key } }.map { LinkTarget.earnings($0) }
+        case .myPortfolio:
+            holdingSelection.flatMap { t in portfolio.holdings.first { $0.ticker == t } }.flatMap { LinkTarget.holding($0) }
+        default:
+            nil
+        }
     }
 
     /// Security-master symbols in the selected account (illustrative tickers are made up, so they never match).

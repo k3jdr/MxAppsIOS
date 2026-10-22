@@ -251,7 +251,12 @@ struct EarningsDayView: View {
             companyColumns(held)
             figureColumns
         }
-        .quickHelpArea("Companies Reporting", "One row per company: its symbol (briefcase: you hold it), name, when it reports, market cap and number of analysts' estimates; consensus and actual EPS with the surprise (Nasdaq.com; ᶠ marks FMP's estimate and actual, used where Nasdaq.com has no result yet); FMP's revenue estimate, actual and surprise. Green beat, red missed. Click a header to sort; select a row for the company's history.", symbol: "list.bullet.rectangle")
+        .contextMenu(forSelectionType: EarningsEntry.ID.self) { keys in
+            if let key = keys.first, let entry = rows.first(where: { $0.key == key }) {
+                linkMenu(LinkTarget.earnings(entry))
+            }
+        }
+        .quickHelpArea("Companies Reporting", "One row per company: its symbol (briefcase: you hold it), name, when it reports, market cap and number of analysts' estimates; consensus and actual EPS with the surprise (Nasdaq.com; ᶠ marks FMP's estimate and actual, used where Nasdaq.com has no result yet); FMP's revenue estimate, actual and surprise. Green beat, red missed. Click a header to sort; select a row for the company's history. ⌘K (Edit ▸ Link…) or the row's context menu adds a link to the symbol or company name, with its own hover text: the pointer resting on a linked name shows its card, a click opens it.", symbol: "list.bullet.rectangle")
     }
 
     @TableColumnBuilder<EarningsEntry, KeyPathComparator<EarningsEntry>>
@@ -259,7 +264,11 @@ struct EarningsDayView: View {
         TableColumn("Symbol", value: \.symbol) { r in SymbolCell(entry: r, held: held.contains(r.key)) }
             .width(min: 60, ideal: 72)
         TableColumn("Company", value: \.nameKey) { r in
-            Text(r.name.isEmpty ? "— only FMP lists it" : r.name).foregroundStyle(r.name.isEmpty ? Color.secondary : Color.primary).lineLimit(1)
+            if r.name.isEmpty {
+                Text("— only FMP lists it").foregroundStyle(.secondary).lineLimit(1)
+            } else {
+                LinkedCell(target: .earnings(r, .name))
+            }
         }
         .width(min: 130, ideal: 190)
         TableColumn("Time", value: \.timeKey) { r in TimeCell(entry: r) }
@@ -300,10 +309,10 @@ private struct SymbolCell: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text(entry.symbol).font(.body.monospaced()).fontWeight(held ? .bold : .regular)
-            if held { Image(systemName: "briefcase.fill").font(.caption2).foregroundStyle(Color.accentColor) }
+            LinkedCell(target: .earnings(entry), font: .body.monospaced(), bold: held,
+                       help: held ? "You hold \(entry.symbol)" : entry.onNasdaq ? entry.symbol : "Only FMP lists \(entry.symbol)")
+            if held { Image(systemName: "briefcase.fill").font(.caption2).foregroundStyle(Color.accentColor).help("You hold \(entry.symbol)") }
         }
-        .help(held ? "You hold \(entry.symbol)" : entry.onNasdaq ? entry.symbol : "Only FMP lists \(entry.symbol)")
     }
 }
 

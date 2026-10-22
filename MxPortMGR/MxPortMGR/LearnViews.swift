@@ -22,16 +22,16 @@ struct WelcomeView: View {
             "It is educational. It never tells you what to buy or sell for your own accounts; talk to a licensed adviser about your situation.",
         ]) {
             HStack(alignment: .top, spacing: 14) {
-                card("1. Learn the Why", "lightbulb", "Why a portfolio needs optimizing, why results need attributing, and what active and passive cost.", .whyOptimize)
-                card("2. Choose a Path", "signpost.right.and.left", "Active: beat a benchmark within a risk budget. Passive: match an index cheaply and stay matched.", .choosePath)
-                card("3. Read the News", "newspaper", "Eighteen reports portfolio managers watch — jobs, CPI, the Fed, earnings, the yield curve and more — and a morning briefing. Simulate your reaction to each over twenty years.", .reportLibrary)
+                card("1. Choose a Path", "signpost.right.and.left", "Active: beat a benchmark within a risk budget. Passive: match an index cheaply and stay matched. Then work through My Portfolio.", .choosePath)
+                card("2. Read the News", "newspaper", "Eighteen reports portfolio managers watch — jobs, CPI, the Fed, earnings, the yield curve and more — a morning briefing, and real earnings by day and month. Simulate your reaction to each over twenty years.", .reportLibrary)
+                card("3. Learn the Why", "lightbulb", "Why a portfolio needs optimizing, why results need attributing, and what active and passive cost.", .whyOptimize)
             }
             Box(title: "How to use it", symbol: "questionmark.circle", help: "How the window is laid out and how Quick Help works.") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("The sidebar is the guide: each path has five steps; ⌘] and ⌘[ move to the next and previous step.", systemImage: "sidebar.left")
+                    Label("The sidebar is the guide: My Portfolio has six steps; ⌘] and ⌘[ move to the next and previous screen.", systemImage: "sidebar.left")
                     Label("Quick Help, under the sidebar, explains whatever is under the pointer — a number, a column, a button. ⌥⌘/ shows or hides it; its ⧉ button floats it in its own window.", systemImage: "questionmark.bubble")
-                    Label("My Portfolio, in the sidebar after Learn the Why, walks your own account through the same five steps — active or passive, your choice.", systemImage: "person.crop.circle")
-                    Label("Pick a sample account in the toolbar for the Active and Passive paths: each teaches an edge case. Library ▸ Sample Portfolios describes them all.", systemImage: "briefcase")
+                    Label("My Portfolio, in the sidebar after Start Here, walks your own account through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
+                    Label("Pick a sample account in the toolbar for the report walkthroughs and the Morning Briefing: each teaches an edge case. Library ▸ Sample Portfolios describes them all; copy one into My Portfolio to work through it.", systemImage: "briefcase")
                     Label("Engine in the toolbar: the built-in optimizers, or the shared Layer 3 services (portfolio-java, portfolio-cpp, analytics) that MxDataHUB and MxJobsWMS use.", systemImage: "cpu")
                 }
                 .font(.callout)
@@ -79,7 +79,7 @@ struct ChoosePathView: View {
         StepPage(store: store, subtitle: "Two ways to run a portfolio. The questions help you see the trade-offs; the choice is yours.", lesson: [
             "An active portfolio tries to beat a benchmark by holding different weights from it — overweighting what you expect to do well. It takes active risk to do so, measured by tracking error.",
             "A passive portfolio tries to match an index as closely and cheaply as possible, and to stay matched as prices move.",
-            "Many people combine them: a passive core with a small active satellite. The samples include both.",
+            "Many people combine them: a passive core with a small active satellite. The samples include both; copy one into My Portfolio to try it.",
         ]) {
             Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 10) {
                 GridRow {
@@ -103,7 +103,7 @@ struct ChoosePathView: View {
                 Image(systemName: "person.crop.circle.fill").font(.largeTitle).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ready to work on your own account?").font(.title3.weight(.semibold))
-                    Text("My Portfolio follows the same five steps with your own holdings: choose Active or Passive index there, and steps 3 and 4 follow your choice. The Model Portfolio below uses sample accounts, so you can learn on them first.")
+                    Text("My Portfolio walks your own holdings through six steps: choose Active or Passive index there, and steps 4 and 5 follow your choice. To learn on a sample first, copy one into My Portfolio (Library ▸ Sample Portfolios, or Start From a Sample).")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -111,31 +111,8 @@ struct ChoosePathView: View {
             }
             .padding(14)
             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-            .quickHelpArea("My Portfolio", "The five steps on your own account: My Holdings & Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
-            HStack(spacing: 14) {
-                start("Start an Active Model Portfolio", "wand.and.stars", "Portfolio & Benchmark → Risk Today → Optimize → Trades & Taxes → Attribution", .activePortfolio, sample: "core-satellite")
-                start("Start a Passive Model Portfolio", "scope", "Portfolio & Index → Tracking Error & Drift → Build the Tracker → Rebalance Bands → Attribution", .passivePortfolio, sample: "drifted-tracker")
-            }
+            .quickHelpArea("My Portfolio", "The six steps on your own account: My Holdings, My Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
         }
-    }
-
-    private func start(_ title: String, _ symbol: String, _ steps: String, _ target: Screen, sample: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: symbol).font(.title3.weight(.semibold))
-            Text(steps).font(.callout).foregroundStyle(.secondary)
-            HStack {
-                Button("Start with the Current Account") { store.go(target) }
-                Button("Start with “\(Samples.all.first { $0.id == sample }!.name)”") {
-                    store.selectedID = sample
-                    store.go(target)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
-        .quickHelpArea(QuickHelpItem(title: title, detail: "The five steps: \(steps). Start with the account selected now, or with the sample written for this path.", symbol: symbol))
     }
 }
 
@@ -226,7 +203,7 @@ struct WhyOptimizeView: View {
                     Image(systemName: "arrow.right").foregroundStyle(.secondary)
                     step("Weights & trades", "The mix with the best forecast reward per unit of risk inside the limits — and the trades to get there.")
                 }
-                Text("Without limits an optimizer bets heavily on whatever its forecasts like most — 'error maximisation'. The active path lets you change each limit and see what binds.")
+                Text("Without limits an optimizer bets heavily on whatever its forecasts like most — 'error maximisation'. My Portfolio's Optimize step (the active approach) lets you change each limit and see what binds.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }

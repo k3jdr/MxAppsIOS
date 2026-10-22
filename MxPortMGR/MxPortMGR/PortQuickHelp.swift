@@ -13,32 +13,22 @@ enum PortHelp {
         let detail: String
         switch screen {
         case .welcome: detail = "What MxPortMGR teaches, how the guide is laid out, and how Quick Help works. Everything runs on an illustrative market of fictional companies, except the earnings screens, which show real companies' reports."
-        case .choosePath: detail = "The questions that separate an actively managed portfolio from a passive index one — and a start button for each path. It doesn't choose for you."
+        case .choosePath: detail = "The questions that separate an actively managed portfolio from a passive index one, and a start button for My Portfolio. It doesn't choose for you."
         case .whyOptimize: detail = "Why a portfolio needs more than good picks: diversification, the risk–return trade-off, and what an optimizer does with forecasts, a risk model and limits. Two live demos."
         case .whyAttribution: detail = "Why results need explaining: was it being in the right sectors (allocation) or picking the right companies (selection)? A two-sector demo you can change."
         case .activeVsPassive: detail = "Costs, tracking error and the odds of beating an index: what you sign up for with each approach. A fee-compounding demo."
-        case .myPortfolio: detail = "My Portfolio, step 1: your own holdings — from the illustrative universe or the security master (srm) — with shares, values and tax lots; add, edit and remove them, and fix the checks first."
+        case .myPortfolio: detail = "My Portfolio, step 1: your own holdings — from the illustrative universe or the security master (srm) — with shares, values and tax lots; add, edit and remove them, and fix the checks first. ⌘K links a holding's ticker or name to a page, with hover text of its own."
         case .myBenchmark: detail = "My Portfolio, step 2: the benchmark that matches your plan — illustrative, or an index loaded in the security master — with sector and asset-mix comparisons, overlap, active share and its largest members."
         case .myRisk: detail = "My Portfolio, step 3: how much your account can move, where its risk comes from, and how far it sits from your benchmark."
         case .myImprove: detail = "My Portfolio, step 4: with an active approach, optimize within a risk budget (built-in or portfolio-java); with a passive approach, build the tracker with the fewest names or compare one index fund (built-in or portfolio-cpp)."
         case .myTrades: detail = "My Portfolio, step 5: active — the trades, their cost and the taxes by lot; passive — the stock / bond / cash mix against its rebalance bands and the trades to return."
         case .myAttribution: detail = "My Portfolio, step 6: last year's difference from your benchmark split into allocation, selection and interaction by sector, month by month."
-        case .activePortfolio: detail = "Model Portfolio (active), step 1: the account's holdings, look-through sector weights against its benchmark, and the problems to fix first."
-        case .activeRisk: detail = "Model Portfolio (active), step 2: how much the account can move, where the risk comes from, and how far it is from the benchmark (tracking error, beta, VaR)."
-        case .activeOptimize: detail = "Model Portfolio (active), step 3: turn forecasts into weights within a risk budget — tracking-error target, weight limits, sector bands — with the built-in engine or portfolio-java."
-        case .activeTrades: detail = "Model Portfolio (active), step 4: the trades the optimizer proposes, their turnover and cost, and (in a taxable account) the realised gains by tax lot."
-        case .activeAttribution: detail = "Model Portfolio (active), step 5: last year's active return split into allocation, selection and interaction by sector, month by month, Carino-linked."
-        case .passivePortfolio: detail = "Model Portfolio (passive), step 1: the account against the index it should follow, with the problems that make tracking harder."
-        case .passiveDrift: detail = "Model Portfolio (passive), step 2: tracking error today and how it grew as holdings drifted through the year."
-        case .passiveTrack: detail = "Model Portfolio (passive), step 3: the fewest names that track the index within budget, the tracking-error curve, and the one-fund alternative — built-in or portfolio-cpp."
-        case .passiveBands: detail = "Model Portfolio (passive), step 4: the stock / bond / cash mix against its targets and rebalance bands, when the bands were crossed, and the trades to return."
-        case .passiveAttribution: detail = "Model Portfolio (passive), step 5: attribution for an index portfolio — small effects everywhere is success; any large effect is drift or a mistake."
         case .reportLibrary: detail = "The reports portfolio managers watch, in six tiers — market-moving economic reports, growth, corporate, positioning, fixed income and industry — with what each measures, why PMs care, the price drivers it moves, and the five with the greatest impact. Open any one's walkthrough."
         case .morningBriefing: detail = "An illustrative morning: overnight markets, Treasury yields, the economic calendar, the economic surprise index, Fed funds futures, analyst rating changes, earnings releases, fund flows, credit spreads and the VIX — with what the account would be worth if it opened with the futures."
         case .earningsCalendar: detail = "Real earnings reports by month or week: for past days how many U.S.-listed companies beat or missed the consensus EPS, for upcoming days who reports and what analysts expect, with the companies you hold marked. Select a day for its full list. Nasdaq.com's calendar, with revenue from FMP through the accounts service."
-        case .earningsDay: detail = "Every company reporting on a day — symbol, company, before the open or after the close, consensus and actual EPS with the surprise (Nasdaq.com), revenue estimate and actual (FMP) — sortable and filterable, with the selected company's history. Real data."
+        case .earningsDay: detail = "Every company reporting on a day — symbol, company, before the open or after the close, consensus and actual EPS with the surprise (Nasdaq.com), revenue estimate and actual (FMP) — sortable and filterable, with the selected company's history. ⌘K links a company's symbol or name to a page, with hover text of its own. Real data."
         case .reportWalkthrough: detail = "A report walkthrough in seven steps: the report, how to read it, the market's move, what it did to the account, your reaction, its long-run consequences against the plan, and the takeaways. Choose another report with the Report menu at the top."
-        case .samples: detail = "Every sample account, the edge case it teaches and what to look for. Select one to use it everywhere; copy one into My Portfolio to edit."
+        case .samples: detail = "Every sample account, the edge case it teaches and what to look for. Use one in the report walkthroughs and the Morning Briefing; copy one into My Portfolio to work through its steps."
         case .services: detail = "The shared Layer 3 services (MXcodeIDE/Services) — portfolio-java for active optimization, portfolio-cpp for tracking and risk, analytics for attribution — whether they run and how to start them."
         }
         return QuickHelpItem(title: screen.fullTitle, detail: detail, symbol: screen.systemImage)
@@ -58,7 +48,7 @@ enum PortHelp {
 
     static let samplePicker = QuickHelpItem(
         title: "Account",
-        detail: "The sample account every screen works on. Each sample is an edge case — concentrated, sector-heavy, income, cash-heavy, frequent trading, a drifted tracker, tax lots, a band breach, messy data — or My Portfolio, which you can edit.",
+        detail: "The account the report walkthroughs and the Morning Briefing work on (the My Portfolio steps always use My Portfolio). Each sample is an edge case — concentrated, sector-heavy, income, cash-heavy, frequent trading, a drifted tracker, tax lots, a band breach, messy data — or My Portfolio, which you can edit.",
         symbol: "briefcase")
 
     static let engine = QuickHelpItem(

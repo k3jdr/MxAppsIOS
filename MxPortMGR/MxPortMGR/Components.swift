@@ -119,29 +119,12 @@ struct StepFooter: View {
         .padding(.top, 8)
     }
 
-    private var next: Screen? { store.screen.guideNext }
+    private var next: Screen? { store.screen.next }
 
     private func label(_ s: Screen) -> String { store.title(s) }
-    private var previous: Screen? { store.screen.guidePrevious }
+    private var previous: Screen? { store.screen.previous }
 }
 
-extension Screen {
-    /// Within a path, its steps; at a path's end, on to the market reports; from Choose Your Path, the active path.
-    var guideNext: Screen? {
-        switch self {
-        case .activeAttribution, .passiveAttribution, .myAttribution: .reportLibrary
-        case .choosePath: .activePortfolio
-        default: next
-        }
-    }
-
-    var guidePrevious: Screen? {
-        switch self {
-        case .activePortfolio, .passivePortfolio: .choosePath
-        default: previous
-        }
-    }
-}
 
 struct EducationalBanner: View {
     /// The earnings screens show real companies' reports rather than illustrative data.
@@ -180,7 +163,6 @@ struct StepPage<Content: View>: View {
                     Text(subtitle).font(.title3).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 if store.screen.group == .mine { MyPortfolioBar(store: store) }
-                if store.screen.isModel { ModelPortfolioBar(store: store) }
                 if !lesson.isEmpty {
                     LessonCard(store: store, id: store.screen.rawValue, title: lessonTitle, points: lesson)
                 }
@@ -376,48 +358,6 @@ struct MyPortfolioBar: View {
         let c = code.trimmingCharacters(in: .whitespaces)
         guard !c.isEmpty else { return }
         Task { await store.openSRMAccount(c) }
-    }
-}
-
-
-/// At the top of every Model Portfolio step: the model type (its steps follow it) and the sample account it runs on.
-struct ModelPortfolioBar: View {
-    @Bindable var store: PortStore
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: store.portfolio.symbol).font(.title2).foregroundStyle(Color.accentColor)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Model Portfolio").font(.headline)
-                Text("\(store.portfolio.account.rawValue) · \(money(store.portfolio.total)) · vs \(store.portfolio.benchmark)")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("Model type").font(.callout)
-            Picker("Model type", selection: Binding(get: { store.modelApproach }, set: { store.setModelApproach($0) })) {
-                Text("Active").tag(PortfolioStyle.active)
-                Text("Passive index").tag(PortfolioStyle.passive)
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .fixedSize()
-            .help("Active: Risk Today, Optimize, Trades & Taxes. Passive index: Tracking Error & Drift, Build the Tracker, Rebalance Bands.")
-            Text("Sample").font(.callout)
-            Picker("Sample", selection: $store.selectedID) {
-                ForEach(Samples.all) { Text($0.name).tag($0.id) }
-            }
-            .labelsHidden()
-            .frame(width: 260)
-            .help("The sample account the model works on; each teaches an edge case")
-            Button("Copy to My Portfolio") {
-                store.copyToMine(store.portfolio)
-                if let step = store.screen.step { store.go(Screen.myPath[step - 1]) }
-            }
-            .help("Make an editable copy of this sample as My Portfolio and continue there")
-        }
-        .padding(10)
-        .background(Color.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
-        .quickHelpArea("Model Portfolio", "Learn the tools on sample accounts. Choose the model type — Active (beat a benchmark within a risk budget) or Passive index (match an index cheaply) — and steps 2 to 4 follow it. Choose the sample here or in the toolbar; Copy to My Portfolio continues with your own editable copy.", symbol: "square.stack.3d.up")
     }
 }
 

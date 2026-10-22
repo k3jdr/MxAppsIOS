@@ -174,10 +174,20 @@ nonisolated struct EarningsEntry: Identifiable, Hashable, Sendable {
         return (a - e) / abs(e)
     }
 
+    /// A listing whose results aren't in yet: the day after, Nasdaq.com fills "EPS" with last year's EPS and gives no
+    /// surprise for anyone. In a finished listing most companies with a forecast have a surprise (all but those exactly
+    /// in line, at most about a fifth in the listings probed).
+    static func isInterim(_ nasdaq: [NasdaqEarningsRow]) -> Bool {
+        let forecast = nasdaq.filter { EarningsParse.number($0.epsForecast) != nil && EarningsParse.number($0.eps) != nil }
+        let noSurprise = forecast.filter { EarningsParse.number($0.surprise) == nil }.count
+        return forecast.count >= 5 && Double(noSurprise) >= 0.9 * Double(forecast.count)
+    }
+
     /// Nasdaq.com's rows, then FMP's: one entry per company, in Nasdaq.com's order (largest first), FMP-only last.
     static func merge(nasdaq: [NasdaqEarningsRow], fmp: [FMPEarningsRow]) -> [EarningsEntry] {
         var byKey: [String: EarningsEntry] = [:]
         var order: [String] = []
+        let interim = isInterim(nasdaq)
         for r in nasdaq {
             let key = EarningsParse.key(r.symbol)
             guard byKey[key] == nil else { continue }
@@ -188,8 +198,8 @@ nonisolated struct EarningsEntry: Identifiable, Hashable, Sendable {
             e.fiscalQuarter = r.fiscalQuarterEnding.flatMap { $0.isEmpty ? nil : $0.replacingOccurrences(of: "/", with: " ") }
             e.epsEstimate = EarningsParse.number(r.epsForecast)
             e.nasdaqEPSEstimate = e.epsEstimate
-            e.epsActual = EarningsParse.number(r.eps)
-            e.epsSurprise = EarningsParse.number(r.surprise).map { $0 / 100 } ?? surprise(e.epsActual, e.epsEstimate)
+            e.epsActual = interim ? nil : EarningsParse.number(r.eps)
+            e.epsSurprise = e.epsActual == nil ? nil : EarningsParse.number(r.surprise).map { $0 / 100 } ?? surprise(e.epsActual, e.epsEstimate)
             e.estimates = EarningsParse.number(r.noOfEsts).map { Int($0) }
             e.lastYearDate = EarningsParse.usDate(r.lastYearRptDt)
             e.lastYearEPS = EarningsParse.number(r.lastYearEPS)
