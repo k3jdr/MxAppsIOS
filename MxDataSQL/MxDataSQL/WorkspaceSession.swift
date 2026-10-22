@@ -30,14 +30,15 @@ final class WorkspaceSession {
     var password = ""
     var status: ConnectionStatus = .disconnected
 
+    /// Tables, views and materialized views (TableSummary.isView).
     var tables: [TableSummary] = []
-    /// Functions and procedures, listed after the tables in DB Table Selection.
+    /// Functions and procedures, listed after the tables and views in DB Table Selection.
     var routines: [RoutineSummary] = []
     /// Databases on the connected server (for the Database picker); the connected one is `connectedDatabase`.
     var databases: [String] = []
     private(set) var connectedDatabase: String?
     var tableFilter = ""
-    /// DB Table Selection lists everything, or only the tables, functions or procedures.
+    /// DB Table Selection lists everything, or only the tables, views, functions or procedures.
     var catalogKind: CatalogKind = .all
     /// The highlighted table's or routine's CatalogEntry.id.
     var highlightedID: CatalogEntry.ID?
@@ -86,19 +87,20 @@ final class WorkspaceSession {
         if case .connected = status { true } else { false }
     }
 
-    /// The list's rows: tables, then functions, then procedures, of the chosen kind and whose
+    /// The list's rows: tables, views, functions, then procedures, of the chosen kind and whose
     /// schema.name contains the filter.
     var filteredEntries: [CatalogEntry] {
+        let shownTables = catalogKind == .all || catalogKind == .tables ? tables.filter { !$0.isView } : []
+        let shownViews = catalogKind == .all || catalogKind == .views ? tables.filter(\.isView) : []
         let shownRoutines = routines.filter { r in
             switch catalogKind {
             case .all: true
-            case .tables: false
+            case .tables, .views: false
             case .functions: !r.isProcedure
             case .procedures: r.isProcedure
             }
         }
-        let entries = (catalogKind == .all || catalogKind == .tables ? tables.map(CatalogEntry.table) : [])
-            + shownRoutines.map(CatalogEntry.routine)
+        let entries = (shownTables + shownViews).map(CatalogEntry.table) + shownRoutines.map(CatalogEntry.routine)
         let filter = tableFilter.trimmingCharacters(in: .whitespaces).lowercased()
         guard !filter.isEmpty else { return entries }
         return entries.filter { entry in
@@ -199,7 +201,7 @@ final class WorkspaceSession {
 
     // MARK: DB Table Selection
 
-    /// Lists the tables, functions and procedures again.
+    /// Lists the tables, views, functions and procedures again.
     func refreshTables() async {
         guard let service else { return }
         await run {
@@ -214,7 +216,7 @@ final class WorkspaceSession {
         }
     }
 
-    /// Loads the right panel: the highlighted table's \d description, or the function's or procedure's code.
+    /// Loads the right panel: the highlighted table's or view's \d description, or the function's or procedure's code.
     func describeHighlighted() async {
         guard let service, let entry = highlightedEntry else {
             highlightedDescription = nil
@@ -246,7 +248,8 @@ final class WorkspaceSession {
         guard let service else { return }
         countingRows = true
         defer { countingRows = false }
-        for index in tables.indices {
+        // A view runs its whole query to be counted; it is counted when opened instead.
+        for index in tables.indices where !tables[index].isPlainView {
             do {
                 tables[index].exactRows = try await service.exactRowCount(tables[index].ref)
             } catch {
@@ -521,9 +524,9 @@ final class WorkspaceSession {
         }
     }
 
-    /// Grid for a query result. It is editable when every column is a plain column of one table and
-    /// either the table's primary key is among them, or the result has the table's full column layout
-    /// (as SELECT * gives) and `rowIDs` (ctid of each row) identify the rows. Otherwise it is read-only.
+    /// Grid for a query result. It is editable when every column is a plain column of one table (not a
+    /// view) and either the table's primary key is among them, or the result has the table's full column
+    /// layout (as SELECT * gives) and `rowIDs` (ctid of each row) identify the rows. Otherwise it is read-only.
     private func queryGrid(_ result: QueryResult, sql: String, rowIDs: [String]? = nil,
                            service: PostgresService) async throws -> GridData {
         var grid = GridData(description: nil, title: "Query result",
@@ -531,7 +534,7 @@ final class WorkspaceSession {
                             rows: result.rows, hasMore: result.hasMore, customSQL: sql)
         let oids = Set(result.columns.map(\.tableOID))
         guard oids.count == 1, let oid = oids.first, oid != 0, result.columns.allSatisfy({ $0.attnum > 0 }),
-              let summary = tables.first(where: { $0.oid == String(oid) }) else { return grid }
+              let summary = tables.first(where: { $0.oid == String(oid) }), !summary.isView else { return grid }
         let description = try await service.describe(summary)
         let columns = result.columns.compactMap { column in description.columns.first { $0.attnum == column.attnum } }
         guard columns.count == result.columns.count else { return grid }

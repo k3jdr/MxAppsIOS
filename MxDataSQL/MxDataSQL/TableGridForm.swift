@@ -237,7 +237,9 @@ struct TableGridForm: View {
 
         Text(grid.isEditable
              ? "Click, shift-click or drag to select cells; ⌘C copies and ⌘V pastes. Double-click a cell or press Return to edit it. Right-click for NULL and Revert."
-             : "Read-only result: select cells and press ⌘C to copy. To edit rows, query one table with SELECT * (any WHERE / ORDER BY), or include its primary key columns.")
+             : grid.description?.summary.isView == true
+                ? "Read-only view: select cells and press ⌘C to copy. To change its rows, edit the tables it reads from."
+                : "Read-only result: select cells and press ⌘C to copy. To edit rows, query one table with SELECT * (any WHERE / ORDER BY), or include its primary key columns.")
             .font(.footnote)
             .foregroundStyle(.secondary)
     }
@@ -249,8 +251,8 @@ struct TableGridForm: View {
                 Text(rowsText(grid))
                 Text("\(grid.columns.count) columns")
                 if let description = grid.description {
-                    Text(description.primaryKey.isEmpty
-                         ? "no primary key"
+                    Text(description.summary.isView ? description.summary.kind
+                         : description.primaryKey.isEmpty ? "no primary key"
                          : "key: \(description.primaryKey.joined(separator: ", "))")
                 }
                 if !grid.isEditable {

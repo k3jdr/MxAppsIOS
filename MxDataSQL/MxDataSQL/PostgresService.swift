@@ -186,17 +186,21 @@ actor PostgresService {
 
     // MARK: DB Table Selection
 
+    /// Tables, partitioned tables, views and materialized views. A plain view has no row estimate
+    /// (0 until counted) and no size.
     func listTables() async throws -> [TableSummary] {
         let sql = """
             SELECT c.oid::text, n.nspname::text, c.relname::text,
-                   CASE c.relkind WHEN 'p' THEN 'partitioned table' ELSE 'table' END,
-                   (CASE WHEN c.reltuples >= 0 THEN c.reltuples::bigint
+                   CASE c.relkind WHEN 'p' THEN 'partitioned table' WHEN 'v' THEN 'view'
+                                  WHEN 'm' THEN 'materialized view' ELSE 'table' END,
+                   (CASE WHEN c.relkind = 'v' THEN 0
+                         WHEN c.reltuples >= 0 THEN c.reltuples::bigint
                          ELSE coalesce(s.n_live_tup, 0) END)::text,
-                   pg_size_pretty(pg_total_relation_size(c.oid))
+                   CASE WHEN c.relkind = 'v' THEN '' ELSE pg_size_pretty(pg_total_relation_size(c.oid)) END
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             LEFT JOIN pg_stat_all_tables s ON s.relid = c.oid
-            WHERE c.relkind IN ('r', 'p')
+            WHERE c.relkind IN ('r', 'p', 'v', 'm')
               AND n.nspname NOT IN ('pg_catalog', 'information_schema')
               AND n.nspname NOT LIKE 'pg_toast%'
             ORDER BY 2, 3
@@ -243,7 +247,7 @@ actor PostgresService {
         return Int(value ?? "") ?? 0
     }
 
-    /// Catalog queries equivalent to psql's `\d table`.
+    /// Catalog queries equivalent to psql's `\d table`; for a view also its definition (`\d+ view`).
     func describe(_ summary: TableSummary) async throws -> TableDescription {
         let oid = [summary.oid] as [String?]
         let columns = try await rows("""
@@ -302,30 +306,37 @@ actor PostgresService {
                                     names)[0].map { $0 ?? "" }
         var defaultSQL = "SELECT * FROM \(quoted[0]).\(quoted[1])"
         if quoted.count > 2 { defaultSQL += " ORDER BY " + quoted[2...].joined(separator: ", ") }
+        let viewDefinition = summary.isView
+            ? try await rows("SELECT pg_get_viewdef($1::text::oid, true)", oid).first?.first ?? nil
+            : nil
         return TableDescription(summary: summary, columns: columns, primaryKey: primaryKey, indexes: indexes,
                                 checks: checks, foreignKeys: foreignKeys, referencedBy: referencedBy,
-                                defaultSQL: defaultSQL)
+                                defaultSQL: defaultSQL, viewDefinition: viewDefinition)
     }
 
     // MARK: DB Table
 
     /// One page of the table: `limit` rows after skipping `offset`, in primary-key (or ctid) order.
     /// With `options`, the page is taken from the sorted and filtered rows; totalRows is then
-    /// the filtered count and unfilteredTotal the table's.
+    /// the filtered count and unfilteredTotal the table's. A view's rows come without row IDs, so the
+    /// grid is read-only; a plain view has no ctid either, so its rows keep the view's own order.
     func fetchGrid(_ description: TableDescription, limit: Int, offset: Int = 0,
                    options: GridQueryOptions = GridQueryOptions()) async throws -> GridData {
         let ref = description.summary.ref
-        let selectList = (["t.ctid::text"] + description.columns.map { "t." + quoteIdent($0.name) + "::text" })
+        let withRowIDs = !description.summary.isView
+        let selectList = ((withRowIDs ? ["t.ctid::text"] : []) + description.columns.map { "t." + quoteIdent($0.name) + "::text" })
             .joined(separator: ", ")
         // Qualified with "t." so filters and ORDER BY use the typed column, not its ::text output column.
         let expr = { (name: String) in "t." + quoteIdent(name) }
         var binds = SQLBinds()
         let whereSQL = GridSQL.whereClause(options, columns: description.columns, expr: expr, binds: &binds)
         // The key comes last so pages stay stable under a sort with repeated values.
-        let key = description.primaryKey.isEmpty ? ["t.ctid"] : description.primaryKey.map(expr)
+        let key = !description.primaryKey.isEmpty ? description.primaryKey.map(expr)
+            : description.summary.isPlainView ? [] : ["t.ctid"]
         let orderBy = ([GridSQL.orderTerm(options, expr: expr)].compactMap { $0 } + key).joined(separator: ", ")
         let from = "\(ref.qualifiedSQL) AS t\(whereSQL)"
-        let result = try await rows("SELECT \(selectList) FROM \(from) ORDER BY \(orderBy) LIMIT \(max(1, limit)) OFFSET \(max(0, offset))",
+        let orderSQL = orderBy.isEmpty ? "" : " ORDER BY \(orderBy)"
+        let result = try await rows("SELECT \(selectList) FROM \(from)\(orderSQL) LIMIT \(max(1, limit)) OFFSET \(max(0, offset))",
                                     binds.values)
         let unfiltered = try await exactRowCount(ref)
         let total = whereSQL.isEmpty
@@ -334,8 +345,8 @@ actor PostgresService {
         return GridData(description: description,
                         title: ref.displayName,
                         columns: description.columns,
-                        rows: result.map { Array($0.dropFirst()) },
-                        rowIDs: result.map { $0[0] ?? "" },
+                        rows: withRowIDs ? result.map { Array($0.dropFirst()) } : result,
+                        rowIDs: withRowIDs ? result.map { $0[0] ?? "" } : [],
                         totalRows: total,
                         offset: max(0, offset),
                         options: options,

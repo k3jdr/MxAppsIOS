@@ -2,9 +2,9 @@
 //  DatabaseModels.swift
 //  MxDataSQL
 //
-//  Value types describing what was read from PostgreSQL: the table, function
-//  and procedure list, a psql-style table description (\d), a function's code
-//  (\sf) and the rows shown in the grid.
+//  Value types describing what was read from PostgreSQL: the table, view,
+//  function and procedure list, a psql-style table or view description (\d),
+//  a function's code (\sf) and the rows shown in the grid.
 //
 
 import Foundation
@@ -23,6 +23,10 @@ nonisolated struct TableSummary: Identifiable, Hashable, Sendable {
     var name: String { ref.name }
     /// Exact count when known, otherwise the planner estimate.
     var displayRows: Int { exactRows ?? estimatedRows }
+    /// A view or materialized view: listed with the tables, opened read-only.
+    var isView: Bool { kind == "view" || kind == "materialized view" }
+    /// A plain view: no storage, row estimate or row IDs (ctid).
+    var isPlainView: Bool { kind == "view" }
 }
 
 /// A function or procedure listed in DB Table Selection (not aggregates, window functions or extensions' functions).
@@ -60,12 +64,13 @@ nonisolated struct RoutineDefinition: Sendable {
 enum CatalogKind: String, CaseIterable, Identifiable {
     case all = "All"
     case tables = "Tables"
+    case views = "Views"
     case functions = "Functions"
     case procedures = "Procedures"
     var id: String { rawValue }
 }
 
-/// A row of the DB Table Selection list: a table, or a function or procedure.
+/// A row of the DB Table Selection list: a table or view, or a function or procedure.
 nonisolated enum CatalogEntry: Identifiable, Hashable, Sendable {
     case table(TableSummary)
     case routine(RoutineSummary)
@@ -82,7 +87,7 @@ nonisolated enum CatalogEntry: Identifiable, Hashable, Sendable {
         case .routine(let r): r.schema
         }
     }
-    /// Table name, or the routine's name with its arguments.
+    /// Table or view name, or the routine's name with its arguments.
     var name: String {
         switch self {
         case .table(let t): t.name
@@ -97,7 +102,7 @@ nonisolated enum CatalogEntry: Identifiable, Hashable, Sendable {
     }
     var symbol: String {
         switch self {
-        case .table: "tablecells"
+        case .table(let t): t.isPlainView ? "eye" : t.isView ? "square.stack.3d.up" : "tablecells"
         case .routine(let r): r.isProcedure ? "gearshape" : "function"
         }
     }
@@ -131,14 +136,26 @@ nonisolated struct TableDescription: Sendable {
     var referencedBy: [String]
     /// `SELECT * FROM schema.table ORDER BY <primary key>`, identifiers quoted by the server.
     var defaultSQL: String
+    /// A view's SELECT (pg_get_viewdef); nil for a table.
+    var viewDefinition: String? = nil
 
     func column(named name: String) -> ColumnInfo? {
         columns.first { $0.name == name }
     }
 
-    /// Text laid out like the output of psql's `\d table`.
+    /// Text laid out like the output of psql's `\d table`; for a view, `\d+ view` with its definition.
     var psqlText: String {
-        let kindTitle = summary.kind == "partitioned table" ? "Partitioned table" : "Table"
+        psqlSummary + (viewDefinition.map { "View definition:\n" + $0 } ?? "")
+    }
+
+    /// psqlText without a view's definition.
+    var psqlSummary: String {
+        let kindTitle = switch summary.kind {
+        case "partitioned table": "Partitioned table"
+        case "view": "View"
+        case "materialized view": "Materialized view"
+        default: "Table"
+        }
         var out = "\(kindTitle) \"\(summary.ref.displayName)\"\n"
         let headers = ["Column", "Type", "Collation", "Nullable", "Default"]
         let body = columns.map { [$0.name, $0.type, $0.collation, $0.notNull ? "not null" : "", $0.defaultExpr] }

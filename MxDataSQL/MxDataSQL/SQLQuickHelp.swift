@@ -41,9 +41,9 @@ enum SQLHelp {
         case .tableSelection:
             return QuickHelpItem(title: "DB Table Selection",
                                  detail: "The database's tables with their rows (~ means estimated from the planner's statistics, until Count Rows) and sizes, "
-                                    + "then its functions and procedures. Select a table for its \\d description on the right — columns, keys, indexes, references; "
-                                    + "double-click it or Open Table (↩) to open it in DB Table, or in a window of its own with Open in New Window. "
-                                    + "Select a function or procedure for its code.",
+                                    + "then its views, functions and procedures. Select a table or view for its \\d description on the right — columns, keys, indexes, "
+                                    + "references, a view's definition; double-click it or Open Table (↩) to open it in DB Table, or in a window of its own with "
+                                    + "Open in New Window (views open read-only). Select a function or procedure for its code.",
                                  symbol: "list.bullet.rectangle")
         case .table:
             return QuickHelpItem(title: "DB Table",
@@ -86,6 +86,15 @@ enum SQLHelp {
                                      symbol: r.isProcedure ? "gearshape" : "function")
             }
             guard let t = session.highlightedEntry?.table else { return nil }
+            if t.isView {
+                let rows = t.exactRows.map { "\($0.formatted()) rows" }
+                    ?? (t.isPlainView ? "rows not counted yet" : "about \(t.displayRows.formatted()) rows")
+                let size = t.totalSize.isEmpty ? "" : ", \(t.totalSize)"
+                return QuickHelpItem(title: "\(t.schema).\(t.name)",
+                                     detail: "\(t.kind.prefix(1).uppercased() + t.kind.dropFirst()), \(rows)\(size). Its columns and definition are on the right; "
+                                        + "double-click or Open View (↩) opens its rows, read-only.",
+                                     symbol: t.isPlainView ? "eye" : "square.stack.3d.up")
+            }
             let rows = (t.exactRows == nil ? "about " : "") + t.displayRows.formatted() + " rows"
             let key = session.highlightedDescription.map { $0.primaryKey.isEmpty ? " No primary key." : " Key: \($0.primaryKey.joined(separator: ", "))." } ?? ""
             return QuickHelpItem(title: "\(t.schema).\(t.name)",
@@ -98,6 +107,7 @@ enum SQLHelp {
             return QuickHelpItem(title: grid.title,
                                  detail: facts.joined(separator: " · ") + ".\n"
                                     + (grid.isEditable ? "Editable: double-click a cell or press Return to change it."
+                                       : grid.description?.summary.isView == true ? "Read-only: a view's rows change with the tables it reads from."
                                        : "Read-only: query one table with SELECT * (any WHERE / ORDER BY), or include its primary key columns, to edit rows."),
                                  symbol: "tablecells")
         case .connection:
@@ -114,14 +124,15 @@ enum SQLHelp {
 
     static let resizeBar = QuickHelpItem(title: "Resize Bar", detail: "Drag to give the SQL box more or less room; double-click to reset it.", symbol: "arrow.up.and.down")
 
-    static let tableList = QuickHelpItem(title: "Tables, Functions and Procedures",
-                                         detail: "The tables (partitioned ones too) by schema with their rows and size, then the functions and procedures with their arguments "
-                                            + "(not aggregates, nor the functions extensions install). Select a table for its description, a function or procedure for its code; "
-                                            + "double-click a table to open it.",
+    static let tableList = QuickHelpItem(title: "Tables, Views, Functions and Procedures",
+                                         detail: "The tables (partitioned ones too) by schema with their rows and size, then the views (materialized ones too), then the functions "
+                                            + "and procedures with their arguments (not aggregates, nor the functions extensions install). Select a table or view for its "
+                                            + "description, a function or procedure for its code; double-click a table or view to open it.",
                                          symbol: "list.bullet")
 
     static let describe = QuickHelpItem(title: "Description",
-                                        detail: "The highlighted table as psql's \\d shows it: columns with types, collation, nullability and defaults, then indexes, checks, foreign keys and the tables that reference it. Select text to copy it.",
+                                        detail: "The highlighted table as psql's \\d shows it: columns with types, collation, nullability and defaults, then indexes, checks, foreign keys and the tables that reference it. "
+                                            + "For a view, its columns and its definition (psql's \\d+), coloured like the SQL box. Select text to copy it.",
                                         symbol: "doc.plaintext")
 
     static let routineCode = QuickHelpItem(title: "Code",
