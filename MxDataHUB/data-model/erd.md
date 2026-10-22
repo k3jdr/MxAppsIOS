@@ -389,9 +389,10 @@ portfolios.
 
 ## Cross-application references
 
-| From | To | How |
-|---|---|---|
-| MxPortMGR `pmg.account.srm_code` | `srm.portfolio.code` | by code (no FK; `pmg` installs without `srm`) |
-| MxPortMGR `pmg.security.srm_security_id` | `srm.security.security_id` | cached copy of a security-master security |
+
+| From                                                      | To                                          | How                                                           |
+| ----------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------- |
+| MxPortMGR `pmg.account.srm_code`                          | `srm.portfolio.code`                        | by code (no FK; `pmg` installs without `srm`)                 |
+| MxPortMGR `pmg.security.srm_security_id`                  | `srm.security.security_id`                  | cached copy of a security-master security                     |
 | MxJobsWMS `wms.job_run.portfolio_code` / `benchmark_code` | `srm.portfolio.code` / `srm.benchmark.code` | by code, from `mxjobswms://sample/<id>?portfolio=&benchmark=` |
-| accounts service (8774) | `srm.portfolio`, `srm.portfolio_tax_lot` | writes MxPortMGR's My Portfolio |
+| accounts service (8774)                                   | `srm.portfolio`, `srm.portfolio_tax_lot`    | writes MxPortMGR's My Portfolio                               |
