@@ -17,6 +17,8 @@ struct MxNoteONEApp: App {
     var body: some Scene {
         Window("MxNoteONE", id: "main") {
             MainView()
+                // mxnoteone:// links from other apps (MxPortMGR's symbol and company links, a browser…).
+                .onOpenURL { NotebookStore.shared.openExternalLink($0) }
         }
         .defaultSize(width: 1380, height: 860)
         .defaultLaunchBehavior(.presented)

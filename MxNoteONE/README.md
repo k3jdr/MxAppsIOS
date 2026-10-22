@@ -222,6 +222,12 @@ Section and New Section Group. Right-click a page for its own menu.
   link them, paste with nothing selected to put in the target's name as the link, or paste the address into ⌘K's
   Address. Clicking a link opens the place (a paragraph link scrolls to the paragraph and selects it, and still finds
   it after edits move it; a cell link selects the cell). A web address on the clipboard pastes as a link the same way.
+- **Links from other apps**: `mxnoteone://` links open in MxNoteONE from anywhere — the app registers the scheme
+  (`Info.plist`). Paste a copied link into MxPortMGR's Link dialog (*Use the Link Copied in MxNoteONE*, on an earnings
+  company's symbol or name, or a holding), a browser's address bar, or Terminal (`open 'mxnoteone://…'`): MxNoteONE
+  comes forward — loading its open notebooks first if it was just launched for the link — and goes where the link
+  leads, as a click on it inside does (page, paragraph, cell, pin, section or notebook). A link into a notebook that
+  isn't open, or to a deleted page, says so.
 - **Links**: type `[[Page Name]]` to link to a page in the notebook (it is created if it doesn't exist), or use ⌘K for
   web links and links to any page. **Edit Link**: with the caret in a link, ⌘K (or right-click the link ▸ Edit Link…)
   opens the dialog with the link's text and address filled in — change either and Update, or Remove Link. Right-click
