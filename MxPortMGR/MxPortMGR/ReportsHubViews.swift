@@ -118,8 +118,18 @@ struct ReportLibraryView: View {
                 }
             }
             Spacer(minLength: 0)
-            Button("Open Walkthrough") { store.openReport(r.id) }
-                .help("Read this report and simulate your reaction")
+            HStack(spacing: 10) {
+                Button("Open Walkthrough") { store.openReport(r.id) }
+                    .help("Read this report and simulate your reaction")
+                if let source = r.sources.first {
+                    Link(destination: source.url) {
+                        Label("\(source.publisher): \(source.title)", systemImage: "arrow.up.right.square").lineLimit(1)
+                    }
+                    .font(.callout)
+                    .help("The real report, from \(source.publisher): \(source.address)")
+                    .quickHelp("Official Source", "Opens the real \(r.title) — \(source.title), from \(source.publisher) — in your browser. The walkthrough's numbers are illustrative; its first step lists every official page (release, schedule, history).", symbol: "arrow.up.right.square")
+                }
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 210, alignment: .topLeading)

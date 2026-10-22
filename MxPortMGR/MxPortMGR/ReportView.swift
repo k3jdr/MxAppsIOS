@@ -138,6 +138,7 @@ struct ReportView: View {
                 }
                 .font(.callout)
             }
+            RealReportBox(store: store, report: report)
             Text("Read it the way the market does: point at each line for what it measures, then go on to Reading It.").font(.callout).foregroundStyle(.secondary)
         }
     }
@@ -485,3 +486,40 @@ struct LongRunView: View {
         }
     }
 }
+
+/// The real report behind the illustrative one: the publisher's latest release, its schedule and its history — and,
+/// for the earnings reports, MxPortMGR's own screens with real companies.
+struct RealReportBox: View {
+    @Bindable var store: PortStore
+    var report: MarketReport
+
+    var body: some View {
+        Box(title: "The real report", symbol: "arrow.up.right.square",
+            help: "The publisher's own pages for the actual \(report.title): the latest release, when the next one comes out, and its history. This walkthrough's numbers are made up to teach.") {
+            Text("This walkthrough uses illustrative numbers. Read the actual \(report.title) at its source:")
+                .font(.callout).foregroundStyle(.secondary)
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+                ForEach(report.sources) { s in
+                    GridRow {
+                        Label(s.kind.rawValue, systemImage: s.kind.symbol).font(.caption).foregroundStyle(.secondary)
+                        Link(s.title, destination: s.url)
+                            .help(s.address)
+                            .quickHelp(s.title, "\(s.kind.rawValue) from \(s.publisher) — opens \(s.address) in your browser.", symbol: s.kind.symbol)
+                        Text(s.publisher).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .font(.callout)
+            if report.id == "earnings" || report.id == "revisions" {
+                HStack(spacing: 10) {
+                    Button { store.openEarningsDay(EarningsDates.today()) } label: { Label("Earnings by Day", systemImage: "list.bullet.rectangle") }
+                        .help("Every company reporting today, with estimates and results (Nasdaq.com and FMP)")
+                    Button { store.go(.earningsCalendar) } label: { Label("Earnings Calendar", systemImage: "calendar") }
+                        .help("Real earnings reports by month or week")
+                    Text("Real companies' reports, in MxPortMGR.").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+

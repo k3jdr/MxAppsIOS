@@ -130,7 +130,8 @@ markets within seconds, others shape positioning over weeks or months.
 * **Report Library** — every report by tier as a card (publisher, schedule, key metrics, why PMs care, the price
   drivers it moves, typical impact), **If you had to pick five** (CPI, Nonfarm Payrolls, FOMC, earnings and guidance,
   ISM PMI — together they drive expectations for growth, inflation, interest rates and profits, the four primary
-  determinants of asset prices), and a report × driver matrix.
+  determinants of asset prices), and a report × driver matrix. Each card links to the **real report** at its
+  publisher (the latest release: BLS, the Federal Reserve, BEA, ISM, the Census Bureau, CFTC, ICI, TreasuryDirect…).
 * **Morning Briefing** — an illustrative morning's ten items: overnight markets, Treasury yield changes (with the
   2Y–10Y and 3M–10Y spreads), the economic calendar (consensus, prior, impact; each release opens its walkthrough),
   an economic surprise index, Fed funds futures probabilities, analyst upgrades and downgrades (fictional firms),
@@ -169,7 +170,12 @@ the time of day the time from an earlier one is kept (marked ↺) — so times s
 * **Report Walkthrough** — one report at a time (the sidebar row shows which; the **Report** menu at the top of the
   page or the Reports menu picks another), in seven steps — **The Report** (with *About this report*), **Reading It**,
   **The Market's Move** (with a context chart: core CPI by month, ISM against its 50 line, auction tails, weekly
-  flows…), **Your Account**, **Your Reaction**, **The Long Run**, **Takeaways**.
+  flows…), **Your Account**, **Your Reaction**, **The Long Run**, **Takeaways**. The walkthroughs teach with
+  illustrative numbers; **The Report**'s *The real report* box links to the actual one: the publisher's latest
+  release, its release schedule, and its history (FRED for the economic series) or live data (CME FedWatch, Treasury
+  yields, Freddie Mac mortgage rates), and for the earnings reports MxPortMGR's own Earnings by Day and Earnings
+  Calendar. The addresses (`ReportSources.swift`) were checked in a browser on 2026-10-22; OPEC's monthly report is
+  left out because its site puts up a bot check.
 
 | Tier | Report | The illustrative release | Written for |
 | --- | --- | --- | --- |
@@ -329,6 +335,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | Built-in engines and the Layer 3 service client |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing |
+| `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
 | `SecurityLinks.swift`, `LinkHover.swift`, `LinkTips.swift` | Links on symbols and names: the links kept on this Mac, the linked cell, the Link dialog and its pages about a security; the hover card; the hover text and its editor (after MxNoteONE's) |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; My Portfolio's steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
