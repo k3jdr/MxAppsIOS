@@ -19,6 +19,8 @@ struct SplitPanes<Leading: View, Trailing: View>: View {
     private let leading: Leading
     private let trailing: Trailing
     @AppStorage private var width: Double
+    /// The width while the divider is dragged; saved to `width` when the drag ends.
+    @State private var dragWidth: Double?
 
     /// `id` names the remembered width; `widths` is the leading pane's minimum and maximum, `ideal` its first width.
     init(id: String, widths: ClosedRange<Double>, ideal: Double, trailingMinimum: Double,
@@ -35,12 +37,16 @@ struct SplitPanes<Leading: View, Trailing: View>: View {
             let upper = max(widths.lowerBound,
                             min(widths.upperBound, Double(geometry.size.width) - trailingMinimum - SplitHandle.width))
             let range = widths.lowerBound...upper
+            let shown = min(max(dragWidth ?? width, range.lowerBound), range.upperBound)
             HStack(spacing: 0) {
                 leading
-                    .frame(width: min(max(width, range.lowerBound), range.upperBound))
+                    .frame(width: shown)
                     .frame(maxHeight: .infinity)
                     .clipped()
-                SplitHandle(width: $width, range: range)
+                SplitHandle(width: shown, range: range) { dragWidth = $0 } ended: {
+                    if let dragWidth { width = dragWidth }
+                    dragWidth = nil
+                }
                 trailing
                     .fixedColumnMinimum(width: trailingMinimum, height: 0)
             }
@@ -48,12 +54,15 @@ struct SplitPanes<Leading: View, Trailing: View>: View {
     }
 }
 
-/// The divider between two panes: drag it to give either more room.
+/// The divider between two panes: drag it to give either more room. The drag is measured in window coordinates:
+/// measured in the divider's own, which moves with every step, the width see-sawed and the panes flickered.
 struct SplitHandle: View {
     static let width = 7.0
 
-    @Binding var width: Double
+    var width: Double
     var range: ClosedRange<Double>
+    var changed: (Double) -> Void
+    var ended: () -> Void
     @State private var dragStart: Double?
 
     var body: some View {
@@ -63,15 +72,16 @@ struct SplitHandle: View {
             .padding(.horizontal, (Self.width - 1) / 2)
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-            }
-            .gesture(DragGesture(minimumDistance: 1)
+            .pointerStyle(.columnResize)
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { drag in
                     let start = dragStart ?? width
                     dragStart = start
-                    width = min(max(start + drag.translation.width, range.lowerBound), range.upperBound)
+                    changed(min(max(start + drag.translation.width, range.lowerBound), range.upperBound))
                 }
-                .onEnded { _ in dragStart = nil })
+                .onEnded { _ in
+                    dragStart = nil
+                    ended()
+                })
     }
 }

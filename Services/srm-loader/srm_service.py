@@ -120,15 +120,17 @@ class ActivityLog:
         self.runs = 0
         self.current = None
 
-    def add(self, text, level=None, loader=None, run=None, event=None):
+    def add(self, text, level=None, loader=None, run=None, event=None, **fields):
+        """`fields`: name on run events, status and seconds on the -end events, for clients that show them."""
         if level is None:
             # srm.py's -v / -vv detail lines are tagged; they never count as warnings or errors.
             level = ("debug" if DEBUG_LINE.match(text) else "error" if ERROR_LINE.search(text)
                      else "warning" if WARNING_LINE.search(text) else "info")
         with self.lock:
             self.seq += 1
-            self.entries.append({"seq": self.seq, "time": dt.datetime.now().isoformat(timespec="milliseconds"),
-                                 "level": level, "loader": loader, "run": run, "event": event, "text": text})
+            self.entries.append(dict({"seq": self.seq, "time": dt.datetime.now().isoformat(timespec="milliseconds"),
+                                      "level": level, "loader": loader, "run": run, "event": event, "text": text},
+                                     **fields))
 
     def start_run(self, name, loaders, category=None, dry=False, verbosity=0):
         with self.lock:
@@ -138,9 +140,9 @@ class ActivityLog:
             if not (dry and self.current and not self.current["dryRun"]):
                 self.current = {"run": run, "category": category, "name": name, "loaders": list(loaders),
                                 "loader": None, "index": 0, "dryRun": dry, "started": time.time(), "loaderStarted": None}
-        detail = {1: " (verbose)", 2: " (trace)"}.get(verbosity, "")
-        self.add("%s %s%s: %s" % ("Preview" if dry else "Refresh", name, detail, ", ".join(loaders)), "info", run=run,
-                 event="run-start")
+        detail = {1: ", verbose", 2: ", trace"}.get(verbosity, "")
+        self.add("%s started: %s (%s%s)" % ("Preview" if dry else "Refresh", name, ", ".join(loaders), detail), "info",
+                 run=run, event="run-start", name=name)
         return run
 
     def start_loader(self, run, loader):
@@ -150,8 +152,9 @@ class ActivityLog:
                                     if loader in self.current["loaders"] else 0, loaderStarted=time.time())
 
     def end_run(self, run, name, status, seconds):
-        self.add("%s: %s in %.1f s" % (name, status, seconds), "error" if status == "failed" else
-                 "warning" if status in ("partial", "no-run") else "info", run=run, event="run-end")
+        self.add("Refresh finished: %s — %s in %.1f s" % (name, status, seconds), "error" if status == "failed" else
+                 "warning" if status in ("partial", "no-run") else "info", run=run, event="run-end",
+                 name=name, status=status, seconds=seconds)
         with self.lock:
             if self.current and self.current["run"] == run:
                 self.current = None
@@ -483,9 +486,9 @@ def run_loader(loader, q, dry=False, run=None):
     command = [sys.executable, "srm.py", "load", loader] + options(q)
     ACTIVITY.start_loader(run, loader)
     if dry:
-        ACTIVITY.add("would run: " + " ".join(command[1:]), "info", loader, run, "loader-start")
+        ACTIVITY.add("%s preview — would run: %s" % (loader, " ".join(command[1:])), "info", loader, run, "loader-start")
         return {"loader": loader, "status": "dry-run", "dryRun": True, "command": " ".join(command[1:]), "runs": []}
-    ACTIVITY.add(" ".join(command[1:]), "info", loader, run, "loader-start")
+    ACTIVITY.add("%s started: %s" % (loader, " ".join(command[1:])), "info", loader, run, "loader-start")
     before = Handler.srm.max_load_id()
     started = time.time()
     timeout = int(q.get("timeout", 3000))
@@ -514,11 +517,11 @@ def run_loader(loader, q, dry=False, run=None):
     totals = {k: sum(r[k] or 0 for r in runs) for k in
               ("rows_read", "rows_inserted", "rows_updated", "rows_rejected", "api_calls")}
     seconds = round(time.time() - started, 1)
-    ACTIVITY.add("%s %s in %.1f s (exit %d): read %d, inserted %d, updated %d, rejected %d, API calls %d"
+    ACTIVITY.add("%s finished: %s in %.1f s (exit %d) — read %d, inserted %d, updated %d, rejected %d, API calls %d"
                  % (loader, status, seconds, exit_code, totals["rows_read"], totals["rows_inserted"],
                     totals["rows_updated"], totals["rows_rejected"], totals["api_calls"]),
                  "error" if status == "failed" else "warning" if status in ("partial", "no-run") else "info",
-                 loader, run, "loader-end")
+                 loader, run, "loader-end", status=status, seconds=seconds)
     return {
         "loader": loader, "status": status, "exitCode": exit_code,
         "seconds": seconds, "command": " ".join(command[1:]),

@@ -62,6 +62,10 @@ struct ActivityEntry: Decodable, Identifiable, Hashable {
     /// run-start, run-end, loader-start, loader-end; nil for a loader's own output
     var event: String?
     var text: String
+    /// The refresh's name on run events; the outcome and its time on the -end events.
+    var name: String?
+    var status: String?
+    var seconds: Double?
 
     var id: Int { seq }
     /// HH:mm:ss of the ISO time.
@@ -149,9 +153,14 @@ final class RefreshStore {
         await load()
     }
 
-    /// What the service logged since the last poll (GET /log?after=).
+    private var polling = false
+
+    /// What the service logged since the last poll (GET /log?after=). One poll at a time: Refresh polls once more
+    /// when it ends, and two polls from the same point appended the same lines twice.
     func pollActivity() async {
-        guard let url = URL(string: base + "/log?after=\(lastSeq)") else { return }
+        guard !polling, let url = URL(string: base + "/log?after=\(lastSeq)") else { return }
+        polling = true
+        defer { polling = false }
         do {
             let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 5))
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return }
@@ -160,9 +169,10 @@ final class RefreshStore {
                 // The service restarted and numbers its log from 1 again.
                 activity = []
                 lastSeq = 0
+                polling = false
                 return await pollActivity()
             }
-            activity.append(contentsOf: page.entries)
+            activity.append(contentsOf: page.entries.filter { $0.seq > lastSeq })
             if activity.count > 20000 { activity.removeFirst(activity.count - 20000) }
             lastSeq = page.last
             current = page.running
@@ -180,8 +190,14 @@ final class RefreshStore {
         }
     }
 
+    /// Which category Refresh All is on, for the header.
+    var allProgress: (index: Int, total: Int)?
+
     func refreshAll() async {
-        for c in categories where c.optional != true {
+        let all = categories.filter { $0.optional != true }
+        defer { allProgress = nil }
+        for (i, c) in all.enumerated() {
+            allProgress = (i + 1, all.count)
             await refresh(c.id)
             if results.first?.status == "failed" { break }
         }
@@ -255,7 +271,11 @@ struct DataRefreshView: View {
             Button {
                 Task { await refresh.refreshAll() }
             } label: {
-                Label("Refresh All", systemImage: "arrow.triangle.2.circlepath")
+                if let all = refresh.allProgress {
+                    Label("Refreshing \(all.index) of \(all.total)…", systemImage: "arrow.triangle.2.circlepath")
+                } else {
+                    Label("Refresh All", systemImage: "arrow.triangle.2.circlepath")
+                }
             }
             .disabled(refresh.running != nil || refresh.categories.isEmpty)
             .help("Every category in dependency order, except the optional ones; stops at the first failure")
@@ -286,14 +306,15 @@ struct DataRefreshView: View {
             Section {
                 ForEach(refresh.categories) { category in
                     // A load the service runs for someone else (MxJobsWMS, another window) counts too.
-                    CategoryRow(category: category,
-                                running: refresh.running == category.id || refresh.current?.category == category.id,
+                    let running = refresh.running == category.id || refresh.current?.category == category.id
+                    CategoryRow(category: category, running: running,
                                 busy: refresh.running != nil || refresh.current.map { !$0.dryRun } == true) {
                         Task {
                             await refresh.refresh(category.id)
                             if store.isConnected { await store.loadAudit() }
                         }
                     }
+                    .listRowBackground(running ? Color.accentColor.opacity(0.14) : nil)
                 }
             } header: {
                 Text("In dependency order — later categories use the earlier ones")
@@ -352,7 +373,7 @@ private struct ActivityPanel: View {
                     .quickHelp("Load History", "Goes to Load History: every loader run (srm.load_run) with its rows and rejects, identifier coverage and the sources. Needs the database connection (DB Connection).", symbol: "tray.and.arrow.down")
             }
             .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 6)
-            runningNow
+            statusStrip
             HStack(spacing: 6) {
                 Picker("Level", selection: $level) {
                     ForEach(Level.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -393,27 +414,69 @@ private struct ActivityPanel: View {
         }
     }
 
-    /// What the service runs now, with the loader and the time it has taken so far.
+    /// Always says what the service is doing: running a refresh (with its loader, a bar by loaders done, the latest
+    /// line and the time so far), else how the last refresh ended, else that it is idle.
     @ViewBuilder
-    private var runningNow: some View {
+    private var statusStrip: some View {
         if let run = refresh.current {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("\(run.dryRun ? "Previewing" : "Running") \(run.name)").font(.callout.weight(.semibold)).lineLimit(1)
-                    if let loader = run.loader {
-                        Text("\(loader) · \(run.index) of \(run.loaders.count)").font(.callout.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(run.dryRun ? "PREVIEWING" : "RUNNING")
+                            .font(.caption.weight(.bold)).foregroundStyle(.white)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 4))
+                        Text(run.name).font(.headline).lineLimit(1)
+                        Spacer()
+                        Text(Duration.seconds(max(0, context.date.timeIntervalSince1970 - run.started))
+                            .formatted(.time(pattern: .hourMinuteSecond)))
+                            .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    Text(Duration.seconds(max(0, context.date.timeIntervalSince1970 - run.started))
-                        .formatted(.time(pattern: .hourMinuteSecond)))
-                        .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                    ProgressView(value: Double(max(run.index - 1, 0)), total: Double(max(run.loaders.count, 1)))
+                    HStack(spacing: 6) {
+                        if let loader = run.loader {
+                            Text("\(loader) · loader \(run.index) of \(run.loaders.count)").font(.caption.monospaced())
+                        }
+                        if let latest = refresh.activity.last(where: { $0.run == run.run && $0.event == nil }) {
+                            Text(latest.text).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.tail)
+                        }
+                    }
                 }
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Color.accentColor.opacity(0.1))
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.12))
+                .overlay(alignment: .leading) { Rectangle().fill(Color.accentColor).frame(width: 3) }
             }
-            .quickHelpArea("Running Now", "The refresh or load the SRM loader service is running — from here, another window or MxJobsWMS — its current loader and how long it has run.",
-                           symbol: "bolt.horizontal")
+            .quickHelpArea("Running Now", "The refresh the SRM loader service is running — from here, another window or MxJobsWMS: its current loader, "
+                           + "a bar by loaders finished, the latest line it printed and how long it has run.", symbol: "bolt.horizontal")
+        } else if let end = refresh.activity.last(where: { $0.event == "run-end" }) {
+            let status = end.status ?? (end.level == "error" ? "failed" : end.level == "warning" ? "partial" : "succeeded")
+            HStack(spacing: 8) {
+                Image(systemName: status == "succeeded" ? "checkmark.circle.fill" : status == "failed" ? "xmark.octagon.fill"
+                      : status == "dry-run" ? "eye.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(StateBadge.color(status))
+                Text("Last refresh: \(end.name ?? "") — \(status)" + (end.seconds.map { " in \($0.formatted()) s" } ?? ""))
+                    .font(.callout.weight(.semibold)).lineLimit(1)
+                Text("ended \(end.clock)").font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                if let run = end.run, runFilter != run {
+                    Button("Show Its Lines") { runFilter = run }
+                        .controlSize(.small)
+                        .quickHelp("Show Its Lines", "Shows only that refresh's lines (Run ▸ All runs shows everything again).")
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(StateBadge.color(status).opacity(0.12))
+            .overlay(alignment: .leading) { Rectangle().fill(StateBadge.color(status)).frame(width: 3) }
+            .quickHelpArea("Last Refresh", "Nothing is running. How the last refresh ended, when, and how long it took.", symbol: "flag.checkered")
+        } else {
+            HStack(spacing: 6) {
+                Image(systemName: "moon.zzz").foregroundStyle(.secondary)
+                Text("Idle — no refresh is running").font(.callout).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
         }
     }
 
@@ -448,11 +511,10 @@ private struct ActivityPanel: View {
     private var runs: [(run: Int, label: String)] {
         var ends: [Int: String] = [:]
         for e in refresh.activity where e.event == "run-end" {
-            if let run = e.run { ends[run] = e.level == "error" ? "failed" : e.level == "warning" ? "with warnings" : "done" }
+            if let run = e.run { ends[run] = e.status ?? (e.level == "error" ? "failed" : e.level == "warning" ? "with warnings" : "done") }
         }
         return refresh.activity.filter { $0.event == "run-start" && $0.run != nil }.reversed().map { e in
-            let name = e.text.split(separator: ":").first.map(String.init) ?? e.text
-            return (e.run!, "\(e.clock) \(name) — \(ends[e.run!] ?? "running")")
+            (e.run!, "\(e.clock) \(e.name ?? e.text) — \(ends[e.run!] ?? "running")")
         }
     }
 
@@ -541,36 +603,69 @@ private struct ActivityConsole: NSViewRepresentable {
         return style
     }()
 
+    private static let headerFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
+    /// A rule across the console: a tab out past the edge, struck through, clipped at the edge. Copies as one tab.
+    private static let rule: NSAttributedString = {
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [NSTextTab(textAlignment: .left, location: 4000)]
+        style.lineBreakMode = .byClipping
+        style.paragraphSpacingBefore = 6
+        return NSAttributedString(string: "\t\n", attributes: [
+            .font: NSFont.systemFont(ofSize: 4), .paragraphStyle: style,
+            .strikethroughStyle: NSUnderlineStyle.thick.rawValue, .strikethroughColor: NSColor.separatorColor])
+    }()
+
+    /// One line; a refresh's END line has a rule below it, between it and the next refresh.
     private static func format(_ entry: ActivityEntry) -> NSAttributedString {
         let line = NSMutableAttributedString()
         func add(_ text: String, _ color: NSColor, _ font: NSFont = Self.font) {
             line.append(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]))
         }
+        let isRun = entry.event == "run-start" || entry.event == "run-end"
         let loader = entry.loader.map { $0.count > 20 ? String($0.prefix(19)) + "…" : $0 } ?? ""
         add(entry.clock + "\t", .tertiaryLabelColor)
-        add(mark(entry) + "\t", markColor(entry))
+        add(mark(entry) + "\t", markColor(entry), entry.event == nil ? font : boldFont)
         add(loader + "\t", .secondaryLabelColor)
-        add(entry.text + "\n",
-            entry.level == "error" ? .systemRed : entry.level == "debug" ? .secondaryLabelColor : .labelColor,
-            entry.event == nil ? font : boldFont)
+        add(entry.text + "\n", textColor(entry), isRun ? headerFont : entry.event == nil ? font : boldFont)
+        if entry.event == "run-end" { line.append(rule) }
         return line
     }
 
     private static func mark(_ entry: ActivityEntry) -> String {
         switch entry.event {
-        case "run-start", "loader-start": "▶"
-        case "run-end", "loader-end": "■"
+        case "run-start": "START"
+        case "run-end": "END"
+        case "loader-start": "▶"
+        case "loader-end": ["succeeded": "✓", "failed": "✗", "dry-run": "·"][entry.status ?? ""] ?? "!"
         default: ["error": "ERR", "warning": "WARN", "debug": "DBG"][entry.level] ?? ""
         }
     }
 
-    private static func markColor(_ entry: ActivityEntry) -> NSColor {
-        switch entry.level {
-        case "error": .systemRed
-        case "warning": .systemOrange
-        case "debug": .tertiaryLabelColor
-        default: entry.event != nil ? .controlAccentColor : .secondaryLabelColor
+    /// The outcome's colour on -end lines (green, red, orange, blue for a preview), else by level.
+    private static func outcomeColor(_ entry: ActivityEntry) -> NSColor? {
+        guard entry.event == "run-end" || entry.event == "loader-end" else { return nil }
+        switch entry.status ?? (entry.level == "error" ? "failed" : entry.level == "warning" ? "partial" : "succeeded") {
+        case "succeeded": return .systemGreen
+        case "failed": return .systemRed
+        case "dry-run": return .systemBlue
+        default: return .systemOrange
         }
+    }
+
+    private static func markColor(_ entry: ActivityEntry) -> NSColor {
+        if let outcome = outcomeColor(entry) { return outcome }
+        switch entry.level {
+        case "error": return .systemRed
+        case "warning": return .systemOrange
+        case "debug": return .tertiaryLabelColor
+        default: return entry.event != nil ? .controlAccentColor : .secondaryLabelColor
+        }
+    }
+
+    private static func textColor(_ entry: ActivityEntry) -> NSColor {
+        if entry.event == "run-end", let outcome = outcomeColor(entry) { return outcome }
+        if entry.event == "run-start" { return .controlAccentColor }
+        return entry.level == "error" ? .systemRed : entry.level == "debug" ? .secondaryLabelColor : .labelColor
     }
 }
 
@@ -587,7 +682,7 @@ private struct CategoryRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            StateBadge(state: category.state).frame(width: 70, alignment: .leading)
+            StateBadge(state: running ? "running" : category.state).frame(width: 70, alignment: .leading)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(category.name).font(.headline)
@@ -618,7 +713,7 @@ private struct CategoryRow: View {
             if running {
                 ProgressView().controlSize(.small)
             }
-            Button("Refresh", action: refresh)
+            Button(running ? "Running…" : "Refresh", action: refresh)
                 .disabled(busy)
                 .quickHelp("Refresh \(category.name)", "Runs " + category.loaders.map(\.loader).joined(separator: ", ") + " now through the SRM loader service; the result appears on the right.")
         }
@@ -652,7 +747,7 @@ struct StateBadge: View {
         case "fresh", "succeeded": .green
         case "due", "partial": .orange
         case "stale", "failed": .red
-        case "dry-run": .blue
+        case "dry-run", "running": .blue
         default: .gray
         }
     }
