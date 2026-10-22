@@ -95,6 +95,8 @@ struct ContentView: View {
         case .passiveBands: BandsView(store: store)
         case .reportLibrary: ReportLibraryView(store: store)
         case .morningBriefing: MorningBriefingView(store: store)
+        case .earningsCalendar: EarningsCalendarView(store: store)
+        case .earningsDay: EarningsDayView(store: store)
         case .reportWalkthrough: ReportView(store: store, report: store.currentReport)
         case .samples: SamplesView(store: store)
         case .services:
@@ -133,10 +135,15 @@ struct ContentView: View {
     }
 
     /// Launch arguments for testing and demos: `-screen activeOptimize -sample employer-stock`, and for a report
-    /// walkthrough `-screen reportWalkthrough -report cpi -reportStep 5` (0–6; 5 simulates the long run) with `-reaction sell-all`.
+    /// walkthrough `-screen reportWalkthrough -report cpi -reportStep 5` (0–6; 5 simulates the long run) with `-reaction sell-all`;
+    /// for the earnings screens `-earningsDate 2026-10-20` (Earnings by Day, and the month or week the calendar shows)
+    /// with `-earningsSymbol PG` (the company selected), and `-earningsMode Week`.
     private func start() {
         let defaults = UserDefaults.standard
         if let s = defaults.string(forKey: "screen").flatMap(Screen.init(rawValue:)) { store.screen = s }
+        if let d = defaults.string(forKey: "earningsDate"), d.count == 10 { store.earnings.date = d; store.earnings.anchor = d }
+        if let m = defaults.string(forKey: "earningsMode").flatMap(EarningsStore.Mode.init(rawValue:)) { store.earnings.mode = m }
+        if let symbol = defaults.string(forKey: "earningsSymbol") { store.earnings.selection = EarningsParse.key(symbol) }
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
         if defaults.string(forKey: "mySource") == "srm" { Task { await store.openSRMAccount(store.srmCode) } }
         if defaults.bool(forKey: "addSecurities") { store.go(.myPortfolio); store.addingSecurities = true }
@@ -163,7 +170,7 @@ struct StatusBar: View {
             Spacer()
             if let m = store.message { Text(m).foregroundStyle(.secondary).lineLimit(1) }
             if store.busy { ProgressView().controlSize(.small) }
-            EducationalBanner()
+            EducationalBanner(realData: store.screen == .earningsCalendar || store.screen == .earningsDay)
         }
         .font(.callout)
         .padding(.horizontal, 12)

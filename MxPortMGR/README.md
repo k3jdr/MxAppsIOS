@@ -6,8 +6,10 @@ rebalancing, attribution — matters before showing the numbers, and lets you si
 news cost over the long run.
 
 > **Educational only.** The companies, prices, reports and futures are illustrative — made up in the shape of real
-> ones. Nothing in MxPortMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell
-> anything. The status bar says so on every screen.
+> ones — except on the earnings screens (Market Reports ▸ Earnings Calendar and Earnings by Day), which show real
+> companies' reports as Nasdaq.com and FMP publish them, and in My Portfolio from the security master. Nothing in
+> MxPortMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
+> status bar says so on every screen.
 
 Sixth app in the MXcodeIDE family, next to MxJobsWMS, MxDataHUB, MxDataSQL, MxNoteONE and MxFileMGR. It re-implements
 MxDataHUB's portfolio optimization and attribution (which MxDataHUB hands to MxJobsWMS workflows and the Layer 3
@@ -36,7 +38,7 @@ gives both.
 | --- | --- |
 | **Guide** | Welcome ⌘0 · Choose Your Path · Learn the Why ▸ · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Model Portfolio steps 1–5 ⌘1–⌘5 and Model Type ▸ Active / Passive Index · Active Portfolio steps ⌘1–⌘5 · Passive Index Portfolio steps ⌥⌘1–⌥⌘5 · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize (Active) ⌘R · Build Index Tracker (Passive) ⇧⌘R · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
-| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
+| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) · Previous Step ⌘[ · Next Step ⌘] |
 
 ## The guide
@@ -168,7 +170,36 @@ markets within seconds, others shape positioning over weeks or months.
   an economic surprise index, Fed funds futures probabilities, analyst upgrades and downgrades (fictional firms),
   earnings releases (marked "you hold"), weekly fund flows, credit spreads and the VIX — with what the selected
   account would be worth if it opened with the futures. Each panel says what it measures and how a long-term investor
-  might use it.
+  might use it. Its earnings panel links to today's real list (Earnings by Day).
+* **Earnings Calendar** — real earnings reports by **month** or **week** (◀ ▶ and Today step through them). A month
+  cell shows the number of U.S.-listed companies reporting, for past days a bar and count of how many beat (green),
+  were in line (grey) or missed (red) the consensus EPS, and the largest names — coloured by result, or with a
+  sunrise / moon for before the open / after the close — with the companies you hold first. The week view lists each
+  weekday's 16 largest reports with the actual EPS (coloured) or the consensus. Under the grid, **This month / This
+  week**: reports listed, the share that beat on EPS and on revenue, how many are still to come, and the largest
+  reports still to come and already reported. Click a day (or a company) to open it in Earnings by Day.
+* **Earnings by Day** — every company reporting on the day picked (date field, ◀ ▶ weekdays, Today): symbol, company,
+  before the open / after the close, market cap, number of estimates, consensus and actual EPS with the surprise,
+  revenue estimate, actual and surprise. Tiles count the companies, the timing, EPS and revenue beats and misses
+  (or, for an upcoming day, how many have a consensus and the revenue expected) and the ones in your account. Filter
+  by symbol or name, time of day, *Also FMP-only listings* (OTC, foreign and preferred-share symbols only FMP lists)
+  and *Only my holdings*; sort by any column. Selecting a company shows this report in detail (Nasdaq.com's range of
+  estimates and four-week revisions, FMP's figures where they differ, a year earlier), an EPS chart of its last
+  twelve reports and the next one against the estimate, its recent revenue surprises, and Nasdaq.com's last four
+  surprises. *You hold* marks (a briefcase) need My Portfolio in the security master, whose tickers are real.
+
+#### Earnings sources and their limits
+
+| Piece | Source | Limits |
+| --- | --- | --- |
+| The day's companies, time of day, market cap, consensus EPS (Zacks) and number of estimates, actual EPS and % surprise | **Nasdaq.com earnings calendar** (`api.nasdaq.com/api/calendar/earnings?date=`), called directly by the app — free, no key | U.S.-listed companies only (up to about 600 on the busiest days); schedules a few weeks ahead (none in January 2027 when probed on 2026-10-22); history back years (2015 probed). Past listings drop the time of day and keep only companies with a result; results appear a day or so after the report. Market cap is today's, also on past days. No revenue. An unofficial public API: fetched three days at a time, and each listing is kept on this Mac |
+| Revenue estimate and actual, FMP's own EPS, OTC / foreign / preferred listings | **FMP earnings calendar** (`stable/earnings-calendar`) through the **accounts** service (`GET /earnings/calendar`, port 8774), which holds SRM's FMP key | The plan reaches back **12 months** (before that FMP answers 402) and several months ahead; at most 4,000 rows a call (the service fetches a week at a time); no company names or times. FMP's EPS can differ from Nasdaq.com's (another consensus, GAAP for some companies), so the app compares each source's estimate with its own actual: FMP's pair is shown (ᶠ) only where Nasdaq.com has no result yet |
+| Company history | FMP `stable/earnings?symbol=` (accounts service `GET /earnings/history`); Nasdaq.com `company/{symbol}/earnings-surprise` and `analyst/{symbol}/earnings-forecast` | FMP: every report back decades, with revenue. Nasdaq.com: the last four quarters' surprises; this and the next quarters' consensus, high, low, number of estimates and the last four weeks' revisions |
+
+Without the accounts service the screens still work from Nasdaq.com, with a note that revenue needs the service.
+Each day's listings are kept in the app's container (`Application Support/Earnings/YYYY-MM-DD.json`): past days open
+at once, a listing is fetched again until three days after its date (FMP's: a week), and when a later listing drops
+the time of day the time from an earlier one is kept (marked ↺) — so times survive for days this Mac saw beforehand.
 * **Report Walkthrough** — one report at a time (the sidebar row shows which; the **Report** menu at the top of the
   page or the Reports menu picks another), in seven steps — **The Report** (with *About this report*), **Reading It**,
   **The Market's Move** (with a context chart: core CPI by month, ISM against its 50 line, auction tails, weekly
@@ -263,13 +294,13 @@ xcodebuild -project MxPortMGR.xcodeproj -scheme MxPortMGR -configuration Debug b
 
 File-system-synchronized Xcode project (team QC4VX47BJ8, bundle id `com.k3jdr.MxPortMGR`, macOS 26.6,
 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`), compiling `MxPortMGR/` and `../Shared` (Quick Help, the Layer 3
-service catalog and view). Sandboxed with outgoing network connections (for the services on 127.0.0.1). The Debug
+service catalog and view). Sandboxed with outgoing network connections (for the services on 127.0.0.1 and Nasdaq.com's earnings calendar). The Debug
 configuration is compiled with `-O`: the optimizers and the simulator are numeric loops that are ~75× slower
 unoptimised.
 
 Launch arguments for demos and tests: `-mySource srm -srmAccount CODE` (My Portfolio from the security master), `-addSecurities YES` (open Add Securities), `-screen activeOptimize` (any `Screen` case), `-sample employer-stock` (a sample
 id), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
-hides Quick Help.
+hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week).
 
 ## Files
 
@@ -284,5 +315,6 @@ hides Quick Help.
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | Built-in engines and the Layer 3 service client |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing |
+| `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

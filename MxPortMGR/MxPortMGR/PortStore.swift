@@ -16,7 +16,7 @@ enum Screen: String, CaseIterable, Identifiable {
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case activePortfolio, activeRisk, activeOptimize, activeTrades, activeAttribution
     case passivePortfolio, passiveDrift, passiveTrack, passiveBands, passiveAttribution
-    case reportLibrary, morningBriefing, reportWalkthrough
+    case reportLibrary, morningBriefing, earningsCalendar, earningsDay, reportWalkthrough
     case samples, services
 
     var id: String { rawValue }
@@ -33,7 +33,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .activePortfolio, .activeRisk, .activeOptimize, .activeTrades, .activeAttribution: .active
         case .passivePortfolio, .passiveDrift, .passiveTrack, .passiveBands, .passiveAttribution: .passive
-        case .reportLibrary, .morningBriefing, .reportWalkthrough: .reports
+        case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .reportWalkthrough: .reports
         case .samples, .services: .library
         }
     }
@@ -63,6 +63,8 @@ enum Screen: String, CaseIterable, Identifiable {
         case .passiveAttribution: "Attribution"
         case .reportLibrary: "Report Library"
         case .morningBriefing: "Morning Briefing"
+        case .earningsCalendar: "Earnings Calendar"
+        case .earningsDay: "Earnings by Day"
         case .reportWalkthrough: "Report Walkthrough"
         case .samples: "Sample Portfolios"
         case .services: "Layer 3 Services"
@@ -102,6 +104,8 @@ enum Screen: String, CaseIterable, Identifiable {
         case .passiveBands: "rectangle.split.3x1"
         case .reportLibrary: "books.vertical"
         case .morningBriefing: "sunrise"
+        case .earningsCalendar: "calendar"
+        case .earningsDay: "list.bullet.rectangle"
         case .reportWalkthrough: "newspaper"
         case .samples: "square.grid.2x2"
         case .services: "server.rack"
@@ -248,6 +252,23 @@ final class PortStore {
     func openReport(_ id: String) {
         reportID = id
         screen = .reportWalkthrough
+    }
+
+    /// Real earnings reports (Earnings by Day, Earnings Calendar).
+    let earnings = EarningsStore()
+
+    func openEarningsDay(_ date: String, select symbol: String? = nil) {
+        earnings.date = date
+        earnings.selection = symbol
+        screen = .earningsDay
+    }
+
+    /// Security-master symbols in the selected account (illustrative tickers are made up, so they never match).
+    var heldEarningsKeys: Set<String> {
+        guard portfolio.isSRM else { return [] }
+        return Set(portfolio.holdings.compactMap { h in
+            h.ticker == "CASH" ? nil : EarningsParse.key(Universe.security(h.ticker)?.srmTicker ?? h.ticker)
+        })
     }
     var collapsedLessons: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "collapsedLessons") ?? []) {
         didSet { UserDefaults.standard.set(Array(collapsedLessons), forKey: "collapsedLessons") }

@@ -16,6 +16,13 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          snapshot from the lots (srm.sync_holdings_from_lots)
     POST /accounts/<code>/load-prices    asks the srm-loader service to load prices for the account's unpriced
                                          securities (srm.py load nasdaq-prices --symbols ...: Nasdaq.com, free, no API key)
+    GET  /earnings/calendar?from=&to=    FMP's earnings calendar (EPS and revenue, estimated and actual) for up to 62
+                                         days; the plan reaches back 12 months, so an earlier `from` is cut there
+                                         (planStart and notOnPlan in the answer)
+    GET  /earnings/history?symbol=&limit=   one company's reports from FMP, newest first (back decades)
+
+The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
+config.local.json), so MxPortMGR's earnings screens get revenue figures with no API key in the sandboxed app.
 
     python3 accounts_service.py                  # http://127.0.0.1:8774
     python3 accounts_service.py --srm-dir ../../MxDataHUB/SRM --port 8774
@@ -33,6 +40,7 @@ import re
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
@@ -51,7 +59,8 @@ DESCRIBE = {
     "port": PORT,
     "purpose": "Keeps MxPortMGR's My Portfolio in the security master: searches securities to add, serves benchmark "
                "weights, and stores each personal account — type, approach, benchmark, cash and open tax lots — with "
-               "the day's holdings snapshot written from the lots, so MxDataHUB and the analytics service see it too.",
+               "the day's holdings snapshot written from the lots, so MxDataHUB and the analytics service see it too. "
+               "Also serves FMP's earnings calendar and company earnings history to MxPortMGR's earnings screens.",
     "whyThisLanguage": "Python and psycopg2 are the shortest path from an HTTP request to a transaction in PostgreSQL; "
                        "the same connection settings as srm.py, no app sandbox or credentials in MxPortMGR.",
     "useCases": ["data-quality", "active", "passive"],
@@ -62,6 +71,8 @@ DESCRIBE = {
         {"method": "GET", "path": "/accounts/{code}", "summary": "An account with its open tax lots, valued"},
         {"method": "PUT", "path": "/accounts/{code}", "summary": "Create or replace an account and its lots; rewrites today's holdings"},
         {"method": "POST", "path": "/accounts/{code}/load-prices", "summary": "Load prices for unpriced holdings (via srm-loader)"},
+        {"method": "GET", "path": "/earnings/calendar", "summary": "FMP earnings calendar: EPS and revenue, estimated and actual (12 months back)"},
+        {"method": "GET", "path": "/earnings/history", "summary": "One company's earnings reports from FMP, newest first"},
     ],
     "samples": [],
 }
@@ -72,9 +83,15 @@ class SRM:
         sys.path.insert(0, folder)
         from srmlib.common import Config   # noqa: E402  (SRM's connection settings and secrets)
         self.Config = Config
+        self._fmp_key = None
 
     def connect(self):
         return self.Config().connect()
+
+    def fmp_key(self):
+        if not self._fmp_key:
+            self._fmp_key = self.Config().api_key("fmp")
+        return self._fmp_key
 
 
 def fetch(conn, sql, params=()):
@@ -380,6 +397,106 @@ def load_prices(conn, code):
             "message": message, "loader": result, "account": account(conn, code)}
 
 
+# --- Earnings (FMP) ----------------------------------------------------------------------------------------------
+
+FMP = "https://financialmodelingprep.com/stable/"
+FMP_ROWS = 4000        # the most rows one earnings-calendar call returns: latest dates first, earlier ones cut off
+FMP_WINDOW = 364       # days back the plan's calendar reaches; an earlier `from` is refused with 402
+SYMBOL = re.compile(r"^[A-Za-z0-9.\-/^]{1,20}$")
+_FMP_CACHE = {}        # (endpoint, params) -> (fetched at, payload), for the life of the process
+_FMP_LOCK = threading.Lock()
+
+
+class PlanLimit(Exception):
+    pass
+
+
+def fmp(endpoint, ttl, **params):
+    """One FMP stable call, cached for `ttl` seconds."""
+    key = (endpoint, tuple(sorted(params.items())))
+    with _FMP_LOCK:
+        hit = _FMP_CACHE.get(key)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    from srmlib.common import HTTPError, http   # SRM's folder is on sys.path (class SRM)
+    api_key = Handler.srm.fmp_key()
+    if not api_key:
+        raise RuntimeError("no FMP API key: set FMP_API_KEY or add it to the Keychain (service SRM-api, account fmp)")
+    try:
+        payload = http(FMP + endpoint + "?" + urllib.parse.urlencode(dict(params, apikey=api_key)), retries=2, timeout=60)
+    except HTTPError as e:
+        if e.status in (402, 403):
+            raise PlanLimit("%s is not on the FMP plan for these parameters" % endpoint)
+        raise
+    with _FMP_LOCK:
+        _FMP_CACHE[key] = (time.time(), payload)
+    return payload
+
+
+def parse_day(text, name):
+    try:
+        return dt.date.fromisoformat(text or "")
+    except ValueError:
+        raise ValueError("%s must be a date (YYYY-MM-DD)" % name)
+
+
+def calendar_rows(start, end, today):
+    """FMP's calendar from `start` to `end`, split into smaller calls while one comes back cut at FMP_ROWS."""
+    ttl = 12 * 3600 if end < today - dt.timedelta(days=7) else 900
+    rows = fmp("earnings-calendar", ttl, **{"from": start.isoformat(), "to": end.isoformat()})
+    rows = rows if isinstance(rows, list) else []
+    if len(rows) >= FMP_ROWS and start < end:
+        middle = start + (end - start) // 2
+        return calendar_rows(start, middle, today) + calendar_rows(middle + dt.timedelta(days=1), end, today)
+    return rows
+
+
+def earnings_calendar(q):
+    start = parse_day(q.get("from"), "from")
+    end = parse_day(q.get("to") or q.get("from"), "to")
+    if end < start or (end - start).days > 62:
+        raise ValueError("to must be on or after from, and at most 62 days later")
+    today = dt.date.today()
+    plan_start = today - dt.timedelta(days=FMP_WINDOW)
+    rows = []
+    first = max(start, plan_start)
+    while first <= end:                      # a week a call: even the busiest weeks are under FMP_ROWS
+        last = min(end, first + dt.timedelta(days=6))
+        try:
+            rows += calendar_rows(first, last, today)
+        except PlanLimit:
+            if first != plan_start or plan_start > today - dt.timedelta(days=FMP_WINDOW):
+                raise
+            plan_start = first = first + dt.timedelta(days=1)   # FMP's day had not yet turned (time zones)
+            continue
+        first = last + dt.timedelta(days=1)
+    not_on_plan = None
+    if start < plan_start:
+        not_on_plan = {"from": start.isoformat(), "to": min(end, plan_start - dt.timedelta(days=1)).isoformat()}
+    seen, out = set(), []
+    for r in sorted(rows, key=lambda r: (r.get("date") or "", r.get("symbol") or "")):
+        k = (r.get("symbol"), r.get("date"))
+        if k in seen or not start.isoformat() <= (r.get("date") or "") <= end.isoformat():
+            continue
+        seen.add(k)
+        out.append({f: r.get(f) for f in ("symbol", "date", "epsActual", "epsEstimated", "revenueActual",
+                                          "revenueEstimated", "lastUpdated")})
+    return {"source": "FMP earnings-calendar", "from": start.isoformat(), "to": end.isoformat(),
+            "planStart": plan_start.isoformat(), "notOnPlan": not_on_plan, "rows": out}
+
+
+def earnings_history(q):
+    symbol = (q.get("symbol") or "").strip().upper()
+    if not SYMBOL.match(symbol):
+        raise ValueError("symbol must be a ticker")
+    limit = min(max(int(q.get("limit") or 40), 1), 200)
+    rows = fmp("earnings", 1800, symbol=symbol.replace(".", "-").replace("/", "-"), limit=limit)
+    rows = sorted(rows if isinstance(rows, list) else [], key=lambda r: r.get("date") or "", reverse=True)
+    return {"source": "FMP earnings", "symbol": symbol,
+            "rows": [{f: r.get(f) for f in ("date", "epsActual", "epsEstimated", "revenueActual", "revenueEstimated",
+                                            "lastUpdated")} for r in rows]}
+
+
 def json_default(value):
     if isinstance(value, (dt.date, dt.datetime)):
         return value.isoformat()
@@ -415,6 +532,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"status": "ok", "service": "accounts", "version": VERSION})
             if url.path == "/describe":
                 return self.send_json(200, dict(DESCRIBE, version=VERSION, port=Handler.port))
+            if parts[:1] == ["earnings"] and method == "GET":    # FMP only: no database connection
+                if parts == ["earnings", "calendar"]:
+                    out = earnings_calendar(q)
+                elif parts == ["earnings", "history"]:
+                    out = earnings_history(q)
+                else:
+                    return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
+                out["seconds"] = round(time.time() - started, 2)
+                return self.send_json(200, out)
             body = self.read_json() if method in ("PUT", "POST") else {}
             conn = Handler.srm.connect()
             try:

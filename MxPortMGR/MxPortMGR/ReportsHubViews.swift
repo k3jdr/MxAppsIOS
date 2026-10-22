@@ -286,7 +286,11 @@ struct MorningBriefingView: View {
                             if held(e.0) { Text("you hold").font(.caption2).padding(.horizontal, 5).background(Color.accentColor.opacity(0.15), in: Capsule()) }
                         }
                     }
-                    Button("Earnings Report walkthrough") { store.openReport("earnings") }.buttonStyle(.link)
+                    HStack(spacing: 14) {
+                        Button("Earnings Report walkthrough") { store.openReport("earnings") }.buttonStyle(.link)
+                        Button("Today's real earnings list") { store.openEarningsDay(EarningsDates.today()) }.buttonStyle(.link)
+                            .help("Every company reporting today, from Nasdaq.com and FMP")
+                    }
                 }
                 panel(8, "Fund flows (last week)", "arrow.left.arrow.right.circle", "Money moving into and out of fund categories, from providers such as EPFR, Morningstar and Lipper.",
                       "Flows reveal sentiment, usually after prices moved. Following them tends to mean buying high and selling low.") {

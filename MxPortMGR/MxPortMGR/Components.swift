@@ -144,10 +144,14 @@ extension Screen {
 }
 
 struct EducationalBanner: View {
+    /// The earnings screens show real companies' reports rather than illustrative data.
+    var realData = false
+
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "graduationcap")
-            Text("Educational simulation with illustrative data — not investment advice, not a forecast, and not a recommendation to buy or sell anything.")
+            Text(realData ? "Educational use: real earnings reports from Nasdaq.com and FMP, as published — not investment advice and not a recommendation to buy or sell anything."
+                 : "Educational simulation with illustrative data — not investment advice, not a forecast, and not a recommendation to buy or sell anything.")
         }
         .font(.caption)
         .foregroundStyle(.secondary)
