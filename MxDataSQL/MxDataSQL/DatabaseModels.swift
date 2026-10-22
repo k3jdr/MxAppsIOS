@@ -2,8 +2,9 @@
 //  DatabaseModels.swift
 //  MxDataSQL
 //
-//  Value types describing what was read from PostgreSQL: the table list,
-//  a psql-style table description (\d) and the rows shown in the grid.
+//  Value types describing what was read from PostgreSQL: the table, function
+//  and procedure list, a psql-style table description (\d), a function's code
+//  (\sf) and the rows shown in the grid.
 //
 
 import Foundation
@@ -22,6 +23,92 @@ nonisolated struct TableSummary: Identifiable, Hashable, Sendable {
     var name: String { ref.name }
     /// Exact count when known, otherwise the planner estimate.
     var displayRows: Int { exactRows ?? estimatedRows }
+}
+
+/// A function or procedure listed in DB Table Selection (not aggregates, window functions or extensions' functions).
+nonisolated struct RoutineSummary: Identifiable, Hashable, Sendable {
+    var oid: String
+    var schema: String
+    var name: String
+    /// "function" or "procedure".
+    var kind: String
+    /// pg_get_function_identity_arguments: the arguments that tell overloads apart.
+    var arguments: String
+    /// Result type of a function ("boolean", "TABLE(...)", "trigger"); empty for a procedure.
+    var returns: String
+    var language: String
+
+    /// Prefixed so it never equals a table's oid in the list's selection.
+    var id: String { "proc:" + oid }
+    var isProcedure: Bool { kind == "procedure" }
+    var signature: String { "\(name)(\(arguments))" }
+    var displayName: String { "\(schema).\(signature)" }
+    /// "Function returning boolean, language sql."
+    var facts: String { (isProcedure ? "Procedure" : "Function returning \(returns)") + ", language \(language)." }
+}
+
+/// A function's or procedure's code, as psql's `\sf` shows it.
+nonisolated struct RoutineDefinition: Sendable {
+    var summary: RoutineSummary
+    /// Its CREATE OR REPLACE FUNCTION / PROCEDURE statement (pg_get_functiondef).
+    var code: String
+    /// `code` in the SQL box's colours.
+    var colored: AttributedString
+}
+
+/// What DB Table Selection lists.
+enum CatalogKind: String, CaseIterable, Identifiable {
+    case all = "All"
+    case tables = "Tables"
+    case functions = "Functions"
+    case procedures = "Procedures"
+    var id: String { rawValue }
+}
+
+/// A row of the DB Table Selection list: a table, or a function or procedure.
+nonisolated enum CatalogEntry: Identifiable, Hashable, Sendable {
+    case table(TableSummary)
+    case routine(RoutineSummary)
+
+    var id: String {
+        switch self {
+        case .table(let t): t.id
+        case .routine(let r): r.id
+        }
+    }
+    var schema: String {
+        switch self {
+        case .table(let t): t.schema
+        case .routine(let r): r.schema
+        }
+    }
+    /// Table name, or the routine's name with its arguments.
+    var name: String {
+        switch self {
+        case .table(let t): t.name
+        case .routine(let r): r.signature
+        }
+    }
+    var kind: String {
+        switch self {
+        case .table(let t): t.kind
+        case .routine(let r): r.kind
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .table: "tablecells"
+        case .routine(let r): r.isProcedure ? "gearshape" : "function"
+        }
+    }
+    var table: TableSummary? {
+        if case .table(let t) = self { t } else { nil }
+    }
+    var routine: RoutineSummary? {
+        if case .routine(let r) = self { r } else { nil }
+    }
+    /// Kind and qualified name, to find the entry again after the list reloads (oids change on DROP and CREATE).
+    var key: String { "\(table == nil ? kind : "table") \(schema).\(name)" }
 }
 
 nonisolated struct ColumnInfo: Hashable, Sendable {

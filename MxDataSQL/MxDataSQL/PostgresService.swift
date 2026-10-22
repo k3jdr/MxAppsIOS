@@ -207,6 +207,37 @@ actor PostgresService {
         }
     }
 
+    /// Functions and procedures, like psql's `\df`: not aggregates or window functions, and not the
+    /// functions of extensions (btree_gist alone adds hundreds to public). Needs PostgreSQL 11 (prokind).
+    func listRoutines() async throws -> [RoutineSummary] {
+        let sql = """
+            SELECT p.oid::text, n.nspname::text, p.proname::text,
+                   CASE p.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END,
+                   pg_get_function_identity_arguments(p.oid),
+                   CASE WHEN p.prokind = 'f' THEN pg_get_function_result(p.oid) ELSE '' END,
+                   l.lanname::text
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+            JOIN pg_language l ON l.oid = p.prolang
+            WHERE p.prokind IN ('f', 'p')
+              AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+              AND n.nspname NOT LIKE 'pg_toast%'
+              AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                              WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')
+            ORDER BY 4, 2, 3, 5
+            """
+        return try await rows(sql).map { r in
+            RoutineSummary(oid: r[0]!, schema: r[1]!, name: r[2]!, kind: r[3]!, arguments: r[4] ?? "",
+                           returns: r[5] ?? "", language: r[6] ?? "")
+        }
+    }
+
+    /// The function's or procedure's CREATE OR REPLACE statement, as psql's `\sf` shows it;
+    /// nil when it no longer exists.
+    func routineCode(_ routine: RoutineSummary) async throws -> String? {
+        try await rows("SELECT pg_get_functiondef($1::text::oid)", [routine.oid]).first?.first ?? nil
+    }
+
     func exactRowCount(_ ref: TableRef) async throws -> Int {
         let value = try await rows("SELECT count(*)::text FROM \(ref.qualifiedSQL)").first?.first ?? nil
         return Int(value ?? "") ?? 0

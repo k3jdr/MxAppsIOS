@@ -40,9 +40,10 @@ enum SQLHelp {
                                  symbol: "cylinder.split.1x2")
         case .tableSelection:
             return QuickHelpItem(title: "DB Table Selection",
-                                 detail: "The database's tables with their rows (~ means estimated from the planner's statistics, until Count Rows) and sizes. "
-                                    + "Select one for its \\d description on the right — columns, keys, indexes, references; double-click it or Open Table (↩) "
-                                    + "to open it in DB Table, or in a window of its own with Open in New Window.",
+                                 detail: "The database's tables with their rows (~ means estimated from the planner's statistics, until Count Rows) and sizes, "
+                                    + "then its functions and procedures. Select a table for its \\d description on the right — columns, keys, indexes, references; "
+                                    + "double-click it or Open Table (↩) to open it in DB Table, or in a window of its own with Open in New Window. "
+                                    + "Select a function or procedure for its code.",
                                  symbol: "list.bullet.rectangle")
         case .table:
             return QuickHelpItem(title: "DB Table",
@@ -78,7 +79,13 @@ enum SQLHelp {
         guard session.isConnected else { return nil }
         switch session.form {
         case .tableSelection:
-            guard let t = session.tables.first(where: { $0.id == session.highlightedTableID }) else { return nil }
+            if let r = session.highlightedEntry?.routine {
+                return QuickHelpItem(title: r.displayName,
+                                     detail: r.facts + " Its code is on the right"
+                                        + (r.isProcedure ? "; run it with CALL in DB Table's SQL box." : "."),
+                                     symbol: r.isProcedure ? "gearshape" : "function")
+            }
+            guard let t = session.highlightedEntry?.table else { return nil }
             let rows = (t.exactRows == nil ? "about " : "") + t.displayRows.formatted() + " rows"
             let key = session.highlightedDescription.map { $0.primaryKey.isEmpty ? " No primary key." : " Key: \($0.primaryKey.joined(separator: ", "))." } ?? ""
             return QuickHelpItem(title: "\(t.schema).\(t.name)",
@@ -107,13 +114,20 @@ enum SQLHelp {
 
     static let resizeBar = QuickHelpItem(title: "Resize Bar", detail: "Drag to give the SQL box more or less room; double-click to reset it.", symbol: "arrow.up.and.down")
 
-    static let tableList = QuickHelpItem(title: "Tables",
-                                         detail: "The tables (partitioned ones too) by schema with their rows and size; click a column header to sort. Select one for its description; double-click to open it.",
+    static let tableList = QuickHelpItem(title: "Tables, Functions and Procedures",
+                                         detail: "The tables (partitioned ones too) by schema with their rows and size, then the functions and procedures with their arguments "
+                                            + "(not aggregates, nor the functions extensions install). Select a table for its description, a function or procedure for its code; "
+                                            + "double-click a table to open it.",
                                          symbol: "list.bullet")
 
     static let describe = QuickHelpItem(title: "Description",
                                         detail: "The highlighted table as psql's \\d shows it: columns with types, collation, nullability and defaults, then indexes, checks, foreign keys and the tables that reference it. Select text to copy it.",
                                         symbol: "doc.plaintext")
+
+    static let routineCode = QuickHelpItem(title: "Code",
+                                           detail: "The highlighted function or procedure as psql's \\sf shows it: its CREATE OR REPLACE statement, coloured like the SQL box. "
+                                            + "Select text to copy it; paste it in DB Table's SQL box to change the function.",
+                                           symbol: "function")
 
     // MARK: Grid cells and headers (AppKit)
 

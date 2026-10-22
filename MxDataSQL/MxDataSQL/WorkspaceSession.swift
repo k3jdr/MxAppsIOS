@@ -31,12 +31,19 @@ final class WorkspaceSession {
     var status: ConnectionStatus = .disconnected
 
     var tables: [TableSummary] = []
+    /// Functions and procedures, listed after the tables in DB Table Selection.
+    var routines: [RoutineSummary] = []
     /// Databases on the connected server (for the Database picker); the connected one is `connectedDatabase`.
     var databases: [String] = []
     private(set) var connectedDatabase: String?
     var tableFilter = ""
-    var highlightedTableID: TableSummary.ID?
+    /// DB Table Selection lists everything, or only the tables, functions or procedures.
+    var catalogKind: CatalogKind = .all
+    /// The highlighted table's or routine's CatalogEntry.id.
+    var highlightedID: CatalogEntry.ID?
     var highlightedDescription: TableDescription?
+    /// The highlighted function's or procedure's code; nil once a table is described.
+    var highlightedRoutine: RoutineDefinition?
     var countingRows = false
     /// DB Table Selection: open tables in their own window instead of the DB Table form.
     var openInNewWindow = false
@@ -79,10 +86,36 @@ final class WorkspaceSession {
         if case .connected = status { true } else { false }
     }
 
-    var filteredTables: [TableSummary] {
+    /// The list's rows: tables, then functions, then procedures, of the chosen kind and whose
+    /// schema.name contains the filter.
+    var filteredEntries: [CatalogEntry] {
+        let shownRoutines = routines.filter { r in
+            switch catalogKind {
+            case .all: true
+            case .tables: false
+            case .functions: !r.isProcedure
+            case .procedures: r.isProcedure
+            }
+        }
+        let entries = (catalogKind == .all || catalogKind == .tables ? tables.map(CatalogEntry.table) : [])
+            + shownRoutines.map(CatalogEntry.routine)
         let filter = tableFilter.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !filter.isEmpty else { return tables }
-        return tables.filter { $0.ref.displayName.lowercased().contains(filter) }
+        guard !filter.isEmpty else { return entries }
+        return entries.filter { entry in
+            let name = entry.routine.map { "\($0.schema).\($0.name)" } ?? "\(entry.schema).\(entry.name)"
+            return name.lowercased().contains(filter)
+        }
+    }
+
+    var highlightedEntry: CatalogEntry? {
+        if let table = tables.first(where: { $0.id == highlightedID }) { return .table(table) }
+        return routines.first { $0.id == highlightedID }.map(CatalogEntry.routine)
+    }
+
+    /// The id, in the reloaded list, of the entry whose CatalogEntry.key is `key`.
+    private func entryID(forKey key: String?) -> CatalogEntry.ID? {
+        guard let key else { return nil }
+        return (tables.map(CatalogEntry.table) + routines.map(CatalogEntry.routine)).first { $0.key == key }?.id
     }
 
     // MARK: Connection
@@ -119,7 +152,9 @@ final class WorkspaceSession {
         status = .disconnected
         connectedDatabase = nil
         tables = []
+        routines = []
         highlightedDescription = nil
+        highlightedRoutine = nil
         grid = nil
         edits = [:]
         gridVersion += 1
@@ -128,9 +163,9 @@ final class WorkspaceSession {
     }
 
     /// Connects to another database on the same server with the same user and password, then
-    /// refreshes the table list and the highlighted table's description (the same schema.table
-    /// when the new database has it, else the first table). On failure the previous database is
-    /// reconnected. Returns whether the switch happened.
+    /// refreshes the table list and the highlighted entry's description (the same schema.table or
+    /// function when the new database has it, else the first table). On failure the previous
+    /// database is reconnected. Returns whether the switch happened.
     func switchDatabase(to name: String, settings: ConnectionSettings) async -> Bool {
         guard isConnected, name != connectedDatabase else { return false }
         if !edits.isEmpty {
@@ -141,7 +176,7 @@ final class WorkspaceSession {
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return false }
         }
-        let previousTable = tables.first { $0.id == highlightedTableID }?.ref
+        let previous = highlightedEntry?.key
         var target = settings
         target.database = name
         await connect(target)
@@ -149,13 +184,14 @@ final class WorkspaceSession {
             let reason: String
             if case .failed(let message) = status { reason = message } else { reason = "unknown error" }
             await connect(settings)
-            highlightedTableID = tables.first { $0.ref == previousTable }?.id ?? tables.first?.id
+            highlightedID = entryID(forKey: previous) ?? tables.first?.id
             await describeHighlighted()
             errorMessage = "Could not connect to database \(name).\n\n\(reason)"
             return false
         }
         highlightedDescription = nil
-        highlightedTableID = tables.first { $0.ref == previousTable }?.id ?? tables.first?.id
+        highlightedRoutine = nil
+        highlightedID = entryID(forKey: previous) ?? tables.first?.id
         await describeHighlighted()
         infoMessage = "Switched to database \(name)."
         return true
@@ -163,6 +199,7 @@ final class WorkspaceSession {
 
     // MARK: DB Table Selection
 
+    /// Lists the tables, functions and procedures again.
     func refreshTables() async {
         guard let service else { return }
         await run {
@@ -172,15 +209,36 @@ final class WorkspaceSession {
                 t.exactRows = counted[t.oid]
                 return t
             }
+            // Servers before PostgreSQL 11 (no pg_proc.prokind) list tables only.
+            self.routines = (try? await service.listRoutines()) ?? []
         }
     }
 
+    /// Loads the right panel: the highlighted table's \d description, or the function's or procedure's code.
     func describeHighlighted() async {
-        guard let service, let id = highlightedTableID, let summary = tables.first(where: { $0.id == id }) else {
+        guard let service, let entry = highlightedEntry else {
             highlightedDescription = nil
+            highlightedRoutine = nil
             return
         }
-        await run { self.highlightedDescription = try await service.describe(summary) }
+        await run {
+            switch entry {
+            case .table(let summary):
+                let description = try await service.describe(summary)
+                // A slower load must not replace the entry clicked after it.
+                guard self.highlightedID == entry.id else { return }
+                self.highlightedDescription = description
+                self.highlightedRoutine = nil
+            case .routine(let routine):
+                let code = try await service.routineCode(routine)
+                    ?? "-- \(routine.displayName) no longer exists; Refresh lists the database's functions again.\n"
+                guard self.highlightedID == entry.id else { return }
+                let sqlBody = ["sql", "plpgsql"].contains(routine.language)
+                self.highlightedRoutine = RoutineDefinition(summary: routine, code: code,
+                                                            colored: SQLHighlighter.attributed(code, sqlBodies: sqlBody))
+                self.highlightedDescription = nil
+            }
+        }
     }
 
     /// Replaces the estimates in the table list with exact count(*) values.
@@ -437,16 +495,16 @@ final class WorkspaceSession {
         }
     }
 
-    /// After CREATE / ALTER / DROP: reloads the database list, the table list and the highlighted table's
-    /// description; reloads the open table, or closes it when it no longer exists.
+    /// After CREATE / ALTER / DROP: reloads the database list, the table, function and procedure list and the
+    /// highlighted entry's description or code; reloads the open table, or closes it when it no longer exists.
     private func afterSchemaChange(limit: Int) async {
         guard let service else { return }
         if let list = try? await service.databases() {
             databases = list.contains(connectedDatabase ?? "") ? list : (list + [connectedDatabase].compactMap { $0 }).sorted()
         }
-        let highlighted = tables.first { $0.id == highlightedTableID }?.ref
+        let highlighted = highlightedEntry?.key
         await refreshTables()
-        highlightedTableID = tables.first { $0.ref == highlighted }?.id
+        highlightedID = entryID(forKey: highlighted)
         await describeHighlighted()
         guard let table = openedTable else { return }
         if tables.contains(where: { $0.ref == table.summary.ref }) {

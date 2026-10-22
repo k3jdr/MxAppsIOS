@@ -11,6 +11,7 @@
 //
 
 import AppKit
+import SwiftUI
 
 nonisolated enum SQLToken: Sendable {
     case keyword, type, function, string, number, comment, quotedIdentifier, parameter
@@ -47,6 +48,35 @@ nonisolated enum SQLHighlighter {
         for (range, token) in tokens(in: storage.string) {
             storage.addAttribute(.foregroundColor, value: colors[token]!, range: range)
         }
+    }
+
+    /// `text` in the same colours, for read-only SwiftUI text (a function's code in DB Table Selection).
+    /// With `sqlBodies`, the body of pg_get_functiondef's `AS $function$ ... $function$` (or `$procedure$`)
+    /// is coloured as SQL rather than as one dollar-quoted string — for LANGUAGE sql and plpgsql.
+    static func attributed(_ text: String, sqlBodies: Bool = false) -> AttributedString {
+        var out = AttributedString(text)
+        let ns = text as NSString
+        func paint(_ range: NSRange, _ token: SQLToken) {
+            guard let r = Range(range, in: out) else { return }
+            out[r].foregroundColor = Color(nsColor: colors[token]!)
+        }
+        for (range, token) in tokens(in: text) {
+            let quoted = ns.substring(with: range)
+            if sqlBodies, token == .string,
+               let tag = ["$function$", "$procedure$"].first(where: { quoted.hasPrefix($0) && quoted.hasSuffix($0) }),
+               range.length >= 2 * tag.utf16.count {
+                let length = tag.utf16.count
+                let body = NSRange(location: range.location + length, length: range.length - 2 * length)
+                paint(NSRange(location: range.location, length: length), .string)
+                paint(NSRange(location: body.upperBound, length: length), .string)
+                for (inner, innerToken) in tokens(in: ns.substring(with: body)) {
+                    paint(NSRange(location: body.location + inner.location, length: inner.length), innerToken)
+                }
+            } else {
+                paint(range, token)
+            }
+        }
+        return out
     }
 
     // MARK: Words

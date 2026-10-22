@@ -141,7 +141,7 @@ struct ContentView: View {
         guard session.isConnected else { return }
         session.form = .tableSelection
         if let saved = document.workspace.selectedTable {
-            session.highlightedTableID = session.tables.first { $0.ref == saved }?.id
+            session.highlightedID = session.tables.first { $0.ref == saved }?.id
         }
     }
 }
