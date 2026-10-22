@@ -195,8 +195,8 @@ struct SyncView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Synchronize") { synchronize() }
-                    .quickHelp("Synchronize", "Copies every row with a direction (→ or ←) after asking, replacing older files at the destination.")
                     .disabled(toRight + toLeft == 0)
+                    .quickHelp("Synchronize", "Copies every row with a direction (→ or ←) after asking, replacing older files at the destination.")
             }
             .padding(10)
         }

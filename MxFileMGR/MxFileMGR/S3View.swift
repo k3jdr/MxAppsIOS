@@ -519,12 +519,12 @@ struct S3View: View {
             Button("New Folder…") { Task { await model.newFolder() } }
                 .disabled(model.bucket == nil)
             Button("Upload from “\(paneName ?? "Pane")”") { model.upload(marked) }
-                .quickHelp("Upload", FileHelp.uploadDetail)
                 .disabled(model.bucket == nil || marked.isEmpty)
+                .quickHelp("Upload", FileHelp.uploadDetail)
                 .help("Upload the items marked in the active pane into this S3 folder")
             Button("Delete…", role: .destructive) { Task { await model.delete(model.selectedEntries) } }
-                .quickHelp("Delete", "Deletes the selected items, and folders with everything in them, after asking. There is no trash.", shortcut: "⌫")
                 .disabled(model.selection.isEmpty)
+                .quickHelp("Delete", "Deletes the selected items, and folders with everything in them, after asking. There is no trash.", shortcut: "⌫")
             Button("Download to “\(paneName ?? "Pane")”") {
                 if let url = pane?.url { model.download(model.selectedEntries, to: url) }
             }

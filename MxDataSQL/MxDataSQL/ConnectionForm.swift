@@ -23,6 +23,7 @@ struct ConnectionForm: View {
                 Picker("SSL", selection: $settings.sslMode) {
                     ForEach(SSLMode.allCases) { Text($0.rawValue).tag($0) }
                 }
+                .quickHelp("SSL Mode", "disable: a plain connection. prefer: encrypted when the server offers TLS, plain otherwise. require: encrypted or no connection. The server's certificate isn't verified in any mode, as with libpq's prefer and require.", symbol: "lock")
                 Toggle("Save password in Keychain", isOn: $settings.savePasswordInKeychain)
                     .quickHelp("Save Password in Keychain", "Keeps the password in your login Keychain (never in the workspace file) so the workspace can connect without asking. Turning it off removes it.")
                     .onChange(of: settings.savePasswordInKeychain) { _, save in

@@ -579,12 +579,12 @@ struct AzureView: View {
             Button("New Folder…") { model.newFolder() }
                 .disabled(model.container == nil)
             Button("Upload from “\(paneName ?? "Pane")”") { model.upload(marked) }
-                .quickHelp("Upload", FileHelp.uploadDetail)
                 .disabled(model.container == nil || marked.isEmpty)
+                .quickHelp("Upload", FileHelp.uploadDetail)
                 .help("Upload the items marked in the active pane into this folder")
             Button("Delete…", role: .destructive) { Task { await model.delete(model.selectedEntries) } }
-                .quickHelp("Delete", "Deletes the selected items, and folders with everything in them, after asking. There is no trash.", shortcut: "⌫")
                 .disabled(model.selection.isEmpty)
+                .quickHelp("Delete", "Deletes the selected items, and folders with everything in them, after asking. There is no trash.", shortcut: "⌫")
             Button("Download to “\(paneName ?? "Pane")”") {
                 if let url = pane?.url { model.download(model.selectedEntries, to: url) }
             }

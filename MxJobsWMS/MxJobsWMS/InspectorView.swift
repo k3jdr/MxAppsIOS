@@ -75,6 +75,7 @@ private struct JobspaceInspector: View {
                     }
                 }
                 Button("Manage API Subscriptions…") { editor.showSubscriptions = true }
+                    .quickHelp("Manage API Subscriptions", "Opens API Subscriptions: each data service's base URL, how its key is sent, headers, and the key itself (kept in your Keychain).", shortcut: "⌥⌘K", symbol: "key.horizontal")
             } header: {
                 Text("Layer 3 API Subscriptions")
             }
@@ -395,6 +396,7 @@ private struct ApiSection: View {
                 editor.subscriptionToEdit = node.api?.subscriptionID
                 editor.showSubscriptions = true
             }
+            .quickHelp("Manage API Subscriptions", "Opens API Subscriptions at this step's subscription: its base URL, how its key is sent, headers, and the key itself (kept in your Keychain).", shortcut: "⌥⌘K", symbol: "key.horizontal")
             Picker("Method", selection: api.method) {
                 ForEach(HTTPMethod.allCases) { Text($0.rawValue).tag($0) }
             }

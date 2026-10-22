@@ -244,6 +244,7 @@ struct CopyCommand: View {
             }
             .buttonStyle(.borderless)
             .help("Copy the command; paste it in Terminal")
+            .quickHelp("Copy \u{201C}\(title)\u{201D} Command", "Copies \(command) — paste it in Terminal to run it.", symbol: "doc.on.doc")
         }
     }
 }

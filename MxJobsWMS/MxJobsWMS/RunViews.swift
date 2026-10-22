@@ -37,10 +37,10 @@ struct RunBar: View {
                     Image(systemName: engine.phase == .paused ? "play.square" : "pause.fill")
                 }
                 .help(engine.phase == .paused ? "Continue (⌃⌘Y)" : "Pause before the next step")
+                .disabled(!(engine.phase == .running || engine.phase == .paused))
                 .quickHelp(engine.phase == .paused ? "Continue" : "Pause",
                            engine.phase == .paused ? "Carries on from where the run paused." : "Pauses the run before its next step; Continue or Step goes on.",
                            shortcut: engine.phase == .paused ? "⌃⌘Y" : nil)
-                .disabled(!(engine.phase == .running || engine.phase == .paused))
 
                 Button {
                     editor.stepRun()
@@ -48,8 +48,8 @@ struct RunBar: View {
                     Image(systemName: "arrow.turn.down.right")
                 }
                 .help("Step — run to the next step and pause (F6)")
-                .quickHelp("Step", "Runs the next step and pauses, so you can look at its output in the console before going on.", shortcut: "F6")
                 .disabled(engine.phase == .running || engine.phase == .waiting)
+                .quickHelp("Step", "Runs the next step and pauses, so you can look at its output in the console before going on.", shortcut: "F6")
 
                 Button {
                     engine.stop()
@@ -58,8 +58,8 @@ struct RunBar: View {
                         .foregroundStyle(engine.isActive ? Color.red : Color.secondary)
                 }
                 .help("Stop (⌘.)")
-                .quickHelp("Stop", "Stops the run. Its results stay on the canvas and in the console until you run again or clear them.", shortcut: "⌘.")
                 .disabled(!engine.isActive)
+                .quickHelp("Stop", "Stops the run. Its results stay on the canvas and in the console until you run again or clear them.", shortcut: "⌘.")
             }
             .buttonStyle(.borderless)
             .font(.system(size: 14))

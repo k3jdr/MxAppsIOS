@@ -218,6 +218,7 @@ struct DataRefreshView: View {
                 Spacer()
                 Button("Load History") { store.section = .loads }
                     .disabled(!store.isConnected)
+                    .quickHelp("Load History", "Goes to Load History: every loader run (srm.load_run) with its rows and rejects, identifier coverage and the sources. Needs the database connection (DB Connection).", symbol: "tray.and.arrow.down")
             }
             .padding(10)
             Divider()
