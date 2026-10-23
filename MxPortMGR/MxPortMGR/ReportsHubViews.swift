@@ -78,16 +78,35 @@ struct ReportLibraryView: View {
                     Text("Impact").bold()
                 }
                 Divider().gridCellColumns(Driver.allCases.count + 2)
-                ForEach(MarketReport.all) { r in
+                ForEach(Array(MarketReport.all.enumerated()), id: \.element.id) { i, r in
                     GridRow {
                         // Right-click: your notes on it, shown on its hover card (ReportNotes.swift).
                         ReportLink(report: r) { store.openReport(r.id) }
+                            .anchorPreference(key: ReportRowBounds.self, value: .bounds) { [i: $0] }
                         ForEach(Driver.allCases, id: \.self) { d in
                             Image(systemName: r.drivers.contains(d) ? "circle.fill" : "circle").font(.caption2)
                                 .foregroundStyle(r.drivers.contains(d) ? Color.accentColor : Color.secondary.opacity(0.3))
                         }
                         ImpactDots(level: r.impact)
                     }
+                }
+            }
+            // Banded rows, so the eye can follow a report across to its impact: every other row gets a band the
+            // width of the table, placed from the row's bounds (a cell's own background leaves gaps between columns).
+            .backgroundPreferenceValue(ReportRowBounds.self) { rows in
+                GeometryReader { g in
+                    ZStack(alignment: .topLeading) {
+                        ForEach(rows.keys.sorted().filter { $0 % 2 == 1 }, id: \.self) { i in
+                            if let anchor = rows[i] {
+                                let row = g[anchor]
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.primary.opacity(0.06))
+                                    .frame(width: g.size.width + 12, height: row.height + 3)
+                                    .offset(x: -6, y: row.minY - 1.5)
+                            }
+                        }
+                    }
+                    .frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
                 }
             }
         }
@@ -348,5 +367,13 @@ struct MorningBriefingView: View {
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
         .quickHelpArea(QuickHelpItem(title: title, detail: what + " For a long-term plan: " + use, symbol: symbol))
+    }
+}
+
+/// Where each row of the report table is (by row number), for its banding.
+private struct ReportRowBounds: PreferenceKey {
+    static let defaultValue: [Int: Anchor<CGRect>] = [:]
+    static func reduce(value: inout [Int: Anchor<CGRect>], nextValue: () -> [Int: Anchor<CGRect>]) {
+        value.merge(nextValue()) { $1 }
     }
 }
