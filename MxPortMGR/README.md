@@ -338,6 +338,19 @@ are sent there the same way, unless the security master already has one for that
   as you move the weights and returns.
 * **Active vs Passive** — what fees compound to over 30 years (fee and pre-fee alpha sliders) and a comparison table.
 
+## Securities (Library ▸ Securities)
+
+MxDataHUB's Securities page in MxPortMGR: the security master's securities, searched by name or any identifier
+(ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI — current or past), filtered by **Type**, **In** (a benchmark's members
+on its latest date) and **Active only**, and by any column from its header (sort, the column's values with their
+counts, or a condition), a thousand at a time with Previous / Next. Selecting one shows its last year of closes, its
+identifiers with their dates and sources (a table that copies), then its issuer and security facts, listings,
+classification, benchmark membership and corporate actions as one selectable text. Links on tickers and names are the
+same rows as MxDataHUB's (`Shared/Links`): ⌘K, the row's context menu, or a hover card's Edit Link…. MxPortMGR reads
+the database through the accounts service (`POST /securities/browse`, `/securities/browse/values`,
+`GET /securities/<id>/detail`, `GET /security-types`), which runs MxDataHUB's queries; the two panes use the shared
+`SplitPanes` (`Shared/SplitPanes.swift`).
+
 ## Sample portfolios (Library ▸ Sample Portfolios)
 
 Each sample is an edge case. *Use* makes it the account of the report walkthroughs and the Morning Briefing; *Copy to

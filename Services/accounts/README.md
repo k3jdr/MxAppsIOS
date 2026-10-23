@@ -18,6 +18,10 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 | `DELETE /links/<securityId>/<ticker\|name>` | Take it off |
 | `GET /earnings/history?symbol=&limit=` | One company's reports from FMP (`earnings`), newest first, back decades; `limit` ≤ 200 (default 40) |
 | `GET /fundamentals/quarters?symbol=&limit=` | A company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow (FMP), newest first — MxPortMGR's Compute screen |
+| `POST /securities/browse` | MxDataHUB's Securities search for MxPortMGR's Library ▸ Securities: `{q, type, benchmark, activeOnly, offset, limit ≤ 1000, sort {column, ascending}, filters {column: {values: […]} or {op, v1, v2}}}` → `securities`, `total` |
+| `POST /securities/browse/values` | A column's distinct values with their counts under the search and the other filters (`{…, column}`), for its filter panel |
+| `GET /securities/<id>/detail` | A security's facts, identifiers, listings, classification, benchmark membership, corporate actions and last 400 days of closes |
+| `GET /security-types` | The security types, for the Type filter |
 
 ```bash
 python3 Services/mxservices.py start accounts     # or: python3 accounts_service.py --port 8774

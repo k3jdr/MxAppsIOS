@@ -1,6 +1,6 @@
 //
 //  SplitPanes.swift
-//  MxDataHUB
+//  Shared by MxDataHUB and MxPortMGR (MXcodeIDE/Shared)
 //
 //  Two panes side by side with a divider to drag, in place of HSplitView. The AppKit split view behind HSplitView
 //  laid panes out at about their ideal widths and kept them there when the window narrowed or the sidebar came
@@ -48,7 +48,10 @@ struct SplitPanes<Leading: View, Trailing: View>: View {
                     dragWidth = nil
                 }
                 trailing
-                    .fixedColumnMinimum(width: trailingMinimum, height: 0)
+                    // A constant minimum (as MxDataHUB's fixedColumnMinimum): one taken from the content changed with it and
+                    // made AppKit loop on updating constraints.
+                    .frame(minWidth: trailingMinimum, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+                    .clipped()
             }
         }
     }

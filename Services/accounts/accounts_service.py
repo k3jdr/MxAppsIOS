@@ -27,6 +27,13 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          {address, text, hoverText, hoverRtf, title, by}
     DELETE /links/<securityId>/<field>   take the link off
 
+    POST /securities/browse              MxDataHUB's Securities search, for MxPortMGR's Library ▸ Securities: {q, type,
+                                         benchmark, activeOnly, offset, limit, sort {column, ascending}, filters
+                                         {column: {values: [...]} | {op, v1, v2}}} → securities, total
+    POST /securities/browse/values       a column's values with their counts under the other filters: {…, column}
+    GET  /securities/<id>/detail         a security's facts, identifiers, listings, classification, benchmark
+                                         membership, corporate actions and a year of prices
+    GET  /security-types                 the security types, for the Type filter
     GET  /fundamentals/quarters?symbol=MSFT&limit=40   a company's quarterly revenue, operating cash flow, capital
                                          expenditure, depreciation and free cash flow (FMP), newest first
 
@@ -82,6 +89,10 @@ DESCRIBE = {
         {"method": "POST", "path": "/accounts/{code}/load-prices", "summary": "Load prices for unpriced holdings (via srm-loader)"},
         {"method": "GET", "path": "/earnings/calendar", "summary": "FMP earnings calendar: EPS and revenue, estimated and actual (12 months back)"},
         {"method": "GET", "path": "/earnings/history", "summary": "One company's earnings reports from FMP, newest first"},
+        {"method": "POST", "path": "/securities/browse", "summary": "Securities search as in MxDataHUB: identifier matches ranked, type, benchmark, active, column sort and filters, a page at a time"},
+        {"method": "POST", "path": "/securities/browse/values", "summary": "A column's distinct values with their counts, for its filter panel"},
+        {"method": "GET", "path": "/securities/{id}/detail", "summary": "A security's facts, identifiers, listings, classification, benchmark membership, corporate actions and prices"},
+        {"method": "GET", "path": "/security-types", "summary": "The security types"},
         {"method": "GET", "path": "/fundamentals/quarters", "summary": "One company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow from FMP, newest first"},
         {"method": "POST", "path": "/links/query", "summary": "Links on securities' tickers and names, by security id or ticker"},
         {"method": "PUT", "path": "/links/{securityId}/{field}", "summary": "Add or change the link on a ticker or name"},
@@ -410,6 +421,208 @@ def load_prices(conn, code):
             "message": message, "loader": result, "account": account(conn, code)}
 
 
+# --- Security browser (MxDataHUB's Securities, for MxPortMGR) ---------------------------------------------------
+
+# The list's columns that sort and filter: column title -> v_security column (as MxDataHUB's SRMStore).
+BROWSE_COLUMNS = {"Ticker": "v.ticker", "Name": "v.name", "Type": "v.security_type", "ISIN": "v.isin",
+                  "CUSIP": "v.cusip", "Composite FIGI": "v.composite_figi", "Sector": "v.sector", "MIC": "v.mic"}
+BROWSE_PAGE = 1000
+
+
+def grid_condition(f, expr, params):
+    """One column filter as SQL on `expr`, compared as text — Shared/GridFilters' GridSQL.condition."""
+    text = expr + "::text"
+    if "values" in f:
+        values = f.get("values") or []
+        parts = []
+        named = sorted(v for v in values if v is not None)
+        if named:
+            parts.append(text + " = ANY(%s)")
+            params.append(named)
+        if any(v is None for v in values):
+            parts.append(expr + " IS NULL")
+        return "(" + " OR ".join(parts) + ")" if parts else "false"
+    op, v1, v2 = f.get("op"), f.get("v1", ""), f.get("v2", "")
+    if op == "is empty":
+        return "(%s IS NULL OR %s = '')" % (expr, text)
+    if op == "is not empty":
+        return "(%s IS NOT NULL AND %s <> '')" % (expr, text)
+    simple = {"equals": text + " = %s", "contains": "strpos(lower(" + text + "), lower(%s)) > 0",
+              "begins with": "starts_with(lower(" + text + "), lower(%s))",
+              "is greater than": text + " > %s", "is greater than or equal to": text + " >= %s",
+              "is less than": text + " < %s", "is less than or equal to": text + " <= %s"}
+    if op in simple:
+        params.append(v1)
+        return simple[op]
+    if op == "does not equal":
+        params.append(v1)
+        return "(%s IS NULL OR %s <> %%s)" % (expr, text)
+    if op == "does not contain":
+        params.append(v1)
+        return "(%s IS NULL OR strpos(lower(%s), lower(%%s)) = 0)" % (expr, text)
+    if op == "ends with":
+        params += [v1, v1]
+        return "right(lower(%s), length(%%s)) = lower(%%s)" % text
+    if op == "is between":
+        params += [v1, v2]
+        return text + " BETWEEN %s AND %s"
+    raise ValueError("unknown filter operator: %s" % op)
+
+
+def browse_source(body, params, except_column=None):
+    """FROM and WHERE of the search: the search box, Type, In (benchmark), Active only and the column filters."""
+    text = (body.get("q") or "").strip()
+    type_ = body.get("type") or "All"
+    benchmark = body.get("benchmark") or ""
+    active = bool(body.get("activeOnly", True))
+    conditions = []
+    for name, f in sorted((body.get("filters") or {}).items()):
+        if name != except_column and name in BROWSE_COLUMNS and isinstance(f, dict):
+            conditions.append(grid_condition(f, BROWSE_COLUMNS[name], params))
+    params[:0] = [text, text, text, type_, type_, benchmark, benchmark, active]
+    return """
+          FROM srm.v_security v
+          LEFT JOIN m ON m.security_id = v.security_id
+         WHERE (%s = '' OR m.security_id IS NOT NULL OR v.name ILIKE '%%' || %s || '%%'
+                OR v.issuer_name ILIKE '%%' || %s || '%%')
+           AND (%s = 'All' OR v.security_type = %s)
+           AND (%s = '' OR v.security_id IN (
+                SELECT w.security_id FROM srm.benchmark b, srm.benchmark_weights(b.benchmark_id) w WHERE b.code = %s))
+           AND (NOT %s OR v.is_active)""" + ("".join("\n           AND " + c for c in conditions))
+
+
+def browse_matches(text):
+    return "WITH m AS (SELECT security_id, min(rank) AS rank FROM srm.resolve_identifier(%s) GROUP BY 1)", [text]
+
+
+def browse(conn, body):
+    """MxDataHUB's Securities search: a page of matching securities with the total, the column sort first, then the
+    best identifier matches, an exact ticker, the name."""
+    text = (body.get("q") or "").strip()
+    offset = max(0, int(body.get("offset") or 0))
+    limit = max(1, min(int(body.get("limit") or BROWSE_PAGE), BROWSE_PAGE))
+    with_m, mparams = browse_matches(text)
+    params = []
+    source = browse_source(body, params)
+    order = []
+    sort = body.get("sort") or None
+    if sort and sort.get("column") in BROWSE_COLUMNS:
+        order.append("%s %s NULLS LAST" % (BROWSE_COLUMNS[sort["column"]], "ASC" if sort.get("ascending", True) else "DESC"))
+    order += ["m.rank NULLS LAST", "(v.ticker = upper(%s)) DESC NULLS LAST", "v.name", "v.security_id"]
+    rows = fetch(conn, with_m + """
+        SELECT v.security_id, coalesce(v.ticker, '') AS ticker, v.name, v.security_type, coalesce(v.isin, '') AS isin,
+               coalesce(v.cusip, '') AS cusip, coalesce(v.composite_figi, '') AS figi, coalesce(v.sector, '') AS sector,
+               coalesce(v.mic::text, '') AS mic, v.is_active, count(*) OVER () AS total""" + source + """
+         ORDER BY """ + ", ".join(order) + """
+         LIMIT %s OFFSET %s""", mparams + params + [text, limit, offset])
+    return {"total": int(rows[0]["total"]) if rows else 0, "offset": offset,
+            "securities": [{"id": r["security_id"], "ticker": r["ticker"], "name": r["name"], "type": r["security_type"],
+                            "isin": r["isin"], "cusip": r["cusip"], "figi": r["figi"], "sector": r["sector"],
+                            "mic": r["mic"], "isActive": r["is_active"]} for r in rows]}
+
+
+def browse_values(conn, body):
+    """A column's distinct values with their counts, under the search and the other columns' filters."""
+    column = body.get("column")
+    if column not in BROWSE_COLUMNS:
+        raise ValueError("column must be one of " + ", ".join(BROWSE_COLUMNS))
+    with_m, mparams = browse_matches((body.get("q") or "").strip())
+    params = []
+    source = browse_source(body, params, except_column=column)
+    rows = fetch(conn, with_m + "\n        SELECT %s::text AS value, count(*) AS n" % BROWSE_COLUMNS[column] + source
+                 + "\n         GROUP BY 1 ORDER BY 1 NULLS FIRST LIMIT 1001", mparams + params)
+    return {"values": [{"value": r["value"], "count": int(r["n"])} for r in rows[:1000]], "truncated": len(rows) > 1000}
+
+
+def security_detail(conn, sid):
+    """MxDataHUB's detail panel: facts, identifiers, listings, classification, benchmark membership, corporate actions
+    and the last 400 days of closes."""
+    try:
+        sid = int(sid)
+    except ValueError:
+        raise ValueError("the security id must be a number")
+    head = fetch(conn, """
+        SELECT v.security_id, coalesce(v.ticker, '') AS ticker, v.name, v.security_type, coalesce(v.isin, '') AS isin,
+               coalesce(v.cusip, '') AS cusip, coalesce(v.composite_figi, '') AS figi, coalesce(v.sector, '') AS sector,
+               coalesce(v.mic::text, '') AS mic, v.is_active
+          FROM srm.v_security v WHERE v.security_id = %s""", [sid])
+    if not head:
+        raise LookupError("no security %d" % sid)
+    h = head[0]
+    facts = fetch(conn, """
+        SELECT k, v FROM srm.security s
+        LEFT JOIN srm.issuer i USING (issuer_id)
+        LEFT JOIN srm.exchange e ON e.mic = s.primary_mic
+        CROSS JOIN LATERAL (VALUES
+            (1, 'Issuer', i.name), (2, 'LEI', i.lei), (3, 'CIK', i.cik),
+            (4, 'Entity status', i.entity_status), (5, 'Legal form (ELF)', i.legal_form),
+            (6, 'Country', coalesce(s.country_code, i.country_code)), (7, 'Incorporation', i.incorporation),
+            (8, 'SIC', i.sic_code || ' ' || coalesce(i.sic_description, '')), (9, 'EIN', i.ein),
+            (10, 'Primary exchange', s.primary_mic || ' ' || coalesce(e.name, '')),
+            (11, 'Currency', s.currency_code), (12, 'Website', i.website),
+            (13, 'Last price', (SELECT to_char(lp.close, 'FM999,999,990.00') || ' on ' || lp.price_date
+                                  FROM srm.last_price(s.security_id) lp)),
+            (14, 'Market cap', (SELECT to_char(md.market_cap, 'FM999,999,999,999,990') || ' (' || md.as_of_date || ')'
+                                  FROM srm.security_market_data md WHERE md.security_id = s.security_id
+                                 ORDER BY md.as_of_date DESC LIMIT 1)),
+            (15, 'Status', CASE WHEN s.is_active THEN 'Active' ELSE 'Inactive since ' || coalesce(s.inactive_date::text, '?') END),
+            (16, 'Updated', to_char(s.updated_at, 'YYYY-MM-DD HH24:MI'))) AS f(n, k, v)
+        WHERE s.security_id = %s AND v IS NOT NULL ORDER BY n""", [sid])
+    identifiers = fetch(conn, """
+        SELECT si.id_type, si.id_value, coalesce(si.mic::text, '') AS mic, si.valid_from::text AS valid_from,
+               CASE WHEN si.valid_to = 'infinity' THEN '' ELSE si.valid_to::text END AS valid_to, ds.code AS source,
+               to_char(si.last_seen, 'YYYY-MM-DD') AS last_seen,
+               (current_date >= si.valid_from AND current_date < si.valid_to) AS is_current
+          FROM srm.security_identifier si JOIN srm.data_source ds USING (source_id)
+          JOIN srm.identifier_type it USING (id_type)
+         WHERE si.security_id = %s
+         ORDER BY it.sort_order, si.valid_to DESC, si.mic""", [sid])
+    listings = fetch(conn, """
+        SELECT l.mic::text AS mic, coalesce(e.name, '') AS exchange, l.ticker, l.is_primary, l.valid_from::text AS valid_from,
+               CASE WHEN l.valid_to = 'infinity' THEN '' ELSE l.valid_to::text END AS valid_to
+          FROM srm.listing l LEFT JOIN srm.exchange e USING (mic)
+         WHERE l.security_id = %s ORDER BY l.valid_to DESC, l.is_primary DESC""", [sid])
+    classifications = fetch(conn, """
+        SELECT sc.scheme_code || ' ' || n.level_name AS name, n.name
+               || CASE WHEN sc.valid_to <> 'infinity' THEN ' (until ' || sc.valid_to || ')' ELSE '' END AS value
+          FROM srm.security_classification sc JOIN srm.classification_node n USING (node_id)
+         WHERE sc.security_id = %s ORDER BY sc.scheme_code, sc.level, sc.valid_to DESC""", [sid])
+    memberships = fetch(conn, """
+        SELECT b.code || ' — ' || b.name AS name, to_char(w.weight * 100, 'FM990.0000') || '%% on ' || w.as_of_date AS value
+          FROM srm.benchmark b CROSS JOIN LATERAL srm.benchmark_weights(b.benchmark_id) w
+         WHERE w.security_id = %s ORDER BY w.weight DESC""", [sid])
+    actions = fetch(conn, """
+        SELECT ca.action_type, ca.ex_date::text AS ex_date,
+               CASE ca.action_type
+                    WHEN 'CASH_DIVIDEND' THEN coalesce(ca.amount::text, '?') || coalesce(' ' || ca.currency_code, '')
+                         || coalesce(', paid ' || ca.pay_date, '')
+                    WHEN 'SPLIT' THEN ca.ratio_new::float8 || ' for ' || ca.ratio_old::float8
+                    WHEN 'SYMBOL_CHANGE' THEN ca.old_value || ' → ' || ca.new_value
+                    ELSE coalesce(ca.new_value, '') END AS detail,
+               ds.code AS source
+          FROM srm.corporate_action ca JOIN srm.data_source ds USING (source_id)
+         WHERE ca.security_id = %s ORDER BY ca.ex_date DESC LIMIT 40""", [sid])
+    prices = fetch(conn, """
+        SELECT p.price_date::text AS date, p.close::float8 AS close
+          FROM srm.listing l JOIN srm.price p USING (listing_id)
+         WHERE l.security_id = %s AND p.price_date > current_date - 400
+         ORDER BY p.price_date""", [sid])
+    return {
+        "security": {"id": h["security_id"], "ticker": h["ticker"], "name": h["name"], "type": h["security_type"],
+                     "isin": h["isin"], "cusip": h["cusip"], "figi": h["figi"], "sector": h["sector"], "mic": h["mic"],
+                     "isActive": h["is_active"]},
+        "facts": [{"name": r["k"], "value": r["v"]} for r in facts],
+        "identifiers": [{"type": r["id_type"], "value": r["id_value"], "mic": r["mic"], "from": r["valid_from"],
+                         "to": r["valid_to"], "source": r["source"], "lastSeen": r["last_seen"] or "",
+                         "isCurrent": r["is_current"]} for r in identifiers],
+        "listings": [{"mic": r["mic"], "exchange": r["exchange"], "ticker": r["ticker"], "isPrimary": r["is_primary"],
+                      "from": r["valid_from"], "to": r["valid_to"]} for r in listings],
+        "classifications": [{"name": r["name"], "value": r["value"]} for r in classifications],
+        "memberships": [{"name": r["name"], "value": r["value"]} for r in memberships],
+        "actions": [{"type": r["action_type"], "exDate": r["ex_date"], "detail": r["detail"], "source": r["source"]} for r in actions],
+        "prices": [{"date": r["date"], "close": r["close"]} for r in prices]}
+
+
 # --- Earnings (FMP) ----------------------------------------------------------------------------------------------
 
 FMP = "https://financialmodelingprep.com/stable/"
@@ -659,6 +872,14 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if parts == ["securities"] and method == "GET":
                     out = search(conn, q)
+                elif parts == ["securities", "browse"] and method == "POST":
+                    out = browse(conn, body)
+                elif parts == ["securities", "browse", "values"] and method == "POST":
+                    out = browse_values(conn, body)
+                elif len(parts) == 3 and parts[0] == "securities" and parts[2] == "detail" and method == "GET":
+                    out = security_detail(conn, parts[1])
+                elif parts == ["security-types"] and method == "GET":
+                    out = {"types": [r["security_type"] for r in fetch(conn, "SELECT security_type FROM srm.security_type ORDER BY 1")]}
                 elif parts == ["benchmarks"] and method == "GET":
                     out = {"benchmarks": benchmarks(conn)}
                 elif len(parts) == 3 and parts[0] == "benchmarks" and parts[2] == "weights" and method == "GET":
