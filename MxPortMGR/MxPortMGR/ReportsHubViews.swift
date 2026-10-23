@@ -70,7 +70,7 @@ struct ReportLibraryView: View {
     }
 
     private var driverMatrix: some View {
-        Box(title: "Which drivers each report moves", symbol: "square.grid.3x3", help: "A dot where a report is news about that driver of asset prices.") {
+        Box(title: "Which drivers each report moves", symbol: "square.grid.3x3", help: "A dot where a report is news about that driver of asset prices. Right-click a report for your own notes on it; rest the pointer on its name to read them.") {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
                 GridRow {
                     Text("Report").bold()
@@ -80,7 +80,8 @@ struct ReportLibraryView: View {
                 Divider().gridCellColumns(Driver.allCases.count + 2)
                 ForEach(MarketReport.all) { r in
                     GridRow {
-                        Button(r.title) { store.openReport(r.id) }.buttonStyle(.link).font(.callout)
+                        // Right-click: your notes on it, shown on its hover card (ReportNotes.swift).
+                        ReportLink(report: r) { store.openReport(r.id) }
                         ForEach(Driver.allCases, id: \.self) { d in
                             Image(systemName: r.drivers.contains(d) ? "circle.fill" : "circle").font(.caption2)
                                 .foregroundStyle(r.drivers.contains(d) ? Color.accentColor : Color.secondary.opacity(0.3))

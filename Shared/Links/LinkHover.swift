@@ -5,7 +5,8 @@
 //  Resting the pointer on a link shows a card, as in MxNoteONE (LinkHover.swift there), Word and OneNote: the link's
 //  hover text, where the link goes (a web site, an email address), "Click to open", and buttons to edit the link (the
 //  Link dialog), copy its address or remove it. Links in the hover text open from the card. The card goes away when
-//  the pointer leaves the link and the card, or on a click or key press elsewhere.
+//  the pointer leaves the link and the card, or on a click or key press elsewhere. Other things can show a card of
+//  their own the same way (pointer(over:rect:in:card:)): MxPortMGR's reports, with your notes on them.
 //
 
 import AppKit
@@ -60,7 +61,17 @@ final class LinkHover {
 
     /// The pointer is over a link (`rect` in `view`), or over no link (`url` nil).
     func pointer(over url: URL?, rect: NSRect, in view: NSView, actions: @escaping () -> LinkHoverActions) {
-        guard let url, view.window != nil else {
+        pointer(over: url, rect: rect, in: view) { [weak self] close in
+            let actions = actions()
+            self?.actions = actions
+            return AnyView(Self.linkCard(url!, actions, close: close))
+        }
+    }
+
+    /// The pointer is over something with a card of its own (MxPortMGR's reports), told apart by `key`, or over
+    /// nothing (nil). The card gets a function that closes it.
+    func pointer(over key: URL?, rect: NSRect, in view: NSView, card: @escaping (_ close: @escaping () -> Void) -> AnyView) {
+        guard let url = key, view.window != nil else {
             pending?.cancel()
             pending = nil
             return
@@ -79,32 +90,37 @@ final class LinkHover {
             guard let window = view.window else { return }
             let mouse = view.convert(window.convertPoint(fromScreen: self.mouseLocation), from: nil)
             guard rect.insetBy(dx: -2, dy: -2).contains(mouse) else { return }
-            self.show(url, actions: actions(), in: view)
+            self.show(card, in: view)
         }
         pending = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.delay, execute: work)
     }
 
-    private func show(_ url: URL, actions: LinkHoverActions, in view: NSView) {
-        let popover = NSPopover()
-        popover.behavior = .applicationDefined
-        popover.animates = false
-        var card = LinkCard(info: LinkInfo(url, tip: actions.tip, text: actions.text, noteTitle: actions.title), edit: { [weak self] in
-            self?.close()
+    /// A link's card: its hover text, where it goes, and Edit Link…, Copy and Remove Link.
+    private static func linkCard(_ url: URL, _ actions: LinkHoverActions, close: @escaping () -> Void) -> LinkCard {
+        var card = LinkCard(info: LinkInfo(url, tip: actions.tip, text: actions.text, noteTitle: actions.title), edit: {
+            close()
             actions.edit()
-        }, copy: { [weak self] in
+        }, copy: {
             LinkInfo.copy(url)
-            self?.close()
-        }, remove: { [weak self] in
-            self?.close()
+            close()
+        }, remove: {
+            close()
             actions.remove()
         })
         // A link in the hover text goes where it leads.
-        card.open = { [weak self] target in
-            self?.close()
+        card.open = { target in
+            close()
             LinkInfo.follow(target)
         }
-        let host = NSHostingController(rootView: card)
+        return card
+    }
+
+    private func show(_ card: (_ close: @escaping () -> Void) -> AnyView, in view: NSView) {
+        let popover = NSPopover()
+        popover.behavior = .applicationDefined
+        popover.animates = false
+        let host = NSHostingController(rootView: card { LinkHover.shared.close() })
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
         let wasKey = view.window?.isKeyWindow == true
@@ -113,7 +129,6 @@ final class LinkHover {
         if wasKey { view.window?.makeKey() }
         NSCursor.pointingHand.set()
         self.popover = popover
-        self.actions = actions
         outsideSince = nil
         poll = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { _ in
             MainActor.assumeIsolated { LinkHover.shared.checkPointer() }

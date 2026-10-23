@@ -59,6 +59,7 @@ struct ContentView: View {
             }
         }
         .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
+        .sheet(item: Binding(get: { ReportNotes.shared.editing }, set: { ReportNotes.shared.editing = $0 })) { ReportNotesSheet(report: $0) }
         .alert("MxPortMGR", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
             if store.engine == .services || store.attributeMaster {
@@ -154,6 +155,19 @@ struct ContentView: View {
             Task {
                 try? await Task.sleep(for: .seconds(4))
                 SecurityLinks.shared.testHover(id)
+            }
+        }
+        // Notes on reports: open the Notes dialog (-reportNotesEdit ID) or show a report's hover card (-reportHoverTest ID).
+        if let id = defaults.string(forKey: "reportNotesEdit") {
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                ReportNotes.shared.beginEdit(MarketReport.report(id))
+            }
+        }
+        if let id = defaults.string(forKey: "reportHoverTest") {
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                ReportNotes.shared.testHover(id)
             }
         }
         #endif

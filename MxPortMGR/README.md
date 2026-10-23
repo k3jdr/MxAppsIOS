@@ -132,6 +132,17 @@ markets within seconds, others shape positioning over weeks or months.
   ISM PMI — together they drive expectations for growth, inflation, interest rates and profits, the four primary
   determinants of asset prices), and a report × driver matrix. Each card links to the **real report** at its
   publisher (the latest release: BLS, the Federal Reserve, BEA, ISM, the Census Bureau, CFTC, ICI, TreasuryDirect…).
+  In the matrix (*Which drivers each report moves*) a report's name opens its walkthrough, and **your own notes** go
+  on it:
+  * **Right-click** a report's name: *Add Notes…* / *Edit Notes…*, *Open Walkthrough*, *Open Official Source* and
+    *Copy Official Source Address*. The **Notes** dialog takes formatted text, written as a link's hover text is (B I U S,
+    size, colour, ⌘B ⌘I ⌘U): what to watch, how you read the report, links to your own pages (the link button or ⌘K;
+    typed addresses become links, `mxnoteone://…` pages in MxNoteONE too). It has a *Hover card preview* and *Remove
+    Notes*. Return starts a new line.
+  * **Resting the pointer** on the name for 0.6 s shows its **hover card**, as a link's does: your notes with their
+    links and when you last changed them, then the report's publisher and schedule, the drivers it moves and its
+    impact, its official source (a click opens it), and **Edit Notes…** and **Open Walkthrough**.
+  * A speech-bubble mark follows the name of a report with notes. Notes are kept on this Mac (`reportNotes`).
 * **Morning Briefing** — an illustrative morning's ten items: overnight markets, Treasury yield changes (with the
   2Y–10Y and 3M–10Y spreads), the economic calendar (consensus, prior, impact; each release opens its walkthrough),
   an economic surprise index, Fed funds futures probabilities, analyst upgrades and downgrades (fictional firms),
@@ -339,8 +350,9 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | Built-in engines and the Layer 3 service client |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing |
+| `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
-| `SecurityLinks.swift`, `LinkHover.swift`, `LinkTips.swift` | Links on symbols and names: the links kept on this Mac, the linked cell, the Link dialog and its pages about a security; the hover card; the hover text and its editor (after MxNoteONE's) |
+| `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; My Portfolio's steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |
