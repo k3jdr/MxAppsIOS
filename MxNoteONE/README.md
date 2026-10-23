@@ -217,7 +217,10 @@ Section and New Section Group. Right-click a page for its own menu.
   - **Recap with Apple Intelligence** (on this Mac, FoundationModels; needs Apple Intelligence turned on) writes
     *Recap — name* beside the video (or under it when there's no room): an overview, key points, **action items** as
     To Do tags (so they show in the Tag Summary), and **chapters** with times that play the video. It transcribes
-    first when there's no transcript yet. Long transcripts are summarized part by part, then recapped.
+    first when there's no transcript yet. Long transcripts are summarized part by part, then recapped. Recordings of
+    any kind work (meetings, lessons, talks). When Apple's safety filter blocks the recap — finance lessons trip it
+    ("speculating", "buy a put") — it's written again as plain text with Apple's filter for summarizing your own
+    text, and a chapter the model gives no time for is listed without one.
   - Progress shows over the picture; the same menu stops the work. Nothing leaves the Mac.
 - **Snap to Grid** (View tab or View ▸ Snap to Grid, ⌃⌘G — as in OneNote for Windows): containers, pictures, tables
   and shapes line up on the page grid when you place, drag, resize or nudge them (arrow keys move one grid step). The

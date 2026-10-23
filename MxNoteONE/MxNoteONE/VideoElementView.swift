@@ -513,7 +513,9 @@ final class VideoElementView: ElementView {
             } catch {
                 guard let self, !Task.isCancelled else { return }
                 self.finishJob()
-                store.showAlert("Couldn't write the recap", error.localizedDescription)
+                store.showAlert("Couldn't write the recap", VideoRecapper.isBlocked(error)
+                    ? "Apple Intelligence's safety filter declined to summarize this transcript, even as plain text. The transcript is still on the page."
+                    : error.localizedDescription)
             }
         }
     }

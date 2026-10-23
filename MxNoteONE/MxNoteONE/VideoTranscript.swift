@@ -8,7 +8,10 @@
 //  stretch of speech with its time; clicking a time plays the video from
 //  there. Apple Intelligence (FoundationModels, on this Mac) then writes a
 //  recap of the transcript: an overview, key points, action items as To Do
-//  tags, and chapters. The transcript is also kept with the video, so a
+//  tags, and chapters. When its safety filter blocks the structured recap
+//  (finance lessons trip it: "speculating", "buy a put"), it's written again
+//  as plain text with the filter Apple provides for transforming the user's
+//  own text (permissiveContentTransformations), and read back. The transcript is also kept with the video, so a
 //  recap can be made after the text box was edited or deleted.
 //
 
@@ -116,6 +119,15 @@ enum VideoTranscriber {
 
 // MARK: - Recap (Apple Intelligence)
 
+/// A recap as the page shows it (from the structured answer, or read from the plain-text one).
+struct VideoRecapNotes {
+    var overview: String
+    var keyPoints: [String]
+    var actionItems: [String]
+    /// (time mark "m:ss", title)
+    var chapters: [(start: String, title: String)]
+}
+
 @Generable
 struct VideoRecap {
     @Guide(description: "Two to four sentences: what the recording is about, and what was decided or concluded.")
@@ -163,9 +175,34 @@ enum VideoRecapper {
     }
 
     static let instructions = """
-        You write meeting notes from a transcript of a recording, like the recap after a Teams meeting. \
+        You write notes from the transcript of a recording — a meeting, a lesson, a talk or a video — like the \
+        recap after a Teams meeting. You only summarize what the speakers said; you don't give advice of your own. \
         Use only what the transcript says; don't invent names, numbers or decisions. Write in the transcript's language.
         """
+
+    /// For summarizing the user's own text: Apple's filter for content transformations (plain-text answers only).
+    static let transformingModel = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+
+    /// The safety filter (or the model) declined. macOS 27 reports it as LanguageModelError, macOS 26 as GenerationError.
+    static func isBlocked(_ error: Error) -> Bool {
+        if #available(macOS 27, *) {
+            switch error {
+            case LanguageModelError.guardrailViolation, LanguageModelError.refusal: return true
+            default: break
+            }
+        }
+        switch error {
+        case LanguageModelSession.GenerationError.guardrailViolation, LanguageModelSession.GenerationError.refusal: return true
+        default: return false
+        }
+    }
+
+    /// The text was too long for the model's context.
+    static func isTooLong(_ error: Error) -> Bool {
+        if #available(macOS 27, *), case LanguageModelError.contextSizeExceeded = error { return true }
+        if case LanguageModelSession.GenerationError.exceededContextWindowSize = error { return true }
+        return false
+    }
 
     /// The same recap each time for the same transcript.
     static let options = GenerationOptions(samplingMode: .greedy)
@@ -190,7 +227,7 @@ enum VideoRecapper {
     }
 
     /// A recap of the transcript. Long transcripts are first turned into notes part by part (keeping the time marks).
-    static func recap(_ segments: [TranscriptSegment], progress: @escaping (String) -> Void) async throws -> VideoRecap {
+    static func recap(_ segments: [TranscriptSegment], progress: @escaping (String) -> Void) async throws -> VideoRecapNotes {
         if let why = unavailableReason { throw Failure.unavailable(why) }
         var budget = 7000
         while true {
@@ -204,7 +241,7 @@ enum VideoRecapper {
                     for (i, part) in parts.enumerated() {
                         try Task.checkCancellation()
                         progress("Summarizing part \(i + 1) of \(parts.count)…")
-                        let session = LanguageModelSession(instructions: instructions)
+                        let session = LanguageModelSession(model: transformingModel, instructions: instructions)
                         let reply = try await session.respond(to: """
                             Write short notes on this part of the transcript: the points made, decisions, \
                             follow-up tasks (with who will do them, when said), and each new topic with its [m:ss] mark.
@@ -219,18 +256,79 @@ enum VideoRecapper {
                 }
                 try Task.checkCancellation()
                 progress("Writing the recap…")
-                let session = LanguageModelSession(instructions: instructions)
-                let reply = try await session.respond(to: """
-                    Write the recap of this recording from its transcript\(round > 0 ? " (given as notes)" : ""). \
-                    The [m:ss] marks are times in the recording.
+                let source = parts.first ?? ""
+                do {
+                    let session = LanguageModelSession(instructions: instructions)
+                    let reply = try await session.respond(to: """
+                        Write the recap of this recording from its transcript\(round > 0 ? " (given as notes)" : ""). \
+                        The [m:ss] marks are times in the recording.
 
-                    \(parts.first ?? "")
-                    """, generating: VideoRecap.self, includeSchemaInPrompt: true, options: options)
-                return reply.content
-            } catch LanguageModelSession.GenerationError.exceededContextWindowSize where budget > 1500 {
+                        \(source)
+                        """, generating: VideoRecap.self, includeSchemaInPrompt: true, options: options)
+                    let r = reply.content
+                    return VideoRecapNotes(overview: r.overview, keyPoints: r.keyPoints, actionItems: r.actionItems,
+                                           chapters: r.chapters.map { ($0.start, $0.title) })
+                } catch where isBlocked(error) {
+                    // The filter blocked the structured answer: write it as text with the transformation filter.
+                    try Task.checkCancellation()
+                    return try await plainRecap(source, fromNotes: round > 0)
+                }
+            } catch where isTooLong(error) && budget > 1500 {
                 budget /= 2
             }
         }
+    }
+
+    /// The recap as plain text in set sections, read back into notes.
+    static func plainRecap(_ source: String, fromNotes: Bool) async throws -> VideoRecapNotes {
+        let session = LanguageModelSession(model: transformingModel, instructions: instructions)
+        let reply = try await session.respond(to: """
+            Summarize this transcript\(fromNotes ? " (given as notes)" : "") of a recording. The [m:ss] marks are times \
+            in the recording. Answer in exactly this form, with these four headings and nothing else:
+
+            OVERVIEW:
+            two to four sentences on what the recording is about and what was concluded
+            KEY POINTS:
+            - one short sentence per main point (at most 8)
+            ACTION ITEMS:
+            - each follow-up task someone said would be done, starting with who (write "- none" if there are none)
+            CHAPTERS:
+            - the [m:ss] mark from the transcript where a main topic starts, then a short title, like "- 0:25 How it's calculated" (at most 8)
+
+            \(source)
+            """, options: options)
+        return parsePlainRecap(reply.content)
+    }
+
+    static func parsePlainRecap(_ text: String) -> VideoRecapNotes {
+        var notes = VideoRecapNotes(overview: "", keyPoints: [], actionItems: [], chapters: [])
+        var section = ""
+        for raw in text.components(separatedBy: .newlines) {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            let heading = line.uppercased().replacingOccurrences(of: "*", with: "").replacingOccurrences(of: "#", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            if let name = ["OVERVIEW", "KEY POINTS", "ACTION ITEMS", "CHAPTERS"].first(where: { heading.hasPrefix($0) }) {
+                section = name
+                line = String(line.drop { $0 != ":" }.dropFirst()).trimmingCharacters(in: .whitespaces)
+                if line.isEmpty { continue }
+            }
+            let item = line.hasPrefix("-") || line.hasPrefix("•") || line.hasPrefix("*")
+                ? String(line.dropFirst()).trimmingCharacters(in: .whitespaces) : line
+            guard !item.isEmpty else { continue }
+            switch section {
+            case "OVERVIEW": notes.overview += (notes.overview.isEmpty ? "" : " ") + item
+            case "KEY POINTS": notes.keyPoints.append(item)
+            case "ACTION ITEMS": if !["none", "none.", "n/a"].contains(item.lowercased()) { notes.actionItems.append(item) }
+            case "CHAPTERS":
+                // "4:05 Title", "[4:05] Title" or "4:05 - Title".
+                let mark = item.prefix { "0123456789:[]".contains($0) }
+                let title = item.dropFirst(mark.count).trimmingCharacters(in: CharacterSet(charactersIn: " -–—:"))
+                // A chapter without a time is listed without one (no guessing).
+                if !title.isEmpty { notes.chapters.append((seconds(String(mark)) != nil ? String(mark) : "", title)) }
+            default: break
+            }
+        }
+        return notes
     }
 
     /// "4:05" or "1:02:03" → seconds.
@@ -306,7 +404,7 @@ enum VideoTranscriptText {
     }
 
     /// Recap: overview, key points, action items (To Do tags) and chapters (times that play the video).
-    static func recap(_ r: VideoRecap, video: PageElement, duration: Double?) -> NSAttributedString {
+    static func recap(_ r: VideoRecapNotes, video: PageElement, duration: Double?) -> NSAttributedString {
         let base = TextFormatter.defaultAttributes
         let heading = TextStyleKind.heading3.attributes
         let out = NSMutableAttributedString()
@@ -326,18 +424,26 @@ enum VideoTranscriptText {
         } else {
             for t in tasks { out.append(line(TagKind.todo.symbol + " " + t, base)) }
         }
-        let chapters = r.chapters.compactMap { c -> (Double, String)? in
-            guard let s = VideoRecapper.seconds(c.start), s >= 0, s <= (duration ?? .greatestFiniteMagnitude) + 1 else { return nil }
+        // Chapters with a time (a link that plays from there) in time order; any without one keep their place after.
+        let chapters = r.chapters.compactMap { c -> (Double?, String)? in
             let title = c.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            return title.isEmpty ? nil : (s, title)
-        }.sorted { $0.0 < $1.0 }
+            guard !title.isEmpty else { return nil }
+            guard !c.start.isEmpty else { return (nil, title) }
+            guard let s = VideoRecapper.seconds(c.start), s >= 0, s <= (duration ?? .greatestFiniteMagnitude) + 1 else { return nil }
+            return (s, title)
+        }.enumerated().sorted { ($0.element.0 ?? .greatestFiniteMagnitude, $0.offset) < ($1.element.0 ?? .greatestFiniteMagnitude, $1.offset) }
+            .map(\.element)
         if !chapters.isEmpty {
             out.append(line("Chapters", heading))
             for (s, title) in chapters {
-                var timeAttrs = small(base)
-                timeAttrs[.link] = link(video.id, s)
-                out.append(NSAttributedString(string: VideoControlBar.clock(s), attributes: timeAttrs))
-                out.append(line("   " + title, base))
+                if let s {
+                    var timeAttrs = small(base)
+                    timeAttrs[.link] = link(video.id, s)
+                    out.append(NSAttributedString(string: VideoControlBar.clock(s), attributes: timeAttrs))
+                    out.append(line("   " + title, base))
+                } else {
+                    out.append(line(TextFormatter.bullet + title, base))
+                }
             }
         }
         trimLastNewline(out)
