@@ -2,7 +2,7 @@
 //  ServiceClient.swift
 //  MxPortMGR
 //
-//  The same optimizations through the Layer 3 services (MXcodeIDE/Services, started with
+//  The same optimizations through the Layer 3 services (MxAppsIOS/Services, started with
 //  `python3 Services/mxservices.py start`): the sample's inputs go inline (assets, sectors, benchmarkWeights,
 //  currentWeights, expectedReturns as alpha, covariance), so portfolio-java's /optimize/active and portfolio-cpp's
 //  /optimize/tracking work on exactly what the built-in engine sees, and the two answers can be compared. The analytics

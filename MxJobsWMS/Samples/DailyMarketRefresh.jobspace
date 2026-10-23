@@ -1166,7 +1166,7 @@
       "name" : "Portfolio optimizer (Java)",
       "notes" : "Start it with: python3 Services/mxservices.py start (builds it first if needed)",
       "plan" : "",
-      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-java",
+      "projectFolder" : "~/MyCodeGIT/MxAppsIOS/Services/portfolio-java",
       "provider" : "This Mac",
       "rateLimitPerMinute" : 0
     },
@@ -1183,7 +1183,7 @@
       "name" : "Portfolio engine (C++)",
       "notes" : "Start it with: python3 Services/mxservices.py start (builds it first if needed)",
       "plan" : "",
-      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp",
+      "projectFolder" : "~/MyCodeGIT/MxAppsIOS/Services/portfolio-cpp",
       "provider" : "This Mac",
       "rateLimitPerMinute" : 0
     },

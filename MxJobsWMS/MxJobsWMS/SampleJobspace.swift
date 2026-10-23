@@ -60,11 +60,11 @@ nonisolated extension Jobspace {
         // Java and C++ portfolio services (Services/portfolio-java, Services/portfolio-cpp).
         var javaService = ApiSubscription.localService(port: 8766)
         javaService.name = "Portfolio optimizer (Java)"
-        javaService.projectFolder = "~/MyCodeGIT/MXcodeIDE/Services/portfolio-java"
+        javaService.projectFolder = "~/MyCodeGIT/MxAppsIOS/Services/portfolio-java"
         javaService.notes = "Start it with: python3 Services/mxservices.py start (builds it first if needed)"
         var cppService = ApiSubscription.localService(port: 8767)
         cppService.name = "Portfolio engine (C++)"
-        cppService.projectFolder = "~/MyCodeGIT/MXcodeIDE/Services/portfolio-cpp"
+        cppService.projectFolder = "~/MyCodeGIT/MxAppsIOS/Services/portfolio-cpp"
         cppService.notes = "Start it with: python3 Services/mxservices.py start (builds it first if needed)"
 
         space.subscriptions = [alpha, finnhub, frankfurter, edgar, local, javaService, cppService]

@@ -80,12 +80,12 @@ struct JobspaceCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.command, .option])
             Button("Open MxDataHUB") {
                 if !AppLink.dataRefresh.open() {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MXcodeIDE/tree/main/MxDataHUB")!)
+                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MxAppsIOS/tree/main/MxDataHUB")!)
                 }
             }
             Button("Open MxPortMGR") {
                 if !AppLink.myPortfolio(nil).open() {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MXcodeIDE/tree/main/MxPortMGR")!)
+                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MxAppsIOS/tree/main/MxPortMGR")!)
                 }
             }
         }
@@ -113,7 +113,7 @@ struct JobspaceCommands: Commands {
         CommandGroup(replacing: .help) {
             Button("Adding API Keys") { openWindow(id: "keys-help") }
             Button("MxJobsWMS on GitHub") {
-                NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MXcodeIDE/tree/main/MxJobsWMS")!)
+                NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MxAppsIOS/tree/main/MxJobsWMS")!)
             }
         }
         CommandMenu("Run") {

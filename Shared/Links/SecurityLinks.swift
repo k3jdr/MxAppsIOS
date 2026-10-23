@@ -1,6 +1,6 @@
 //
 //  SecurityLinks.swift
-//  Shared by MxPortMGR and MxDataHUB (MXcodeIDE/Shared/Links)
+//  Shared by MxPortMGR and MxDataHUB (MxAppsIOS/Shared/Links)
 //
 //  Links on a security's ticker and name in the apps' tables (MxDataHUB: Securities, Portfolios ▸ Holdings; MxPortMGR:
 //  My Holdings, Earnings by Day), made and shown as MxNoteONE makes and shows links: ⌘K (Edit ▸ Link…, or a row's

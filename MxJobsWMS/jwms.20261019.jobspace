@@ -1412,7 +1412,7 @@
       "name" : "SRM loader service",
       "notes" : "Start it with: python3 Services/mxservices.py start (needs psycopg2, like srm.py). X-SRM-Dry-Run: 1 makes every load report its srm.py command without running it — remove the header to load for real. Database and API keys come from srm.py's own configuration.",
       "plan" : "",
-      "projectFolder" : "~/MyCodeGIT/MXcodeIDE/MxDataHUB/SRM",
+      "projectFolder" : "~/MyCodeGIT/MxAppsIOS/MxDataHUB/SRM",
       "provider" : "MxDataHUB/SRM (srm.py) on this Mac",
       "rateLimitPerMinute" : 0
     },

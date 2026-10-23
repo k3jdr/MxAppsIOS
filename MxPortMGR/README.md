@@ -11,7 +11,7 @@ news cost over the long run.
 > MxPortMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
 > status bar says so on every screen.
 
-Sixth app in the MXcodeIDE family, next to MxJobsWMS, MxDataHUB, MxDataSQL, MxNoteONE and MxFileMGR. It re-implements
+Sixth app in the MxAppsIOS family, next to MxJobsWMS, MxDataHUB, MxDataSQL, MxNoteONE and MxFileMGR. It re-implements
 MxDataHUB's portfolio optimization and attribution (which MxDataHUB hands to MxJobsWMS workflows and the Layer 3
 services) as interactive, explained steps, and can run them through the same **Layer 3 services** in `../Services`.
 
@@ -22,7 +22,7 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 | Area | What it holds |
 | --- | --- |
 | **Sidebar — the guide** | Five groups: Start Here, **My Portfolio** (6 steps, your own account), Market Reports, Learn the Why, Library. |
-| **Quick Help** (bottom of the sidebar) | The shared MXcodeIDE Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
+| **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the My Portfolio steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. |
 | **Status bar** | The account, its type, value and benchmark; the last action (e.g. "Optimized with Built-in (Swift) in 134 ms"); the educational-use banner. |

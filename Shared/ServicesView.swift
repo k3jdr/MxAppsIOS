@@ -1,6 +1,6 @@
 //
 //  ServicesView.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MXcodeIDE/Shared)
+//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MxAppsIOS/Shared)
 //
 //  "Layer 3 Services": every service both apps use — running or not, its language and why, the use cases it
 //  serves and when to use them, its endpoints, how to start it, and the sample workflows built on it.

@@ -11,7 +11,7 @@ Both apps show the same services, samples and Quick Help, and must agree on the 
 
 ## Decision
 
-Keep shared code in `MXcodeIDE/Shared` (`AppLinks.swift`, `ServiceCatalog.swift`, `ServicesView.swift`,
+Keep shared code in `MxAppsIOS/Shared` (`AppLinks.swift`, `ServiceCatalog.swift`, `ServicesView.swift`,
 `QuickHelp/`) and compile it into each app through a **file-system synchronized group**, not a package or framework.
 Shared views take closures for app-specific behaviour (e.g. MxJobsWMS passes *Add Step* into `ServicesView`).
 

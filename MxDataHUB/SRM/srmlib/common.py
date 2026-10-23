@@ -127,7 +127,7 @@ def local_network_hint(host, error):
     return (f"{host} is on your local network. If other apps on this Mac reach it (MxDataHUB's own connection, "
             "psql), macOS is blocking this program's local network access: it was started from an app without the "
             "Local Network permission, e.g. Terminal. Turn that app on in System Settings > Privacy & Security > "
-            "Local Network, then restart the services from it: python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py restart")
+            "Local Network, then restart the services from it: python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py restart")
 
 
 def log(message):

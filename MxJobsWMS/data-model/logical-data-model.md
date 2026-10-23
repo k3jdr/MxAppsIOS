@@ -3,7 +3,7 @@
 **Scope.** The workflows MxJobsWMS designs and runs: a **jobspace** is a three-layer diagram of steps (Business
 Operations, Agentic Operations, Data Reads) joined by links, with the API subscriptions its data reads use, run
 settings, and — once run — a history of runs, step results, console log and the questions it asked. Also the
-catalog both MxJobsWMS and MxDataHUB show: the Layer 3 services in `MXcodeIDE/Services` and the sample workflows.
+catalog both MxJobsWMS and MxDataHUB show: the Layer 3 services in `MxAppsIOS/Services` and the sample workflows.
 
 Today a jobspace is a JSON file (`format: "mxjobspace"`, `formatVersion: 1`) and runs live in memory. This model
 is the relational form of both: every field of the file format has a column (see §6), and

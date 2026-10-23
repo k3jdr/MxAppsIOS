@@ -10,7 +10,7 @@ CREATE TABLE wms.layer3_service (
     port              integer NOT NULL UNIQUE CHECK (port BETWEEN 1 AND 65535),
     purpose           text NOT NULL,
     why_this_language text NOT NULL,
-    folder            text NOT NULL,      -- under MXcodeIDE/Services
+    folder            text NOT NULL,      -- under MxAppsIOS/Services
     develop_in        text NOT NULL DEFAULT ''
 );
 COMMENT ON TABLE wms.layer3_service IS 'A local Layer 3 service (http://127.0.0.1:<port>) the workflows call';

@@ -1,8 +1,8 @@
 //
 //  ServiceCatalog.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MXcodeIDE/Shared)
+//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MxAppsIOS/Shared)
 //
-//  The Layer 3 services both apps rely on (MXcodeIDE/Services): what each is for, why it is written in its
+//  The Layer 3 services both apps rely on (MxAppsIOS/Services): what each is for, why it is written in its
 //  language, which use cases and samples it serves, and whether it is running now. The built-in entries mirror
 //  each service's GET /describe, so the apps can explain a service and how to start it while it is stopped.
 //
@@ -62,7 +62,7 @@ nonisolated struct ServiceInfo: Codable, Identifiable, Hashable, Sendable {
     var useCases: [String]
     var endpoints: [ServiceEndpoint]
     var samples: [String]
-    /// Folder under MXcodeIDE/Services.
+    /// Folder under MxAppsIOS/Services.
     var folder: String = ""
     var developIn: String = ""
 
@@ -76,10 +76,10 @@ nonisolated struct ServiceInfo: Codable, Identifiable, Hashable, Sendable {
 }
 
 nonisolated enum ServiceCatalog {
-    static let repository = "~/MyCodeGIT/MXcodeIDE"
-    static let startCommand = "python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py start"
-    static let statusCommand = "python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py status"
-    static let agentsCommand = "python3 ~/MyCodeGIT/MXcodeIDE/Services/mxservices.py install-agents"
+    static let repository = "~/MyCodeGIT/MxAppsIOS"
+    static let startCommand = "python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py start"
+    static let statusCommand = "python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py status"
+    static let agentsCommand = "python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py install-agents"
 
     static func service(_ id: String) -> ServiceInfo? { all.first { $0.id == id } }
 

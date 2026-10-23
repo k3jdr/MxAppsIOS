@@ -32,7 +32,7 @@ enum PortHelp {
         case .reportWalkthrough: detail = "A report walkthrough in seven steps: the report, how to read it, the market's move, what it did to the account, your reaction, its long-run consequences against the plan, and the takeaways. Choose another report with the Report menu at the top. Its first step links to the real report: the publisher's latest release, release schedule and history."
         case .securities: detail = "The security master's securities, as on MxDataHUB's Securities page: search by name or any identifier (ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI), filter by type, benchmark and activity or by any column's header, and see the selected one's prices, identifiers, issuer and security facts, listings, classification, benchmark membership and corporate actions. Through the accounts service."
         case .samples: detail = "Every sample account, the edge case it teaches and what to look for. Use one in the report walkthroughs and the Morning Briefing; copy one into My Portfolio to work through its steps."
-        case .services: detail = "The shared Layer 3 services (MXcodeIDE/Services) — portfolio-java for active optimization, portfolio-cpp for tracking and risk, analytics for attribution — whether they run and how to start them."
+        case .services: detail = "The shared Layer 3 services (MxAppsIOS/Services) — portfolio-java for active optimization, portfolio-cpp for tracking and risk, analytics for attribution — whether they run and how to start them."
         }
         return QuickHelpItem(title: screen.fullTitle, detail: detail, symbol: screen.systemImage)
     }

@@ -5,7 +5,7 @@
 //  A portfolio-management IDE that teaches: one window with a guide in the sidebar — Start Here, My Portfolio, Market
 //  Reports (walkthroughs and real earnings), Learn the Why and the Library — over your own account, sample accounts in
 //  an illustrative market, or the security master. Optimization and attribution run built-in or through the shared Layer 3
-//  services (MXcodeIDE/Services). Educational only; never investment advice.
+//  services (MxAppsIOS/Services). Educational only; never investment advice.
 //
 
 import SwiftUI

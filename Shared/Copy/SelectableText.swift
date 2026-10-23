@@ -1,6 +1,6 @@
 //
 //  SelectableText.swift
-//  Shared by MxDataHUB and MxPortMGR (MXcodeIDE/Shared/Copy)
+//  Shared by MxDataHUB and MxPortMGR (MxAppsIOS/Shared/Copy)
 //
 //  A block of read-only text that can be selected across all its lines. SwiftUI selects within one Text at a time,
 //  so a panel built of many (labels, values, a heading per section) could only be copied a word or a line at once.

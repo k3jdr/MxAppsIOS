@@ -1,6 +1,6 @@
 //
 //  AppLinks.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MXcodeIDE/Shared)
+//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MxAppsIOS/Shared)
 //
 //  How the apps hand work to each other:
 //

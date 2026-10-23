@@ -31,7 +31,7 @@ nonisolated extension Jobspace {
         var srm = ApiSubscription.localService(port: 8770)
         srm.name = "SRM loader service"
         srm.provider = "MxDataHUB/SRM (srm.py) on this Mac"
-        srm.projectFolder = "~/MyCodeGIT/MXcodeIDE/MxDataHUB/SRM"
+        srm.projectFolder = "~/MyCodeGIT/MxAppsIOS/MxDataHUB/SRM"
         srm.defaultHeaders = [KeyValue("X-SRM-Dry-Run", "1")]
         srm.notes = "Start it with: python3 Services/mxservices.py start (needs psycopg2, like srm.py). "
             + "X-SRM-Dry-Run: 1 makes every load report its srm.py command without running it — "

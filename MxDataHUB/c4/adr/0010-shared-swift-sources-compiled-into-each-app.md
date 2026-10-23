@@ -10,7 +10,7 @@ package or framework would add versioning and build configuration for a few file
 
 ## Decision
 
-Keep the shared code in **`MXcodeIDE/Shared`** and add it to each Xcode project as a **file-system synchronized
+Keep the shared code in **`MxAppsIOS/Shared`** and add it to each Xcode project as a **file-system synchronized
 group** (`path = ../Shared`), so it compiles into each app. MxDataSQL and MxFileMGR include only `Shared/QuickHelp`.
 
 ## Consequences

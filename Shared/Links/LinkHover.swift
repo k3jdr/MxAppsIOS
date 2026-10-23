@@ -1,6 +1,6 @@
 //
 //  LinkHover.swift
-//  Shared by MxPortMGR and MxDataHUB (MXcodeIDE/Shared/Links)
+//  Shared by MxPortMGR and MxDataHUB (MxAppsIOS/Shared/Links)
 //
 //  Resting the pointer on a link shows a card, as in MxNoteONE (LinkHover.swift there), Word and OneNote: the link's
 //  hover text, where the link goes (a web site, an email address), "Click to open", and buttons to edit the link (the

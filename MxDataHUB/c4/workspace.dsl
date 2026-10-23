@@ -78,7 +78,7 @@ workspace "MxDataHUB" "Security reference master app and the systems around it" 
                     containerInstance services.java
                     containerInstance services.cpp
                 }
-                deploymentNode "~/MyCodeGIT/MXcodeIDE" {
+                deploymentNode "~/MyCodeGIT/MxAppsIOS" {
                     containerInstance hub.cli
                 }
             }
