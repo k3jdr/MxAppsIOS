@@ -93,7 +93,7 @@ enum PageText {
         var text: String?
         if isValue {
             text = label(element) ?? ""
-        } else if role == .staticText || role == .textField || role == .link {
+        } else if role == .staticText || role == .textField || role == .textArea || role == .link {
             text = (value(element) as? String).flatMap { $0.isEmpty ? nil : $0 } ?? label(element)
         } else if role == .button || role == .menuButton {
             // Cards, report names and other things drawn as buttons carry their words as the button's label.

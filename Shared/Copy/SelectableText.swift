@@ -1,11 +1,12 @@
 //
 //  SelectableText.swift
-//  MxDataHUB
+//  Shared by MxDataHUB and MxPortMGR (MXcodeIDE/Shared/Copy)
 //
 //  A block of read-only text that can be selected across all its lines. SwiftUI selects within one Text at a time,
 //  so a panel built of many (labels, values, a heading per section) could only be copied a word or a line at once.
 //  Here headings, label / value rows and columns are one text: drag across any of it, ⌘A, ⌘C or right-click ▸ Copy.
-//  It is as tall as its text, for use inside a scroll view.
+//  It is as tall as its text, for use inside a scroll view. Links in it (RichLines.links, .bullets with addresses)
+//  open with a click, as on a web page.
 //
 
 import AppKit
@@ -27,6 +28,7 @@ struct SelectableText: NSViewRepresentable {
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
         view.textContainer?.widthTracksTextView = true
+        view.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .cursor: NSCursor.pointingHand]
         return view
     }
 
@@ -71,6 +73,18 @@ struct RichLines {
     static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
     static let boldFont = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
     static let digitFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    /// SwiftUI's .callout: the size of the lessons and boxes' text in MxPortMGR.
+    static let calloutFont = NSFont.preferredFont(forTextStyle: .callout)
+    static let calloutBoldFont = NSFont.systemFont(ofSize: calloutFont.pointSize, weight: .semibold)
+    static let captionFont = NSFont.preferredFont(forTextStyle: .caption1)
+
+    /// A text cell: its words, font and colour, and the address it links to.
+    struct Cell {
+        var text: String
+        var font: NSFont = RichLines.font
+        var color: NSColor = .labelColor
+        var link: URL? = nil
+    }
 
     /// A section heading, with space above it unless it opens the text.
     mutating func heading(_ title: String) {
@@ -113,6 +127,69 @@ struct RichLines {
         }
     }
 
+    /// A paragraph, wrapping as wide as the text is.
+    mutating func paragraph(_ line: String, font: NSFont = RichLines.font, color: NSColor = .labelColor, spacing: CGFloat = 6) {
+        let style = NSMutableParagraphStyle()
+        style.paragraphSpacing = spacing
+        append(line + "\n", font, color, style)
+    }
+
+    /// A list, each item after its marker ("•", or "1." "2." … when `numbered`) with its wrapped lines indented to
+    /// the item's text, as a list in a document.
+    mutating func bullets(_ items: [String], numbered: Bool = false, marker bullet: String = "•", font: NSFont = RichLines.font,
+                          color: NSColor = .labelColor, spacing: CGFloat = 6) {
+        let marker = numbered ? "\(items.count)." : bullet
+        let indent = width(marker, numbered ? Self.emboldened(font) : font) + 8
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [NSTextTab(textAlignment: .left, location: indent)]
+        style.headIndent = indent
+        style.paragraphSpacing = spacing
+        for (i, item) in items.enumerated() {
+            let m = numbered ? "\(i + 1)." : bullet
+            append(m + "\t", numbered ? Self.emboldened(font) : font, numbered ? .labelColor : .secondaryLabelColor, style)
+            append(item + "\n", font, color, style)
+        }
+    }
+
+    /// Label / value rows with the labels at the left, in a column as wide as the longest (at most `maxLabel`), and
+    /// values wrapping under themselves.
+    mutating func labelled(_ rows: [(String, String)], font: NSFont = RichLines.font, maxLabel: CGFloat = 200) {
+        let labelWidth = min(maxLabel, rows.map { width($0.0, font) }.max() ?? 0) + 14
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [NSTextTab(textAlignment: .left, location: labelWidth)]
+        style.headIndent = labelWidth
+        style.paragraphSpacing = 5
+        for (label, value) in rows {
+            append(label + "\t", font, .secondaryLabelColor, style)
+            append(value + "\n", font, .labelColor, style)
+        }
+    }
+
+    /// Rows of cells in columns, each as wide as its widest cell; a cell with an address is a link.
+    mutating func cells(_ rows: [[Cell]], spacing: CGFloat = 6) {
+        let count = rows.map(\.count).max() ?? 0
+        var stops: [NSTextTab] = []
+        var x: CGFloat = 0
+        for c in 0..<max(count - 1, 0) {
+            x += (rows.map { c < $0.count ? width($0[c].text, $0[c].font) : 0 }.max() ?? 0) + 14
+            stops.append(NSTextTab(textAlignment: .left, location: x))
+        }
+        let style = NSMutableParagraphStyle()
+        style.tabStops = stops
+        style.headIndent = stops.last?.location ?? 0
+        style.paragraphSpacing = spacing
+        for row in rows {
+            for (i, cell) in row.enumerated() {
+                append(cell.text, cell.font, cell.color, style, link: cell.link)
+                append(i < row.count - 1 ? "\t" : "\n", cell.font, cell.color, style)
+            }
+        }
+    }
+
+    private static func emboldened(_ font: NSFont) -> NSFont {
+        NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+    }
+
     /// A line of plain secondary text (an empty section's note).
     mutating func note(_ line: String) {
         let style = NSMutableParagraphStyle()
@@ -120,8 +197,10 @@ struct RichLines {
         append(line + "\n", Self.font, .secondaryLabelColor, style)
     }
 
-    private mutating func append(_ string: String, _ font: NSFont, _ color: NSColor, _ style: NSParagraphStyle) {
-        text.append(NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style]))
+    private mutating func append(_ string: String, _ font: NSFont, _ color: NSColor, _ style: NSParagraphStyle, link: URL? = nil) {
+        var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: style]
+        if let link { attributes[.link] = link }
+        text.append(NSAttributedString(string: string, attributes: attributes))
     }
 
     private func width(_ string: String, _ font: NSFont) -> CGFloat {

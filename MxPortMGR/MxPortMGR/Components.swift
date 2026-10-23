@@ -16,6 +16,13 @@ struct LessonCard: View {
     var points: [String]
     var symbol = "lightbulb"
 
+    /// The points as one selectable text, a bullet before each.
+    static func text(_ points: [String]) -> NSAttributedString {
+        var lines = RichLines()
+        lines.bullets(points, font: RichLines.calloutFont)
+        return lines.result
+    }
+
     private var collapsed: Bool { store.collapsedLessons.contains(id) }
 
     var body: some View {
@@ -34,16 +41,8 @@ struct LessonCard: View {
             .plainButton()
             .help(collapsed ? "Show why this step matters" : "Hide the lesson")
             if !collapsed {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(points, id: \.self) { p in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("•").foregroundStyle(.secondary)
-                            Text(p).fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                .font(.callout)
-                .textSelection(.enabled)
+                // One text, so a drag selects across the points (Shared/Copy/SelectableText.swift).
+                SelectableText(text: Self.text(points))
             }
         }
         .padding(12)

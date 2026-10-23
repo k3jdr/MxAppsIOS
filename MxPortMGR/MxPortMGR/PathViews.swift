@@ -822,7 +822,7 @@ struct AttributionResultView: View {
                 contributors("Hurt most", result.bottom)
             }
             Box(title: "Assumptions", symbol: "info.circle", help: "How the numbers were computed; read them before trusting the result.") {
-                ForEach(result.assumptions, id: \.self) { Text("• " + $0).font(.callout).fixedSize(horizontal: false, vertical: true) }
+                SelectableText(text: { var l = RichLines(); l.bullets(result.assumptions, font: RichLines.calloutFont); return l.result }())
             }
         }
     }

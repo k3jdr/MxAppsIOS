@@ -129,38 +129,40 @@ struct ReportView: View {
                 Text("ILLUSTRATIVE").font(.caption2.weight(.heavy)).foregroundStyle(.orange).padding(8)
             }
             Box(title: "About this report", symbol: "info.circle", help: "Who publishes it, when, what it measures and why portfolio managers watch it.") {
-                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
-                    GridRow { Text("Published by").foregroundStyle(.secondary); Text(report.publisher) }
-                    GridRow { Text("When").foregroundStyle(.secondary); Text(report.frequency) }
-                    GridRow { Text("Key metrics").foregroundStyle(.secondary); Text(report.keyMetrics.joined(separator: " · ")) }
-                    GridRow { Text("Why PMs care").foregroundStyle(.secondary); Text(report.whyCare.joined(separator: " ")) }
-                    GridRow { Text("Typical impact").foregroundStyle(.secondary); ImpactDots(level: report.impact) }
-                }
-                .font(.callout)
+                // One text, so a drag selects across its rows (Shared/Copy/SelectableText.swift).
+                SelectableText(text: aboutText)
             }
             RealReportBox(store: store, report: report)
             Text("Read it the way the market does: point at each line for what it measures, then go on to Reading It.").font(.callout).foregroundStyle(.secondary)
         }
     }
 
+    /// About this report's rows, as one text.
+    private var aboutText: NSAttributedString {
+        var lines = RichLines()
+        lines.labelled([("Published by", report.publisher), ("When", report.frequency),
+                        ("Key metrics", report.keyMetrics.joined(separator: " · ")), ("Why PMs care", report.whyCare.joined(separator: " ")),
+                        ("Typical impact", ["", "Low — usually a small market reaction on the day", "Medium — can move markets on a surprise",
+                                            "High — moves markets within seconds of release"][report.impact])],
+                       font: RichLines.calloutFont)
+        return lines.result
+    }
+
     private var reading: some View {
         VStack(alignment: .leading, spacing: 12) {
             Box(title: "How to read it", symbol: "text.magnifyingglass", help: "The questions analysts ask of this report, in order.") {
-                ForEach(Array(report.reading.enumerated()), id: \.offset) { i, r in
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("\(i + 1).").bold().frame(width: 20)
-                        Text(r).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+                // One text, so a drag selects across the steps (Shared/Copy/SelectableText.swift).
+                SelectableText(text: { var l = RichLines(); l.bullets(report.reading, numbered: true); return l.result }())
             }
             Box(title: "Terms", symbol: "character.book.closed", help: "Words the report and the commentary on it use.") {
-                ForEach(report.terms) { t in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(t.term).font(.callout.weight(.semibold))
-                        Text(t.definition).font(.callout).foregroundStyle(.secondary)
+                SelectableText(text: {
+                    var l = RichLines()
+                    for t in report.terms {
+                        l.paragraph(t.term, font: RichLines.calloutBoldFont, spacing: 1)
+                        l.paragraph(t.definition, font: RichLines.calloutFont, color: .secondaryLabelColor, spacing: 8)
                     }
-                    .quickHelpArea(QuickHelpItem(title: t.term, detail: t.definition, symbol: "character.book.closed"))
-                }
+                    return l.result
+                }())
             }
         }
     }
@@ -356,7 +358,7 @@ struct ReportView: View {
     private var takeaways: some View {
         VStack(alignment: .leading, spacing: 12) {
             Box(title: "Takeaways", symbol: "checkmark.seal", help: "What this walkthrough is meant to leave you with.") {
-                ForEach(report.takeaways, id: \.self) { Label($0, systemImage: "checkmark").fixedSize(horizontal: false, vertical: true) }
+                SelectableText(text: { var l = RichLines(); l.bullets(report.takeaways, marker: "✓"); return l.result }())
             }
             Box(title: "A plan you can keep on a bad day", symbol: "doc.plaintext", help: "Questions to write down answers to on a calm day.") {
                 Text("Write down, on a calm day: what the account is for and when you'll need the money; the stock / bond mix and the band you'll rebalance at; what you will do when stocks fall 20% (most plans: rebalance, nothing more); and who you will talk to before changing the plan.")
@@ -493,23 +495,24 @@ struct RealReportBox: View {
     @Bindable var store: PortStore
     var report: MarketReport
 
+    /// The introduction and a row per source (kind, title linked to its page, publisher), as one text.
+    private var sourcesText: NSAttributedString {
+        var lines = RichLines()
+        lines.paragraph("This walkthrough uses illustrative numbers. Read the actual \(report.title) at its source:",
+                        font: RichLines.calloutFont, color: .secondaryLabelColor, spacing: 8)
+        lines.cells(report.sources.map { s in
+            [RichLines.Cell(text: s.kind.rawValue, font: RichLines.captionFont, color: .secondaryLabelColor),
+             RichLines.Cell(text: s.title, font: RichLines.calloutFont, color: .linkColor, link: s.url),
+             RichLines.Cell(text: s.publisher, font: RichLines.captionFont, color: .secondaryLabelColor)]
+        })
+        return lines.result
+    }
+
     var body: some View {
         Box(title: "The real report", symbol: "arrow.up.right.square",
             help: "The publisher's own pages for the actual \(report.title): the latest release, when the next one comes out, and its history. This walkthrough's numbers are made up to teach.") {
-            Text("This walkthrough uses illustrative numbers. Read the actual \(report.title) at its source:")
-                .font(.callout).foregroundStyle(.secondary)
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
-                ForEach(report.sources) { s in
-                    GridRow {
-                        Label(s.kind.rawValue, systemImage: s.kind.symbol).font(.caption).foregroundStyle(.secondary)
-                        Link(s.title, destination: s.url)
-                            .help(s.address)
-                            .quickHelp(s.title, "\(s.kind.rawValue) from \(s.publisher) — opens \(s.address) in your browser.", symbol: s.kind.symbol)
-                        Text(s.publisher).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .font(.callout)
+            // One text, so a drag selects across the sources; a click on a title opens it in the browser.
+            SelectableText(text: sourcesText)
             if report.id == "earnings" || report.id == "revisions" {
                 HStack(spacing: 10) {
                     Button { store.openEarningsDay(EarningsDates.today()) } label: { Label("Earnings by Day", systemImage: "list.bullet.rectangle") }

@@ -33,8 +33,11 @@ selection / interaction, turnover, rebalance band, look-through, tax lot, Carino
 gives both.
 
 **Selecting and copying.** The screens' text can be selected and copied (⌘C), as in a document: lessons, figures,
-captions, cards and the walkthroughs. Each piece of text is selected on its own; SwiftUI doesn't select across
-several, so to take more than one at a time:
+captions, cards and the walkthroughs. Sections that are mostly reading are each one text, so a drag selects across
+all their lines: every lesson (Why this step, What this walkthrough shows), and in the walkthroughs About this report,
+The real report (its titles still open the source), How to read it, Terms and Takeaways, and Attribution's
+Assumptions (`Shared/Copy/SelectableText.swift`, shared with MxDataHUB). Elsewhere each piece of text is selected on
+its own — SwiftUI doesn't select across several — so to take more than one at a time:
 
 - **Edit ▸ Copy Page Text** (⌥⇧⌘C) copies the whole page — every section, card and grid, also what is scrolled out of
   sight — laid out as on screen: things side by side tab-separated (a grid's columns, a metric row), cards one after
