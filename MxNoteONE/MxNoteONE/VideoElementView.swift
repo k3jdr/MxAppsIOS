@@ -362,11 +362,90 @@ final class VideoElementView: ElementView {
         }
         self.player = player
         screen.show(player)
+        // A video macOS can't decode (VP9, AV1 — inserted before conversion existed): offer to convert it.
+        Task { [weak self] in
+            guard await !VideoConverter.canPlay(url) else { return }
+            self?.offerConversion(url: url)
+        }
         return player
+    }
+
+    // MARK: Converting
+
+    private var conversionOffered = false
+
+    private func offerConversion(url: URL) {
+        guard !conversionOffered, job == nil else { return }
+        conversionOffered = true
+        resetPlayer()
+        Task {
+            let codec = await VideoConverter.codecName(url)
+            let name = element.fileName ?? "The video"
+            guard VideoConverter.ffmpeg != nil else {
+                return NotebookStore.shared.showAlert("Can't play this video", VideoConverter.noFFmpegMessage(name, codec: codec))
+            }
+            let alert = NSAlert()
+            alert.messageText = "Convert “\(name)” so it plays?"
+            alert.informativeText = "It's \(codec) video, which macOS can't play. MxNoteONE can convert it to H.264 (with ffmpeg); the converted video replaces it on the page."
+            alert.addButton(withTitle: "Convert")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn { convertForPlayback() }
+        }
+    }
+
+    /// Converts the video to H.264 in place: the notebook gets the converted file, a poster and the right proportions.
+    func convertForPlayback() {
+        guard job == nil, let controller, let ref = controller.ref, let asset = element.asset else { return NSSound.beep() }
+        let store = NotebookStore.shared
+        guard VideoConverter.ffmpeg != nil else {
+            return store.showAlert("Can't convert the video", VideoConverter.noFFmpegMessage(element.fileName ?? "The video", codec: "this kind of"))
+        }
+        resetPlayer()
+        let plain = store.plainAssetURL(asset, for: ref)
+        guard let source = plain ?? store.temporaryCopy(of: asset, fileName: element.fileName, for: ref) else {
+            return store.showAlert("Can't convert the video", "The video is missing from the notebook.")
+        }
+        showStatus("Converting for playback…")
+        job = Task { [weak self] in
+            defer { if plain == nil { try? FileManager.default.removeItem(at: source.deletingLastPathComponent()) } }
+            do {
+                let converted = try await VideoConverter.convert(source) { done in
+                    self?.showStatus("Converting for playback… \(Int(done * 100))%")
+                }
+                defer { try? FileManager.default.removeItem(at: converted.deletingLastPathComponent()) }
+                let (poster, size) = await VideoConverter.posterAndSize(converted)
+                guard let self, !Task.isCancelled, self.controller?.ref == ref, self.superview != nil,
+                      let data = try? Data(contentsOf: converted), let name = store.writeAsset(data, ext: "mp4", for: ref) else { return }
+                self.finishJob()
+                let old = self.frame
+                self.element.asset = name
+                self.element.fileName = ((self.element.fileName ?? "Video") as NSString).deletingPathExtension + ".mp4"
+                if let poster, let jpeg = VideoElementView.jpeg(poster), let posterName = store.writeAsset(jpeg, ext: "jpg", for: ref) {
+                    self.element.preview = posterName
+                    self.screen.poster = NSImage(cgImage: poster, size: NSSize(width: poster.width, height: poster.height))
+                }
+                self.duration = nil
+                self.conversionOffered = false
+                self.aspect = size.height / size.width
+                self.setWidth(old.width)
+                self.refreshBar()
+                self.controller?.markDirty()
+                if self.frame.height != old.height { self.heightChanged(from: old.height) }
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                self.finishJob()
+                store.showAlert("Couldn't convert the video", error.localizedDescription)
+            }
+        }
     }
 
     private func tearDown() {
         job?.cancel()
+        resetPlayer()
+    }
+
+    /// Lets the player go (it's made again when next needed).
+    private func resetPlayer() {
         player?.pause()
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
@@ -561,7 +640,7 @@ final class VideoElementView: ElementView {
         }
     }
 
-    static func jpeg(_ image: CGImage) -> Data? {
+    nonisolated static func jpeg(_ image: CGImage) -> Data? {
         NSBitmapImageRep(cgImage: image).representation(using: .jpeg, properties: [.compressionFactor: 0.85])
     }
 
@@ -574,6 +653,7 @@ final class VideoElementView: ElementView {
         menu.addItem(stop)
         menu.addItem(.separator())
         transcriptItems().forEach(menu.addItem)
+        menu.addItem(ClosureMenuItem("Convert for Playback (H.264)…") { [weak self] in self?.convertForPlayback() })
         let poster = ClosureMenuItem("Use This Frame as Poster") { [weak self] in self?.useCurrentFrameAsPoster() }
         poster.isEnabled = player != nil
         menu.addItem(poster)

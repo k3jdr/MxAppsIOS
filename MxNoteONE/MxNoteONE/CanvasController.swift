@@ -709,33 +709,50 @@ final class CanvasController: NSObject {
     }
 
     /// A video file copied into the notebook and played on the page, with a poster frame and its proportions.
+    /// A video macOS can't decode (VP9, AV1) is converted to H.264 first (VideoConverter), with its progress in the
+    /// sidebar.
     func insertVideo(_ url: URL, at point: NSPoint? = nil) {
         guard let ref else { return }
         let p = point ?? nextInsertionPoint()
         Task {
-            let asset = AVURLAsset(url: url)
-            var size = CGSize(width: 16, height: 9)
-            if let track = try? await asset.loadTracks(withMediaType: .video).first,
-               let (natural, transform) = try? await track.load(.naturalSize, .preferredTransform) {
-                let shown = natural.applying(transform)
-                if abs(shown.width) > 0, abs(shown.height) > 0 { size = CGSize(width: abs(shown.width), height: abs(shown.height)) }
-            }
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 1280, height: 1280)
-            let seconds = (try? await asset.load(.duration).seconds).flatMap { $0.isFinite ? $0 : nil } ?? 0
-            let poster = try? await generator.image(at: CMTime(seconds: min(1, seconds / 3), preferredTimescale: 600)).image
-            // The page may have changed meanwhile: the video goes where it was dropped or chosen.
-            guard self.ref == ref else { return NSSound.beep() }
-            guard let data = try? Data(contentsOf: url),
-                  let name = store.writeAsset(data, ext: url.pathExtension, for: ref) else { return }
-            let width = min(max(size.width, VideoElementView.minimumWidth), 640)
-            var element = PageElement(kind: .video, x: p.x, y: p.y, width: width,
-                                      height: ElementView.gripHeight + (width * size.height / size.width).rounded() + VideoElementView.barHeight,
-                                      asset: name, fileName: url.lastPathComponent)
-            element.preview = poster.flatMap(VideoElementView.jpeg).flatMap { store.writeAsset($0, ext: "jpg", for: ref) }
-            if let view = addElement(element) { canvas.selectedElement = view }
+            guard await VideoConverter.canPlay(url) else { return await convertThenInsert(url, ref: ref, at: p) }
+            placeVideo(url, fileName: url.lastPathComponent, poster: await VideoConverter.posterAndSize(url), ref: ref, at: p)
         }
+    }
+
+    private func convertThenInsert(_ url: URL, ref: PageRef, at p: NSPoint) async {
+        let name = url.lastPathComponent
+        let codec = await VideoConverter.codecName(url)
+        guard VideoConverter.ffmpeg != nil else {
+            return store.showAlert("Can't play this video", VideoConverter.noFFmpegMessage(name, codec: codec))
+        }
+        ImportActivity.shared.runTask("Converting \(name) for playback…") { activity in
+            do {
+                let converted = try await VideoConverter.convert(url) { done in
+                    activity.status = "Converting \(name) (\(codec)) for playback… \(Int(done * 100))%"
+                }
+                defer { try? FileManager.default.removeItem(at: converted.deletingLastPathComponent()) }
+                let poster = await VideoConverter.posterAndSize(converted)
+                self.placeVideo(converted, fileName: converted.lastPathComponent, poster: poster, ref: ref, at: p)
+            } catch {
+                self.store.showAlert("Couldn't convert the video", "“\(name)” is \(codec) video, which macOS can't play. \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func placeVideo(_ url: URL, fileName: String, poster: (poster: CGImage?, size: CGSize), ref: PageRef, at p: NSPoint) {
+        // The page may have changed meanwhile: the video goes where it was dropped or chosen.
+        guard self.ref == ref else { return NSSound.beep() }
+        guard let data = try? Data(contentsOf: url),
+              let name = store.writeAsset(data, ext: url.pathExtension, for: ref) else { return }
+        // At most 640 points on its longer side (a phone's portrait video isn't a page tall).
+        let size = poster.size
+        let width = max(VideoElementView.minimumWidth, size.width * min(1, 640 / max(size.width, size.height)))
+        var element = PageElement(kind: .video, x: p.x, y: p.y, width: width,
+                                  height: ElementView.gripHeight + (width * size.height / size.width).rounded() + VideoElementView.barHeight,
+                                  asset: name, fileName: fileName)
+        element.preview = poster.poster.flatMap(VideoElementView.jpeg).flatMap { store.writeAsset($0, ext: "jpg", for: ref) }
+        if let view = addElement(element) { canvas.selectedElement = view }
     }
 
     /// Dropped or chosen files: pictures go on the page, other files become attachments.

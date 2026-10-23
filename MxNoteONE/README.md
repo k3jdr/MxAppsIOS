@@ -209,6 +209,12 @@ Section and New Section Group. Right-click a page for its own menu.
   double-clicking the video plays or pauses it. Right-click for Play / Stop, **Use This Frame as Poster**, Open in
   Viewer and Save Video As…. Videos in password-protected sections play from a decrypted temporary copy that is
   removed when the page closes. Exports link the video file; OneNote sync uploads it as an attachment.
+- **Videos macOS can't play** — VP9, AV1 or VP8 (common from YouTube and the web, often in an .mp4) — are converted
+  to an H.264 / AAC .mp4 with **ffmpeg** as they're inserted (progress in the sidebar; the Mac's hardware encoder,
+  libx264 if that fails), then put on the page as usual. Such a video inserted earlier offers to convert itself
+  when played, or right-click ▸ Convert for Playback (H.264)…; the converted file replaces it. ffmpeg comes from
+  Homebrew (`brew install ffmpeg`); without it MxNoteONE says so. A video goes on the page at most 640 points on its
+  longer side (a phone's portrait video is 360 × 640).
 - **Transcripts and recaps** (as for a Teams meeting recording): the control bar's transcript button
   (speech bubble) or right-click the video:
   - **Transcribe to Page** turns what's said into text on this Mac (Apple's Speech framework — SpeechAnalyzer; the
