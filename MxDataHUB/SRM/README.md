@@ -58,6 +58,7 @@ security add-generic-password -U -s SRM-api -a openfigi -w
 | Benchmarks | `benchmark`, `benchmark_weight` (dated snapshots, one per load), `benchmark_constituent` (membership over time, rebuilt from all snapshots), `benchmark_level` |
 | Portfolios | `portfolio`, `portfolio_holding` (dated snapshots; shares and/or target weight; `load_id` and `drifted_from` when carried forward by `portfolio-snapshots`), `portfolio_transaction` |
 | Personal accounts (V011) | `portfolio.account_type` (taxable / retirement / roth; NULL for model portfolios), `approach` (active / passive), `managed_by` (e.g. MxPortMGR), `cash_balance`; `portfolio_tax_lot` (open lots: security, purchase date, shares, total cost) |
+| Links (V014) | `security_link`: a link on a security's ticker or name (address, words, hover text plain and RTF, MxNoteONE title, updated at / by) — MxDataHUB's Securities and Holdings, MxPortMGR's Earnings by Day and My Holdings; `us_security(ticker)`: the current U.S. listing of a ticker spelled BRK.B, BRK-B or BRK/B |
 | Views | `v_security` (current identifiers pivoted), `v_identifier_coverage`, `v_benchmark_summary`, `v_load_history`, `v_snapshot_coverage` (weight history per benchmark and portfolio), `v_portfolio_tax_lot` (lots valued: price, market value, unrealised gain, long-term), `v_personal_account` (accounts with lots, value and cost) |
 
 Functions:

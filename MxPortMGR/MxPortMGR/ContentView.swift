@@ -131,6 +131,10 @@ struct ContentView: View {
     /// for the earnings screens `-earningsDate 2026-10-20` (Earnings by Day, and the month or week the calendar shows)
     /// with `-earningsSymbol PG` (the company selected), and `-earningsMode Week`.
     private func start() {
+        // Links on tickers and names live in the security master, through the accounts service; links kept on this
+        // Mac for its securities go there once it answers.
+        SecurityLinks.shared.use(AccountsLinkBackend())
+        Task { await SecurityLinks.shared.load() }
         let defaults = UserDefaults.standard
         if let s = defaults.string(forKey: "screen").flatMap(Screen.init(rawValue:)) { store.screen = s }
         if let d = defaults.string(forKey: "earningsDate"), d.count == 10 { store.earnings.date = d; store.earnings.anchor = d }

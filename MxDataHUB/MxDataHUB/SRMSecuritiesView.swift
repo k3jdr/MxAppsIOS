@@ -57,8 +57,8 @@ struct SRMSecuritiesView: View {
             .onChange(of: store.activeOnly) { Task { await store.search() } }
 
             Table(store.results, selection: $store.selectedSecurityID) {
-                TableColumn("Ticker", value: \.ticker).width(min: 50, ideal: 70)
-                TableColumn("Name", value: \.name).width(min: 140, ideal: 220)
+                TableColumn("Ticker") { r in LinkedCell(target: .security(r)) }.width(min: 50, ideal: 70)
+                TableColumn("Name") { r in LinkedCell(target: .security(r, .name)) }.width(min: 140, ideal: 220)
                 TableColumn("Type", value: \.type).width(min: 60, ideal: 90)
                 TableColumn("ISIN", value: \.isin).width(min: 90, ideal: 110)
                 TableColumn("CUSIP", value: \.cusip).width(min: 70, ideal: 85)
@@ -66,6 +66,10 @@ struct SRMSecuritiesView: View {
                 TableColumn("Sector", value: \.sector).width(min: 60, ideal: 120)
                 TableColumn("MIC", value: \.mic).width(min: 40, ideal: 45)
             }
+            .contextMenu(forSelectionType: SecurityRow.ID.self) { ids in
+                if let id = ids.first, let r = store.results.first(where: { $0.id == id }) { linkMenu(.security(r)) }
+            }
+            .task(id: store.results.map(\.id)) { await SecurityLinks.shared.load(securityIDs: store.results.map(\.id)) }
             .quickHelpArea(HubHelp.results)
             HStack {
                 Text(store.resultsTruncated ? "First 1,000 matches — narrow the search" : "\(store.results.count.formatted()) securities")

@@ -1,6 +1,6 @@
 //
 //  LinkHover.swift
-//  MxPortMGR
+//  Shared by MxPortMGR and MxDataHUB (MXcodeIDE/Shared/Links)
 //
 //  Resting the pointer on a link shows a card, as in MxNoteONE (LinkHover.swift there), Word and OneNote: the link's
 //  hover text, where the link goes (a web site, an email address), "Click to open", and buttons to edit the link (the
@@ -196,7 +196,7 @@ struct LinkInfo {
         let words = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.text = words?.isEmpty == false ? words : nil
         if url.scheme == Self.noteScheme {
-            // MxPortMGR can't read MxNoteONE's notebooks: the title is the one copied with the link.
+            // These apps can't read MxNoteONE's notebooks: the title is the one copied with the link.
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             let kind: String
             switch url.host() {

@@ -20,6 +20,12 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          days; the plan reaches back 12 months, so an earlier `from` is cut there
                                          (planStart and notOnPlan in the answer)
     GET  /earnings/history?symbol=&limit=   one company's reports from FMP, newest first (back decades)
+    POST /links/query                    links on securities' tickers and names (srm.security_link, V014) for
+                                         {securityIds: [...], tickers: [...]}; tickers resolve to their current U.S.
+                                         listing (srm.us_security) and come back in `resolved`
+    PUT  /links/<securityId>/<field>     add or change the link on a security's ticker or name (field ticker | name):
+                                         {address, text, hoverText, hoverRtf, title, by}
+    DELETE /links/<securityId>/<field>   take the link off
 
 The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
 config.local.json), so MxPortMGR's earnings screens get revenue figures with no API key in the sandboxed app.
@@ -73,6 +79,9 @@ DESCRIBE = {
         {"method": "POST", "path": "/accounts/{code}/load-prices", "summary": "Load prices for unpriced holdings (via srm-loader)"},
         {"method": "GET", "path": "/earnings/calendar", "summary": "FMP earnings calendar: EPS and revenue, estimated and actual (12 months back)"},
         {"method": "GET", "path": "/earnings/history", "summary": "One company's earnings reports from FMP, newest first"},
+        {"method": "POST", "path": "/links/query", "summary": "Links on securities' tickers and names, by security id or ticker"},
+        {"method": "PUT", "path": "/links/{securityId}/{field}", "summary": "Add or change the link on a ticker or name"},
+        {"method": "DELETE", "path": "/links/{securityId}/{field}", "summary": "Take a link off"},
     ],
     "samples": [],
 }
@@ -497,6 +506,77 @@ def earnings_history(q):
                                             "lastUpdated")} for r in rows]}
 
 
+# --- Links on tickers and names (srm.security_link, V014) ---------------------------------------------------------
+
+LINK_FIELDS = ("ticker", "name")
+
+
+def link_out(r):
+    return {"securityId": r["security_id"], "field": r["field"], "address": r["address"], "text": r["display_text"],
+            "hoverText": r["hover_text"], "hoverRtf": r["hover_rtf"], "title": r["link_title"],
+            "updatedAt": r["updated_at"], "updatedBy": r["updated_by"]}
+
+
+def query_links(conn, body):
+    """The links on these securities, by id or by ticker (resolved to the current U.S. listing)."""
+    ids = set()
+    for i in body.get("securityIds") or []:
+        try:
+            ids.add(int(i))
+        except (TypeError, ValueError):
+            raise ValueError("securityIds must be numbers")
+    tickers = sorted({str(t).strip().upper() for t in body.get("tickers") or [] if str(t).strip()})[:3000]
+    resolved = {}
+    if tickers:
+        for r in fetch(conn, "SELECT t AS ticker, srm.us_security(t) AS security_id FROM unnest(%s::text[]) t", (tickers,)):
+            if r["security_id"] is not None:
+                resolved[r["ticker"]] = r["security_id"]
+                ids.add(r["security_id"])
+    rows = fetch(conn, "SELECT * FROM srm.security_link WHERE security_id = ANY(%s) ORDER BY security_id, field",
+                 (sorted(ids),)) if ids else []
+    return {"resolved": resolved, "links": [link_out(r) for r in rows]}
+
+
+def link_key(security_id, field):
+    try:
+        security_id = int(security_id)
+    except ValueError:
+        raise ValueError("the security id must be a number")
+    if field not in LINK_FIELDS:
+        raise ValueError("field must be ticker or name")
+    return security_id, field
+
+
+def save_link(conn, security_id, field, body):
+    security_id, field = link_key(security_id, field)
+    address = (body.get("address") or "").strip()
+    if not address:
+        raise ValueError("the link needs an address")
+    if not fetch(conn, "SELECT 1 FROM srm.security WHERE security_id = %s", (security_id,)):
+        raise LookupError("no security %d" % security_id)
+    blank = lambda k: (body.get(k) or "").strip() or None
+    rows = fetch(conn, """
+        INSERT INTO srm.security_link (security_id, field, address, display_text, hover_text, hover_rtf, link_title,
+                                       updated_at, updated_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, now(), %s)
+        ON CONFLICT (security_id, field) DO UPDATE SET address = excluded.address, display_text = excluded.display_text,
+            hover_text = excluded.hover_text, hover_rtf = excluded.hover_rtf, link_title = excluded.link_title,
+            updated_at = now(), updated_by = excluded.updated_by
+        RETURNING *""", (security_id, field, address, blank("text"), blank("hoverText"), body.get("hoverRtf") or None,
+                         blank("title"), blank("by") or "MxPortMGR"))
+    conn.commit()
+    return link_out(rows[0])
+
+
+def delete_link(conn, security_id, field):
+    security_id, field = link_key(security_id, field)
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM srm.security_link WHERE security_id = %s AND field = %s", (security_id, field))
+        deleted = cur.rowcount
+    conn.commit()
+    return {"deleted": deleted}
+
+
 def json_default(value):
     if isinstance(value, (dt.date, dt.datetime)):
         return value.isoformat()
@@ -519,6 +599,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         self.route("PUT")
+
+    def do_DELETE(self):
+        self.route("DELETE")
 
     def route(self, method):
         if Handler.token and self.headers.get("Authorization", "") != "Bearer " + Handler.token:
@@ -556,6 +639,12 @@ class Handler(BaseHTTPRequestHandler):
                     out = account(conn, parts[1])
                 elif len(parts) == 2 and parts[0] == "accounts" and method == "PUT":
                     out = save_account(conn, parts[1], body)
+                elif parts == ["links", "query"] and method == "POST":
+                    out = query_links(conn, body)
+                elif len(parts) == 3 and parts[0] == "links" and method == "PUT":
+                    out = save_link(conn, parts[1], parts[2], body)
+                elif len(parts) == 3 and parts[0] == "links" and method == "DELETE":
+                    out = delete_link(conn, parts[1], parts[2])
                 elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "load-prices" and method == "POST":
                     out = load_prices(conn, parts[1])
                 else:

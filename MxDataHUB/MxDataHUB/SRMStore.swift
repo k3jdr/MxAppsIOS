@@ -155,6 +155,8 @@ struct HoldingRow: Identifiable, Hashable {
     var priceDate: String
     var marketValue: Double?
     var weight: Double?
+    /// srm.security_type (for the Link dialog's pages about the security).
+    var type: String = ""
 }
 
 struct ValidationIssue: Identifiable, Hashable {
@@ -292,6 +294,15 @@ final class SRMStore {
     var snapshotDate: String?
     var holdings: [HoldingRow] = []
     var selectedHoldingIDs = Set<Int64>()
+
+    /// What Edit ▸ Link… (⌘K) links: the security selected on the Securities page, or the (first) holding selected.
+    var linkSelection: LinkTarget? {
+        switch section {
+        case .securities: results.first { $0.id == selectedSecurityID }.map { LinkTarget.security($0) }
+        case .portfolios: holdings.first { selectedHoldingIDs.contains($0.id) }.map { LinkTarget.holding($0) }
+        default: nil
+        }
+    }
     var issues: [ValidationIssue] = []
     var activeWeights: [ActiveWeightRow] = []
 
@@ -355,6 +366,8 @@ final class SRMStore {
             databases = list.contains(target.database) ? list : (list + [target.database]).sorted()
             let exists = try await scalar("SELECT (to_regclass('srm.security') IS NOT NULL)::text")
             available = exists == "true"
+            // Links on tickers and names: srm.security_link (V014), shared with MxPortMGR.
+            SecurityLinks.shared.use(available == true ? HubLinkBackend(service: service) : nil)
             if available == true {
                 securityTypes = try await column("SELECT security_type FROM srm.security_type ORDER BY 1")
                 results = []
@@ -370,6 +383,7 @@ final class SRMStore {
     func disconnect() async {
         if let service { await service.close() }
         service = nil
+        SecurityLinks.shared.use(nil)
         status = .disconnected
         connectedSettings = nil
         available = nil
@@ -653,7 +667,7 @@ final class SRMStore {
                 SELECT v.security_id::text, coalesce(s.ticker, ''), coalesce(s.name, ''), coalesce(h.input_identifier, ''),
                        coalesce(h.input_type, ''), v.quantity::float8::text, v.target_weight::float8::text,
                        v.price::float8::text, coalesce(v.price_date::text, ''), v.market_value::float8::text,
-                       v.weight::float8::text
+                       v.weight::float8::text, coalesce(s.security_type, '')
                   FROM srm.portfolio_valuation($1::text::int, $2::text::date) v
                   LEFT JOIN srm.v_security s USING (security_id)
                   LEFT JOIN srm.portfolio_holding h ON h.portfolio_id = $1::text::int AND h.as_of_date = $2::text::date
@@ -664,7 +678,7 @@ final class SRMStore {
                            input: $0[3] ?? "", inputType: $0[4] ?? "", quantity: $0[5].flatMap(Double.init),
                            targetWeight: $0[6].flatMap(Double.init), price: $0[7].flatMap(Double.init),
                            priceDate: $0[8] ?? "", marketValue: $0[9].flatMap(Double.init),
-                           weight: $0[10].flatMap(Double.init))
+                           weight: $0[10].flatMap(Double.init), type: $0[11] ?? "")
             }
             issues = try await rows("SELECT severity, message FROM srm.portfolio_validate($1::text::int, $2::text::date) ORDER BY 1, 2",
                                     binds).map { ValidationIssue(severity: $0[0] ?? "", message: $0[1] ?? "") }

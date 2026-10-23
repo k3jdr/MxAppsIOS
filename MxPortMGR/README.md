@@ -219,7 +219,7 @@ sometimes does) — and that you can't know in advance which future you're in.
 
 In **Earnings by Day** (the Symbol and Company columns) and **My Holdings** (Ticker and Name), any symbol or name can
 carry a link, made and shown the way MxNoteONE does it (its `LinkHover.swift`, `LinkTips.swift` and Link dialog, ported
-into `LinkHover.swift`, `LinkTips.swift` and `SecurityLinks.swift`):
+into `../Shared/Links` — shared with MxDataHUB's Securities and Portfolio Holdings tables):
 
 * **⌘K** (Edit ▸ Link…) on a selected row — or the row's context menu, *Add Link to Symbol… / Company…* — opens the
   **Link** dialog (**Edit Link** when there is one): *Link on* Symbol or Company (Ticker or Name; ⌘K takes the column the
@@ -242,10 +242,14 @@ into `LinkHover.swift`, `LinkTips.swift` and `SecurityLinks.swift`):
   Link…**, **Copy** and **Remove Link**. It closes when the pointer leaves the link and the card, or on a click or key
   press elsewhere.
 
-A link belongs to the security and the column, not the table: a company's symbol link shows in Earnings by Day and,
-when you hold it in My Portfolio from the security master, in My Holdings. Real securities share links by ticker
-(BRK.B is BRK-B); the illustrative market's made-up ones keep their own. Links are kept on this Mac (the app's
-preferences, `securityLinks`), not in the security master.
+A link belongs to the security and the column, not the table or the app: it is kept in the **security master**
+(`srm.security_link`, migration V014) through the accounts service (`/links`), so it shows in Earnings by Day, in My
+Holdings (My Portfolio from the security master) and in **MxDataHUB** (Securities, Portfolios ▸ Holdings), and a link
+made there shows here. A company in Earnings by Day is found by its ticker's current U.S. listing (`srm.us_security`:
+BRK.B, BRK-B and BRK/B alike). Links stay on this Mac for the illustrative market's made-up securities and for tickers
+the security master doesn't list; a link saved while the accounts service can't be reached is kept here too, and goes to
+the security master the next time it answers (the dialog says where each link is kept). Links made on this Mac before
+are sent there the same way, unless the security master already has one for that ticker or name.
 
 ### Learn the Why
 

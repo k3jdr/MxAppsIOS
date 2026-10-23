@@ -13,6 +13,9 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 | `PUT /accounts/<code>` | Create or replace the account and its lots (`{name, accountType, approach, benchmark, cash, lots: [{securityId, acquired, quantity, costBasis}]}`); rewrites today's holdings snapshot with `srm.sync_holdings_from_lots` |
 | `POST /accounts/<code>/load-prices` | Asks srm-loader (8770) to run `srm.py load nasdaq-prices --symbols …` (Nasdaq.com, free, no key) for unpriced holdings |
 | `GET /earnings/calendar?from=&to=` | FMP's earnings calendar for up to 62 days: `rows` of `{symbol, date, epsEstimated, epsActual, revenueEstimated, revenueActual, lastUpdated}`. Fetched a week per call (a call returns at most 4,000 rows, latest first, and is split further if it hits that). The plan reaches back 12 months: an earlier `from` is cut at `planStart`, and `notOnPlan` gives the range left out |
+| `POST /links/query` | Links on securities' tickers and names (`srm.security_link`, V014) for `{securityIds: [...], tickers: [...]}`: `links` of `{securityId, field: ticker\|name, address, text, hoverText, hoverRtf, title, updatedAt, updatedBy}`; tickers resolve to their current U.S. listing (`srm.us_security`) and come back in `resolved` |
+| `PUT /links/<securityId>/<ticker\|name>` | Add or change a link: `{address, text, hoverText, hoverRtf, title, by}` |
+| `DELETE /links/<securityId>/<ticker\|name>` | Take it off |
 | `GET /earnings/history?symbol=&limit=` | One company's reports from FMP (`earnings`), newest first, back decades; `limit` ≤ 200 (default 40) |
 
 ```bash

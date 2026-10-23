@@ -1,31 +1,42 @@
 //
 //  SecurityLinks.swift
-//  MxPortMGR
+//  Shared by MxPortMGR and MxDataHUB (MXcodeIDE/Shared/Links)
 //
-//  Links on a security's symbol and name in the Earnings by Day and My Holdings tables, made and shown as MxNoteONE
-//  makes and shows links: ⌘K (Edit ▸ Link…, or a row's context menu) opens the Link dialog — text to display,
-//  address, and formatted hover text that can hold links of its own, with a preview of the hover card — and resting
-//  the pointer on a linked symbol or name shows the hover card (LinkHover.swift): the hover text, where the link goes,
-//  and Edit Link…, Copy and Remove Link. A click on a linked symbol or name opens it. In place of MxNoteONE's list of
-//  notebook pages, the dialog offers pages about the security (Nasdaq.com, SEC EDGAR, Yahoo Finance).
+//  Links on a security's ticker and name in the apps' tables (MxDataHUB: Securities, Portfolios ▸ Holdings; MxPortMGR:
+//  My Holdings, Earnings by Day), made and shown as MxNoteONE makes and shows links: ⌘K (Edit ▸ Link…, or a row's
+//  context menu) opens the Link dialog — text to display, address, and formatted hover text that can hold links of its
+//  own, with a preview of the hover card — and resting the pointer on a linked ticker or name shows the hover card
+//  (LinkHover.swift): the hover text, where the link goes, and Edit Link…, Copy and Remove Link. A click on a linked
+//  ticker or name opens it. In place of MxNoteONE's list of notebook pages, the dialog offers pages about the security
+//  (Nasdaq.com, SEC EDGAR, Yahoo Finance) and a link copied in MxNoteONE.
 //
-//  A link belongs to the security and the column, not to the table: a company's symbol link shows in both tables.
-//  Real securities (earnings, the security master) share links by ticker; the illustrative universe's made-up ones
-//  keep their own. Links are kept on this Mac.
+//  A link belongs to the security and the column, not to a table or an app: it is kept in the security master
+//  (srm.security_link, migration V014), through the app's backend — MxDataHUB's own database connection, MxPortMGR's
+//  accounts service — so it shows wherever the security is listed. Securities the security master doesn't have (the
+//  illustrative market's made-up ones, a ticker it doesn't list) keep their links on this Mac; so does a link saved
+//  while the security master can't be reached, until it can.
 //
 
 import AppKit
 import Observation
 import SwiftUI
 
-/// What a link is on: a security's symbol or its name.
+/// What a link is on: a security's ticker (symbol) or its name.
 struct LinkTarget: Hashable, Identifiable {
-    enum Field: String, CaseIterable { case symbol, name }
+    enum Field: String, CaseIterable, Sendable {
+        case symbol, name
+
+        /// The column's name in srm.security_link.
+        var column: String { self == .symbol ? "ticker" : "name" }
+        init?(column: String) { self.init(rawValue: column == "ticker" ? "symbol" : column) }
+    }
     /// What kind of public pages the security has (none for a made-up one).
     enum Kind { case stock, etf, mutualFund, other }
 
-    /// The security: a real ticker as the earnings sources match it (BRK.B is BRK-B), or "mx:" and a made-up one.
+    /// The security on this Mac: a real ticker as the apps match it (BRK.B is BRK-B), or "mx:" and a made-up one.
     var security: String
+    /// The security in the security master, when the table knows it; else it is looked up by `security` (a ticker).
+    var securityID: Int64?
     var symbol: String
     var name: String
     var field: Field
@@ -36,6 +47,8 @@ struct LinkTarget: Hashable, Identifiable {
     var id: String { security + "|" + field.rawValue }
     var cellText: String { field == .symbol ? symbol : name }
     var column: String { columns[field == .symbol ? 0 : 1] }
+    /// A made-up security of MxPortMGR's illustrative market: its links stay on this Mac.
+    var isMadeUp: Bool { security.hasPrefix("mx:") }
 
     func with(_ field: Field) -> LinkTarget {
         var t = self
@@ -43,32 +56,15 @@ struct LinkTarget: Hashable, Identifiable {
         return t
     }
 
-    /// A company in Earnings by Day.
-    static func earnings(_ e: EarningsEntry, _ field: Field = .symbol) -> LinkTarget {
-        LinkTarget(security: e.key, symbol: e.symbol, name: e.name, field: field, columns: ["Symbol", "Company"], kind: .stock)
-    }
-
-    /// A holding in My Holdings (none for cash).
-    static func holding(_ h: Holding, _ field: Field = .symbol) -> LinkTarget? {
-        guard h.ticker != "CASH" else { return nil }
-        let s = h.security
-        let symbol = s?.displayTicker ?? h.ticker
-        let name = s?.name ?? "Unknown — not in the security master"
-        guard let s, s.srmID != nil else {
-            return LinkTarget(security: "mx:" + h.ticker, symbol: symbol, name: name, field: field, columns: ["Ticker", "Name"], kind: nil)
-        }
-        let kind: Kind = switch s.securityType {
-        case "ETF", "ETN": .etf
-        case "Mutual Fund", "Closed-End Fund": .mutualFund
-        case "Collective Investment Trust": .other
-        default: .stock
-        }
-        return LinkTarget(security: EarningsParse.key(symbol), symbol: symbol, name: name, field: field, columns: ["Ticker", "Name"], kind: kind)
+    /// A ticker as the apps match it: upper case, share classes with "-" (BRK.B, BRK/B → BRK-B).
+    static func key(_ ticker: String) -> String {
+        ticker.trimmingCharacters(in: .whitespaces).uppercased()
+            .replacingOccurrences(of: ".", with: "-").replacingOccurrences(of: "/", with: "-")
     }
 }
 
-/// A link: where it goes, the words shown for it (the symbol or name when nil), its hover text (RTF), and for a link
-/// copied in MxNoteONE the title copied with it (MxPortMGR can't read MxNoteONE's notebooks to look it up).
+/// A link: where it goes, the words shown for it (the ticker or name when nil), its hover text (RTF), and for a link
+/// copied in MxNoteONE the title copied with it (these apps can't read MxNoteONE's notebooks to look it up).
 nonisolated struct SecurityLink: Codable, Equatable, Sendable {
     var address: String
     var text: String?
@@ -77,6 +73,18 @@ nonisolated struct SecurityLink: Codable, Equatable, Sendable {
 
     var url: URL? { URL(string: address) }
     var tipText: NSAttributedString? { LinkRichText.text(tip) }
+    /// The hover text as plain text (kept beside the RTF in the security master, to read and search).
+    var tipPlain: String? { tipText.map(\.string).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } }
+}
+
+/// Where an app keeps links in the security master: its own database connection (MxDataHUB) or a service (MxPortMGR).
+protocol SecurityLinkBackend: Sendable {
+    /// What it is, for messages ("the security master", "the accounts service").
+    var name: String { get }
+    /// The links on these securities, by id or by ticker; tickers are looked up to their securities (`resolved`).
+    func links(securityIDs: [Int64], tickers: [String]) async throws -> (resolved: [String: Int64], links: [Int64: [LinkTarget.Field: SecurityLink]])
+    func save(_ link: SecurityLink, securityID: Int64, field: LinkTarget.Field) async throws
+    func delete(securityID: Int64, field: LinkTarget.Field) async throws
 }
 
 @MainActor
@@ -86,22 +94,131 @@ final class SecurityLinks {
 
     private static let key = "securityLinks"
 
-    /// Every link, by LinkTarget.id.
-    private(set) var links: [String: SecurityLink] = {
+    /// Where links on securities of the security master are kept; nil keeps every link on this Mac.
+    @ObservationIgnored private(set) var backend: SecurityLinkBackend?
+
+    /// What saving a link did.
+    enum Saved: Equatable {
+        case saved
+        /// Kept on this Mac for now: the security master couldn't be reached (it goes there on the next load).
+        case keptHere(String)
+        case failed(String)
+    }
+
+    /// Uses another backend (connected to another database, or disconnected): what was loaded from the last one goes.
+    func use(_ backend: SecurityLinkBackend?) {
+        self.backend = backend
+        remote = [:]
+        resolved = [:]
+        unknown = []
+        problem = nil
+    }
+
+    /// Links kept on this Mac, by LinkTarget.id: made-up securities, tickers the security master doesn't list, and
+    /// links waiting to go to the security master.
+    private(set) var local: [String: SecurityLink] = {
         guard let data = UserDefaults.standard.data(forKey: SecurityLinks.key) else { return [:] }
         return (try? JSONDecoder().decode([String: SecurityLink].self, from: data)) ?? [:]
     }()
+    /// Links in the security master, by security and field, as far as they have been loaded.
+    private(set) var remote: [Int64: [LinkTarget.Field: SecurityLink]] = [:]
+    /// Tickers looked up in the security master (LinkTarget.key → security), and those it doesn't list.
+    private(set) var resolved: [String: Int64] = [:]
+    private var unknown: Set<String> = []
+    /// Why the security master couldn't be reached, the last time it was tried.
+    var problem: String?
 
     /// The Link dialog is open for this.
     var editing: LinkTarget?
-    /// The symbol or name cell under the pointer: ⌘K links that column of the selected row.
+    /// The ticker or name cell under the pointer: ⌘K links that column of the selected row.
     @ObservationIgnored var hovered: LinkTarget?
 
-    func link(_ t: LinkTarget) -> SecurityLink? { links[t.id] }
+    /// The target's security in the security master, if it is known or has been looked up.
+    func securityID(_ t: LinkTarget) -> Int64? {
+        guard !t.isMadeUp else { return nil }
+        return t.securityID ?? resolved[t.security]
+    }
 
-    func set(_ link: SecurityLink?, for t: LinkTarget) {
-        links[t.id] = link
-        if let data = try? JSONEncoder().encode(links) { UserDefaults.standard.set(data, forKey: Self.key) }
+    func link(_ t: LinkTarget) -> SecurityLink? {
+        if let id = securityID(t), let link = remote[id]?[t.field] { return link }
+        return local[t.id]
+    }
+
+    /// Where the target's link is kept, in words (for the Link dialog).
+    func whereKept(_ t: LinkTarget) -> String {
+        if t.isMadeUp { return "Kept on this Mac: the security is a made-up one of the illustrative market." }
+        guard let backend else { return "Kept on this Mac." }
+        if securityID(t) != nil { return "Kept in the security master (through \(backend.name)): it shows in MxDataHUB and MxPortMGR." }
+        if unknown.contains(t.security) { return "Kept on this Mac: the security master doesn't list \(t.symbol)." }
+        return "Kept on this Mac until the security master can be reached (\(backend.name))."
+    }
+
+    /// Loads the links on these securities from the security master, and sends it links kept on this Mac for them.
+    func load(securityIDs: [Int64] = [], tickers: [String] = []) async {
+        guard let backend else { return }
+        let keys = Set(tickers.map(LinkTarget.key)).subtracting(resolved.keys).subtracting(unknown)
+        // Links kept here for real tickers go with the first load.
+        let pending = Set(local.keys.compactMap { id -> String? in
+            let security = String(id.split(separator: "|").first ?? "")
+            return security.hasPrefix("mx:") || resolved[security] != nil || unknown.contains(security) ? nil : security
+        })
+        let ask = keys.union(pending)
+        guard !securityIDs.isEmpty || !ask.isEmpty else { return }
+        do {
+            let answer = try await backend.links(securityIDs: securityIDs, tickers: Array(ask))
+            for (ticker, id) in answer.resolved { resolved[LinkTarget.key(ticker)] = id }
+            unknown.formUnion(ask.filter { resolved[$0] == nil })
+            for (id, links) in answer.links { remote[id] = links }
+            for id in Set(securityIDs).union(answer.resolved.values) where answer.links[id] == nil { remote[id] = [:] }
+            problem = nil
+            await sendKept()
+        } catch {
+            problem = error.localizedDescription
+        }
+    }
+
+    /// Links kept on this Mac for securities now found in the security master go there (unless it already has one).
+    private func sendKept() async {
+        guard let backend else { return }
+        for (id, link) in local {
+            let parts = id.split(separator: "|").map(String.init)
+            guard parts.count == 2, let field = LinkTarget.Field(rawValue: parts[1]), let securityID = resolved[parts[0]] else { continue }
+            if remote[securityID]?[field] == nil {
+                do { try await backend.save(link, securityID: securityID, field: field) } catch { problem = error.localizedDescription; return }
+                remote[securityID, default: [:]][field] = link
+            }
+            local[id] = nil
+        }
+        saveLocal()
+    }
+
+    /// Saves (or with nil removes) the target's link: in the security master when the security is there, else on this
+    /// Mac. A link that can't reach the security master is kept here and sent later; removing one there needs it.
+    @discardableResult
+    func set(_ link: SecurityLink?, for t: LinkTarget) async -> Saved {
+        if let backend, let id = securityID(t) {
+            do {
+                if let link { try await backend.save(link, securityID: id, field: t.field) } else { try await backend.delete(securityID: id, field: t.field) }
+                remote[id, default: [:]][t.field] = link
+                local[t.id] = nil
+                saveLocal()
+                problem = nil
+                return .saved
+            } catch {
+                problem = error.localizedDescription
+                guard let link else { return .failed(error.localizedDescription) }
+                local[t.id] = link
+                saveLocal()
+                return .keptHere(error.localizedDescription)
+            }
+        }
+        local[t.id] = link
+        saveLocal()
+        return .saved
+    }
+
+    private func saveLocal() {
+        if let data = try? JSONEncoder().encode(local) { UserDefaults.standard.set(data, forKey: Self.key) }
     }
 
     /// Opens the Link dialog (⌘K, Edit Link… on a hover card, a row's context menu).
@@ -135,7 +252,7 @@ final class SecurityLinks {
 
 // MARK: - Cells
 
-/// A symbol or a name in a table: plain text, or with a link the link's words — a click opens it, the pointer resting
+/// A ticker or a name in a table: plain text, or with a link the link's words — a click opens it, the pointer resting
 /// on it shows the hover card.
 struct LinkedCell: View {
     let target: LinkTarget
@@ -216,7 +333,7 @@ final class LinkAnchorView: NSView {
         guard let url, let target else { return }
         LinkHover.shared.pointer(over: url, rect: bounds, in: self) { [weak self] in
             LinkHoverActions(edit: { SecurityLinks.shared.beginEdit(target) },
-                             remove: { SecurityLinks.shared.set(nil, for: target) },
+                             remove: { Task { await SecurityLinks.shared.set(nil, for: target) } },
                              tip: self?.tip, text: self?.words, title: self?.title)
         }
     }
@@ -234,7 +351,7 @@ struct SecurityPage: Identifiable, Hashable {
         guard let kind = t.kind else { return [] }
         let symbol = t.symbol.uppercased()
         let nasdaq = symbol.lowercased().replacingOccurrences(of: "-", with: ".").replacingOccurrences(of: "/", with: ".")
-        let dashed = EarningsParse.key(symbol)
+        let dashed = LinkTarget.key(symbol)
         var out: [SecurityPage] = []
         switch kind {
         case .stock:
@@ -272,6 +389,10 @@ struct SecurityLinkSheet: View {
     @State private var noteAddress: String?
     /// The pasteboard holds a link copied in MxNoteONE (seen from its types, without reading it).
     @State private var noteOnPasteboard = false
+    @State private var saving = false
+    @State private var failure: String?
+    /// Saved, but only on this Mac: the dialog stays to say so, and closes with Done.
+    @State private var kept = false
 
     private var links: SecurityLinks { .shared }
     private var target: LinkTarget { initial.with(field) }
@@ -351,20 +472,37 @@ struct SecurityLinkSheet: View {
                 Text("\(target.symbol) is a made-up security of the illustrative market: it has no public pages, but any address works.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Label(failure ?? links.whereKept(target), systemImage: failure == nil ? "externaldrive" : "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(failure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                .fixedSize(horizontal: false, vertical: true)
+                .help("Where this link is kept, and so where it shows")
             HStack {
                 if editing {
                     Button("Remove Link", role: .destructive) {
-                        links.set(nil, for: target)
-                        dismiss()
+                        Task {
+                            saving = true
+                            if case .failed(let why) = await links.set(nil, for: target) {
+                                failure = "Couldn't take it off in the security master: " + why
+                            } else {
+                                dismiss()
+                            }
+                            saving = false
+                        }
                     }
                     .help("Keep the text, take the link off")
                 }
                 Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button(editing ? "Update" : "Insert") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(url == nil)
+                if saving { ProgressView().controlSize(.small) }
+                if kept {
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Cancel", role: .cancel) { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                    Button(editing ? "Update" : "Insert") { save() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(url == nil || saving)
+                }
             }
         }
         .padding(20)
@@ -394,7 +532,7 @@ struct SecurityLinkSheet: View {
         address = copied
     }
 
-    /// The words the link shows: the text to display, or the symbol or name.
+    /// The words the link shows: the text to display, or the ticker or name.
     private var shownText: String {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return words.isEmpty ? target.cellText : words
@@ -409,18 +547,30 @@ struct SecurityLinkSheet: View {
         page = pages.first { $0.address == address }?.id
         noteTitle = link?.title
         noteAddress = link?.title == nil ? nil : link?.address
+        failure = nil
     }
 
     private func save() {
         guard let url else { return }
         let words = shownText
-        links.set(SecurityLink(address: url.absoluteString, text: words == target.cellText ? nil : words, tip: LinkRichText.data(tip),
-                               title: url.scheme == LinkInfo.noteScheme ? noteTitle : nil), for: target)
-        dismiss()
+        let link = SecurityLink(address: url.absoluteString, text: words == target.cellText ? nil : words, tip: LinkRichText.data(tip),
+                                title: url.scheme == LinkInfo.noteScheme ? noteTitle : nil)
+        Task {
+            saving = true
+            let saved = await links.set(link, for: target)
+            saving = false
+            if case .keptHere(let why) = saved {
+                // Say so, rather than closing as if it had gone to the security master.
+                failure = "Saved on this Mac for now: the security master couldn't be reached (\(why)). It goes there when it can."
+                kept = true
+            } else {
+                dismiss()
+            }
+        }
     }
 }
 
-/// A row's context menu: add or edit the link on its symbol or its name (as ⌘K does), and open them.
+/// A row's context menu: add or edit the link on its ticker or its name (as ⌘K does), and open them.
 @ViewBuilder
 func linkMenu(_ row: LinkTarget) -> some View {
     let links = SecurityLinks.shared

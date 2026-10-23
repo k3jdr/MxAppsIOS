@@ -101,7 +101,10 @@ struct EarningsDayView: View {
             }
             EarningsSourcesBox(store: store)
         }
-        .task(id: e.date) { show(await e.load([e.date], weekends: true)) }
+        .task(id: e.date) {
+            show(await e.load([e.date], weekends: true))
+            await SecurityLinks.shared.load(tickers: e.days[e.date]?.listed.map(\.symbol) ?? [])
+        }
     }
 
     private func show(_ message: String) { if !message.isEmpty { store.message = message } }

@@ -52,6 +52,8 @@ struct ContentView: View {
         .task { await start() }
         .onOpenURL { url in open(AppLink(url: url)) }
         .errorDialog("MxDataHUB", message: $store.errorMessage)
+        // Links on tickers and names (Shared/Links), as in MxNoteONE: ⌘K, a row's context menu, Edit Link… on a hover card.
+        .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
     }
 
     @ViewBuilder

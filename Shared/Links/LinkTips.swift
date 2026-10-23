@@ -1,6 +1,6 @@
 //
 //  LinkTips.swift
-//  MxPortMGR
+//  Shared by MxPortMGR and MxDataHUB (MXcodeIDE/Shared/Links)
 //
 //  A link's hover text (its "ScreenTip", as Word calls it), as in MxNoteONE (LinkTips.swift there): formatted text
 //  written in the Link dialog and shown on the link's hover card. It is kept as RTF with the link. Hover text can hold

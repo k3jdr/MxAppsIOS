@@ -190,7 +190,13 @@ nonisolated final class SRMRegistry: @unchecked Sendable {
 
 /// The accounts service (Services/accounts, 127.0.0.1:8774).
 nonisolated enum AccountsClient {
-    static let base = "http://127.0.0.1:8774"
+    static let base: String = {
+        #if DEBUG
+        // Self-tests: a test instance of the service (-accountsPort 18774).
+        if let port = UserDefaults.standard.string(forKey: "accountsPort") { return "http://127.0.0.1:\(port)" }
+        #endif
+        return "http://127.0.0.1:8774"
+    }()
     static let service = "accounts (Python, port 8774)"
 
     private static func request<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil, timeout: Double = 60, as: T.Type) async throws -> T {

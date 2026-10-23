@@ -212,8 +212,8 @@ struct SRMPortfoliosView: View {
     private var holdingsTable: some View {
         VStack(alignment: .leading, spacing: 4) {
             Table(store.holdings, selection: $store.selectedHoldingIDs) {
-                TableColumn("Ticker", value: \.ticker).width(min: 40, ideal: 52)
-                TableColumn("Name", value: \.name).width(min: 100, ideal: 150)
+                TableColumn("Ticker") { h in LinkedCell(target: .holding(h)) }.width(min: 40, ideal: 52)
+                TableColumn("Name") { h in LinkedCell(target: .holding(h, .name)) }.width(min: 100, ideal: 150)
                 TableColumn("Entered as") { Text($0.input.isEmpty ? "" : "\($0.input) (\($0.inputType))").foregroundStyle(.secondary) }
                     .width(min: 60, ideal: 100)
                 TableColumn("Shares") { Text(numberText($0.quantity, digits: 0)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
@@ -230,6 +230,10 @@ struct SRMPortfoliosView: View {
                 TableColumn("Weight") { Text(percentText($0.weight, digits: 2)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
                     .width(min: 50, ideal: 70)
             }
+            .contextMenu(forSelectionType: HoldingRow.ID.self) { ids in
+                if let id = ids.first, let h = store.holdings.first(where: { $0.id == id }) { linkMenu(.holding(h)) }
+            }
+            .task(id: store.holdings.map(\.id)) { await SecurityLinks.shared.load(securityIDs: store.holdings.map(\.id)) }
             HStack {
                 Text("\(store.holdings.count) holdings")
                 if totalValue > 0 { Text("· market value \(numberText(totalValue))") }

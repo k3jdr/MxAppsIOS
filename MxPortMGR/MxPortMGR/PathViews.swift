@@ -255,6 +255,10 @@ struct HoldingsTable: View {
             }
             // Every row visible, up to 40.
             .frame(minHeight: CGFloat(max(min(p.holdings.count, 40), 6)) * 26 + 34)
+            // The links on the security master's holdings (illustrative ones are kept on this Mac).
+            .task(id: p.holdings.map(\.ticker)) {
+                await SecurityLinks.shared.load(securityIDs: p.holdings.compactMap { LinkTarget.holding($0)?.securityID })
+            }
         }
     }
 }
