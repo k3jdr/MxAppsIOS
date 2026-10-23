@@ -100,6 +100,12 @@ description, so for `.avi` the Description is stored in (and read from) the comm
 custom ID3 frame (`TXXX:description`, not shown by music players), and the command adds `-id3v2_version 3 -write_id3v1 1` so
 the tags stay ID3v2.3 and ID3v1 tags are kept (plain ffmpeg would write 2.4 and drop ID3v1).
 
+**Edit ▸ Show Clipboard** opens a **Clipboard** window, as in Finder: *Clipboard contents: …* and the content itself —
+copied files (name, folder, size; **Paste into** the active pane's folder, **Move Here**, **Show in Finder**), a picture
+(format and pixel size), styled text, plain text (character and line counts), a link or a colour — plus the data types
+underneath and **Clear Clipboard**. It follows the clipboard while open (macOS has no change notification, so it checks
+twice a second).
+
 **Properties (⌘I)** shows the kind, total size, dates and owner, and lets you change the permission bits
 (optionally for everything inside a folder) and the modification date.
 

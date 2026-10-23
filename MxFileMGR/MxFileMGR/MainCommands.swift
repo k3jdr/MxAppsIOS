@@ -19,6 +19,7 @@ extension KeyEquivalent {
 
 struct MainCommands: Commands {
     @FocusedValue(\.workspace) private var workspace
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -53,6 +54,7 @@ struct MainCommands: Commands {
 
         CommandGroup(after: .pasteboard) {
             Divider()
+            Button("Show Clipboard") { openWindow(id: "clipboard") }
             item("Move Item Here", "v", [.command, .option]) { $0.pasteFromPasteboard(move: true) }
             item("Copy Path", "c", [.command, .option]) { $0.copyPaths() }
             Divider()

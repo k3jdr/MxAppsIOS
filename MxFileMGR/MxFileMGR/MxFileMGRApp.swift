@@ -90,6 +90,13 @@ struct MxFileMGRApp: App {
         .restorationBehavior(.disabled)
         .commandsRemoved()
 
+        Window("Clipboard", id: "clipboard") {
+            ClipboardView()
+        }
+        .defaultSize(width: 560, height: 440)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
+
         Window("Google Cloud Storage", id: "gcs") {
             GCSView()
         }

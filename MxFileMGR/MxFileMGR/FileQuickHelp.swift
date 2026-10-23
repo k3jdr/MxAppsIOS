@@ -204,6 +204,13 @@ enum FileHelp {
         detail: "Saves a WebDAV server (Nextcloud, ownCloud, a NAS, …) in Favorites so one click connects and opens it. The password can be kept in your Keychain.",
         symbol: "plus.circle")
 
+    static let clipboard = QuickHelpItem(
+        title: "Clipboard",
+        detail: "What's on the clipboard, as in Finder's Show Clipboard: files (with Paste into the active pane, Move Here, Show in Finder), "
+            + "a picture, styled or plain text, a link or a colour, and the data types underneath. It updates while the window is open; "
+            + "Clear Clipboard empties it.",
+        symbol: "clipboard")
+
     static let sharePointSetup = QuickHelpItem(
         title: "SharePoint",
         detail: "SharePoint document libraries appear here once the OneDrive app syncs them (work or school account; in SharePoint, a library's Sync or Add shortcut to My files). "
