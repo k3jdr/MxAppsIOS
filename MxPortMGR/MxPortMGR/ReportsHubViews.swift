@@ -40,6 +40,8 @@ struct ReportLibraryView: View {
                     Button("Open the Morning Briefing") { store.go(.morningBriefing) }.buttonStyle(.borderedProminent)
                     Button("The VIX, real data") { store.go(.vix) }
                         .help("The Cboe Volatility Index from Cboe: today, its history, term structure and past spikes")
+                    Button("Compute: hyperscaler capex") { store.go(.compute) }
+                        .help("What Microsoft, Alphabet, Amazon, Meta and Oracle spend on AI compute, and their suppliers' revenue — reported figures")
                 }
             }
         }

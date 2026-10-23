@@ -27,7 +27,10 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          {address, text, hoverText, hoverRtf, title, by}
     DELETE /links/<securityId>/<field>   take the link off
 
-The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
+    GET  /fundamentals/quarters?symbol=MSFT&limit=40   a company's quarterly revenue, operating cash flow, capital
+                                         expenditure, depreciation and free cash flow (FMP), newest first
+
+The earnings and fundamentals endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
 config.local.json), so MxPortMGR's earnings screens get revenue figures with no API key in the sandboxed app.
 
     python3 accounts_service.py                  # http://127.0.0.1:8774
@@ -79,6 +82,7 @@ DESCRIBE = {
         {"method": "POST", "path": "/accounts/{code}/load-prices", "summary": "Load prices for unpriced holdings (via srm-loader)"},
         {"method": "GET", "path": "/earnings/calendar", "summary": "FMP earnings calendar: EPS and revenue, estimated and actual (12 months back)"},
         {"method": "GET", "path": "/earnings/history", "summary": "One company's earnings reports from FMP, newest first"},
+        {"method": "GET", "path": "/fundamentals/quarters", "summary": "One company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow from FMP, newest first"},
         {"method": "POST", "path": "/links/query", "summary": "Links on securities' tickers and names, by security id or ticker"},
         {"method": "PUT", "path": "/links/{securityId}/{field}", "summary": "Add or change the link on a ticker or name"},
         {"method": "DELETE", "path": "/links/{securityId}/{field}", "summary": "Take a link off"},
@@ -506,6 +510,30 @@ def earnings_history(q):
                                             "lastUpdated")} for r in rows]}
 
 
+def fundamentals_quarters(q):
+    """A company's quarterly cash-flow statement and income statement, joined by quarter (capex as a positive amount)."""
+    symbol = (q.get("symbol") or "").strip().upper()
+    if not SYMBOL.match(symbol):
+        raise ValueError("symbol must be a ticker")
+    limit = min(max(int(q.get("limit") or 40), 1), 80)
+    fmp_symbol = symbol.replace(".", "-").replace("/", "-")
+    # Statements change only when a company reports: a long cache keeps the calls well within the plan's limits.
+    cash = fmp("cash-flow-statement", 12 * 3600, symbol=fmp_symbol, period="quarter", limit=limit)
+    income = fmp("income-statement", 12 * 3600, symbol=fmp_symbol, period="quarter", limit=limit)
+    revenue = {r.get("date"): r for r in (income if isinstance(income, list) else [])}
+    rows = []
+    for r in sorted(cash if isinstance(cash, list) else [], key=lambda r: r.get("date") or "", reverse=True):
+        i = revenue.get(r.get("date"), {})
+        capex = r.get("capitalExpenditure")
+        rows.append({"date": r.get("date"), "fiscalYear": r.get("fiscalYear"), "period": r.get("period"),
+                     "filingDate": r.get("filingDate") or i.get("filingDate"),
+                     "revenue": i.get("revenue"), "operatingIncome": i.get("operatingIncome"),
+                     "operatingCashFlow": r.get("operatingCashFlow"),
+                     "capex": -capex if isinstance(capex, (int, float)) else None,
+                     "depreciation": r.get("depreciationAndAmortization"), "freeCashFlow": r.get("freeCashFlow")})
+    return {"source": "FMP cash-flow and income statements", "symbol": symbol, "rows": rows}
+
+
 # --- Links on tickers and names (srm.security_link, V014) ---------------------------------------------------------
 
 LINK_FIELDS = ("ticker", "name")
@@ -615,11 +643,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"status": "ok", "service": "accounts", "version": VERSION})
             if url.path == "/describe":
                 return self.send_json(200, dict(DESCRIBE, version=VERSION, port=Handler.port))
-            if parts[:1] == ["earnings"] and method == "GET":    # FMP only: no database connection
+            if parts[:1] in (["earnings"], ["fundamentals"]) and method == "GET":    # FMP only: no database connection
                 if parts == ["earnings", "calendar"]:
                     out = earnings_calendar(q)
                 elif parts == ["earnings", "history"]:
                     out = earnings_history(q)
+                elif parts == ["fundamentals", "quarters"]:
+                    out = fundamentals_quarters(q)
                 else:
                     return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 out["seconds"] = round(time.time() - started, 2)

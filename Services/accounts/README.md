@@ -17,6 +17,7 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 | `PUT /links/<securityId>/<ticker\|name>` | Add or change a link: `{address, text, hoverText, hoverRtf, title, by}` |
 | `DELETE /links/<securityId>/<ticker\|name>` | Take it off |
 | `GET /earnings/history?symbol=&limit=` | One company's reports from FMP (`earnings`), newest first, back decades; `limit` ≤ 200 (default 40) |
+| `GET /fundamentals/quarters?symbol=&limit=` | A company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow (FMP), newest first — MxPortMGR's Compute screen |
 
 ```bash
 python3 Services/mxservices.py start accounts     # or: python3 accounts_service.py --port 8774

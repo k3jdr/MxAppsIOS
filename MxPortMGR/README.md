@@ -60,7 +60,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
-| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · VIX ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
+| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · VIX ⌥⌘V · Compute — Hyperscaler Capex ⌥⌘U · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
 
 ### Back and Forward
@@ -210,6 +210,16 @@ markets within seconds, others shape positioning over weeks or months.
   VIX explains swings rather than timing a plan. Data: Cboe's daily history files (cdn.cboe.com, no key), read at
   most hourly and kept in the app's Caches folder for when Cboe can't be reached. The Morning Briefing's illustrative
   VIX panel and the Report Library's morning reading link to it.
+* **Compute** (⌥⌘U) — AI compute as an asset theme, followed through what the hyperscalers spend to build it, with
+  real reported figures: Microsoft, Alphabet, Amazon, Meta and Oracle's quarterly capex — combined for the latest
+  calendar quarter all have reported and against a year earlier, over the last four quarters, and as a share of their
+  operating cash flow and revenue — in a stacked chart by calendar quarter (3, 5 or 10 years); a table company by
+  company (latest quarter and its growth, last four quarters, capex / revenue, capex / cash flow, depreciation, free
+  cash flow; copyable); capital intensity over time; **where the money goes** — the revenue and growth of Nvidia,
+  Broadcom, AMD, Micron, Arista, Vertiv and Equinix; and **your exposure**, the share of My Portfolio (in the security
+  master) held in these companies directly. The lesson: capex is the suppliers' revenue, building ahead of demand has
+  happened before (fibre around 2000), and an index fund already holds the theme. Data: FMP's quarterly cash-flow and
+  income statements through the accounts service (`GET /fundamentals/quarters`), which keeps them 12 hours.
 
 #### Earnings sources and their limits
 
