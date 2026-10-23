@@ -8,7 +8,9 @@
 //  empty space, dragged, resized from their corner and typed in place. Right-click for the line's
 //  curve, sides and colour, a note's colour, and the Schema menu — select a schema, copy it, or
 //  export it (to a file in MxDataSQL, to a page of its own in MxNoteONE). The app around it (the
-//  host) hears each change as one step, and adds its own commands to the menu.
+//  host) hears each change as one step, and adds its own commands to the menu. A host with a snap
+//  grid (MxNoteONE's Snap to Grid) has dragged tables and notes, resized notes and arrow-key moves
+//  land on its grid, which shows as dots while dragging.
 //
 
 import AppKit
@@ -26,6 +28,12 @@ enum DBMLHit: Equatable {
     case line(String)
     /// The name strip of a schema panel (a table group).
     case panel(String)
+}
+
+/// A grid to snap to, in the canvas view's own coordinates (the host's page grid, so it lines up with it).
+struct DBMLSnapGrid: Equatable {
+    var step: CGFloat
+    var origin: CGPoint
 }
 
 /// The app around a canvas: told of each change (for undo, saving), and adding its own commands.
@@ -48,6 +56,8 @@ protocol DBMLCanvasHost: AnyObject {
     func canvas(_ canvas: DBMLCanvasView, showSourceLine line: Int)
     /// The diagram's name, for a schema cut out of it.
     var diagramTitle: String? { get }
+    /// The grid dragged tables and notes snap to right now (nil: none — no grid, or snapping is off or held off).
+    func canvasSnapGrid(_ canvas: DBMLCanvasView) -> DBMLSnapGrid?
 }
 
 extension DBMLCanvasHost {
@@ -58,6 +68,7 @@ extension DBMLCanvasHost {
     func canvas(_ canvas: DBMLCanvasView, copy part: DBMLDiagram, schema: String, to item: NSPasteboardItem) {}
     func canvas(_ canvas: DBMLCanvasView, showSourceLine line: Int) {}
     var diagramTitle: String? { nil }
+    func canvasSnapGrid(_ canvas: DBMLCanvasView) -> DBMLSnapGrid? { nil }
 }
 
 /// A menu item that runs a closure.
@@ -100,6 +111,10 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
     var drawsBackground = true { didSet { needsDisplay = true } }
     var isEditable = true
     private(set) var editingNote: String?
+    /// The snap grid shown while something is dragged.
+    private var shownGrid: DBMLSnapGrid? {
+        didSet { if shownGrid != oldValue { needsDisplay = true } }
+    }
     private var noteEditor: DBMLNoteEditor?
     private var tracking: NSTrackingArea?
 
@@ -150,6 +165,18 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
         if drawsBackground {
             NSColor.textBackgroundColor.setFill()
             dirtyRect.fill()
+        }
+        if let grid = shownGrid, grid.step >= 4 {
+            NSColor(srgbRed: 0.45, green: 0.62, blue: 0.85, alpha: 0.45).setFill()
+            var y = grid.origin.y + floor((dirtyRect.minY - grid.origin.y) / grid.step) * grid.step
+            while y <= dirtyRect.maxY {
+                var x = grid.origin.x + floor((dirtyRect.minX - grid.origin.x) / grid.step) * grid.step
+                while x <= dirtyRect.maxX {
+                    NSRect(x: x - 0.75, y: y - 0.75, width: 1.5, height: 1.5).fill()
+                    x += grid.step
+                }
+                y += grid.step
+            }
         }
         NSGraphicsContext.saveGraphicsState()
         let t = NSAffineTransform()
@@ -228,6 +255,37 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
         host?.canvasDidChangeLive(self)
     }
 
+    // MARK: Snap to grid
+
+    /// A diagram point put on the grid (the grid is in view coordinates, the diagram scaled by the zoom).
+    private func snapped(_ p: CGPoint, to grid: DBMLSnapGrid) -> CGPoint {
+        CGPoint(x: (grid.origin.x + ((p.x * zoom - grid.origin.x) / grid.step).rounded() * grid.step) / zoom,
+                y: (grid.origin.y + ((p.y * zoom - grid.origin.y) / grid.step).rounded() * grid.step) / zoom)
+    }
+
+    /// A drag's offset, changed so `anchor` (the dragged thing's top-left corner) lands on the host's grid; the
+    /// grid shows while it snaps. Held ⌥ (the host says no grid) moves freely.
+    private func snapOffset(_ offset: CGSize, anchor: CGPoint?) -> CGSize {
+        guard let anchor, let grid = host?.canvasSnapGrid(self) else {
+            shownGrid = nil
+            return offset
+        }
+        shownGrid = grid
+        let target = snapped(CGPoint(x: anchor.x + offset.width, y: anchor.y + offset.height), to: grid)
+        return CGSize(width: target.x - anchor.x, height: target.y - anchor.y)
+    }
+
+    /// An arrow key's move with a grid: to the next grid line that way (from where the anchor is, on a line or not).
+    private func gridStep(_ anchor: CGPoint, dx: CGFloat, dy: CGFloat, grid: DBMLSnapGrid) -> CGSize {
+        func next(_ v: CGFloat, _ origin: CGFloat, _ dir: CGFloat) -> CGFloat {
+            guard dir != 0 else { return v }
+            let u = (v * zoom - origin) / grid.step
+            let n = dir > 0 ? floor(u + 0.001) + 1 : ceil(u - 0.001) - 1
+            return (origin + n * grid.step) / zoom
+        }
+        return CGSize(width: next(anchor.x, grid.origin.x, dx) - anchor.x, height: next(anchor.y, grid.origin.y, dy) - anchor.y)
+    }
+
     // MARK: Mouse
 
     override func mouseDown(with event: NSEvent) {
@@ -257,13 +315,13 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
             } else if !selection.tables.contains(key) {
                 selection = DBMLSelection(tables: [key])
             }
-            dragTables(selection.tables, from: event)
+            dragTables(selection.tables, lead: key, from: event)
         case .line(let id)?:
             selection = DBMLSelection(ref: id)
         case .panel(let name)?:
             let tables = Set(geometry.groups.first { $0.name == name }?.tables ?? []).intersection(geometry.boxes.map(\.key))
             selection = DBMLSelection(tables: adding ? selection.tables.union(tables) : tables)
-            dragTables(selection.tables, from: event)
+            dragTables(selection.tables, lead: nil, from: event)
         case nil:
             if !adding { selection = DBMLSelection() }
         }
@@ -300,13 +358,19 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
         return moved
     }
 
-    private func dragTables(_ keys: Set<String>, from event: NSEvent) {
+    /// Moves tables together; with a snap grid, the table dragged by (`lead`, else the group's top-left corner)
+    /// lands on it and the others keep their places around it.
+    private func dragTables(_ keys: Set<String>, lead: String?, from event: NSEvent) {
         let start = point(event)
         let origins = diagram.positions.filter { keys.contains($0.key) }
+        let anchor = lead.flatMap { origins[$0] }
+            ?? (origins.isEmpty ? nil : CGPoint(x: origins.values.map(\.x).min()!, y: origins.values.map(\.y).min()!))
         let old = diagram
         let moved = track(event) { p in
-            self.live { d in d.move(keys, from: origins, by: CGSize(width: p.x - start.x, height: p.y - start.y)) }
+            let offset = self.snapOffset(CGSize(width: p.x - start.x, height: p.y - start.y), anchor: anchor)
+            self.live { d in d.move(keys, from: origins, by: offset) }
         }
+        shownGrid = nil
         if moved { commit(keys.count == 1 ? "Move Table" : "Move Tables", from: old) }
     }
 
@@ -316,7 +380,8 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
         let own = diagram.notes.first { $0.id == id }?.frame
         let sticky = geometry.stickies.first { $0.id == id && !$0.own }?.rect
         let moved = track(event) { p in
-            let dx = p.x - start.x, dy = p.y - start.y
+            let offset = self.snapOffset(CGSize(width: p.x - start.x, height: p.y - start.y), anchor: own?.origin ?? sticky?.origin)
+            let dx = offset.width, dy = offset.height
             self.live { d in
                 if let own, let i = d.notes.firstIndex(where: { $0.id == id }) {
                     d.notes[i].frame.origin = CGPoint(x: max(0, (own.minX + dx).rounded()), y: max(0, (own.minY + dy).rounded()))
@@ -325,6 +390,7 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
                 }
             }
         }
+        shownGrid = nil
         if moved { commit("Move Note", from: old) }
     }
 
@@ -333,11 +399,14 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
         let start = point(event)
         let old = diagram
         let moved = track(event) { p in
+            // With a grid, the corner dragged lands on it.
+            let offset = self.snapOffset(CGSize(width: p.x - start.x, height: p.y - start.y), anchor: CGPoint(x: frame.maxX, y: frame.maxY))
             self.live { d in
                 guard let i = d.notes.firstIndex(where: { $0.id == id }) else { return }
-                d.notes[i].frame.size = CGSize(width: max(120, (frame.width + p.x - start.x).rounded()), height: max(60, (frame.height + p.y - start.y).rounded()))
+                d.notes[i].frame.size = CGSize(width: max(120, (frame.width + offset.width).rounded()), height: max(60, (frame.height + offset.height).rounded()))
             }
         }
+        shownGrid = nil
         if moved { commit("Resize Note", from: old) }
     }
 
@@ -595,13 +664,22 @@ final class DBMLCanvasView: NSView, NSTextViewDelegate {
         case 123, 124, 125, 126:
             let dx: CGFloat = event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0
             let dy: CGFloat = event.keyCode == 126 ? -step : event.keyCode == 125 ? step : 0
+            // With a snap grid, one grid step at a time onto the grid.
+            let grid = host?.canvasSnapGrid(self)
             if !selection.tables.isEmpty {
                 let keys = selection.tables
-                return change(keys.count == 1 ? "Move Table" : "Move Tables") { d in d.move(keys, from: d.positions, by: CGSize(width: dx, height: dy)) }
+                let origins = diagram.positions.filter { keys.contains($0.key) }
+                var offset = CGSize(width: dx, height: dy)
+                if let grid, !origins.isEmpty {
+                    let anchor = CGPoint(x: origins.values.map(\.x).min()!, y: origins.values.map(\.y).min()!)
+                    offset = gridStep(anchor, dx: dx, dy: dy, grid: grid)
+                }
+                return change(keys.count == 1 ? "Move Table" : "Move Tables") { d in d.move(keys, from: d.positions, by: offset) }
             }
             if let id = selection.note, let i = diagram.notes.firstIndex(where: { $0.id == id }) {
+                let offset = grid.map { gridStep(diagram.notes[i].frame.origin, dx: dx, dy: dy, grid: $0) } ?? CGSize(width: dx, height: dy)
                 return change("Move Note") { d in
-                    d.notes[i].frame.origin = CGPoint(x: max(0, d.notes[i].frame.minX + dx), y: max(0, d.notes[i].frame.minY + dy))
+                    d.notes[i].frame.origin = CGPoint(x: max(0, d.notes[i].frame.minX + offset.width), y: max(0, d.notes[i].frame.minY + offset.height))
                 }
             }
         case 0 where event.modifierFlags.contains(.command):

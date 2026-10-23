@@ -251,6 +251,12 @@ final class DBMLElementView: ElementView, NSTextViewDelegate, DBMLCanvasHost {
 
     func canvas(_ canvas: DBMLCanvasView, showSourceLine line: Int) { showInSource(line: line) }
 
+    /// Snap to Grid reaches into the diagram: dragged tables and notes land on the page's grid (⌥ moves freely).
+    func canvasSnapGrid(_ canvas: DBMLCanvasView) -> DBMLSnapGrid? {
+        guard let page = self.canvas, page.snaps else { return nil }
+        return DBMLSnapGrid(step: page.gridStep, origin: canvas.convert(page.gridOrigin, from: page))
+    }
+
     func canvasMenuItems(_ canvas: DBMLCanvasView, at point: CGPoint, hit: DBMLHit?) -> [NSMenuItem] {
         var items: [NSMenuItem] = []
         if case .box(let key)? = hit, let box = geometry.box(key) {
@@ -674,7 +680,7 @@ extension DBMLCanvasView {
             return QuickHelpItem(title: "Schema \(name)", detail: "Click its name to select all its tables (drag to move them together); right-click to copy the schema or export it to a page of its own.",
                                  shortcut: nil, symbol: "square.dashed")
         case nil:
-            return QuickHelpItem(title: "DBML Diagram", detail: "Click it to work on it (the DBML tab). Double-click empty space for a note; right-click for a schema's Select / Copy / Export, Show DBML, Arrange Tables, line styles and zoom.",
+            return QuickHelpItem(title: "DBML Diagram", detail: "Click it to work on it (the DBML tab). Drag tables and notes (with Snap to Grid on they land on the page grid; ⌥ places freely). Double-click empty space for a note; right-click for a schema's Select / Copy / Export, Show DBML, Arrange Tables, line styles and zoom.",
                                  shortcut: nil, symbol: "cylinder.split.1x2")
         }
     }

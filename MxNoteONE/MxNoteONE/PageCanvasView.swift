@@ -164,6 +164,9 @@ final class PageCanvasView: NSView {
         snaps ? ((y - gridOriginY) / gridStep).rounded() * gridStep + gridOriginY : y
     }
 
+    /// A point on the grid (where its lines start), for views drawn over the page that snap to it (DBML diagrams).
+    var gridOrigin: NSPoint { NSPoint(x: 0, y: gridOriginY) }
+
     func snapped(_ point: NSPoint) -> NSPoint {
         NSPoint(x: snappedX(point.x), y: snappedY(point.y))
     }

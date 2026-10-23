@@ -381,7 +381,7 @@ extension QuickHelp {
         "Page Width": "Zooms so the page fills the window's width.",
         "Full Page View": "Hides the notebook and page lists so the page fills the window.",
         "Recycle Bin": "Deleted pages and sections, kept for 60 days. Restore them from here.",
-        "Snap to Grid": "Boxes and drawings line up on an invisible grid as you move them. Hold ⌥ to place freely.",
+        "Snap to Grid": "Boxes and drawings line up on an invisible grid as you move them — and so do the tables and notes inside DBML diagrams. Hold ⌥ to place freely.",
         // Table
         "Insert Above": "Adds rows above the selected cells (as many as are selected).",
         "Insert Below": "Adds rows below the selected cells.",

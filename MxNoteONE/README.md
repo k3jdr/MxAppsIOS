@@ -227,7 +227,10 @@ Section and New Section Group. Right-click a page for its own menu.
 - **Snap to Grid** (View tab or View ▸ Snap to Grid, ⌃⌘G — as in OneNote for Windows): containers, pictures, tables
   and shapes line up on the page grid when you place, drag, resize or nudge them (arrow keys move one grid step). The
   grid is the page's rule lines or grid when it has them, otherwise 12 points (shown as dots while you drag). Hold ⌥
-  to place something freely.
+  to place something freely. It reaches into **DBML diagrams** too: tables (one, or a selection moving together — the
+  one you drag lands on the grid, the others keep their places around it), the diagram's notes and their resize
+  corner, and arrow-key moves (to the next grid line) snap to the same page grid, shown as dots inside the diagram
+  while you drag, at any diagram zoom.
 - **Diagrams (draw.io)** — the Draw tab. **New Diagram** (⌃⌘D) or **From Template** puts a draw.io diagram on the page
   and opens it in **draw.io's own editor** — the one VS Code's draw.io extension uses: every shape library
   (flowchart, UML, BPMN, network, AWS / Azure / GCP, electrical, mockups…), connectors, waypoints, layers, styles,
