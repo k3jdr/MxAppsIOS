@@ -1,9 +1,9 @@
 //
 //  GridFilters.swift
-//  MxDataSQL
+//  Shared (MxDataSQL's DB Table grid, MxDataHUB's Securities list)
 //
-//  Excel-style sorting and filtering for the DB Table grid. They run on the
-//  server: the grid's query gets a WHERE and ORDER BY, so paging, row counts,
+//  Excel-style sorting and filtering for a grid of PostgreSQL rows. They run on
+//  the server: the grid's query gets a WHERE and ORDER BY, so paging, row counts,
 //  Export CSV (all rows) and Update all see the same rows. Filter values are
 //  always sent as parameters, never pasted into the SQL.
 //
@@ -117,15 +117,22 @@ nonisolated enum GridSQL {
         }
     }
 
-    /// " WHERE ..." for the filters (empty when there are none). `expr` maps a column name to its SQL expression.
-    static func whereClause(_ options: GridQueryOptions, columns: [ColumnInfo], except: String? = nil,
-                            expr: (String) -> String, binds: inout SQLBinds) -> String {
-        let conditions = options.filters.keys.sorted().compactMap { name -> String? in
-            guard name != except, let filter = options.filters[name],
-                  let column = columns.first(where: { $0.name == name }) else { return nil }
-            return condition(filter, expr: expr(name), type: column.type, binds: &binds)
+    /// The filters' conditions joined with AND (empty when there are none). `types` gives each column's
+    /// SQL type (filters on other names are ignored); `expr` maps a column name to its SQL expression.
+    static func conditions(_ options: GridQueryOptions, types: [String: String], except: String? = nil,
+                           expr: (String) -> String, binds: inout SQLBinds) -> String {
+        options.filters.keys.sorted().compactMap { name -> String? in
+            guard name != except, let filter = options.filters[name], let type = types[name] else { return nil }
+            return condition(filter, expr: expr(name), type: type, binds: &binds)
         }
-        return conditions.isEmpty ? "" : " WHERE " + conditions.joined(separator: " AND ")
+        .joined(separator: " AND ")
+    }
+
+    /// " WHERE ..." for the filters (empty when there are none).
+    static func whereClause(_ options: GridQueryOptions, types: [String: String], except: String? = nil,
+                            expr: (String) -> String, binds: inout SQLBinds) -> String {
+        let sql = conditions(options, types: types, except: except, expr: expr, binds: &binds)
+        return sql.isEmpty ? "" : " WHERE " + sql
     }
 
     /// "<expr> ASC NULLS LAST" for the sort column, or nil.

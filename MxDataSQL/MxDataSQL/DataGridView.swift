@@ -380,7 +380,8 @@ struct DataGridView: NSViewRepresentable {
             let popover = NSPopover()
             popover.behavior = .transient
             let content = ColumnFilterPopover(
-                column: grid.columns[column], current: grid.options, pendingEdits: session.edits.count,
+                name: grid.columns[column].name, type: grid.columns[column].type,
+                current: grid.options, pendingEdits: session.edits.count,
                 loadValues: { [session] in try await session.distinctValues(column: column) },
                 apply: { [weak self] in self?.onApplyOptions($0) },
                 close: { [weak popover] in popover?.performClose(nil) })

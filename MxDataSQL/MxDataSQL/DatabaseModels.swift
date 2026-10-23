@@ -266,3 +266,12 @@ nonisolated struct CellKey: Hashable, Sendable {
 nonisolated struct CellEdit: Hashable, Sendable {
     var value: String?
 }
+
+nonisolated extension GridSQL {
+    /// " WHERE ..." for the filters on `columns` (Shared/GridFilters), typed by the columns' SQL types.
+    static func whereClause(_ options: GridQueryOptions, columns: [ColumnInfo], except: String? = nil,
+                            expr: (String) -> String, binds: inout SQLBinds) -> String {
+        let types = Dictionary(columns.map { ($0.name, $0.type) }, uniquingKeysWith: { first, _ in first })
+        return whereClause(options, types: types, except: except, expr: expr, binds: &binds)
+    }
+}

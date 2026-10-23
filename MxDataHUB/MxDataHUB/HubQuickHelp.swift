@@ -98,10 +98,12 @@ enum HubHelp {
 
     static let search = QuickHelpItem(title: "Security Search",
                                       detail: "Type a name or any identifier — AAPL, AAPL:XNAS, US0378331005, 037833100, 2046251, BBG000B9XRY4, a CIK or LEI — and press Return. "
-                                        + "Type, In (benchmark) and Active only narrow the results; the first 1,000 matches show.",
+                                        + "Type, In (benchmark) and Active only narrow the results, 1,000 to a page.",
                                       shortcut: "↩", symbol: "magnifyingglass")
     static let results = QuickHelpItem(title: "Results",
-                                       detail: "The matching securities with their main identifiers, sector and MIC. Select one to see everything about it on the right; click a column header to sort.",
+                                       detail: "The matching securities with their main identifiers, sector and MIC, 1,000 to a page (Previous / Next below). "
+                                        + "A column header's ▾ button sorts the column or filters it by values or a condition, as in Excel; the database does the work, so it covers every page. "
+                                        + "Select a security to see everything about it on the right.",
                                        symbol: "list.bullet.rectangle")
     static let securityDetail = QuickHelpItem(title: "Security Detail",
                                               detail: "Prices, then identifiers with their history (From / To; grey ones are past values), issuer and security facts, listings, classification, "

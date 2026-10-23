@@ -283,7 +283,12 @@ final class SRMStore {
     var activeOnly = true
     var securityTypes: [String] = []
     var results: [SecurityRow] = []
-    var resultsTruncated = false
+    /// Excel-style sorting and column filters of the results, keyed by column title (securityColumns); run on the server.
+    var securityOptions = GridQueryOptions()
+    /// Securities before the page shown; a page is `securityPageSize` rows.
+    var securityOffset = 0
+    /// Securities matching the search and filters, on all pages.
+    var securityTotal = 0
     var selectedSecurityID: Int64?
     var detail: SecurityDetail?
 
@@ -432,31 +437,97 @@ final class SRMStore {
 
     // MARK: Securities
 
+    static let securityPageSize = 1000
+
+    /// The results' columns that sort and filter: column title → v_security column.
+    static let securityColumns = ["Ticker": "v.ticker", "Name": "v.name", "Type": "v.security_type", "ISIN": "v.isin",
+                                  "CUSIP": "v.cusip", "Composite FIGI": "v.composite_figi", "Sector": "v.sector", "MIC": "v.mic"]
+    /// Their types for the filter panel: all compare as text.
+    static let securityColumnTypes = securityColumns.mapValues { _ in "text" }
+
+    private static let resolvedMatches = "WITH m AS (SELECT security_id, min(rank) AS rank FROM srm.resolve_identifier($1) GROUP BY 1)"
+
+    /// $1–$4 of the search queries: the search box, Type, In (benchmark) and Active only.
+    private var securitySearchBinds: SQLBinds {
+        SQLBinds([query.trimmingCharacters(in: .whitespaces), typeFilter, benchmarkFilter, activeOnly ? "true" : "false"])
+    }
+
+    /// FROM and WHERE of the search: the search fields and the column filters, except `exceptColumn`'s
+    /// (its filter panel lists the values the other filters leave).
+    private func securitySource(except exceptColumn: String? = nil, binds: inout SQLBinds) -> String {
+        let filters = GridSQL.conditions(securityOptions, types: Self.securityColumnTypes, except: exceptColumn,
+                                         expr: { Self.securityColumns[$0] ?? "v.name" }, binds: &binds)
+        return """
+              FROM srm.v_security v
+              LEFT JOIN m ON m.security_id = v.security_id
+             WHERE ($1 = '' OR m.security_id IS NOT NULL OR v.name ILIKE '%' || $1 || '%'
+                    OR v.issuer_name ILIKE '%' || $1 || '%')
+               AND ($2 = 'All' OR v.security_type = $2)
+               AND ($3 = '' OR v.security_id IN (
+                    SELECT w.security_id FROM srm.benchmark b, srm.benchmark_weights(b.benchmark_id) w WHERE b.code = $3))
+               AND (NOT $4::bool OR v.is_active)
+            """ + (filters.isEmpty ? "" : "\n   AND \(filters)")
+    }
+
+    var hasPreviousSecurityPage: Bool { securityOffset > 0 }
+    var hasNextSecurityPage: Bool { securityOffset + results.count < securityTotal }
+
+    /// Runs the search from its first page.
     func search() async {
+        securityOffset = 0
+        await loadSecurities()
+    }
+
+    /// Previous or Next: the neighbouring page of securities.
+    func showSecurityPage(next: Bool) async {
+        guard next ? hasNextSecurityPage : hasPreviousSecurityPage else { return }
+        securityOffset = next ? securityOffset + Self.securityPageSize : max(0, securityOffset - Self.securityPageSize)
+        await loadSecurities()
+    }
+
+    /// New sorting or column filters from a column header's panel; the search runs again from its first page.
+    func applySecurityOptions(_ options: GridQueryOptions) async {
+        securityOptions = options
+        await search()
+    }
+
+    /// One page of the results: the column sort first, then the best identifier matches, an exact ticker, the name.
+    private func loadSecurities() async {
         await perform {
+            var binds = securitySearchBinds
+            let source = securitySource(binds: &binds)
+            let order = [GridSQL.orderTerm(securityOptions, expr: { Self.securityColumns[$0] ?? "v.name" })].compactMap { $0 }
+                + ["m.rank NULLS LAST", "(v.ticker = upper($1)) DESC NULLS LAST", "v.name", "v.security_id"]
             let r = try await rows("""
-                WITH m AS (SELECT security_id, min(rank) AS rank FROM srm.resolve_identifier($1) GROUP BY 1)
+                \(Self.resolvedMatches)
                 SELECT v.security_id::text, coalesce(v.ticker, ''), v.name, v.security_type, coalesce(v.isin, ''),
                        coalesce(v.cusip, ''), coalesce(v.composite_figi, ''), coalesce(v.sector, ''),
-                       coalesce(v.mic::text, ''), v.is_active::text
-                  FROM srm.v_security v
-                  LEFT JOIN m ON m.security_id = v.security_id
-                 WHERE ($1 = '' OR m.security_id IS NOT NULL OR v.name ILIKE '%' || $1 || '%'
-                        OR v.issuer_name ILIKE '%' || $1 || '%')
-                   AND ($2 = 'All' OR v.security_type = $2)
-                   AND ($3 = '' OR v.security_id IN (
-                        SELECT w.security_id FROM srm.benchmark b, srm.benchmark_weights(b.benchmark_id) w WHERE b.code = $3))
-                   AND (NOT $4::bool OR v.is_active)
-                 ORDER BY m.rank NULLS LAST, (v.ticker = upper($1)) DESC NULLS LAST, v.name
-                 LIMIT 1001
-                """, [query.trimmingCharacters(in: .whitespaces), typeFilter, benchmarkFilter, activeOnly ? "true" : "false"])
-            resultsTruncated = r.count > 1000
-            results = r.prefix(1000).map(Self.securityRow)
+                       coalesce(v.mic::text, ''), v.is_active::text, count(*) OVER ()::text
+                \(source)
+                 ORDER BY \(order.joined(separator: ", "))
+                 LIMIT \(Self.securityPageSize) OFFSET \(securityOffset)
+                """, binds.values)
+            securityTotal = r.first.flatMap { Int($0[10] ?? "") } ?? 0
+            results = r.map(Self.securityRow)
             if let first = results.first, results.count == 1 || selectedSecurityID == nil
                 || !results.contains(where: { $0.id == selectedSecurityID }) {
                 selectedSecurityID = first.id
             }
         }
+    }
+
+    /// A column's distinct values with their counts, for its filter panel (the other columns' filters applied).
+    func securityValues(column: String) async throws -> (values: [DistinctValue], truncated: Bool) {
+        guard let expr = Self.securityColumns[column] else { return ([], false) }
+        var binds = securitySearchBinds
+        let source = securitySource(except: column, binds: &binds)
+        let r = try await rows("""
+            \(Self.resolvedMatches)
+            SELECT \(expr)::text, count(*)::text
+            \(source)
+             GROUP BY 1 ORDER BY 1 NULLS FIRST LIMIT 1001
+            """, binds.values)
+        return (r.prefix(1000).map { DistinctValue(value: $0[0], count: Int($0[1] ?? "") ?? 0) }, r.count > 1000)
     }
 
     private static func securityRow(_ r: [String?]) -> SecurityRow {

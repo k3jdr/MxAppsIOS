@@ -1,6 +1,6 @@
 //
 //  ColumnFilterPopover.swift
-//  MxDataSQL
+//  Shared (MxDataSQL, MxDataHUB)
 //
 //  The panel behind a column header's filter button, laid out like Excel's:
 //  sort ascending / descending, then a filter by values (checklist of the
@@ -10,7 +10,9 @@
 import SwiftUI
 
 struct ColumnFilterPopover: View {
-    let column: ColumnInfo
+    /// The column's name (the key of its filter) and SQL type.
+    let name: String
+    let type: String
     let current: GridQueryOptions
     /// Pending grid edits; sorting and filtering are blocked until they are applied or discarded.
     let pendingEdits: Int
@@ -35,12 +37,11 @@ struct ColumnFilterPopover: View {
     @State private var value1 = ""
     @State private var value2 = ""
 
-    private var name: String { column.name }
     private var sortedHere: GridSort? { current.sort?.column == name ? current.sort : nil }
     private var filteredHere: ColumnFilter? { current.filters[name] }
 
     private var kind: (asc: String, desc: String) {
-        let t = column.type.lowercased()
+        let t = type.lowercased()
         if ["int", "numeric", "decimal", "real", "double", "float", "money", "serial"].contains(where: t.contains) {
             return ("Sort Smallest to Largest", "Sort Largest to Smallest")
         }
@@ -176,7 +177,7 @@ struct ColumnFilterPopover: View {
             if op.needsSecondValue {
                 TextField("and", text: $value2).textFieldStyle(.roundedBorder)
             }
-            Text("Text conditions ignore case. Greater, less and between compare as \(column.type).")
+            Text("Text conditions ignore case. Greater, less and between compare as \(type).")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -3,7 +3,8 @@
 //  MxDataHUB
 //
 //  SRM ▸ Securities: search by name or any identifier (ISIN, CUSIP, SEDOL, FIGI, ticker,
-//  TICKER:MIC, CIK, LEI), filter by type and benchmark, and see a security's identifiers with
+//  TICKER:MIC, CIK, LEI), filter by type and benchmark, sort and filter the columns Excel-style
+//  (Shared/GridFilters), page through 1,000 at a time, and see a security's identifiers with
 //  their history, listings, issuer, classifications, benchmark weights, corporate actions and prices.
 //
 
@@ -64,20 +65,88 @@ struct SRMSecuritiesView: View {
                 TableColumn("CUSIP", value: \.cusip).width(min: 70, ideal: 85)
                 TableColumn("Composite FIGI", value: \.figi).width(min: 90, ideal: 110)
                 TableColumn("Sector", value: \.sector).width(min: 60, ideal: 120)
-                TableColumn("MIC", value: \.mic).width(min: 40, ideal: 45)
+                TableColumn("MIC", value: \.mic).width(min: 56, ideal: 60)
             }
+            .columnHeaderFilters(
+                types: SRMStore.securityColumnTypes, options: store.securityOptions,
+                loadValues: { [store] in try await store.securityValues(column: $0) },
+                apply: { [store] options in Task { await store.applySecurityOptions(options) } })
             .contextMenu(forSelectionType: SecurityRow.ID.self) { ids in
                 if let id = ids.first, let r = store.results.first(where: { $0.id == id }) { linkMenu(.security(r)) }
             }
             .task(id: store.results.map(\.id)) { await SecurityLinks.shared.load(securityIDs: store.results.map(\.id)) }
             .quickHelpArea(HubHelp.results)
-            HStack {
-                Text(store.resultsTruncated ? "First 1,000 matches — narrow the search" : "\(store.results.count.formatted()) securities")
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
+            pageBar
+            if !store.securityOptions.isEmpty { sortAndFilterLine }
         }
         .padding(10)
+    }
+
+    /// Directly below the grid: which rows are shown, then Previous / Next on the right (as in MxDataSQL's DB Table).
+    private var pageBar: some View {
+        HStack {
+            Text(rowsText)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+            Button("Previous", systemImage: "chevron.left") {
+                Task { await store.showSecurityPage(next: false) }
+            }
+            .disabled(!store.hasPreviousSecurityPage || store.busy)
+            .help("Show the previous \(SRMStore.securityPageSize.formatted()) securities")
+            .quickHelp("Previous", "Shows the previous \(SRMStore.securityPageSize.formatted()) securities.")
+            Button {
+                Task { await store.showSecurityPage(next: true) }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Next")
+                    Image(systemName: "chevron.right")
+                }
+            }
+            .disabled(!store.hasNextSecurityPage || store.busy)
+            .help("Show the next \(SRMStore.securityPageSize.formatted()) securities")
+            .quickHelp("Next", "Shows the next \(SRMStore.securityPageSize.formatted()) securities.")
+        }
+    }
+
+    /// "1–1,000 of 13,263 securities"
+    private var rowsText: String {
+        let total = store.securityTotal
+        guard !store.results.isEmpty else { return store.securityOffset > 0 ? "No securities on this page" : "No securities" }
+        if store.securityOffset == 0 && store.results.count == total {
+            return "\(total.formatted()) \(total == 1 ? "security" : "securities")"
+        }
+        return "\((store.securityOffset + 1).formatted())–\((store.securityOffset + store.results.count).formatted()) of \(total.formatted()) securities"
+    }
+
+    /// The column sort and filters in force, with Clear Sort / Clear Filters.
+    private var sortAndFilterLine: some View {
+        HStack(spacing: 10) {
+            if let sort = store.securityOptions.sort {
+                Label("sorted by \(sort.column)", systemImage: sort.ascending ? "arrow.up" : "arrow.down")
+                Button("Clear Sort") {
+                    var options = store.securityOptions
+                    options.sort = nil
+                    Task { await store.applySecurityOptions(options) }
+                }
+                .buttonStyle(.link)
+            }
+            if !store.securityOptions.filters.isEmpty {
+                Label("filtered: \(store.securityOptions.filters.keys.sorted().joined(separator: ", "))",
+                      systemImage: "line.3.horizontal.decrease.circle.fill")
+                    .lineLimit(1)
+                Button("Clear Filters") {
+                    var options = store.securityOptions
+                    options.filters = [:]
+                    Task { await store.applySecurityOptions(options) }
+                }
+                .buttonStyle(.link)
+            }
+            Spacer()
+        }
+        .font(.callout)
+        .foregroundStyle(Color.accentColor)
+        .disabled(store.busy)
     }
 
     /// One container for both states, so the split view keeps the same pane; the previous security stays on
