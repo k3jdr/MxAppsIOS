@@ -209,7 +209,7 @@ enum FileHelp {
         detail: "What's on the clipboard, as in Finder's Show Clipboard: files (with Paste into the active pane, Move Here, Show in Finder), "
             + "a picture, styled or plain text, a link or a colour, and the data types underneath. It updates while the window is open; "
             + "Clear Clipboard empties it.",
-        symbol: "clipboard")
+        shortcut: "⇧⌘V", symbol: "clipboard")
 
     static let sharePointSetup = QuickHelpItem(
         title: "SharePoint",

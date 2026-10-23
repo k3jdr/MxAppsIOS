@@ -55,6 +55,7 @@ struct MainCommands: Commands {
         CommandGroup(after: .pasteboard) {
             Divider()
             Button("Show Clipboard") { openWindow(id: "clipboard") }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
             item("Move Item Here", "v", [.command, .option]) { $0.pasteFromPasteboard(move: true) }
             item("Copy Path", "c", [.command, .option]) { $0.copyPaths() }
             Divider()
