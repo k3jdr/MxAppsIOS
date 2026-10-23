@@ -15,6 +15,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.notebooksFolderKey) private var notebooksFolder = ""
     @AppStorage(Prefs.autoLockKey) private var autoLockMinutes = 10
     @AppStorage(Prefs.newTextBoxKey) private var newTextBox = Prefs.NewTextBox.click.rawValue
+    @AppStorage(LineSpacing.lineBreakKey) private var lineBreakSpacing = 1.0
     @AppStorage(DeviceUnlock.appLockKey) private var appLock = false
     @State private var useOfficeFonts = OfficeFonts.enabled
     @AppStorage(WebBrowser.key) private var browserID = ""
@@ -58,6 +59,14 @@ struct SettingsView: View {
                 Text("The quick brown fox jumps over the lazy dog.")
                     .font(Font(Prefs.defaultFont as CTFont))
                     .foregroundStyle(.secondary)
+                Picker("Line breaks (⇧↩):", selection: $lineBreakSpacing) {
+                    ForEach(LineSpacing.lineBreakChoices, id: \.1) { Text($0.0).tag($0.1) }
+                }
+                .onChange(of: lineBreakSpacing) { LineSpacing.relayoutOpenPage() }
+                Text("Shift-Return breaks the line inside a paragraph (its bullet or tag carries on); Return starts a new paragraph. Format ▸ Line Spacing spaces a paragraph's lines.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("Page") {
                 Picker("Clicking an empty part of a page:", selection: $newTextBox) {

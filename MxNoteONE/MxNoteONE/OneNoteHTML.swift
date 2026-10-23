@@ -283,6 +283,7 @@ enum OneNoteHTML {
                 return
             }
             var piece = escape(ns.substring(with: run)).replacingOccurrences(of: "\t", with: "&nbsp;&nbsp;&nbsp;&nbsp;")
+                .replacingOccurrences(of: LineSpacing.lineBreak, with: "<br />")
             var style: [String] = []
             if let font = attrs[.font] as? NSFont {
                 if font.familyName != base.familyName, let family = font.familyName { style.append("font-family:\(escape(family))") }

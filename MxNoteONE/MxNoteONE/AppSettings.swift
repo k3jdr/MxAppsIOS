@@ -200,6 +200,8 @@ final class EditorState {
     var isItalic = false
     var isUnderline = false
     var isStrikethrough = false
+    /// Line spacing of the selected paragraphs (1.0 single, 2.0 double).
+    var lineSpacing: CGFloat? = 1
 
     /// View ▸ Snap to Grid: containers, pictures and shapes line up on the page grid (hold ⌥ to place freely).
     var snapToGrid = UserDefaults.standard.bool(forKey: Prefs.snapToGridKey) {

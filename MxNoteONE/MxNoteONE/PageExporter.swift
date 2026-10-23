@@ -279,7 +279,8 @@ enum PageExporter {
                 }
                 line += piece
             }
-            lines.append(line)
+            // A line break inside the paragraph (Shift-Return) stays in its list item.
+            lines.append(line.replacingOccurrences(of: LineSpacing.lineBreak, with: "<br>"))
             if range.length == 0 { break }
         }
         return lines

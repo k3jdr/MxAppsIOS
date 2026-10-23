@@ -235,6 +235,9 @@ enum TextFormatter {
         let italic = fonts.allSatisfy { fm.traits(of: $0).contains(.italicFontMask) }
         let underline = runs.allSatisfy { ($0[.underlineStyle] as? Int ?? 0) != 0 }
         let strike = runs.allSatisfy { ($0[.strikethroughStyle] as? Int ?? 0) != 0 }
+        let spacings = Set(runs.map { (LineSpacing.multiple(of: $0[.paragraphStyle] as? NSParagraphStyle) * 1000).rounded() })
+        let spacing = spacings.count == 1 ? spacings.first.map { $0 / 1000 } : nil
+        if editor.lineSpacing != spacing { editor.lineSpacing = spacing }
         if editor.fontFamily != family { editor.fontFamily = family }
         if editor.fontSize != size { editor.fontSize = size }
         if editor.isBold != bold { editor.isBold = bold }
@@ -525,6 +528,7 @@ enum TextFormatter {
         }
     }
 
+    /// Line spacing of the selected paragraphs (or of what's typed next), in lines: 1.0 single, 2.0 double.
     static func setLineSpacing(_ multiple: CGFloat) {
         perform { tv in
             modifyParagraphStyle(tv, actionName: "Line Spacing") { $0.lineHeightMultiple = multiple }
@@ -678,6 +682,18 @@ enum TextFormatter {
         tv.didChangeText()
         tv.setSelectedRange(NSRange(location: sel.location + insertion.length, length: 0))
         tv.typingAttributes = nextAttrs
+        return true
+    }
+
+    /// Shift-Return: a line break inside the paragraph, single spaced (see LineSpacing). No new bullet, number or
+    /// To Do box, and a heading stays a heading; in code it's a new line, as Return.
+    static func handleLineBreak(_ tv: NSTextView) -> Bool {
+        let sel = tv.selectedRange()
+        if inCode(tv, at: sel.location) { return handleNewline(tv) }
+        var attrs = tv.typingAttributes
+        attrs[.link] = nil
+        tv.typingAttributes = attrs
+        tv.insertText(LineSpacing.lineBreak, replacementRange: sel)
         return true
     }
 

@@ -390,11 +390,9 @@ struct HomeRibbon: View {
                 Button { TextFormatter.setAlignment(.center) } label: { Label("Center", systemImage: "text.aligncenter") }
                 Button { TextFormatter.setAlignment(.right) } label: { Label("Align Right", systemImage: "text.alignright") }
                 Button { TextFormatter.setAlignment(.justified) } label: { Label("Justify", systemImage: "text.justify") }
-                Divider()
-                Button("Line Spacing 1.0") { TextFormatter.setLineSpacing(1) }
-                Button("Line Spacing 1.15") { TextFormatter.setLineSpacing(1.15) }
-                Button("Line Spacing 1.5") { TextFormatter.setLineSpacing(1.5) }
-                Button("Line Spacing 2.0") { TextFormatter.setLineSpacing(2) }
+            }
+            RibbonMenu("Line Spacing", "arrow.up.and.down.text.horizontal", showTitle: false) {
+                LineSpacingMenuItems()
             }
         }
         RibbonGroup("Styles") {

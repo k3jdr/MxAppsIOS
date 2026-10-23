@@ -176,6 +176,9 @@ struct MainCommands: Commands {
                 Button("Align Right") { TextFormatter.setAlignment(.right) }
                 Button("Justify") { TextFormatter.setAlignment(.justified) }
             }
+            Menu("Line Spacing") {
+                LineSpacingMenuItems()
+            }
             Divider()
             Button("Format as Code") { TextFormatter.formatAsCode() }
                 .keyboardShortcut("c", modifiers: [.command, .option])

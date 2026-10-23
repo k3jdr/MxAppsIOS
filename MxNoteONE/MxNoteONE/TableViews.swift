@@ -1089,6 +1089,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
     init(model: TableModel) {
         self.model = model
         super.init(frame: .zero)
+        editor.textContainer?.replaceLayoutManager(NoteLayoutManager())
         editor.isRichText = true
         editor.importsGraphics = true
         editor.allowsImageEditing = true
@@ -1425,7 +1426,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
     /// Lays out a drawn cell's text the way draw(_:) shows it.
     private func layout(_ text: NSAttributedString, width: CGFloat) -> (NSTextStorage, NSLayoutManager, NSTextContainer) {
         let storage = NSTextStorage(attributedString: text)
-        let layout = NSLayoutManager()
+        let layout = NoteLayoutManager()
         let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         layout.addTextContainer(container)
