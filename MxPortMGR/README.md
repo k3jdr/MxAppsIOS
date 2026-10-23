@@ -243,6 +243,15 @@ the time of day the time from an earlier one is kept (marked ↺) — so times s
   Calendar. The addresses (`ReportSources.swift`) were checked in a browser on 2026-10-22; OPEC's monthly report is
   left out because its site puts up a bot check.
 
+  The **Yield Curve Report** adds the real curve below *The real report* (`YieldCurve.swift`), over several time
+  frames: today's yields (3-month, 2-, 10- and 30-year, each with its change in a year) and slopes (10Y − 2Y,
+  10Y − 3M) with how long the curve has been inverted or not; **the curve, then and now** — 1-month to 30-year today
+  against 1 month, 1 year, 5 and 10 years before (tick which); **the slope over time** and **yields over time** for
+  1, 5, 10 or 25 years or since 1977, with NBER recessions shaded; and **every inversion since 1981** (10-year below
+  the 3-month) with the recession that began within three years and how many months later — or "none yet", as after
+  the longest, which began in 2022 (a table that copies). Data: the Treasury's daily constant-maturity yields and the
+  NBER recession months from FRED (free CSV, no key), read at most hourly and kept in the app's Caches folder.
+
 | Tier | Report | The illustrative release | Written for |
 | --- | --- | --- | --- |
 | 1 | **Jobs Report** (#2 of the five) | Payrolls +48,000 vs +150,000, unemployment 4.6%, downward revisions | Cash-Heavy |

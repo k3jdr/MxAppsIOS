@@ -133,6 +133,8 @@ struct ReportView: View {
                 SelectableText(text: aboutText)
             }
             RealReportBox(store: store, report: report)
+            // The Yield Curve Report's illustrative numbers above; the real curve, its slope and yields over time here.
+            if report.id == "yield-curve" { RealYieldCurve() }
             Text("Read it the way the market does: point at each line for what it measures, then go on to Reading It.").font(.callout).foregroundStyle(.secondary)
         }
     }
