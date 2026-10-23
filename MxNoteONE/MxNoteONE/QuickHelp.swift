@@ -191,6 +191,7 @@ final class QuickHelp {
 // MARK: - The panel
 
 struct QuickHelpPanel: View {
+    static let height: CGFloat = 140
     @Bindable private var help = QuickHelp.shared
 
     var body: some View {
@@ -215,10 +216,14 @@ struct QuickHelpPanel: View {
                     }
                 }
                 if !item.detail.isEmpty {
-                    Text(item.detail)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Fits: shown as it is. Longer: scrolls, with a scroll bar that stays visible.
+                    ViewThatFits(in: .vertical) {
+                        detail(item.detail)
+                        ScrollView(.vertical) {
+                            detail(item.detail).padding(.trailing, 10)
+                        }
+                        .scrollIndicators(.visible)
+                    }
                 }
             } else {
                 Text("Point at a tool or at something on the page to see what it does.")
@@ -228,10 +233,21 @@ struct QuickHelpPanel: View {
             }
         }
         .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        // A fixed height, as in the other MXcodeIDE apps: a panel that grew with its text changed the sidebar's
+        // minimum size whenever Quick Help changed (the layout loop that crashed MxJobsWMS, 2026-10-18).
+        .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .topLeading)
         .background(.background.opacity(0.6))
         .overlay(alignment: .top) { Divider() }
         .animation(nil, value: help.shown)
+    }
+
+    private func detail(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
     }
 }
 

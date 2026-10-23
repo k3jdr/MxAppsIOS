@@ -206,8 +206,7 @@ struct QuickHelpPanel: View {
                 }
                 if !item.detail.isEmpty {
                     if scrolls {
-                        ScrollView(.vertical) { detail(item.detail) }
-                            .scrollIndicators(.automatic)
+                        QuickHelpScrollingDetail { detail(item.detail) }
                     } else {
                         detail(item.detail)
                     }
@@ -274,6 +273,24 @@ struct QuickHelpPanel: View {
         case .docked: nil
         case .fixedHeight(let h): h
         case .floating: .infinity
+        }
+    }
+}
+
+/// A description that fits shows as it is; a longer one scrolls with a scroll bar that stays visible, so it's clear
+/// there's more (the system's overlay scrollers otherwise stay hidden until you scroll).
+struct QuickHelpScrollingDetail<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            content()
+            ScrollView(.vertical) {
+                content()
+                    // Room for the scroll bar beside the text.
+                    .padding(.trailing, 10)
+            }
+            .scrollIndicators(.visible)
         }
     }
 }
