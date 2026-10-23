@@ -151,6 +151,16 @@ struct ContentView: View {
         if let name = defaults.string(forKey: "section"), let section = SRMSection(rawValue: name) {
             store.section = section
         }
+        #if DEBUG
+        // Self-test of the hover card: show a linked cell's card once the table is up (-linkHoverTest ID, e.g. YQ|symbol),
+        // as MxPortMGR does.
+        if let id = defaults.string(forKey: "linkHoverTest") {
+            Task {
+                try? await Task.sleep(for: .seconds(6))
+                SecurityLinks.shared.testHover(id)
+            }
+        }
+        #endif
     }
 }
 

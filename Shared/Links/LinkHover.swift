@@ -364,7 +364,19 @@ struct TipText: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> TipCardTextView {
+    /// The tallest the hover text gets on the card. Longer text scrolls, with a scroll bar that stays visible (the
+    /// system's overlay scroll bars stay hidden until you scroll, so nothing showed there was more).
+    static let maxHeight: CGFloat = 220
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView(frame: .zero)
+        scroll.drawsBackground = false
+        scroll.borderType = .noBorder
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        // Shown only when the text is taller than the card, and then always (not only while scrolling).
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .legacy
         let tv = TipCardTextView(frame: .zero)
         tv.isEditable = false
         tv.isSelectable = true
@@ -373,30 +385,45 @@ struct TipText: NSViewRepresentable {
         tv.textContainerInset = .zero
         tv.textContainer?.lineFragmentPadding = 0
         tv.textContainer?.widthTracksTextView = true
-        tv.isVerticallyResizable = false
+        tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = false
+        tv.autoresizingMask = [.width]
+        tv.minSize = .zero
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         tv.displaysLinkToolTips = true
         tv.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue,
                                  .cursor: NSCursor.pointingHand]
         tv.delegate = context.coordinator
         tv.setAccessibilityLabel("Hover text")
-        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        return tv
+        scroll.documentView = tv
+        scroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return scroll
     }
 
-    func updateNSView(_ tv: TipCardTextView, context: Context) {
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.open = open
+        guard let tv = scroll.documentView as? TipCardTextView else { return }
         let shown = Self.shown(text)
-        if tv.textStorage?.isEqual(to: shown) != true { tv.textStorage?.setAttributedString(shown) }
+        if tv.textStorage?.isEqual(to: shown) != true {
+            tv.textStorage?.setAttributedString(shown)
+            tv.scroll(.zero)
+        }
     }
 
-    /// As wide as the text's longest line (at most `maxWidth`), or the width offered; as tall as its lines.
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: TipCardTextView, context: Context) -> CGSize? {
+    /// As wide as the text's longest line (at most `maxWidth`), or the width offered; as tall as its lines, up to
+    /// `maxHeight` — beyond that the text scrolls beside a scroll bar.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         let offered = proposal.width.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
         let shown = Self.shown(text)
-        let bounds = shown.boundingRect(with: NSSize(width: offered ?? Self.maxWidth, height: .greatestFiniteMagnitude),
-                                        options: [.usesLineFragmentOrigin, .usesFontLeading])
-        return CGSize(width: offered ?? ceil(bounds.width), height: ceil(bounds.height))
+        func measure(_ width: CGFloat) -> CGRect {
+            shown.boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                               options: [.usesLineFragmentOrigin, .usesFontLeading])
+        }
+        let bounds = measure(offered ?? Self.maxWidth)
+        if ceil(bounds.height) <= Self.maxHeight {
+            return CGSize(width: offered ?? ceil(bounds.width), height: ceil(bounds.height))
+        }
+        return CGSize(width: offered ?? Self.maxWidth, height: Self.maxHeight)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
