@@ -32,6 +32,13 @@ convention of the other apps; glossary terms (tracking error, active share, info
 selection / interaction, turnover, rebalance band, look-through, tax lot, Carino linking) use `.term(_:)`, which
 gives both.
 
+**Selecting and copying.** The screens' text can be selected and copied (⌘C), as in a document: lessons, figures,
+captions, cards, the walkthroughs, and the cells of tables you don't pick rows in (Trades, By sector). Each piece of
+text is selected on its own; SwiftUI doesn't select across several. Buttons drawn as cards or headings stay buttons: a
+click on their words presses them. In the tables whose rows you pick (My Holdings, Earnings by Day, Add Securities),
+a click selects the row; **⌘C** (Edit ▸ Copy) or the row's context menu, *Copy Row*, copies it as tab-separated
+columns under the columns' titles, which paste into Numbers or Excel as a table.
+
 ## Menus
 
 | Menu | Items |
@@ -153,7 +160,8 @@ markets within seconds, others shape positioning over weeks or months.
     *Copy Official Source Address*. The **Notes** dialog takes formatted text, written as a link's hover text is (B I U S,
     size, colour, ⌘B ⌘I ⌘U): what to watch, how you read the report, links to your own pages (the link button or ⌘K;
     typed addresses become links, `mxnoteone://…` pages in MxNoteONE too). It has a *Hover card preview* and *Remove
-    Notes*. Return starts a new line.
+    Notes*. Return starts a new line. A link in the notes takes words of its own (*Text to display*), as links in a
+    link's hover text do.
   * **Resting the pointer** on the name for 0.6 s shows its **hover card**, as a link's does: your notes with their
     links and when you last changed them, then the report's publisher and schedule, the drivers it moves and its
     impact, its official source (a click opens it), and **Edit Notes…** and **Open Walkthrough**.
@@ -251,7 +259,10 @@ into `../Shared/Links` — shared with MxDataHUB's Securities and Portfolio Hold
   **Link** dialog (**Edit Link** when there is one): *Link on* Symbol or Company (Ticker or Name; ⌘K takes the column the
   pointer rests on), *Text to display* (the symbol or name unless you change it), *Address* (a web address — https://
   is added — or an email address), and **hover text**: formatted text (B I U S, size, colour, ⌘B ⌘I ⌘U) that can hold
-  links of its own (the link button or ⌘K; typed addresses become links), with a *Hover card preview*. In place of
+  links of its own, with a *Hover card preview*. The link button (or ⌘K in the hover text) asks, as MxNoteONE's Link
+  dialog does, for the link's **Text to display** and its *Address*: on selected words, on a link (to change its words
+  or address, or *Remove Link*), or on an address typed in the text (to show words of your own in its place; empty shows
+  the address itself). The hover card shows the words; the pointer resting on them shows the address. In place of
   MxNoteONE's list of notebook pages it offers pages about the security: Nasdaq.com's quote and earnings pages (or the
   ETF / fund page), SEC EDGAR filings, Yahoo Finance, and a web search for the company's investor relations. A made-up
   security of the illustrative market has none, but any address works. *Remove Link* takes it off.

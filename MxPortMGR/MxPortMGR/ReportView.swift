@@ -89,7 +89,7 @@ struct ReportView: View {
                         .padding(.horizontal, 10).padding(.vertical, 5)
                         .background(i == state.step ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.08), in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .plainButton()
                 .help("Go to step \(i + 1): \(title)")
             }
         }
@@ -280,7 +280,7 @@ struct ReportView: View {
                             .background(chosen ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .plainButton()
                         .quickHelp(r.title, r.summary)
                     }
                 }

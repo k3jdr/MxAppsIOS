@@ -101,6 +101,8 @@ struct AddSecuritiesSheet: View {
                     .width(90)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // A click picks a row (the screens' text is selectable, the rows' words aren't).
+                .textSelection(.disabled)
                 .quickHelpArea("Securities", "Every security in the illustrative universe. Filter by type or sector, search by ticker, name or issuer, and select one to see its details and add it. Risk is volatility for a stock or fund and duration for a bond.", symbol: "list.bullet.rectangle")
                 Divider()
                 detail.frame(width: 380).frame(maxHeight: .infinity)
@@ -353,6 +355,8 @@ struct SRMAddSecurities: View {
                     TableColumn("Market value", value: \.marketCapKey) { s in Text(s.marketCap.map { compact($0) } ?? "").monospacedDigit().foregroundStyle(.secondary) }.width(84)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // A click picks a row (the screens' text is selectable, the rows' words aren't).
+                .textSelection(.disabled)
                 .quickHelpArea("Security Master", "Every match in srm, a page at a time. Click a column header to sort by it (again to reverse) — across all matches, in the database. The filter row above narrows each column like a spreadsheet's autofilter: text contains, pick values with their counts, a price range, priced or not. A column title with ⏷ is filtered.", symbol: "cylinder.split.1x2")
                 Divider()
                 detail.frame(width: 320).frame(maxHeight: .infinity)

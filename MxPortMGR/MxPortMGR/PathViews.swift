@@ -7,6 +7,7 @@
 //
 
 import Charts
+import AppKit
 import SwiftUI
 
 private func isPassive(_ store: PortStore) -> Bool { store.passiveContext }
@@ -249,9 +250,19 @@ struct HoldingsTable: View {
                 .width(28)
             }
             .contextMenu(forSelectionType: Holding.ID.self) { tickers in
-                if let ticker = tickers.first, let h = p.holdings.first(where: { $0.ticker == ticker }), let t = LinkTarget.holding(h) {
-                    linkMenu(t)
+                if let ticker = tickers.first, let h = p.holdings.first(where: { $0.ticker == ticker }) {
+                    if let t = LinkTarget.holding(h) {
+                        linkMenu(t)
+                        Divider()
+                    }
+                    Button("Copy Row") { copyRows([h], of: p) }
                 }
+            }
+            // Rows are selected, not their words: Edit ▸ Copy (⌘C) copies the selected row, with the columns' titles.
+            .textSelection(.disabled)
+            .onCopyCommand {
+                guard let h = p.holdings.first(where: { $0.ticker == store.holdingSelection }) else { return [] }
+                return [NSItemProvider(object: Self.rows([h], of: p) as NSString)]
             }
             // Every row visible, up to 40.
             .frame(minHeight: CGFloat(max(min(p.holdings.count, 40), 6)) * 26 + 34)
@@ -260,6 +271,26 @@ struct HoldingsTable: View {
                 await SecurityLinks.shared.load(securityIDs: p.holdings.compactMap { LinkTarget.holding($0)?.securityID })
             }
         }
+    }
+}
+
+extension HoldingsTable {
+    /// Holdings as lines of tab-separated columns under the columns' titles (they paste into a spreadsheet as a table).
+    static func rows(_ holdings: [Holding], of p: Portfolio) -> String {
+        let titles = ["Ticker", "Name", "Sector / class", "Shares", "Value", "Weight", "Cost basis", "Gain", "Lots"]
+        let lines = holdings.map { h in
+            [h.ticker, h.security?.name ?? "Cash",
+             h.security.map { $0.lookThrough != nil ? "Fund · \($0.assetClass.rawValue)" : $0.issuer.map { "Bond · \($0)" } ?? $0.sector } ?? "—",
+             h.quantity.map { String(format: "%.4g", $0) } ?? "—", money(h.value), pct(p.weight(h)),
+             h.lots.isEmpty ? "—" : money(h.costBasis), h.lots.isEmpty ? "—" : money(h.unrealizedGain),
+             h.lots.map { "\($0.acquired) (\(pct($0.share, 0)))" }.joined(separator: ", ")].joined(separator: "\t")
+        }
+        return ([titles.joined(separator: "\t")] + lines).joined(separator: "\n")
+    }
+
+    func copyRows(_ holdings: [Holding], of p: Portfolio) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(Self.rows(holdings, of: p), forType: .string)
     }
 }
 

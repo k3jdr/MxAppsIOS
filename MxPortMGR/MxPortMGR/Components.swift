@@ -31,7 +31,7 @@ struct LessonCard: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .plainButton()
             .help(collapsed ? "Show why this step matters" : "Hide the lesson")
             if !collapsed {
                 VStack(alignment: .leading, spacing: 6) {
@@ -92,6 +92,14 @@ struct Box<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
         .quickHelpArea(help.map { QuickHelpItem(title: title, detail: $0, symbol: symbol ?? "rectangle.dashed") })
+    }
+}
+
+extension View {
+    /// A button drawn as its label alone (a card, a day, a heading that folds): the screens' text is selectable, but
+    /// not a button's, so a click on its words still presses it.
+    func plainButton() -> some View {
+        buttonStyle(.plain).textSelection(.disabled)
     }
 }
 
@@ -389,7 +397,7 @@ struct CollapsibleBox<Content: View>: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .plainButton()
             .help(collapsed ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
             if !collapsed { content }
         }

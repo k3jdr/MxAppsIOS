@@ -33,6 +33,8 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 screen
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Every screen's text can be selected and copied: lessons, figures, cards, table cells.
+                    .textSelection(.enabled)
                 Divider()
                 StatusBar(store: store)
             }

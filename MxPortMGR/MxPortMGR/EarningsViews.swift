@@ -8,6 +8,7 @@
 //  with its time, EPS and revenue estimates and results, and the selected company's history.
 //
 
+import AppKit
 import Charts
 import SwiftUI
 
@@ -33,6 +34,17 @@ nonisolated enum EarningsFormat {
     static func surprise(_ x: Double?) -> String {
         guard let x else { return "—" }
         return String(format: "%+.1f%%", 100 * x).replacingOccurrences(of: "-", with: "−")
+    }
+
+    /// Companies as lines of tab-separated columns under the table's column titles (they paste into a spreadsheet).
+    static func rows(_ entries: [EarningsEntry]) -> String {
+        let titles = ["Symbol", "Company", "Time", "Mkt cap", "Ests", "EPS est.", "EPS actual", "Surprise", "Rev. est.", "Rev. actual", "Rev. surprise"]
+        let lines = entries.map { r in
+            [r.symbol, r.name, r.time.shortTitle, dollars(r.marketCap), r.estimates.map(String.init) ?? "",
+             eps(r.epsEstimate) + (r.epsFromFMP ? " (FMP)" : ""), eps(r.epsActual), surprise(r.epsSurprise),
+             dollars(r.revenueEstimate), dollars(r.revenueActual), surprise(r.revenueSurprise)].joined(separator: "\t")
+        }
+        return ([titles.joined(separator: "\t")] + lines).joined(separator: "\n")
     }
 
     static func color(_ o: EarningsEntry.Outcome) -> Color {
@@ -257,7 +269,18 @@ struct EarningsDayView: View {
         .contextMenu(forSelectionType: EarningsEntry.ID.self) { keys in
             if let key = keys.first, let entry = rows.first(where: { $0.key == key }) {
                 linkMenu(LinkTarget.earnings(entry))
+                Divider()
+                Button("Copy Row") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(EarningsFormat.rows([entry]), forType: .string)
+                }
             }
+        }
+        // Rows are selected, not their words: Edit ▸ Copy (⌘C) copies the selected row, with the columns' titles.
+        .textSelection(.disabled)
+        .onCopyCommand {
+            guard let entry = rows.first(where: { $0.key == selection.wrappedValue }) else { return [] }
+            return [NSItemProvider(object: EarningsFormat.rows([entry]) as NSString)]
         }
         .quickHelpArea("Companies Reporting", "One row per company: its symbol (briefcase: you hold it), name, when it reports, market cap and number of analysts' estimates; consensus and actual EPS with the surprise (Nasdaq.com; ᶠ marks FMP's estimate and actual, used where Nasdaq.com has no result yet); FMP's revenue estimate, actual and surprise. Green beat, red missed. Click a header to sort; select a row for the company's history. ⌘K (Edit ▸ Link…) or the row's context menu adds a link to the symbol or company name, with its own hover text: the pointer resting on a linked name shows its card, a click opens it.", symbol: "list.bullet.rectangle")
     }
@@ -677,7 +700,7 @@ struct EarningsCalendarView: View {
                     .font(.callout)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .plainButton()
                 .help("Open \(EarningsDates.title(r.date)) with \(r.entry.symbol) selected")
             }
         }
@@ -746,7 +769,7 @@ struct EarningsMonthCell: View {
             .opacity(inMonth ? 1 : 0.4)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .plainButton()
         .disabled(!inMonth)
         .help(listed.isEmpty ? EarningsDates.title(date) : "\(EarningsDates.title(date)): \(listed.count) reports — open the day's list")
     }
@@ -776,7 +799,7 @@ struct EarningsWeekColumn: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .plainButton()
             .help("Open \(EarningsDates.title(date))")
             Divider()
             ForEach(Array(rows), id: \.key) { r in
@@ -794,7 +817,7 @@ struct EarningsWeekColumn: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .plainButton()
                 .help("\(r.name.isEmpty ? r.symbol : r.name) · \(r.time.title) · " + (r.reported ? "EPS \(EarningsFormat.eps(r.epsActual)) vs \(EarningsFormat.eps(r.epsEstimate)) expected (\(EarningsFormat.surprise(r.epsSurprise)))" : "consensus EPS \(EarningsFormat.eps(r.epsEstimate))"))
             }
             if listed.count > rows.count {

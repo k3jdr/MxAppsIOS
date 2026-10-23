@@ -59,7 +59,7 @@ struct ReportLibraryView: View {
                         .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .plainButton()
                     .help("Open the \(r.title) walkthrough")
                     .quickHelp(r.title, (r.whyCare + ["Open its walkthrough."]).joined(separator: " "))
                 }

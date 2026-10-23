@@ -57,7 +57,7 @@ struct WelcomeView: View {
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .plainButton()
         .help("Go to \(target.fullTitle)")
         .quickHelp(title, text)
     }

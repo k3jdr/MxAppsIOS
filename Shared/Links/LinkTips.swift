@@ -4,7 +4,8 @@
 //
 //  A link's hover text (its "ScreenTip", as Word calls it), as in MxNoteONE (LinkTips.swift there): formatted text
 //  written in the Link dialog and shown on the link's hover card. It is kept as RTF with the link. Hover text can hold
-//  links of its own (the Link button or ⌘K, or an address typed in it); they open from the hover card.
+//  links of its own (the Link button or ⌘K, or an address typed in it), each with words of its own to show (Text to
+//  display, as in MxNoteONE's Link dialog); they open from the hover card.
 //
 
 import AppKit
@@ -24,10 +25,22 @@ nonisolated enum LinkRichText {
     /// Hover text with its web and email addresses — and links copied in MxNoteONE (mxnoteone://…) — made into links.
     /// Words that are already a link keep theirs.
     static func linked(_ tip: NSAttributedString) -> NSAttributedString {
-        let string = tip.string
-        let all = NSRange(location: 0, length: tip.length)
         guard tip.length > 0 else { return tip }
-        var found: [(NSRange, URL)] = []
+        var result: NSMutableAttributedString?
+        for (range, url) in addresses(in: tip.string) {
+            var linked = false
+            tip.enumerateAttribute(.link, in: range) { value, _, stop in if value != nil { linked = true; stop.pointee = true } }
+            if linked || result?.attribute(.link, at: range.location, effectiveRange: nil) != nil { continue }
+            if result == nil { result = NSMutableAttributedString(attributedString: tip) }
+            result!.addAttribute(.link, value: url, range: range)
+        }
+        return result ?? tip
+    }
+
+    /// The web and email addresses written in a text, and links copied in MxNoteONE (mxnoteone://…).
+    static func addresses(in string: String) -> [(range: NSRange, url: URL)] {
+        let all = NSRange(location: 0, length: (string as NSString).length)
+        var found: [(range: NSRange, url: URL)] = []
         if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
             for match in detector.matches(in: string, range: all) { if let url = match.url { found.append((match.range, url)) } }
         }
@@ -37,15 +50,12 @@ nonisolated enum LinkRichText {
                 if let url = URL(string: text) { found.append((NSRange(location: match.range.location, length: (text as NSString).length), url)) }
             }
         }
-        var result: NSMutableAttributedString?
-        for (range, url) in found {
-            var linked = false
-            tip.enumerateAttribute(.link, in: range) { value, _, stop in if value != nil { linked = true; stop.pointee = true } }
-            if linked || result?.attribute(.link, at: range.location, effectiveRange: nil) != nil { continue }
-            if result == nil { result = NSMutableAttributedString(attributedString: tip) }
-            result!.addAttribute(.link, value: url, range: range)
-        }
-        return result ?? tip
+        return found
+    }
+
+    /// An address as words: an email address without its mailto:.
+    static func addressText(_ url: URL) -> String {
+        url.scheme == "mailto" ? String(url.absoluteString.dropFirst("mailto:".count)) : url.absoluteString
     }
 
     /// A link's address as typed: a web address (https:// is added), an email address, or any link with its scheme.
@@ -162,31 +172,57 @@ final class TipEditorBox {
         return range
     }
 
-    /// The link the Link button changes: on the selection, or around the caret.
-    var selectedLink: URL? {
-        guard let tv = textView, let storage = tv.textStorage else { return nil }
-        let range = tv.selectedRange()
-        let index = range.length > 0 || linkRange(at: range.location) != nil ? range.location : range.location - 1
-        guard index >= 0, index < storage.length, let value = storage.attribute(.link, at: index, effectiveRange: nil) else { return nil }
-        return value as? URL ?? (value as? String).flatMap { URL(string: $0) }
+    /// What the Link button changes, and what its popover starts from.
+    struct LinkSpot {
+        /// The words: selected, a link's, or an address typed in the text; empty at the caret.
+        var range: NSRange
+        var text: String
+        /// The link there (`isLink`), or the address the words are.
+        var url: URL?
+        var isLink: Bool
     }
 
-    /// Makes the selected words (or the link at the caret) a link to `url`, or the address itself where the caret
-    /// is; nil takes the link off.
-    func setLink(_ url: URL?) {
-        guard let tv = textView, let storage = tv.textStorage else { return }
-        tv.window?.makeFirstResponder(tv)
+    /// The selected words, the link around the caret, an address typed around the caret, or else the caret.
+    func linkSpot() -> LinkSpot? {
+        guard let tv = textView, let storage = tv.textStorage else { return nil }
+        let string = storage.string as NSString
         var range = tv.selectedRange()
         if range.length == 0, let around = linkRange(at: range.location) ?? linkRange(at: range.location - 1) { range = around }
-        if range.length > 0 {
-            change(range) { storage, range in
-                if let url { storage.addAttribute(.link, value: url, range: range) } else { storage.removeAttribute(.link, range: range) }
-            }
+        if range.length == 0 {
+            guard let typed = LinkRichText.addresses(in: storage.string)
+                .first(where: { NSLocationInRange(range.location, $0.range) || NSMaxRange($0.range) == range.location })
+            else { return LinkSpot(range: range, text: "", url: nil, isLink: false) }
+            return LinkSpot(range: typed.range, text: string.substring(with: typed.range), url: typed.url, isLink: false)
+        }
+        let text = string.substring(with: range)
+        if let value = storage.attribute(.link, at: range.location, effectiveRange: nil) {
+            return LinkSpot(range: range, text: text, url: value as? URL ?? (value as? String).flatMap { URL(string: $0) }, isLink: true)
+        }
+        // Selected words that are an address themselves.
+        let typed = LinkRichText.addresses(in: text).first { $0.range.length == (text as NSString).length }
+        return LinkSpot(range: range, text: text, url: typed?.url, isLink: false)
+    }
+
+    /// Links the spot (the one the popover opened on, or the selection's) to `url`, showing `text` — or the words
+    /// there, or else the address itself; nil takes the link off and keeps the words.
+    func setLink(_ url: URL?, text: String? = nil, at spot: LinkSpot? = nil) {
+        guard let tv = textView, let storage = tv.textStorage, let spot = spot ?? linkSpot(),
+              NSMaxRange(spot.range) <= storage.length else { return }
+        tv.window?.makeFirstResponder(tv)
+        let range = spot.range
+        guard let url else {
+            if range.length > 0 { change(range) { storage, range in storage.removeAttribute(.link, range: range) } }
             return
         }
-        guard let url else { return }
-        let words = url.scheme == "mailto" ? String(url.absoluteString.dropFirst("mailto:".count)) : url.absoluteString
-        var attrs = tv.typingAttributes
+        let typed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let words = !typed.isEmpty ? typed : range.length > 0 ? spot.text : LinkRichText.addressText(url)
+        if range.length > 0, words == spot.text {
+            // The same words keep their formatting.
+            change(range) { storage, range in storage.addAttribute(.link, value: url, range: range) }
+            return
+        }
+        // Other words, formatted as the ones they replace (or as what's typed next).
+        var attrs = range.length > 0 ? storage.attributes(at: range.location, effectiveRange: nil) : tv.typingAttributes
         attrs[.link] = url
         guard tv.shouldChangeText(in: range, replacementString: words) else { return }
         storage.replaceCharacters(in: range, with: NSAttributedString(string: words, attributes: attrs))
@@ -294,6 +330,10 @@ struct TipToolbar: View {
     let box: TipEditorBox
     @State private var askingLink = false
     @State private var address = ""
+    /// The words the link shows.
+    @State private var text = ""
+    /// What the popover links: the words or caret it opened on.
+    @State private var spot: TipEditorBox.LinkSpot?
     @State private var hadLink = false
     @FocusState private var addressFocused: Bool
 
@@ -325,38 +365,52 @@ struct TipToolbar: View {
                 .fixedSize()
                 .help("Text colour")
             Button { box.askForLink?() } label: { Image(systemName: "link") }
-                .help("Link: make the selected words a link (⌘K) — to a web or email address")
+                .help("Link (⌘K): make the selected words a link, or change a link's words and address — to a web or email address, or a page in MxNoteONE")
                 .popover(isPresented: $askingLink, arrowEdge: .bottom) { linkEditor }
             Button { box.clearFormatting() } label: { Image(systemName: "eraser") }.help("Clear formatting (links stay)")
         }
         .buttonStyle(.borderless)
         .controlSize(.small)
         .onAppear {
-            let asking = $askingLink, address = $address, hadLink = $hadLink
+            let asking = $askingLink, address = $address, text = $text, spot = $spot, hadLink = $hadLink
             let editor = box
             editor.askForLink = { [weak editor] in
-                hadLink.wrappedValue = editor?.selectedLink != nil
-                address.wrappedValue = editor?.selectedLink?.absoluteString ?? ""
+                let found = editor?.linkSpot()
+                spot.wrappedValue = found
+                hadLink.wrappedValue = found?.isLink == true
+                address.wrappedValue = found?.url?.absoluteString ?? ""
+                text.wrappedValue = found?.text ?? ""
                 asking.wrappedValue = true
             }
         }
     }
 
-    /// The address for the hover text's link.
+    /// The link's words and address, as MxNoteONE's Link dialog has them.
     private var linkEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Link in the hover text").font(.headline)
-            TextField("Address:", text: $address, prompt: Text("https://…, an email address, or mxnoteone://…"))
-                .frame(width: 300)
-                .focused($addressFocused)
-                .onSubmit(applyLink)
-                .help("A web address, an email address, or a link copied in MxNoteONE (Copy Link to Page, Paragraph or Section)")
+            Text(hadLink ? "Edit Link in the Hover Text" : "Link in the Hover Text").font(.headline)
+            Form {
+                TextField("Text to display:", text: $text, prompt: Text("The address itself"))
+                    .onSubmit(applyLink)
+                    .help("The words the hover text shows for the link (empty: the address itself). The address shows when the pointer rests on them.")
+                TextField("Address:", text: $address, prompt: Text("https://…, an email address, or mxnoteone://…"))
+                    .focused($addressFocused)
+                    .onSubmit(applyLink)
+                    .help("A web address, an email address, or a link copied in MxNoteONE (Copy Link to Page, Paragraph or Section)")
+            }
+            .frame(width: 380)
+            // Words that were the address itself follow it as it changes.
+            .onChange(of: address) { old, new in
+                let shown = LinkRichText.url(fromAddress: old).map(LinkRichText.addressText)
+                if text == old || text == shown { text = LinkRichText.url(fromAddress: new).map(LinkRichText.addressText) ?? new }
+            }
             HStack {
                 if hadLink {
                     Button("Remove Link", role: .destructive) {
-                        box.setLink(nil)
+                        box.setLink(nil, at: spot)
                         askingLink = false
                     }
+                    .help("Keep the words, take the link off")
                 }
                 Spacer()
                 Button("Cancel") { askingLink = false }
@@ -373,6 +427,6 @@ struct TipToolbar: View {
     private func applyLink() {
         guard let url = LinkRichText.url(fromAddress: address) else { return }
         askingLink = false
-        box.setLink(url)
+        box.setLink(url, text: text, at: spot)
     }
 }

@@ -65,7 +65,8 @@ MxNoteONE makes links (the shared `../Shared/Links`, also used by MxPortMGR):
 
 * **⌘K** (Edit ▸ Link…) on the selected row — or its context menu, *Add Link to Ticker… / Name…* — opens the **Link**
   dialog: *Link on* Ticker or Name (⌘K takes the column the pointer rests on), *Text to display*, *Address*, formatted
-  **hover text** with links of its own, a *Hover card preview*, pages about the security (Nasdaq.com, SEC EDGAR, Yahoo
+  **hover text** with links of its own (each with its own *Text to display*, set with the link button or ⌘K in the
+  hover text), a *Hover card preview*, pages about the security (Nasdaq.com, SEC EDGAR, Yahoo
   Finance, investor relations), *Use the Link Copied in MxNoteONE*, and *Remove Link*.
 * A linked ticker or name shows as a link; a click opens it. **Resting the pointer** on it shows the **hover card**:
   the hover text, where the link goes, and Edit Link…, Copy and Remove Link.
