@@ -220,7 +220,9 @@ struct ReportCard: View {
             .disabled(preview)
         }
         .padding(10)
-        .frame(minWidth: 250, maxWidth: 360, alignment: .leading)
+        // A set width, so the card's height is measured with its lines wrapped as shown: sized from its unwrapped
+        // width, the publisher's line wrapped once shown and pushed the buttons off the card's bottom.
+        .frame(width: 360, alignment: .leading)
     }
 }
 

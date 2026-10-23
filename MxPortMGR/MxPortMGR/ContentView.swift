@@ -172,7 +172,11 @@ struct ContentView: View {
         }
         if let id = defaults.string(forKey: "reportHoverTest") {
             Task {
-                try? await Task.sleep(for: .seconds(4))
+                // Once the report's name is on screen (the window can take longer than a few seconds to open).
+                for _ in 0..<60 where ReportNotes.shared.anchors[id]?()?.window == nil {
+                    try? await Task.sleep(for: .seconds(0.5))
+                }
+                try? await Task.sleep(for: .seconds(1))
                 ReportNotes.shared.testHover(id)
             }
         }
