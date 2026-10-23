@@ -50,6 +50,7 @@ struct LessonCard: View {
         .background(Color.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.yellow.opacity(0.25)))
         .quickHelpArea(QuickHelpItem(title: title, detail: points.joined(separator: " "), symbol: symbol))
+        .copySection(title)
     }
 }
 
@@ -92,6 +93,7 @@ struct Box<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
         .quickHelpArea(help.map { QuickHelpItem(title: title, detail: $0, symbol: symbol ?? "rectangle.dashed") })
+        .copySection(title)
     }
 }
 
@@ -405,5 +407,50 @@ struct CollapsibleBox<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
         .quickHelpArea(QuickHelpItem(title: title, detail: help, symbol: symbol))
+        .copySection(title)
+    }
+}
+
+/// Cards in as many columns as fit (each at least `minimum` wide), row after row — what LazyVGrid with an adaptive
+/// column does, but not lazy: every card exists, also those scrolled out of sight, so Edit ▸ Copy Page Text and Copy
+/// Section (Shared/Copy/PageText.swift) copy all of them, not just the ones on screen. For a handful of cards.
+struct AdaptiveColumns: Layout {
+    var minimum: CGFloat
+    var spacing: CGFloat
+    var rowSpacing: CGFloat
+
+    private func columns(_ width: CGFloat) -> (count: Int, width: CGFloat) {
+        let n = max(1, Int((width + spacing) / (minimum + spacing)))
+        return (n, max(0, (width - spacing * CGFloat(n - 1)) / CGFloat(n)))
+    }
+
+    /// Each row's height (its tallest card) at this width.
+    private func rowHeights(_ subviews: Subviews, width: CGFloat) -> [CGFloat] {
+        let c = columns(width)
+        return stride(from: 0, to: subviews.count, by: c.count).map { start in
+            subviews[start..<min(start + c.count, subviews.count)]
+                .map { $0.sizeThatFits(ProposedViewSize(width: c.width, height: nil)).height }.max() ?? 0
+        }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? minimum
+        let heights = rowHeights(subviews, width: width)
+        return CGSize(width: width, height: heights.reduce(0, +) + rowSpacing * CGFloat(max(0, heights.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let c = columns(bounds.width)
+        let heights = rowHeights(subviews, width: bounds.width)
+        var y = bounds.minY
+        for (row, height) in heights.enumerated() {
+            for column in 0..<c.count {
+                let i = row * c.count + column
+                guard i < subviews.count else { break }
+                subviews[i].place(at: CGPoint(x: bounds.minX + CGFloat(column) * (c.width + spacing), y: y),
+                                  anchor: .topLeading, proposal: ProposedViewSize(width: c.width, height: nil))
+            }
+            y += height + rowSpacing
+        }
     }
 }

@@ -33,17 +33,27 @@ selection / interaction, turnover, rebalance band, look-through, tax lot, Carino
 gives both.
 
 **Selecting and copying.** The screens' text can be selected and copied (⌘C), as in a document: lessons, figures,
-captions, cards, the walkthroughs, and the cells of tables you don't pick rows in (Trades, By sector). Each piece of
-text is selected on its own; SwiftUI doesn't select across several. Buttons drawn as cards or headings stay buttons: a
-click on their words presses them. In the tables whose rows you pick (My Holdings, Earnings by Day, Add Securities),
-a click selects the row; **⌘C** (Edit ▸ Copy) or the row's context menu, *Copy Row*, copies it as tab-separated
-columns under the columns' titles, which paste into Numbers or Excel as a table.
+captions, cards and the walkthroughs. Each piece of text is selected on its own; SwiftUI doesn't select across
+several, so to take more than one at a time:
+
+- **Edit ▸ Copy Page Text** (⌥⇧⌘C) copies the whole page — every section, card and grid, also what is scrolled out of
+  sight — laid out as on screen: things side by side tab-separated (a grid's columns, a metric row), cards one after
+  another, a blank line between blocks. The Report Library's drivers grid comes out as a table with ✓ per driver and
+  the impact (low / medium / high).
+- **Copy Section** — right-click a section (a titled box, a lesson) away from its text — copies just that section.
+- **Tables** — click a row to select it (⇧ / ⌘ for several, ⌘A for all), then **⌘C** (Edit ▸ Copy) or the row's
+  context menu, *Copy Row*, copies them as tab-separated columns under the columns' titles, which paste into Numbers or
+  Excel as a table: My Holdings, Earnings by Day, Add Securities, Trades and By sector.
+
+Buttons drawn as cards or headings stay buttons: a click on their words presses them (their words are in the copied
+page). The page and section text is read through accessibility (`Shared/Copy/PageText.swift`); table rows through
+`Shared/Copy/TableCopy.swift`, shared with MxDataHUB.
 
 ## Menus
 
 | Menu | Items |
 | --- | --- |
-| **Edit** | (the standard items) · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
+| **Edit** | (the standard items) · **Copy Page Text** ⌥⇧⌘C — the whole page as text · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |

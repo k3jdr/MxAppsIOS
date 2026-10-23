@@ -263,7 +263,7 @@ struct ReportView: View {
     private var yourReaction: some View {
         VStack(alignment: .leading, spacing: 12) {
             Box(title: "What would you do?", symbol: "hand.raised", help: "Choose the reaction to simulate. All of them are simulated against staying with the plan; the chart follows the one chosen.") {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 10)], alignment: .leading, spacing: 10) {
+                AdaptiveColumns(minimum: 300, spacing: 10, rowSpacing: 10) {
                     ForEach([Reaction.plan] + report.reactions) { r in
                         let chosen = (state.reaction ?? report.reactions.first!.id) == r.id
                         Button { store.updateReport(report) { $0.reaction = r.id } } label: {

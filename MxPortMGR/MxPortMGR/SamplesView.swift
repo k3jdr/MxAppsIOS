@@ -18,8 +18,8 @@ struct SamplesView: View {
             "Use a sample in the report walkthroughs — the same news lands very differently on a concentrated, an income and a cash-heavy account — or copy it into My Portfolio to work through its steps.",
             "My Portfolio is yours to edit, in the same illustrative universe; it is remembered between launches.",
         ]) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 14)], alignment: .leading, spacing: 14) {
-                ForEach(store.portfolios) { p in card(p) }
+            AdaptiveColumns(minimum: 340, spacing: 14, rowSpacing: 14) {
+                ForEach(store.portfolios) { p in card(p).copyBlock() }
             }
         }
     }

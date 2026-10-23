@@ -104,6 +104,10 @@ struct MxPortMGRApp: App {
             }
             CommandGroup(after: .pasteboard) {
                 Divider()
+                // The whole page as text, laid out as on screen (Shared/Copy/PageText.swift); a section's context menu
+                // has Copy Section.
+                Button("Copy Page Text") { PageText.copy(PageText.page) }
+                    .keyboardShortcut("c", modifiers: [.command, .option, .shift])
                 // As in MxNoteONE: add or edit the link of the selected company or holding (its symbol, or the name
                 // when the pointer rests there).
                 Button("Link…") { SecurityLinks.shared.beginEdit(SecurityLinks.shared.commandTarget(selected: store.linkSelection)) }

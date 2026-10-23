@@ -1,11 +1,11 @@
 //
 //  TableCopy.swift
-//  MxDataHUB
+//  Shared by MxDataHUB and MxPortMGR (MXcodeIDE/Shared/Copy)
 //
-//  Copying a table's rows, as in MxPortMGR: select rows (⇧-click or ⌘-click for several, ⌘A for all), then Edit ▸
+//  Copying a table's rows: select rows (⇧-click or ⌘-click for several, ⌘A for all), then Edit ▸
 //  Copy (⌘C) or the row's Copy Row puts them on the clipboard as lines of tab-separated columns under the table's
 //  column titles, so they paste into a spreadsheet, a ticket or a note. Tables select rows, not their words; the rest
-//  of each screen's text can be selected as text (ContentView).
+//  of each screen's text can be selected as text (ContentView), and copied a section or a page at a time (PageText).
 //
 
 import AppKit

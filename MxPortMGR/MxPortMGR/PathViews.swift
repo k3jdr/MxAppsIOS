@@ -553,7 +553,21 @@ struct WeightsChart: View {
 struct TradesView: View {
     @Bindable var store: PortStore
     @State private var fraction = 1.0
+    @State private var tradeSelection = Set<Trade.ID>()
     private let costRate = 0.0015
+
+    /// How a security is held today: directly, only through a fund, or not at all.
+    private func held(_ t: Trade) -> String {
+        store.portfolio.holdings.contains { $0.ticker == t.asset } ? "directly" : t.from > 0 ? "through a fund" : "new"
+    }
+
+    /// The trades table as text, for ⌘C and Copy Row (Shared/Copy/TableCopy.swift).
+    private var tradesText: TableText<Trade> {
+        TableText(titles: ["Side", "Security", "Today", "Target", "Change", "Amount", "Held"]) { t in
+            [t.side, "\(t.asset) — \(Universe.security(t.asset)?.name ?? "")", pct(t.from, 2), pct(t.to, 2), signedPct(t.change),
+             money(t.change * store.portfolio.total), held(t)]
+        }
+    }
 
     var body: some View {
         StepPage(store: store, subtitle: "What it takes to get there: the trades, their cost, and the taxes they trigger.", lesson: [
@@ -582,18 +596,20 @@ struct TradesView: View {
                     }
                 }
                 Box(title: "Trades", symbol: "list.bullet.rectangle", help: "Buys and sells in the securities (funds looked through), largest first. Names held only through a fund are traded by changing the fund or adding the name directly.") {
-                    Table(trades.filter { abs($0.change) > 1e-4 }) {
+                    let shown = trades.filter { abs($0.change) > 1e-4 }
+                    Table(shown, selection: $tradeSelection) {
                         TableColumn("Side") { t in Text(t.side).foregroundStyle(t.change > 0 ? .green : .red) }.width(50)
                         TableColumn("Security") { t in Text("\(t.asset) — \(Universe.security(t.asset)?.name ?? "")") }
                         TableColumn("Today") { t in Text(pct(t.from, 2)).monospacedDigit() }.width(70)
                         TableColumn("Target") { t in Text(pct(t.to, 2)).monospacedDigit() }.width(70)
                         TableColumn("Change") { t in Text(signedPct(t.change)).monospacedDigit() }.width(70)
                         TableColumn("Amount") { t in Text(money(t.change * store.portfolio.total)).monospacedDigit() }.width(100)
-                        TableColumn("Held") { t in
-                            Text(store.portfolio.holdings.contains { $0.ticker == t.asset } ? "directly" : t.from > 0 ? "through a fund" : "new").foregroundStyle(.secondary)
-                        }
+                        TableColumn("Held") { t in Text(held(t)).foregroundStyle(.secondary) }
                         .width(100)
                     }
+                    // Select rows (⇧ / ⌘ for several, ⌘A for all); ⌘C or Copy Row copies them under the column titles.
+                    .copyRowsMenu(shown, as: tradesText)
+                    .copiesSelectedRows(shown, selected: tradeSelection, as: tradesText)
                     .frame(minHeight: 260)
                 }
                 TaxBox(store: store, estimate: estimate)
@@ -730,6 +746,14 @@ struct AttributionView: View {
 struct AttributionResultView: View {
     var result: AttributionResult
     var passive: Bool
+    @State private var groupSelection = Set<AttributionResult.Group.ID>()
+
+    /// The sector table as text, for ⌘C and Copy Row (Shared/Copy/TableCopy.swift).
+    private static let groupsText = TableText<AttributionResult.Group>(
+        titles: ["Sector", "Account", "Benchmark", "Active", "Allocation", "Selection", "Interaction", "Total"]) { g in
+        [g.group, pct(g.portfolioWeight), pct(g.benchmarkWeight), signedPct(g.activeWeight, 1), signedPct(g.allocation),
+         signedPct(g.selection), signedPct(g.interaction), signedPct(g.total)]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -779,7 +803,7 @@ struct AttributionResultView: View {
                 }
             }
             Box(title: "By sector", symbol: "tablecells", help: "Average weights over the period and each effect, largest total first.") {
-                Table(result.groups) {
+                Table(result.groups, selection: $groupSelection) {
                     TableColumn("Sector", value: \.group)
                     TableColumn("Account") { g in Text(pct(g.portfolioWeight)).monospacedDigit() }.width(70)
                     TableColumn("Benchmark") { g in Text(pct(g.benchmarkWeight)).monospacedDigit() }.width(80)
@@ -789,6 +813,8 @@ struct AttributionResultView: View {
                     TableColumn("Interaction") { g in Text(signedPct(g.interaction)).monospacedDigit().foregroundStyle(Color.signed(g.interaction)) }.width(80)
                     TableColumn("Total") { g in Text(signedPct(g.total)).monospacedDigit().bold() }.width(70)
                 }
+                .copyRowsMenu(result.groups, as: Self.groupsText)
+                .copiesSelectedRows(result.groups, selected: groupSelection, as: Self.groupsText)
                 .frame(minHeight: CGFloat(result.groups.count) * 26 + 34)
             }
             HStack(alignment: .top, spacing: 14) {

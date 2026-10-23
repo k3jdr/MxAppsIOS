@@ -33,8 +33,10 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 screen
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Every screen's text can be selected and copied: lessons, figures, cards, table cells.
+                    // Every screen's text can be selected and copied: lessons, figures, cards, table cells; a whole
+                    // page with Edit ▸ Copy Page Text, a section from its context menu (Shared/Copy/PageText.swift).
                     .textSelection(.enabled)
+                    .copyableText(PageText.page)
                 Divider()
                 StatusBar(store: store)
             }
@@ -168,6 +170,18 @@ struct ContentView: View {
             Task {
                 try? await Task.sleep(for: .seconds(4))
                 ReportNotes.shared.beginEdit(MarketReport.report(id))
+            }
+        }
+        // Copy Page Text onto a pasteboard of its own rather than the clipboard (-pageTextTest NAME), once the page has
+        // drawn; -pageTextID TITLE copies that section instead of the page.
+        if let name = defaults.string(forKey: "pageTextTest") {
+            Task {
+                try? await Task.sleep(for: .seconds(10))
+                let window = NSApp.windows.first { $0.isVisible && $0.contentView != nil && !($0 is NSPanel) }
+                let text = PageText.text(of: defaults.string(forKey: "pageTextID").map(PageText.section) ?? PageText.page, in: window)
+                let pb = NSPasteboard(name: NSPasteboard.Name(name))
+                pb.clearContents()
+                pb.setString(text ?? "<nil>", forType: .string)
             }
         }
         if let id = defaults.string(forKey: "reportHoverTest") {

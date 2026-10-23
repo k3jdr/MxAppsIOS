@@ -27,8 +27,8 @@ struct ReportLibraryView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(tier.title).font(.title2.weight(.semibold))
                     Text(tier.summary).foregroundStyle(.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 12)], alignment: .leading, spacing: 12) {
-                        ForEach(MarketReport.all.filter { $0.tier == tier.id }) { reportCard($0) }
+                    AdaptiveColumns(minimum: 340, spacing: 12, rowSpacing: 12) {
+                        ForEach(MarketReport.all.filter { $0.tier == tier.id }) { reportCard($0).copyBlock() }
                     }
                 }
                 .padding(.top, 6)
@@ -86,6 +86,7 @@ struct ReportLibraryView: View {
                         ForEach(Driver.allCases, id: \.self) { d in
                             Image(systemName: r.drivers.contains(d) ? "circle.fill" : "circle").font(.caption2)
                                 .foregroundStyle(r.drivers.contains(d) ? Color.accentColor : Color.secondary.opacity(0.3))
+                                .copyText(r.drivers.contains(d) ? "✓" : "")
                         }
                         ImpactDots(level: r.impact)
                     }
@@ -168,6 +169,7 @@ struct ImpactDots: View {
             }
         }
         .help(["", "Usually a small market reaction on the day", "Can move markets on a surprise", "Moves markets within seconds of release"][level])
+        .copyText(["", "low", "medium", "high"][level])
     }
 }
 
@@ -244,7 +246,7 @@ struct MorningBriefingView: View {
                 MetricTile(title: "VIX", value: String(format: "%.1f", Briefing.vix.last!), caption: "+2.8 today, long-run average ≈ 19", tint: .orange, help: "The market's expected 30-day volatility of the S&P 500, from option prices; it rises when investors pay up for protection.")
                 MetricTile(title: "Fed: odds of a cut next meeting", value: "62%", caption: "from fed funds futures", help: "Probabilities implied by fed funds futures prices.")
             }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 420), spacing: 14)], alignment: .leading, spacing: 14) {
+            AdaptiveColumns(minimum: 420, spacing: 14, rowSpacing: 14) {
                 panel(1, "Overnight markets", "globe", "Asia and Europe traded while the U.S. slept; U.S. futures show where stocks are likely to open.",
                       "Overnight moves often reverse during the U.S. day; they set the mood, not the result.") {
                     ForEach(Briefing.overnight, id: \.0) { row in
@@ -366,6 +368,7 @@ struct MorningBriefingView: View {
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .copyBlock()
         .quickHelpArea(QuickHelpItem(title: title, detail: what + " For a long-term plan: " + use, symbol: symbol))
     }
 }
