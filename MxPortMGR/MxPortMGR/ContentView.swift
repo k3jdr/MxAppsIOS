@@ -39,6 +39,7 @@ struct ContentView: View {
             .navigationTitle(store.title(store.screen))
             .navigationSubtitle(store.portfolio.name)
             .toolbar {
+                BackForwardButtons(store: store)
                 ToolbarItem(placement: .primaryAction) { accountPicker }
                 ToolbarItem(placement: .primaryAction) { enginePicker }
             }
@@ -46,6 +47,8 @@ struct ContentView: View {
         .frame(minWidth: 1180, minHeight: 720)
         .quickHelpScreen(store.title(store.screen), PortHelp.about(store.screen), selection: PortHelp.selection(store))
         .task { start() }
+        // Each place visited joins the history (Back and Forward, Navigation.swift).
+        .onChange(of: store.place, initial: true) { store.recordPlace() }
         .onOpenURL { url in
             // mxportmgr://my-portfolio/CODE from MxDataHUB or MxJobsWMS (Shared/AppLinks.swift).
             if case let .myPortfolio(code)? = AppLink(url: url) {
@@ -132,6 +135,7 @@ struct ContentView: View {
     /// for the earnings screens `-earningsDate 2026-10-20` (Earnings by Day, and the month or week the calendar shows)
     /// with `-earningsSymbol PG` (the company selected), and `-earningsMode Week`.
     private func start() {
+        NavigationKeys.install(store)
         // Links on tickers and names live in the security master, through the accounts service; links kept on this
         // Mac for its securities go there once it answers.
         SecurityLinks.shared.use(AccountsLinkBackend())

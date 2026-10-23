@@ -212,6 +212,22 @@ final class PortStore {
         screen = .earningsDay
     }
 
+    // Back and Forward through the places visited, as in a browser (Navigation.swift).
+    private(set) var canGoBack = false
+    private(set) var canGoForward = false
+    /// Bumped whenever the Back / Forward lists change (their menus redraw).
+    private(set) var historyVersion = 0
+    @ObservationIgnored var backStack: [Place] = [] { didSet { historyChanged() } }
+    @ObservationIgnored var forwardStack: [Place] = [] { didSet { historyChanged() } }
+    /// The place the history is at (set before Back or Forward shows it, so it isn't recorded again).
+    @ObservationIgnored var historyCurrent: Place?
+
+    private func historyChanged() {
+        canGoBack = !backStack.isEmpty
+        canGoForward = !forwardStack.isEmpty
+        historyVersion += 1
+    }
+
     /// The holding selected in My Holdings.
     var holdingSelection: Holding.ID?
 

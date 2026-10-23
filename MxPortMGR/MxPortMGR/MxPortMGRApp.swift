@@ -21,6 +21,8 @@ struct MxPortMGRApp: App {
         .defaultSize(width: 1440, height: 900)
         .windowResizability(.contentMinSize)
         .commands {
+            // Back, Forward and History (⌘[ ⌘]), and the guide's Previous and Next Step (⌥⌘↑ ⌥⌘↓) — Navigation.swift.
+            GoCommands(store: store)
             CommandMenu("Guide") {
                 Button("Welcome") { store.go(.welcome) }
                     .keyboardShortcut("0", modifiers: .command)
@@ -107,13 +109,6 @@ struct MxPortMGRApp: App {
                 Button("Link…") { SecurityLinks.shared.beginEdit(SecurityLinks.shared.commandTarget(selected: store.linkSelection)) }
                     .keyboardShortcut("k")
                     .disabled(store.screen != .earningsDay && store.screen != .myPortfolio || SecurityLinks.shared.editing != nil)
-            }
-            CommandGroup(after: .sidebar) {
-                Button("Previous Step") { if let p = store.screen.previous { store.go(p) } }
-                    .keyboardShortcut("[", modifiers: .command)
-                Button("Next Step") { if let n = store.screen.next { store.go(n) } }
-                    .keyboardShortcut("]", modifiers: .command)
-                Divider()
             }
             QuickHelpCommands()
         }

@@ -28,7 +28,7 @@ struct WelcomeView: View {
             }
             Box(title: "How to use it", symbol: "questionmark.circle", help: "How the window is laid out and how Quick Help works.") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("The sidebar is the guide: My Portfolio has six steps; ⌘] and ⌘[ move to the next and previous screen.", systemImage: "sidebar.left")
+                    Label("The sidebar is the guide: My Portfolio has six steps; ⌥⌘↓ and ⌥⌘↑ move to the next and previous screen, and ⌘[ and ⌘] go back and forward, as in a browser.", systemImage: "sidebar.left")
                     Label("Quick Help, under the sidebar, explains whatever is under the pointer — a number, a column, a button. ⌥⌘/ shows or hides it; its ⧉ button floats it in its own window.", systemImage: "questionmark.bubble")
                     Label("My Portfolio, in the sidebar after Start Here, walks your own account through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
                     Label("Pick a sample account in the toolbar for the report walkthroughs and the Morning Briefing: each teaches an edge case. Library ▸ Sample Portfolios describes them all; copy one into My Portfolio to work through it.", systemImage: "briefcase")

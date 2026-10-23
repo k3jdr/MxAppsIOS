@@ -103,8 +103,8 @@ struct StepFooter: View {
         HStack {
             if let prev = previous {
                 Button { store.go(prev) } label: { Label(label(prev), systemImage: "chevron.left") }
-                    .help("Previous step: \(prev.fullTitle) (⌘[)")
-                    .quickHelp("Previous Step", "Back to \(prev.fullTitle).", shortcut: "⌘[")
+                    .help("Previous step: \(prev.fullTitle) (⌥⌘↑)")
+                    .quickHelp("Previous Step", "Back to \(prev.fullTitle), the step before this one in the guide. (⌘[ goes back to where you were, as in a browser.)", shortcut: "⌥⌘↑")
             }
             Spacer()
             if let next = next {
@@ -112,8 +112,8 @@ struct StepFooter: View {
                     HStack { Text("Next: \(label(next))"); Image(systemName: "chevron.right") }
                 }
                 .buttonStyle(.borderedProminent)
-                .help("Next step: \(next.fullTitle) (⌘])")
-                .quickHelp("Next Step", "On to \(next.fullTitle).", shortcut: "⌘]")
+                .help("Next step: \(next.fullTitle) (⌥⌘↓)")
+                .quickHelp("Next Step", "On to \(next.fullTitle), the next step in the guide.", shortcut: "⌥⌘↓")
             }
         }
         .padding(.top, 8)

@@ -23,8 +23,8 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 | --- | --- |
 | **Sidebar — the guide** | Five groups: Start Here, **My Portfolio** (6 steps, your own account), Market Reports, Learn the Why, Library. |
 | **Quick Help** (bottom of the sidebar) | The shared MXcodeIDE Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
-| **Toolbar** | **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the My Portfolio steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
-| **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Back / Next** along the guide. |
+| **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the My Portfolio steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
+| **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. |
 | **Status bar** | The account, its type, value and benchmark; the last action (e.g. "Optimized with Built-in (Swift) in 134 ms"); the educational-use banner. |
 
 Every control has a `.help` tooltip and a Quick Help entry (`.quickHelp` / `.quickHelpArea`), following the
@@ -37,10 +37,25 @@ gives both.
 | Menu | Items |
 | --- | --- |
 | **Edit** | (the standard items) · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
+| **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
-| **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) · Previous Step ⌘[ · Next Step ⌘] |
+| **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
+
+### Back and Forward
+
+As in a browser, Finder and MxNoteONE, every place you go joins a history: a screen, the report a walkthrough shows,
+or the day Earnings by Day shows. Going somewhere new after going back drops the places ahead, as a browser does.
+
+* **Back**: the toolbar's **‹**, Go ▸ Back, **⌘[**, **⌃←**, or a mouse's back button.
+* **Forward**: the toolbar's **›**, Go ▸ Forward, **⌘]**, **⌃→**, or a mouse's forward button.
+* **Several places at once**: hold ‹ or › for the places before or after (up to 15), or use Go ▸ History.
+
+macOS gives ⌃← and ⌃→ to Mission Control ("Move left / right a space") until they are turned off in System Settings ▸
+Keyboard ▸ Keyboard Shortcuts… ▸ Mission Control; ⌘[ and ⌘] always work. ⌃← and ⌃→ are left to text while you type.
+The guide's own order is **Previous Step ⌥⌘↑** and **Next Step ⌥⌘↓** (they used to be ⌘[ and ⌘]), and the buttons at
+the foot of each step.
 
 ## The guide
 
@@ -343,6 +358,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | --- | --- |
 | `MxPortMGRApp.swift` | The window and the Guide, Portfolio and Reports menus, and Edit ▸ Link… |
 | `ContentView.swift` | Sidebar guide with Quick Help docked, toolbar pickers, status bar, launch arguments |
+| `Navigation.swift` | Back and Forward: the places visited, the toolbar's ‹ ›, the Go menu, ⌃← ⌃→ and a mouse's side buttons |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
 | `Universe.swift`, `Portfolio.swift`, `Samples.swift` | The illustrative market, accounts and checks, the samples |
 | `SRMData.swift` | Security-master securities and benchmarks registry, the accounts-service client, analytics inputs for srm accounts |
