@@ -20,15 +20,22 @@ struct SelectableText: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSTextView {
-        // TextKit 1, so its height can be measured for a width (sizeThatFits).
+        // TextKit 1, as the measuring below.
         let view = CopyTrimmingTextView(usingTextLayoutManager: false)
         view.isEditable = false
         view.isSelectable = true
         view.drawsBackground = false
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
+        // SwiftUI sets the frame from sizeThatFits; the view neither grows nor shrinks itself to its text (it did,
+        // and drew its lines outside the frame SwiftUI gave it, over the views below).
+        view.isVerticallyResizable = false
+        view.isHorizontallyResizable = false
         view.textContainer?.widthTracksTextView = true
+        view.textContainer?.heightTracksTextView = true
         view.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .cursor: NSCursor.pointingHand]
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return view
     }
 
@@ -38,12 +45,30 @@ struct SelectableText: NSViewRepresentable {
         view.textStorage?.setAttributedString(text)
     }
 
+    /// As wide as offered, as tall as the text wrapped to that width — measured apart from the view, whose own
+    /// layout follows its frame (measuring by resizing the view's text container left the text wrapped to whatever
+    /// width SwiftUI asked about last, and the lines ran over the views below).
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: NSTextView, context: Context) -> CGSize? {
-        guard let container = view.textContainer, let layout = view.layoutManager else { return nil }
-        let width = proposal.width ?? 480
-        container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        guard let offered = proposal.width else {
+            // Its ideal size: a comfortable reading width.
+            return CGSize(width: 480, height: Self.height(of: text, width: 480))
+        }
+        // As wide as it may get (a maximum): any width, the text on as few lines as it has paragraphs.
+        if !offered.isFinite { return CGSize(width: offered, height: Self.height(of: text, width: 100_000)) }
+        let width = max(offered, 40)
+        return CGSize(width: width, height: Self.height(of: text, width: width))
+    }
+
+    /// The height of the text wrapped to `width`.
+    static func height(of text: NSAttributedString, width: CGFloat) -> CGFloat {
+        let storage = NSTextStorage(attributedString: text)
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
         layout.ensureLayout(for: container)
-        return CGSize(width: width, height: ceil(layout.usedRect(for: container).height))
+        return ceil(layout.usedRect(for: container).height)
     }
 }
 
