@@ -22,7 +22,9 @@ Right-click the empty space in the pages list for **Add New**: New Page, New Sub
 Section and New Section Group. Right-click a page for its own menu.
 
 - **Text containers** hold rich text (fonts, colours, highlights, lists, inline pictures). Typing grows the container.
-- **Bullets and numbering**: Return continues the list, Return on an empty item ends it, Tab / Shift-Tab indent items.
+- **Bullets and numbering**: Return continues the list, Return on an empty item ends it, Tab / Shift-Tab indent items. A long
+  item's wrapped lines line up under its first character, not under the bullet, number or To Do box (a hanging
+  indent as wide as the marker, kept up to date as you edit).
 - **Tags**: ☐ To Do, ⭐ Important, ❓ Question, ❗ Critical, 💡 Idea, 📌 Remember for Later, 📖 Definition, 📞 Phone Number,
   💬 Discuss with Team (⌘1 – ⌘9, ⌘0 removes). Click ☐ to check it off; Return after a To Do starts another.
 - **Tables, OneNote style**: type some text and press **Tab** — the paragraph becomes a table with your text in the

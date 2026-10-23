@@ -485,6 +485,8 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         configureTextView()
         if let data = element.rtfd, let text = NoteRichText.text(data) {
             textView.textStorage?.setAttributedString(text)
+            // Wrapped list items line up under their text (notes saved before this was done, too).
+            if let storage = textView.textStorage { ListIndent.apply(storage) }
         }
         addSubview(textView)
         finishSetup()
@@ -616,6 +618,7 @@ final class TextElementView: ElementView, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         CodeHighlighter.recolor(textView)
+        if let storage = textView.textStorage { ListIndent.apply(storage) }
         controller?.textChanged()
         TextFormatter.convertWikiLink(in: textView)
     }
