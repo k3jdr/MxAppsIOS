@@ -246,6 +246,9 @@ final class PageCanvasView: NSView {
             view = ImageElementView(element: element, image: image)
         case .file, .audio:
             view = FileElementView(element: element)
+        case .video:
+            let poster = element.preview.flatMap { controller?.assetData($0) }.flatMap(NSImage.init(data:))
+            view = VideoElementView(element: element, poster: poster)
         case .table:
             view = TableElementView(element: element)
         case .chart:
@@ -439,6 +442,7 @@ final class PageCanvasView: NSView {
         }
         here("Table", "tablecells") { $0.insertTable(rows: 3, columns: 3) }
         here("Picture…", "photo") { $0.choosePictures() }
+        here("Video…", "film") { $0.chooseVideos() }
         here("File Attachment…", "paperclip") { $0.chooseAttachments() }
         im.addItem(.separator())
         here("Map", "map") { $0.insertMap() }

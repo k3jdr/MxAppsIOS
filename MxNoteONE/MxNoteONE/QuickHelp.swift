@@ -4,7 +4,7 @@
 //
 //  Quick Help, as in Logic Pro: a panel at the bottom of the sidebar that
 //  describes what's under the pointer — a toolbar tool or section, a note in
-//  a score, a table cell, a link, a text box, a picture — in a sentence or
+//  a score, a table cell, a link, a text box, a picture, a video's controls — in a sentence or
 //  two, with its shortcut. With the pointer over nothing it can describe, it
 //  tells about what's being worked on (the selected note, the cell being
 //  typed in…). View ▸ Quick Help (⌥⌘/) shows or hides it.
@@ -142,6 +142,11 @@ final class QuickHelp {
             return QuickHelpItem(title: "Music Score", detail: "Click to write notes: A–G add notes, 3–7 set the length, Space plays. The Score tab has every tool.", shortcut: nil, symbol: "music.note")
         case is ImageElementView:
             return QuickHelpItem(title: "Picture", detail: "Drag to move it; drag a corner to resize. Right-click to copy, save, rotate or delete it.", shortcut: nil, symbol: "photo")
+        case let bar as VideoControlBar:
+            return bar.quickHelp(at: p)
+        case let video as VideoElementView:
+            return QuickHelpItem(title: "Video", detail: "\(video.element.fileName ?? "A video") — double-click it to play or pause, or use the bar below it: play, stop, back or forward 10 seconds, mute and volume. Drag to move it; drag its right edge to resize (it keeps its proportions). Right-click to save it, open it in a viewer, pick its poster frame or delete it.",
+                                 shortcut: nil, symbol: "film")
         case let file as FileElementView:
             return QuickHelpItem(title: file.element.kind == .audio ? "Recording" : "Attachment",
                                  detail: file.element.kind == .audio ? "Click to play the recording. Right-click to save or delete it."
@@ -278,7 +283,7 @@ extension QuickHelp {
         "Map/Directions": "Driving or walking routes from one pin to another.",
         "Map/View": "The pin list, showing every pin, zooming, facing north, the title, and copying a picture of the map.",
         "Insert/3D": "A 3D model (parametric CAD): a new part, the sample bracket, or an STL / OBJ file. Double-click it on the page to edit it.",
-        "Insert/Files": "Pictures, attachments and screen clippings.",
+        "Insert/Files": "Pictures, videos, attachments and screen clippings.",
         "Insert/Recording": "Record audio onto the page.",
         "Insert/Links": "A link to a web page, an email address or a page in your notebooks.",
         "Insert/Time Stamp": "Today's date, the time, or both, where the caret is.",
@@ -348,6 +353,7 @@ extension QuickHelp {
         "Score": "Inserts an empty music score: click it and type notes A–G.",
         "MusicXML": "Inserts a music score from a MusicXML file (MuseScore, Finale, Sibelius, Dorico).",
         "Picture": "Inserts a picture from a file.",
+        "Video": "Puts a video (.mov, .mp4, .m4v) on the page, copied into the notebook. It plays in place, with play, stop, ±10 seconds, mute and volume. You can also drop a video file on the page.",
         "File": "Attaches a file to the page; double-click it to open.",
         "Screen Clipping": "Takes a picture of part of the screen and puts it on the page.",
         "Record Audio": "Records sound onto the page.",

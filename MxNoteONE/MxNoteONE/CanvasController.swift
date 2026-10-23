@@ -11,6 +11,7 @@
 //
 
 import AppKit
+import AVFoundation
 import UniformTypeIdentifiers
 
 /// An element on the pasteboard, with its picture or file data.
@@ -678,6 +679,36 @@ final class CanvasController: NSObject {
         addElement(element)
     }
 
+    /// A video file copied into the notebook and played on the page, with a poster frame and its proportions.
+    func insertVideo(_ url: URL, at point: NSPoint? = nil) {
+        guard let ref else { return }
+        let p = point ?? nextInsertionPoint()
+        Task {
+            let asset = AVURLAsset(url: url)
+            var size = CGSize(width: 16, height: 9)
+            if let track = try? await asset.loadTracks(withMediaType: .video).first,
+               let (natural, transform) = try? await track.load(.naturalSize, .preferredTransform) {
+                let shown = natural.applying(transform)
+                if abs(shown.width) > 0, abs(shown.height) > 0 { size = CGSize(width: abs(shown.width), height: abs(shown.height)) }
+            }
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 1280, height: 1280)
+            let seconds = (try? await asset.load(.duration).seconds).flatMap { $0.isFinite ? $0 : nil } ?? 0
+            let poster = try? await generator.image(at: CMTime(seconds: min(1, seconds / 3), preferredTimescale: 600)).image
+            // The page may have changed meanwhile: the video goes where it was dropped or chosen.
+            guard self.ref == ref else { return NSSound.beep() }
+            guard let data = try? Data(contentsOf: url),
+                  let name = store.writeAsset(data, ext: url.pathExtension, for: ref) else { return }
+            let width = min(max(size.width, VideoElementView.minimumWidth), 640)
+            var element = PageElement(kind: .video, x: p.x, y: p.y, width: width,
+                                      height: ElementView.gripHeight + (width * size.height / size.width).rounded() + VideoElementView.barHeight,
+                                      asset: name, fileName: url.lastPathComponent)
+            element.preview = poster.flatMap(VideoElementView.jpeg).flatMap { store.writeAsset($0, ext: "jpg", for: ref) }
+            if let view = addElement(element) { canvas.selectedElement = view }
+        }
+    }
+
     /// Dropped or chosen files: pictures go on the page, other files become attachments.
     func insertFiles(_ urls: [URL], at point: NSPoint? = nil) {
         var p = point ?? nextInsertionPoint()
@@ -705,6 +736,12 @@ final class CanvasController: NSObject {
                 p.y = view.frame.maxY + 14
                 continue
             }
+            // Videos play on the page (they're put on it once their poster frame is ready).
+            if VideoElementView.isVideo(url) {
+                insertVideo(url, at: p)
+                p.y += 400
+                continue
+            }
             guard let data = try? Data(contentsOf: url) else { continue }
             let type = UTType(filenameExtension: url.pathExtension)
             if type?.conforms(to: .image) == true, NSImage(data: data) != nil {
@@ -722,6 +759,15 @@ final class CanvasController: NSObject {
         guard ref != nil else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        insertFiles(panel.urls)
+    }
+
+    func chooseVideos() {
+        guard ref != nil else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie]
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK else { return }
         insertFiles(panel.urls)
@@ -785,6 +831,9 @@ final class CanvasController: NSObject {
         case .table:
             item.setString(element.table?.rows.map { $0.joined(separator: "\t") }.joined(separator: "\n") ?? "", forType: .string)
         case .file, .audio:
+            item.setString(element.fileName ?? "", forType: .string)
+        case .video:
+            if let tiff = (view as? VideoElementView)?.screen.poster?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
             item.setString(element.fileName ?? "", forType: .string)
         case .chart:
             if let tiff = (view as? ChartElementView)?.image()?.tiffRepresentation { item.setData(tiff, forType: .tiff) }

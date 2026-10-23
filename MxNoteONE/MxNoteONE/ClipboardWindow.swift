@@ -263,6 +263,8 @@ final class ClipboardModel {
             return ("file attachment", "File attachment", e.fileName ?? "", "paperclip")
         case .audio:
             return ("recording", "Audio recording", e.fileName ?? "", "waveform")
+        case .video:
+            return ("video", "Video", e.fileName ?? "", "film")
         case .table:
             let rows = e.table?.rows.count ?? 0, columns = e.table?.rows.first?.count ?? 0
             return ("table", "Table", "\(rows) row\(rows == 1 ? "" : "s") × \(columns) column\(columns == 1 ? "" : "s")", "tablecells")

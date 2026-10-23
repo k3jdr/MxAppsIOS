@@ -3,7 +3,7 @@
 //  MxNoteONE
 //
 //  The ribbon above the page: Home (text formatting, styles, tags),
-//  Insert (tables, pictures, files, screen clippings, recordings, links,
+//  Insert (tables, pictures, videos, files, screen clippings, recordings, links,
 //  time stamps, templates), Draw (pens, highlighters, shapes, eraser) and
 //  View (page colour, rule lines, zoom, full page view).
 //
@@ -465,6 +465,7 @@ struct InsertRibbon: View {
         }
         RibbonGroup("Files") {
             RibbonButton("Picture", "photo", large: true) { canvas?.choosePictures() }
+            RibbonButton("Video", "film", large: true) { canvas?.chooseVideos() }
             RibbonButton("File", "paperclip", large: true) { canvas?.chooseAttachments() }
             RibbonButton("Screen Clipping", "camera.viewfinder", large: true) { canvas?.screenClipping() }
         }

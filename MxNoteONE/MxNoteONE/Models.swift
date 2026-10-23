@@ -6,7 +6,7 @@
 //  notebook.json (the section tree and recycle bin), one sections/<id>.json
 //  per section (its page list and search index), one pages/<id>.json per page
 //  (the free-form page content) and an assets/ folder for pictures, file
-//  attachments and audio recordings. Password-protected sections keep their
+//  attachments, audio recordings and videos. Password-protected sections keep their
 //  section, page and asset files encrypted.
 //
 
@@ -438,7 +438,7 @@ struct CellSpan: Codable, Hashable {
 
 /// A container placed anywhere on the page.
 struct PageElement: Codable, Identifiable {
-    enum Kind: String, Codable { case text, image, file, audio, table, chart, score, diagram, model, map, dbml }
+    enum Kind: String, Codable { case text, image, file, audio, video, table, chart, score, diagram, model, map, dbml }
 
     var id = UUID()
     var kind: Kind
@@ -448,9 +448,9 @@ struct PageElement: Codable, Identifiable {
     var height: Double = 0
     /// Rich text (RTFD) of a text container.
     var rtfd: Data?
-    /// File name in the notebook's assets folder (image, file, audio).
+    /// File name in the notebook's assets folder (image, file, audio, video).
     var asset: String?
-    /// Original name of an attached file or recording.
+    /// Original name of an attached file, recording or video.
     var fileName: String?
     var table: TableData?
     /// A chart of a table's data.
@@ -458,7 +458,7 @@ struct PageElement: Codable, Identifiable {
     /// A music score.
     var score: ScoreData?
     /// A draw.io diagram: `asset` is its .drawio.svg; `preview` a PNG of it; `linkedPath` an outside .drawio.svg
-    /// file it's kept in step with; `diagramText` its labels (for search).
+    /// file it's kept in step with; `diagramText` its labels (for search). A video's `preview` is its poster frame.
     var preview: String?
     var linkedPath: String?
     var diagramText: String?

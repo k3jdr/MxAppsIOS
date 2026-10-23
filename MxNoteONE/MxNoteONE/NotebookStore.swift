@@ -931,9 +931,13 @@ final class NotebookStore {
         do {
             if !sameStorage {
                 for i in content.elements.indices {
-                    guard let asset = content.elements[i].asset,
-                          let data = try? read(srcNB.assetURL(asset), key: srcKey) else { continue }
-                    content.elements[i].asset = try storeAsset(data, ext: (asset as NSString).pathExtension, nb: dstNB, key: dstKey)
+                    if let asset = content.elements[i].asset, let data = try? read(srcNB.assetURL(asset), key: srcKey) {
+                        content.elements[i].asset = try storeAsset(data, ext: (asset as NSString).pathExtension, nb: dstNB, key: dstKey)
+                    }
+                    // A video's poster, a diagram's or map's picture.
+                    if let preview = content.elements[i].preview, let data = try? read(srcNB.assetURL(preview), key: srcKey) {
+                        content.elements[i].preview = try storeAsset(data, ext: (preview as NSString).pathExtension, nb: dstNB, key: dstKey)
+                    }
                 }
             }
             try writePage(content, nb: dstNB, key: dstKey)
@@ -1273,7 +1277,7 @@ final class NotebookStore {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let data = try read(url, key: oldKey)
         if let content = try? decoder.decode(PageContent.self, from: data) {
-            for asset in content.elements.compactMap(\.asset) {
+            for asset in content.elements.compactMap(\.asset) + content.elements.compactMap(\.preview) {
                 let assetURL = nb.assetURL(asset)
                 guard let assetData = try? read(assetURL, key: oldKey) else { continue }
                 try write(assetData, to: assetURL, key: newKey)
@@ -1314,6 +1318,14 @@ final class NotebookStore {
     func assetData(_ name: String, for ref: PageRef) -> Data? {
         guard let nb = notebook(ref.notebookID) else { return nil }
         return try? read(nb.assetURL(name), key: nb.keys[ref.sectionID])
+    }
+
+    /// An asset's own file, when its section isn't password-protected (videos play straight from it).
+    func plainAssetURL(_ name: String, for ref: PageRef) -> URL? {
+        guard let nb = notebook(ref.notebookID), nb.keys[ref.sectionID] == nil,
+              nb.manifest.sections.find(ref.sectionID)?.isProtected != true else { return nil }
+        let url = nb.assetURL(name)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     /// A temporary copy of an attachment under its original name, for opening or dragging out.
@@ -1570,7 +1582,7 @@ enum PageIndexer {
                 }
             case .table:
                 texts.append(element.table?.rows.map { $0.joined(separator: " ") }.joined(separator: "\n") ?? "")
-            case .file, .audio, .image:
+            case .file, .audio, .video, .image:
                 if let name = element.fileName { texts.append(name) }
             case .diagram:
                 // A diagram's name and its shapes' labels.

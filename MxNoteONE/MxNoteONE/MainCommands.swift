@@ -242,6 +242,7 @@ struct MainCommands: Commands {
             Button("Music Score from MusicXML…") { canvas?.chooseMusicXML() }
             Button("Picture…") { canvas?.choosePictures() }
                 .keyboardShortcut("p", modifiers: [.command, .control])
+            Button("Video…") { canvas?.chooseVideos() }
             Button("File Attachment…") { canvas?.chooseAttachments() }
             Button("Screen Clipping") { canvas?.screenClipping() }
                 .keyboardShortcut("s", modifiers: [.command, .control, .shift])
