@@ -42,11 +42,24 @@ final class VideoScreenView: NSView {
         self.playerLayer = playerLayer
     }
 
+    /// The container sets this view's frame directly (no Auto Layout, so layout() isn't called): the video layer
+    /// follows the new size here, and the poster is drawn again at it.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        fitPlayerLayer()
+        needsDisplay = true
+    }
+
     override func layout() {
         super.layout()
+        fitPlayerLayer()
+    }
+
+    private func fitPlayerLayer() {
+        guard let playerLayer, playerLayer.frame != bounds else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        playerLayer?.frame = bounds
+        playerLayer.frame = bounds
         CATransaction.commit()
     }
 
