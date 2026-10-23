@@ -93,7 +93,7 @@ struct MxFileMGRApp: App {
         Window("Clipboard", id: "clipboard") {
             ClipboardView()
         }
-        .defaultSize(width: 560, height: 440)
+        .defaultSize(width: 820, height: 500)
         .restorationBehavior(.disabled)
         .commandsRemoved()
 

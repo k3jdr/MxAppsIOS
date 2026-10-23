@@ -206,7 +206,7 @@ enum FileHelp {
 
     static let clipboard = QuickHelpItem(
         title: "Clipboard",
-        detail: "What's on the clipboard, as in Finder's Show Clipboard: files (with Paste into the active pane, Move Here, Show in Finder), "
+        detail: "What's on the clipboard, as in Finder's Show Clipboard: files (a Quick Look preview of the selected one, Paste into the active pane, Move Here, Show in Finder; double-click opens the Viewer), "
             + "a picture, styled or plain text, a link or a colour, and the data types underneath. It updates while the window is open; "
             + "Clear Clipboard empties it.",
         shortcut: "⇧⌘V", symbol: "clipboard")

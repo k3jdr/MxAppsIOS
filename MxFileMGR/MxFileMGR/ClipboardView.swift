@@ -198,46 +198,109 @@ struct ClipboardView: View {
     }
 }
 
-/// Copied files: name, folder and size, with Paste Here / Move Here into the active pane.
+/// Copied files: name, folder and size, a Quick Look preview of the selected one, and Paste Here / Move Here
+/// into the active pane. Double-click opens a file in the Viewer (F3).
 private struct ClipboardFilesView: View {
     let urls: [URL]
+    @State private var selection: URL?
+    @AppStorage("clipboardShowsPreview") private var showPreview = true
+    @Environment(\.openWindow) private var openWindow
+
+    /// The selected file, else the first; nil when it no longer exists.
+    private var previewURL: URL? {
+        let url = selection.flatMap { urls.contains($0) ? $0 : nil } ?? urls.first
+        return url.flatMap { FileOps.exists($0) ? $0 : nil }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            List(urls, id: \.self) { url in
-                HStack(spacing: 8) {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
-                        .resizable().frame(width: 20, height: 20)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(url.lastPathComponent).lineLimit(1)
-                        Text(url.deletingLastPathComponent().path)
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    }
-                    Spacer()
-                    Text(size(of: url)).font(.caption).foregroundStyle(.secondary)
+            HSplitView {
+                list
+                    .frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
+                if showPreview {
+                    preview
+                        .frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .opacity(FileOps.exists(url) ? 1 : 0.45)
-                .help(FileOps.exists(url) ? url.path : "\(url.path) — no longer exists")
             }
             Divider()
-            HStack {
-                let folder = Workspace.current?.activeTab.url
-                Text(totals).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(urls.filter(FileOps.exists)) }
-                    .quickHelp("Show in Finder", "Selects the copied items in Finder.")
-                Button("Move Here") { if let folder { Workspace.current?.transfer(urls, to: folder, move: true) } }
-                    .disabled(folder == nil)
-                    .quickHelp("Move Here", "Moves the copied items into the active pane's folder\(folder.map { ", “\(BrowserTab.displayName(of: $0))”" } ?? ""), as ⌥⌘V does.", shortcut: "⌥⌘V")
-                Button(folder.map { "Paste into “\(BrowserTab.displayName(of: $0))”" } ?? "Paste") {
-                    if let folder { Workspace.current?.transfer(urls, to: folder, move: false) }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(folder == nil)
-                .quickHelp("Paste", "Copies the items into the active pane's folder, as ⌘V in the file list does.", shortcut: "⌘V")
-            }
-            .padding(10)
+            footer
         }
+        .onChange(of: urls) { selection = urls.first }
+        .onAppear { if selection == nil { selection = urls.first } }
+    }
+
+    private var list: some View {
+        List(urls, id: \.self, selection: $selection) { url in
+            HStack(spacing: 8) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                    .resizable().frame(width: 20, height: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(url.lastPathComponent).lineLimit(1)
+                    Text(url.deletingLastPathComponent().path)
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
+                Spacer()
+                Text(size(of: url)).font(.caption).foregroundStyle(.secondary)
+            }
+            .opacity(FileOps.exists(url) ? 1 : 0.45)
+            .help(FileOps.exists(url) ? url.path : "\(url.path) — no longer exists")
+            .tag(url)
+        }
+        .contextMenu(forSelectionType: URL.self) { picked in
+            if let url = picked.first, FileOps.exists(url), !FileOps.isRealDirectory(url) {
+                Button("Open in Viewer") { openWindow(value: ViewerRequest(url: url)) }
+            }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(picked.filter(FileOps.exists)) }
+        } primaryAction: { picked in
+            guard let url = picked.first, FileOps.exists(url) else { return }
+            if FileOps.isRealDirectory(url) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            else { openWindow(value: ViewerRequest(url: url)) }
+        }
+        .quickHelpArea("Copied Items", "The files and folders on the clipboard. Select one to preview it on the right; double-click a file to open it in the Viewer (F3).",
+                       symbol: "doc.on.clipboard")
+    }
+
+    @ViewBuilder private var preview: some View {
+        if let url = previewURL {
+            VStack(spacing: 0) {
+                QuickLookView(url: url)
+                Divider()
+                Text(url.lastPathComponent)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .padding(4)
+            }
+            .quickHelpArea("Quick Look", "A Quick Look preview of the selected copied item, as Finder's preview pane shows it. Double-click the item for the Viewer.",
+                           symbol: "eye")
+        } else {
+            ContentUnavailableView("No Preview", systemImage: "eye.slash",
+                                   description: Text("The copied item no longer exists."))
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            let folder = Workspace.current?.activeTab.url
+            Toggle(isOn: $showPreview) {
+                Label("Preview", systemImage: "sidebar.right")
+            }
+            .toggleStyle(.button)
+            .quickHelp("Preview", "Shows or hides the Quick Look preview of the selected item.")
+            Text(totals).font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(urls.filter(FileOps.exists)) }
+                .quickHelp("Show in Finder", "Selects the copied items in Finder.")
+            Button("Move Here") { if let folder { Workspace.current?.transfer(urls, to: folder, move: true) } }
+                .disabled(folder == nil)
+                .quickHelp("Move Here", "Moves the copied items into the active pane's folder\(folder.map { ", “\(BrowserTab.displayName(of: $0))”" } ?? ""), as ⌥⌘V does.", shortcut: "⌥⌘V")
+            Button(folder.map { "Paste into “\(BrowserTab.displayName(of: $0))”" } ?? "Paste") {
+                if let folder { Workspace.current?.transfer(urls, to: folder, move: false) }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(folder == nil)
+            .quickHelp("Paste", "Copies the items into the active pane's folder, as ⌘V in the file list does.", shortcut: "⌘V")
+        }
+        .padding(10)
     }
 
     private var totals: String {

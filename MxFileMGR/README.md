@@ -102,7 +102,8 @@ custom ID3 frame (`TXXX:description`, not shown by music players), and the comma
 the tags stay ID3v2.3 and ID3v1 tags are kept (plain ffmpeg would write 2.4 and drop ID3v1).
 
 **Edit ▸ Show Clipboard** (⇧⌘V) opens a **Clipboard** window, as in Finder: *Clipboard contents: …* and the content itself —
-copied files (name, folder, size; **Paste into** the active pane's folder, **Move Here**, **Show in Finder**), a picture
+copied files (name, folder, size; a **Quick Look preview** of the selected one, which **Preview** hides or shows;
+double-click opens a file in the Viewer; **Paste into** the active pane's folder, **Move Here**, **Show in Finder**), a picture
 (format and pixel size), styled text, plain text (character and line counts), a link or a colour — plus the data types
 underneath and **Clear Clipboard**. It follows the clipboard while open (macOS has no change notification, so it checks
 twice a second).
