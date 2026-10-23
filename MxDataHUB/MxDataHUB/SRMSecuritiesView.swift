@@ -214,60 +214,8 @@ struct SRMSecuritiesView: View {
                     .frame(height: CGFloat(min(12, detail.identifiers.count + 1)) * 24 + 8)
                 }
 
-                section("Issuer and security") {
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                        ForEach(detail.facts) { FactRow(name: $0.name, value: $0.value) }
-                    }
-                }
-
-                if !detail.listings.isEmpty {
-                    section("Listings") {
-                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                            ForEach(detail.listings) { l in
-                                GridRow {
-                                    Text(l.ticker).bold()
-                                    Text("\(l.mic) \(l.exchange)").lineLimit(1)
-                                    Text(l.isPrimary ? "primary" : "").foregroundStyle(.secondary)
-                                    Text(l.to.isEmpty ? (knownDate(l.from).isEmpty ? "current" : "since \(l.from)") : "\(knownDate(l.from)) – \(l.to)")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if !detail.classifications.isEmpty {
-                    section("Classification") {
-                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                            ForEach(detail.classifications) { FactRow(name: $0.name, value: $0.value) }
-                        }
-                    }
-                }
-
-                section("Benchmark membership") {
-                    if detail.memberships.isEmpty {
-                        Text("Not in any loaded benchmark").foregroundStyle(.secondary)
-                    } else {
-                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                            ForEach(detail.memberships) { FactRow(name: $0.name, value: $0.value) }
-                        }
-                    }
-                }
-
-                if !detail.actions.isEmpty {
-                    section("Corporate actions") {
-                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-                            ForEach(detail.actions) { a in
-                                GridRow {
-                                    Text(a.exDate).monospacedDigit()
-                                    Text(a.type.replacingOccurrences(of: "_", with: " ").capitalized)
-                                    Text(a.detail)
-                                    Text(a.source).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
+                // From here down one text, so a drag selects across sections and rows (SelectableText.swift).
+                SelectableText(text: Self.factsText(detail))
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -275,7 +223,45 @@ struct SRMSecuritiesView: View {
     }
 
     /// 1900-01-01 marks a value whose start is unknown (it was already valid at the first load).
-    private func knownDate(_ day: String) -> String { day == "1900-01-01" ? "" : day }
+    private func knownDate(_ day: String) -> String { Self.known(day) }
+    private static func known(_ day: String) -> String { day == "1900-01-01" ? "" : day }
+
+    /// Issuer and security, listings, classification, benchmark membership and corporate actions, as one text.
+    static func factsText(_ detail: SecurityDetail) -> NSAttributedString {
+        var lines = RichLines()
+        lines.heading("Issuer and security")
+        lines.facts(detail.facts.map { ($0.name, $0.value) })
+        if !detail.listings.isEmpty {
+            lines.heading("Listings")
+            lines.columns(detail.listings.map { l in
+                [(l.ticker, RichLines.boldFont, .labelColor),
+                 ("\(l.mic) \(l.exchange)", RichLines.font, .labelColor),
+                 (l.isPrimary ? "primary" : "", RichLines.font, .secondaryLabelColor),
+                 (l.to.isEmpty ? (known(l.from).isEmpty ? "current" : "since \(l.from)") : "\(known(l.from)) – \(l.to)",
+                  RichLines.font, .secondaryLabelColor)]
+            })
+        }
+        if !detail.classifications.isEmpty {
+            lines.heading("Classification")
+            lines.facts(detail.classifications.map { ($0.name, $0.value) })
+        }
+        lines.heading("Benchmark membership")
+        if detail.memberships.isEmpty {
+            lines.note("Not in any loaded benchmark")
+        } else {
+            lines.facts(detail.memberships.map { ($0.name, $0.value) })
+        }
+        if !detail.actions.isEmpty {
+            lines.heading("Corporate actions")
+            lines.columns(detail.actions.map { a in
+                [(a.exDate, RichLines.digitFont, .labelColor),
+                 (a.type.replacingOccurrences(of: "_", with: " ").capitalized, RichLines.font, .labelColor),
+                 (a.detail, RichLines.font, .labelColor),
+                 (a.source, RichLines.font, .secondaryLabelColor)]
+            })
+        }
+        return lines.result
+    }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
