@@ -36,7 +36,11 @@ struct ReportLibraryView: View {
             Box(title: "Daily morning reading", symbol: "sunrise", help: "The ten things many institutional PMs review before the open.") {
                 Text("Many institutional PMs start the day with overnight markets, Treasury yields, the economic calendar, economic surprise indexes, Fed funds futures, analyst upgrades and downgrades, earnings releases, fund flows, credit spreads and the VIX.")
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Open the Morning Briefing") { store.go(.morningBriefing) }.buttonStyle(.borderedProminent)
+                HStack {
+                    Button("Open the Morning Briefing") { store.go(.morningBriefing) }.buttonStyle(.borderedProminent)
+                    Button("The VIX, real data") { store.go(.vix) }
+                        .help("The Cboe Volatility Index from Cboe: today, its history, term structure and past spikes")
+                }
             }
         }
     }
@@ -348,6 +352,9 @@ struct MorningBriefingView: View {
                     .chartXAxis(.hidden)
                     .chartYScale(domain: 10...25)
                     .frame(height: 120)
+                    Button("The real VIX, since 1990") { store.go(.vix) }
+                        .buttonStyle(.link)
+                        .help("Market Reports ▸ VIX: real data from Cboe")
                 }
             }
         }

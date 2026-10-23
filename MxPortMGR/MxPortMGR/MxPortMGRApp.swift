@@ -80,6 +80,8 @@ struct MxPortMGRApp: App {
                     .keyboardShortcut("e", modifiers: [.command, .option])
                 Button("Earnings Today") { store.openEarningsDay(EarningsDates.today()) }
                     .keyboardShortcut("e", modifiers: [.command, .option, .shift])
+                Button("VIX") { store.go(.vix) }
+                    .keyboardShortcut("v", modifiers: [.command, .option])
                 Divider()
                 Section("The Five Most Important") {
                     ForEach(MarketReport.topFive) { r in

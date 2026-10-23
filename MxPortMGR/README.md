@@ -60,7 +60,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
-| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
+| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · VIX ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
 
 ### Back and Forward
@@ -201,6 +201,15 @@ markets within seconds, others shape positioning over weeks or months.
   estimates and four-week revisions, FMP's figures where they differ, a year earlier), an EPS chart of its last
   twelve reports and the next one against the estimate, its recent revenue surprises, and Nasdaq.com's last four
   surprises. *You hold* marks (a briefcase) need My Portfolio in the security master, whose tickers are real.
+* **VIX** (⌥⌘V) — the Cboe Volatility Index, real data: the latest close and change, its regime (calm under 15,
+  normal 15–20, elevated 20–30, stress 30–40, panic 40 and over), the share of closes since 1990 below it, the 52-week
+  range, the long-run average and median, and the S&P 500 move it implies (±VIX/√12 a month, ±VIX/16 a day). Its
+  history (1M, 6M, 1Y, 5Y, since 1990) with the regimes shaded; the term structure (VIX9D, VIX, VIX3M, VIX6M) and what
+  an upward or inverted curve means; and every spike above 35 since 1990 — when it began, its peak, and the trading days
+  until the VIX closed under 20 again (a table that copies). The lesson: fear peaks near market lows and passes, so the
+  VIX explains swings rather than timing a plan. Data: Cboe's daily history files (cdn.cboe.com, no key), read at
+  most hourly and kept in the app's Caches folder for when Cboe can't be reached. The Morning Briefing's illustrative
+  VIX panel and the Report Library's morning reading link to it.
 
 #### Earnings sources and their limits
 

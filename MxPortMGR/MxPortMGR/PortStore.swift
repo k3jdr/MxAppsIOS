@@ -14,7 +14,7 @@ enum Screen: String, CaseIterable, Identifiable {
     // In the sidebar's order (Back and Next follow it).
     case welcome, choosePath
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
-    case reportLibrary, morningBriefing, earningsCalendar, earningsDay, reportWalkthrough
+    case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, reportWalkthrough
     case whyOptimize, whyAttribution, activeVsPassive
     case samples, services
 
@@ -29,7 +29,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .welcome, .choosePath: .start
         case .whyOptimize, .whyAttribution, .activeVsPassive: .learn
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
-        case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .reportWalkthrough: .reports
+        case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .reportWalkthrough: .reports
         case .samples, .services: .library
         }
     }
@@ -51,6 +51,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .morningBriefing: "Morning Briefing"
         case .earningsCalendar: "Earnings Calendar"
         case .earningsDay: "Earnings by Day"
+        case .vix: "VIX"
         case .reportWalkthrough: "Report Walkthrough"
         case .samples: "Sample Portfolios"
         case .services: "Layer 3 Services"
@@ -82,6 +83,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .morningBriefing: "sunrise"
         case .earningsCalendar: "calendar"
         case .earningsDay: "list.bullet.rectangle"
+        case .vix: "waveform.path.ecg.rectangle"
         case .reportWalkthrough: "newspaper"
         case .samples: "square.grid.2x2"
         case .services: "server.rack"
