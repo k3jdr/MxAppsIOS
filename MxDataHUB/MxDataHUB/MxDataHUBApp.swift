@@ -44,6 +44,8 @@ struct MxDataHUBApp: App {
                     .keyboardShortcut("k")
                     .disabled(!store.isConnected || (store.section != .securities && store.section != .portfolios) || SecurityLinks.shared.editing != nil)
             }
+            // Back, Forward and History (⌘[ ⌘]), as in MxPortMGR — Navigation.swift.
+            GoCommands(store: store)
             QuickHelpCommands()
         }
     }

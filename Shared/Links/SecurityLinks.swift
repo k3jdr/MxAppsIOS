@@ -272,6 +272,8 @@ struct LinkedCell: View {
                         .foregroundStyle(Color(nsColor: .linkColor)).lineLimit(1)
                 }
                 .buttonStyle(.plain)
+                // A click on the words follows the link, even on a screen whose text is selectable.
+                .textSelection(.disabled)
                 .background(LinkHoverAnchor(url: url, target: target, words: words, tip: link.tipText, title: link.title))
                 .accessibilityHint("Link to \(url.absoluteString)")
             } else if let help {

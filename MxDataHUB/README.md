@@ -56,6 +56,15 @@ SRM loader service. Debug builds also take the password from `PGPASSWORD`.
 The window's minimum (1280 × 720 points) is the widest sidebar plus the widest screen (Data Refresh). Each screen's
 panes sit in `SplitPanes`, not `HSplitView`: drag the divider; the width is remembered per screen.
 
+**Back and Forward**, as in MxPortMGR and a browser: the toolbar's ‹ and › beside the title (hold either for the places
+before or after), **Go ▸ Back** ⌘[, **Forward** ⌘] and **History**, ⌃← ⌃→, or a mouse's side buttons. A place is a
+screen with the security, portfolio or benchmark selected on it; rows picked within a second of each other on the same
+screen (arrowing down a table) count as one place.
+
+**Selecting and copying:** every screen's text can be selected and copied. Tables select rows (⇧-click or ⌘-click for
+several, ⌘A for all): **Edit ▸ Copy** (⌘C) or the row's **Copy Row** puts them on the clipboard as tab-separated columns
+under the column titles, ready for a spreadsheet or a ticket.
+
 
 ### Links on tickers and names
 
@@ -98,6 +107,8 @@ in a small window of its own; closing that window docks it again. Both choices a
 | `SRMSecuritiesView.swift`, `SRMPortfoliosView.swift`, `SRMBenchmarksView.swift`, `SRMLoadsView.swift` | The screens and their dialogs |
 | `DataRefreshView.swift` | Data Refresh: categories, freshness, refresh through the SRM loader service, and the Activity console |
 | `SplitPanes.swift` | Two panes with a divider to drag, used by every screen instead of `HSplitView` |
+| `Navigation.swift` | Back, Forward and History through the places visited |
+| `TableCopy.swift` | Copying a table's selected rows as tab-separated columns |
 | `ServicesWorkflowsView.swift` | Services & Workflows, and the Workflows menu of Portfolios |
 | `HubQuickHelp.swift` | What Quick Help says about each screen, the selection and the controls |
 | `Info.plist` | The `mxdatahub` URL scheme (merged into the generated Info.plist) |

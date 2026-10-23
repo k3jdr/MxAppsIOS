@@ -276,6 +276,24 @@ final class SRMStore {
     var errorMessage: String?
     var busy = false
 
+    // Back and Forward through the places visited, as in a browser (Navigation.swift).
+    private(set) var canGoBack = false
+    private(set) var canGoForward = false
+    /// Bumped whenever the Back / Forward lists change (their menus redraw).
+    private(set) var historyVersion = 0
+    @ObservationIgnored var backStack: [Visit] = [] { didSet { historyChanged() } }
+    @ObservationIgnored var forwardStack: [Visit] = [] { didSet { historyChanged() } }
+    /// The place the history is at (set before Back or Forward shows it, so it isn't recorded again).
+    @ObservationIgnored var historyCurrent: Visit?
+    /// When the place last changed.
+    @ObservationIgnored var historyStamp = Date.distantPast
+
+    private func historyChanged() {
+        canGoBack = !backStack.isEmpty
+        canGoForward = !forwardStack.isEmpty
+        historyVersion += 1
+    }
+
     // Securities
     var query = ""
     var typeFilter = "All"

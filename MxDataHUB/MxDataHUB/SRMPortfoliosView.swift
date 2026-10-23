@@ -11,6 +11,24 @@ import SwiftUI
 
 struct SRMPortfoliosView: View {
     @Bindable var store: SRMStore
+    @State private var taxLotSelection = Set<TaxLotRow.ID>()
+    @State private var activeSelection = Set<ActiveWeightRow.ID>()
+
+    /// The tables' columns as text, for ⌘C and Copy Row (TableCopy.swift).
+    static let portfoliosText = TableText<PortfolioRow>(
+        titles: ["Code", "Name", "Benchmark"], cells: { [$0.code, $0.name, $0.benchmarkCode] })
+    static let holdingsText = TableText<HoldingRow>(
+        titles: ["Ticker", "Name", "Entered as", "Shares", "Target", "Price", "Market value", "Weight"],
+        cells: { [$0.ticker, $0.name, $0.input.isEmpty ? "" : "\($0.input) (\($0.inputType))", numberText($0.quantity, digits: 0),
+                  percentText($0.targetWeight, digits: 2), numberText($0.price), numberText($0.marketValue), percentText($0.weight, digits: 2)] })
+    static let taxLotsText = TableText<TaxLotRow>(
+        titles: ["Ticker", "Name", "Bought", "Shares", "Cost", "Value", "Gain", "Term"],
+        cells: { [$0.ticker, $0.name, $0.acquired, numberText($0.quantity, digits: 0), numberText($0.costBasis), numberText($0.marketValue),
+                  numberText($0.gain), $0.longTerm ? "long" : "short"] })
+    static let activeWeightsText = TableText<ActiveWeightRow>(
+        titles: ["Ticker", "Name", "Portfolio", "Benchmark", "Active"],
+        cells: { [$0.ticker, $0.name, percentText($0.portfolio, digits: 2), percentText($0.benchmark, digits: 2), percentText($0.active, digits: 2)] })
+
     @State private var editing: PortfolioRow?
     @State private var creating = false
     @State private var addingHolding = false
@@ -49,9 +67,12 @@ struct SRMPortfoliosView: View {
                 TableColumn("Name", value: \.name)
                 TableColumn("Benchmark", value: \.benchmarkCode).width(min: 50, ideal: 70)
             }
-            .contextMenu(forSelectionType: Int.self) { _ in } primaryAction: { ids in
+            .contextMenu(forSelectionType: Int.self) { ids in
+                CopyRowsButton(rows: store.portfolios, ids: ids, text: Self.portfoliosText)
+            } primaryAction: { ids in
                 editing = store.portfolios.first { $0.id == ids.first }
             }
+            .copiesSelectedRows(store.portfolios, selected: store.selectedPortfolioID, as: Self.portfoliosText)
             .quickHelpArea(HubHelp.portfolioList)
             HStack {
                 Button("New…") { creating = true }
@@ -232,7 +253,10 @@ struct SRMPortfoliosView: View {
             }
             .contextMenu(forSelectionType: HoldingRow.ID.self) { ids in
                 if let id = ids.first, let h = store.holdings.first(where: { $0.id == id }) { linkMenu(.holding(h)) }
+                Divider()
+                CopyRowsButton(rows: store.holdings, ids: ids, text: Self.holdingsText)
             }
+            .copiesSelectedRows(store.holdings, selected: store.selectedHoldingIDs, as: Self.holdingsText)
             .task(id: store.holdings.map(\.id)) { await SecurityLinks.shared.load(securityIDs: store.holdings.map(\.id)) }
             HStack {
                 Text("\(store.holdings.count) holdings")
@@ -246,7 +270,7 @@ struct SRMPortfoliosView: View {
 
     private var taxLotsTable: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Table(store.taxLots) {
+            Table(store.taxLots, selection: $taxLotSelection) {
                 TableColumn("Ticker", value: \.ticker).width(min: 40, ideal: 60)
                 TableColumn("Name", value: \.name).width(min: 100, ideal: 180)
                 TableColumn("Bought", value: \.acquired).width(min: 70, ideal: 85)
@@ -259,6 +283,8 @@ struct SRMPortfoliosView: View {
                 }
                 TableColumn("Term") { Text($0.longTerm ? "long" : "short").foregroundStyle($0.longTerm ? Color.secondary : .orange) }.width(min: 40, ideal: 50)
             }
+            .copyRowsMenu(store.taxLots, as: Self.taxLotsText)
+            .copiesSelectedRows(store.taxLots, selected: taxLotSelection, as: Self.taxLotsText)
             let value = store.taxLots.compactMap(\.marketValue).reduce(0, +), cost = store.taxLots.reduce(0) { $0 + $1.costBasis }
             Text("\(store.taxLots.count) lots · value \(numberText(value)) · cost \(numberText(cost)) · unrealised \(numberText(value - cost))")
                 .foregroundStyle(.secondary)
@@ -268,7 +294,7 @@ struct SRMPortfoliosView: View {
 
     private var activeWeightsTable: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Table(store.activeWeights) {
+            Table(store.activeWeights, selection: $activeSelection) {
                 TableColumn("Ticker", value: \.ticker).width(min: 45, ideal: 60)
                 TableColumn("Name", value: \.name).width(min: 120, ideal: 220)
                 TableColumn("Portfolio") { Text(percentText($0.portfolio, digits: 2)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
@@ -279,6 +305,8 @@ struct SRMPortfoliosView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
+            .copyRowsMenu(store.activeWeights, as: Self.activeWeightsText)
+            .copiesSelectedRows(store.activeWeights, selected: activeSelection, as: Self.activeWeightsText)
             let overlap = store.activeWeights.reduce(0) { $0 + min($1.portfolio, $1.benchmark) }
             Text("Largest 200 active weights · overlap with benchmark \(percentText(overlap, digits: 1)) · active share \(percentText(1 - overlap, digits: 1))")
                 .foregroundStyle(.secondary)

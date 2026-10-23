@@ -12,6 +12,14 @@ import SwiftUI
 
 struct SRMBenchmarksView: View {
     @Bindable var store: SRMStore
+    @State private var constituentSelection = Set<ConstituentRow.ID>()
+
+    /// The tables' columns as text, for ⌘C and Copy Row (TableCopy.swift).
+    static let benchmarksText = TableText<BenchmarkRow>(
+        titles: ["Code", "Name", "Members", "As of"], cells: { [$0.code, $0.name, $0.members.formatted(), $0.asOf] })
+    static let constituentsText = TableText<ConstituentRow>(
+        titles: ["Ticker", "Name", "Sector", "Weight", "Shares"],
+        cells: { [$0.ticker, $0.name, $0.sector, percentText($0.weight), numberText($0.shares, digits: 0)] })
     @State private var building = false
     @State private var showAvailability = false
     @State private var confirmDelete = false
@@ -27,6 +35,8 @@ struct SRMBenchmarksView: View {
                         .width(min: 46, ideal: 52)
                     TableColumn("As of", value: \.asOf).width(min: 76, ideal: 80)
                 }
+                .copyRowsMenu(store.benchmarks, as: Self.benchmarksText)
+                .copiesSelectedRows(store.benchmarks, selected: store.selectedBenchmarkID, as: Self.benchmarksText)
                 .quickHelpArea(HubHelp.benchmarkList)
                 HStack {
                     Button("Build Custom…") { building = true }
@@ -114,7 +124,7 @@ struct SRMBenchmarksView: View {
                     }
 
                     TextField("Filter constituents", text: $filter).textFieldStyle(.roundedBorder)
-                    Table(filteredConstituents) {
+                    Table(filteredConstituents, selection: $constituentSelection) {
                         TableColumn("Ticker", value: \.ticker).width(min: 45, ideal: 60)
                         TableColumn("Name", value: \.name).width(min: 140, ideal: 240)
                         TableColumn("Sector", value: \.sector).width(min: 80, ideal: 150)
@@ -123,6 +133,8 @@ struct SRMBenchmarksView: View {
                         TableColumn("Shares") { Text(numberText($0.shares, digits: 0)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }
                             .width(min: 60, ideal: 100)
                     }
+                    .copyRowsMenu(filteredConstituents, as: Self.constituentsText)
+                    .copiesSelectedRows(filteredConstituents, selected: constituentSelection, as: Self.constituentsText)
                     .quickHelpArea(HubHelp.constituents)
                     Text("\(filteredConstituents.count) of \(store.constituents.count) · weights total \(percentText(store.constituents.reduce(0) { $0 + $1.weight }, digits: 2))")
                         .foregroundStyle(.secondary)

@@ -31,6 +31,9 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 screen
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Every screen's text can be selected and copied, as in MxPortMGR; tables select rows, which
+                    // ⌘C copies as tab-separated columns (TableCopy.swift).
+                    .textSelection(.enabled)
                 Divider()
                 StatusBar(store: store)
                     .quickHelpArea("Status", "The connection — server, database and PostgreSQL version, and whether it has the security master — and the last action's message.",
@@ -38,6 +41,7 @@ struct ContentView: View {
             }
             .navigationTitle(store.section.rawValue)
             .toolbar {
+                BackForwardButtons(store: store)
                 if store.isConnected {
                     ToolbarItem(placement: .primaryAction) { databasePicker }
                 }
@@ -50,6 +54,8 @@ struct ContentView: View {
         .frame(minWidth: 1280, minHeight: 720)
         .quickHelpScreen(store.section.rawValue, HubHelp.screen(store), selection: HubHelp.selection(store))
         .task { await start() }
+        // Each place visited joins the history (Back and Forward, Navigation.swift).
+        .onChange(of: store.place, initial: true) { store.recordPlace() }
         .onOpenURL { url in open(AppLink(url: url)) }
         .errorDialog("MxDataHUB", message: $store.errorMessage)
         // Links on tickers and names (Shared/Links), as in MxNoteONE: ⌘K, a row's context menu, Edit Link… on a hover card.
@@ -129,6 +135,7 @@ struct ContentView: View {
     /// `-autoConnect YES -section Portfolios -query AAPL` (connection fields: `-host`, `-port`,
     /// `-user`, `-database`, `-sslMode`). Debug builds also take the password from PGPASSWORD.
     private func start() async {
+        NavigationKeys.install(store)
         store.loadSavedPassword()
         #if DEBUG
         if store.password.isEmpty, let env = ProcessInfo.processInfo.environment["PGPASSWORD"] {

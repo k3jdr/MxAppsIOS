@@ -43,6 +43,8 @@ struct ServicesView: View {
                     }
                 }
                 .listStyle(.sidebar)
+                // Rows are picked, not their words (MxDataHUB makes its screens' text selectable).
+                .textSelection(.disabled)
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {

@@ -13,6 +13,15 @@ import SwiftUI
 
 struct SRMSecuritiesView: View {
     @Bindable var store: SRMStore
+    @State private var identifierSelection = Set<IdentifierRow.ID>()
+
+    /// The tables' columns as text, for ⌘C and Copy Row (TableCopy.swift).
+    static let resultsText = TableText<SecurityRow>(
+        titles: ["Ticker", "Name", "Type", "ISIN", "CUSIP", "Composite FIGI", "Sector", "MIC"],
+        cells: { [$0.ticker, $0.name, $0.type, $0.isin, $0.cusip, $0.figi, $0.sector, $0.mic] })
+    static let identifiersText = TableText<IdentifierRow>(
+        titles: ["Type", "Value", "MIC", "From", "To", "Source"],
+        cells: { [$0.type, $0.value, $0.mic, $0.from == "1900-01-01" ? "" : $0.from, $0.to.isEmpty ? "current" : $0.to, $0.source] })
 
     var body: some View {
         SplitPanes(id: "securities", widths: 460...720, ideal: 560, trailingMinimum: 440) {
@@ -73,7 +82,10 @@ struct SRMSecuritiesView: View {
                 apply: { [store] options in Task { await store.applySecurityOptions(options) } })
             .contextMenu(forSelectionType: SecurityRow.ID.self) { ids in
                 if let id = ids.first, let r = store.results.first(where: { $0.id == id }) { linkMenu(.security(r)) }
+                Divider()
+                CopyRowsButton(rows: store.results, ids: ids, text: Self.resultsText)
             }
+            .copiesSelectedRows(store.results, selected: store.selectedSecurityID, as: Self.resultsText)
             .task(id: store.results.map(\.id)) { await SecurityLinks.shared.load(securityIDs: store.results.map(\.id)) }
             .quickHelpArea(HubHelp.results)
             pageBar
@@ -130,6 +142,7 @@ struct SRMSecuritiesView: View {
                     Task { await store.applySecurityOptions(options) }
                 }
                 .buttonStyle(.link)
+                .textSelection(.disabled)
             }
             if !store.securityOptions.filters.isEmpty {
                 Label("filtered: \(store.securityOptions.filters.keys.sorted().joined(separator: ", "))",
@@ -141,6 +154,7 @@ struct SRMSecuritiesView: View {
                     Task { await store.applySecurityOptions(options) }
                 }
                 .buttonStyle(.link)
+                .textSelection(.disabled)
             }
             Spacer()
         }
@@ -186,15 +200,17 @@ struct SRMSecuritiesView: View {
                 }
 
                 section("Identifiers") {
-                    Table(detail.identifiers) {
+                    Table(detail.identifiers, selection: $identifierSelection) {
                         TableColumn("Type", value: \.type).width(min: 60, ideal: 90)
-                        TableColumn("Value") { Text($0.value).textSelection(.enabled).foregroundStyle($0.isCurrent ? .primary : .secondary) }
+                        TableColumn("Value") { Text($0.value).foregroundStyle($0.isCurrent ? .primary : .secondary) }
                             .width(min: 100, ideal: 112)
                         TableColumn("MIC", value: \.mic).width(min: 40, ideal: 44)
                         TableColumn("From") { Text(knownDate($0.from)) }.width(min: 56, ideal: 66)
                         TableColumn("To") { Text($0.to.isEmpty ? "current" : $0.to) }.width(min: 50, ideal: 58)
                         TableColumn("Source", value: \.source).width(min: 50, ideal: 74)
                     }
+                    .copyRowsMenu(detail.identifiers, as: Self.identifiersText)
+                    .copiesSelectedRows(detail.identifiers, selected: identifierSelection, as: Self.identifiersText)
                     .frame(height: CGFloat(min(12, detail.identifiers.count + 1)) * 24 + 8)
                 }
 
