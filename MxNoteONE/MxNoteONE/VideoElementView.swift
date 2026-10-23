@@ -5,7 +5,8 @@
 //  Insert ▸ Video: a movie (.mov, .mp4, .m4v) copied into the notebook and
 //  played in place. The container shows a poster frame until it plays, keeps
 //  the video's proportions, and has its own control bar: play / pause, stop,
-//  back and forward 10 seconds, the time, a position slider, mute and volume.
+//  back and forward 10 seconds, the time, a position slider, a transcript
+//  menu (Transcribe to Page, Recap — see VideoTranscript.swift), mute and volume.
 //
 
 import AppKit
@@ -84,6 +85,7 @@ final class VideoControlBar: NSView {
     let stopButton = VideoControlBar.button("stop.fill", "Stop")
     let backButton = VideoControlBar.button("gobackward.10", "Back 10 Seconds")
     let forwardButton = VideoControlBar.button("goforward.10", "Forward 10 Seconds")
+    let transcriptButton = VideoControlBar.button("captions.bubble", "Transcript and Recap")
     let muteButton = VideoControlBar.button("speaker.wave.2.fill", "Mute")
     let timeLabel = NSTextField(labelWithString: "0:00 / --:--")
     let position = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
@@ -102,7 +104,8 @@ final class VideoControlBar: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         for (button, action) in [(playButton, #selector(play)), (stopButton, #selector(stop)), (backButton, #selector(back)),
-                                 (forwardButton, #selector(forward)), (muteButton, #selector(mute))] {
+                                 (forwardButton, #selector(forward)), (transcriptButton, #selector(transcriptMenu)),
+                                 (muteButton, #selector(mute))] {
             button.target = self
             button.action = action
             addSubview(button)
@@ -142,7 +145,8 @@ final class VideoControlBar: NSView {
         let volumeWidth: CGFloat = 56
         volume.frame = NSRect(x: bounds.width - volumeWidth - 6, y: (h - 16) / 2, width: volumeWidth, height: 16)
         muteButton.frame = NSRect(x: volume.frame.minX - size - 2, y: (h - size) / 2, width: size, height: size)
-        let room = muteButton.frame.minX - 8 - x
+        transcriptButton.frame = NSRect(x: muteButton.frame.minX - size - 2, y: (h - size) / 2, width: size, height: size)
+        let room = transcriptButton.frame.minX - 8 - x
         position.isHidden = room < 30
         position.frame = NSRect(x: x, y: (h - 16) / 2, width: max(0, room), height: 16)
     }
@@ -185,6 +189,10 @@ final class VideoControlBar: NSView {
     @objc private func back() { owner?.skip(by: -10) }
     @objc private func forward() { owner?.skip(by: 10) }
     @objc private func mute() { owner?.toggleMute() }
+    @objc private func transcriptMenu() {
+        guard let menu = owner?.transcriptMenu() else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: transcriptButton.frame.minX, y: transcriptButton.frame.maxY + 2), in: self)
+    }
     @objc private func seek() { owner?.seek(to: position.doubleValue) }
     @objc private func changeVolume() { owner?.setVolume(volume.floatValue) }
 
@@ -206,13 +214,14 @@ final class VideoControlBar: NSView {
             (forwardButton, "Forward 10 Seconds", "Goes forward 10 seconds in the video.", "goforward.10"),
             (timeLabel, "Time", "The time played and the video's length.", "clock"),
             (position, "Position", "Where the video is. Drag to go to another moment.", "slider.horizontal.below.rectangle"),
+            (transcriptButton, "Transcript and Recap", owner?.isWorking == true ? "Working on the transcript or recap — click to stop it." : "Transcribe to Page writes what's said in the video into a text box, each part with its time (click a time to play from there). Recap has Apple Intelligence write an overview, key points, action items (To Do tags) and chapters. Both run on this Mac.", "captions.bubble"),
             (muteButton, muted ? "Unmute" : "Mute", muted ? "Turns the sound back on." : "Turns the video's sound off (the volume is kept).", muted ? "speaker.slash.fill" : "speaker.wave.2.fill"),
             (volume, "Volume", "The video's volume. Dragging it turns Mute off.", "speaker.wave.3.fill"),
         ]
         for (view, title, detail, symbol) in items where !view.isHidden && view.frame.insetBy(dx: -2, dy: -2).contains(p) {
             return QuickHelpItem(title: title, detail: detail, shortcut: nil, symbol: symbol)
         }
-        return QuickHelpItem(title: "Video Controls", detail: "Play or pause, stop, go back or forward 10 seconds, see the time, drag the position, mute or set the volume. Drag the bar to move the video.",
+        return QuickHelpItem(title: "Video Controls", detail: "Play or pause, stop, go back or forward 10 seconds, see the time, drag the position, transcribe or recap, mute or set the volume. Drag the bar to move the video.",
                              shortcut: nil, symbol: "film")
     }
 }
@@ -228,6 +237,10 @@ final class VideoElementView: ElementView {
 
     let screen = VideoScreenView()
     let bar = VideoControlBar()
+    /// "Transcribing… 40%" over the picture while a transcript or recap is made.
+    let status = NSTextField(labelWithString: "")
+    private var job: Task<Void, Never>?
+    var isWorking: Bool { job != nil }
     /// Picture height ÷ width.
     private var aspect: CGFloat
     private var player: AVPlayer?
@@ -256,6 +269,12 @@ final class VideoElementView: ElementView {
         bar.owner = self
         addSubview(screen)
         addSubview(bar)
+        status.font = .systemFont(ofSize: 12, weight: .medium)
+        status.textColor = .white
+        status.drawsBackground = true
+        status.backgroundColor = NSColor(white: 0, alpha: 0.65)
+        status.isHidden = true
+        addSubview(status)
         finishSetup()
         setWidth(frame.width)
         refreshBar()
@@ -263,7 +282,7 @@ final class VideoElementView: ElementView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    static let minimumWidth: CGFloat = 300
+    static let minimumWidth: CGFloat = 340
     override var minWidth: CGFloat { Self.minimumWidth }
 
     override func setWidth(_ width: CGFloat) {
@@ -275,6 +294,8 @@ final class VideoElementView: ElementView {
         let content = contentFrame
         screen.frame = NSRect(x: content.minX, y: content.minY, width: content.width, height: max(0, content.height - Self.barHeight))
         bar.frame = NSRect(x: content.minX, y: screen.frame.maxY, width: content.width, height: Self.barHeight)
+        status.sizeToFit()
+        status.frame = NSRect(x: content.minX + 8, y: content.minY + 8, width: min(status.frame.width + 12, content.width - 16), height: status.frame.height + 4)
     }
 
     override func viewDidMoveToWindow() {
@@ -332,6 +353,7 @@ final class VideoElementView: ElementView {
     }
 
     private func tearDown() {
+        job?.cancel()
         player?.pause()
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
@@ -370,6 +392,16 @@ final class VideoElementView: ElementView {
         refreshBar()
     }
 
+    /// Plays from a moment (a time clicked in the transcript or recap).
+    func play(from seconds: Double) {
+        guard let player = makePlayer() else { return NSSound.beep() }
+        seek(on: player, to: seconds)
+        player.play()
+        canvas?.selectedElement = self
+        canvas?.scrollToVisible(frame)
+        refreshBar()
+    }
+
     func skip(by seconds: Double) {
         guard let player = makePlayer() else { return NSSound.beep() }
         seek(on: player, to: currentTime + seconds)
@@ -405,6 +437,94 @@ final class VideoElementView: ElementView {
         bar.refresh(playing: isPlaying, time: currentTime, duration: duration, muted: isMuted, volume: level)
     }
 
+    // MARK: Transcript and recap
+
+    private func showStatus(_ text: String?) {
+        status.stringValue = text.map { " " + $0 } ?? ""
+        status.isHidden = text == nil
+        layoutContent()
+    }
+
+    private func finishJob() {
+        job = nil
+        showStatus(nil)
+    }
+
+    func cancelJob() {
+        job?.cancel()
+        finishJob()
+    }
+
+    /// Transcribes the video's sound into a text box under it (on this Mac); then a recap, when asked for.
+    func transcribe(thenRecap: Bool = false) {
+        guard job == nil, let controller, let ref = controller.ref, let asset = element.asset else { return NSSound.beep() }
+        let store = NotebookStore.shared
+        let plain = store.plainAssetURL(asset, for: ref)
+        guard let url = plain ?? store.temporaryCopy(of: asset, fileName: element.fileName, for: ref) else {
+            return store.showAlert("Can't transcribe the video", "The video is missing from the notebook.")
+        }
+        showStatus("Preparing the transcript…")
+        job = Task { [weak self] in
+            defer { if plain == nil { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) } }
+            do {
+                let t = try await VideoTranscriber.transcribe(url) { done, what in
+                    self?.showStatus(done > 0 ? "\(what) \(Int(done * 100))%" : what)
+                }
+                guard let self, !Task.isCancelled, self.controller?.ref == ref, self.superview != nil else { return }
+                self.finishJob()
+                self.element.transcript = t.segments
+                if self.duration == nil { self.duration = t.duration; self.refreshBar() }
+                self.controller?.addText(near: self, VideoTranscriptText.transcript(t, video: self.element))
+                if thenRecap { self.recap() }
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                self.finishJob()
+                store.showAlert("Couldn't transcribe the video", error.localizedDescription)
+            }
+        }
+    }
+
+    /// Has Apple Intelligence write a recap of the transcript (transcribing first when there's none yet).
+    func recap() {
+        guard job == nil, let controller, let ref = controller.ref else { return NSSound.beep() }
+        let store = NotebookStore.shared
+        if let why = VideoRecapper.unavailableReason { return store.showAlert("Can't write a recap", why) }
+        guard let segments = element.transcript, !segments.isEmpty else { return transcribe(thenRecap: true) }
+        showStatus("Summarizing…")
+        job = Task { [weak self] in
+            do {
+                let recap = try await VideoRecapper.recap(segments) { self?.showStatus($0) }
+                guard let self, !Task.isCancelled, self.controller?.ref == ref, self.superview != nil else { return }
+                self.finishJob()
+                self.controller?.addText(near: self, VideoTranscriptText.recap(recap, video: self.element, duration: self.duration), beside: true)
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                self.finishJob()
+                store.showAlert("Couldn't write the recap", error.localizedDescription)
+            }
+        }
+    }
+
+    /// The control bar's transcript menu (also in the right-click menu).
+    func transcriptItems() -> [NSMenuItem] {
+        if isWorking {
+            return [ClosureMenuItem(status.stringValue.contains("ummar") || status.stringValue.contains("recap") ? "Stop the Recap" : "Stop Transcribing") { [weak self] in self?.cancelJob() }]
+        }
+        let hasTranscript = element.transcript?.isEmpty == false
+        let transcribe = ClosureMenuItem(hasTranscript ? "Transcribe to Page Again" : "Transcribe to Page") { [weak self] in self?.transcribe() }
+        transcribe.image = NSImage(systemSymbolName: "captions.bubble", accessibilityDescription: nil)
+        let recap = ClosureMenuItem(hasTranscript ? "Recap with Apple Intelligence" : "Transcribe and Recap with Apple Intelligence") { [weak self] in self?.recap() }
+        recap.image = NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
+        return [transcribe, recap]
+    }
+
+    func transcriptMenu() -> NSMenu {
+        let menu = NSMenu()
+        transcriptItems().forEach(menu.addItem)
+        return menu
+    }
+
     // MARK: Menu
 
     /// Takes the frame showing now as the poster (shown until the video plays, and in printouts and exports).
@@ -437,6 +557,8 @@ final class VideoElementView: ElementView {
         let stop = ClosureMenuItem("Stop") { [weak self] in self?.stop() }
         stop.isEnabled = player != nil
         menu.addItem(stop)
+        menu.addItem(.separator())
+        transcriptItems().forEach(menu.addItem)
         let poster = ClosureMenuItem("Use This Frame as Poster") { [weak self] in self?.useCurrentFrameAsPoster() }
         poster.isEnabled = player != nil
         menu.addItem(poster)

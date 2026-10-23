@@ -679,6 +679,35 @@ final class CanvasController: NSObject {
         addElement(element)
     }
 
+    /// A text box for a video's transcript or recap: beside the video when there's room on its right, else under it
+    /// (below whatever is already there).
+    @discardableResult
+    func addText(near view: ElementView, _ text: NSAttributedString, beside: Bool = false) -> TextElementView? {
+        let others = canvas.elementViews.filter { $0 !== view }
+        var origin = NSPoint(x: view.frame.minX, y: view.frame.maxY + 14)
+        var width = max(view.frame.width, 420)
+        // Beside: as wide as the page shows (no sideways scrolling), at least 320.
+        let sideWidth = min(440, canvas.visibleRect.maxX - view.frame.maxX - 24 - 16)
+        let side = NSRect(x: view.frame.maxX + 24, y: view.frame.minY, width: sideWidth, height: max(view.frame.height, 300))
+        if beside, sideWidth >= 320, !others.contains(where: { $0.frame.intersects(side) }) {
+            origin = side.origin
+            width = side.width
+        } else {
+            var moved = true
+            while moved {
+                moved = false
+                let probe = NSRect(x: origin.x, y: origin.y, width: width, height: 40)
+                if let hit = others.first(where: { $0.frame.intersects(probe) }) {
+                    origin.y = hit.frame.maxY + 14
+                    moved = true
+                }
+            }
+        }
+        let box = createTextElement(at: NSPoint(x: origin.x + 8, y: origin.y + ElementView.gripHeight + 10), text: text, width: width)
+        if let box { canvas.selectedElement = box; canvas.scrollToVisible(box.frame) }
+        return box
+    }
+
     /// A video file copied into the notebook and played on the page, with a poster frame and its proportions.
     func insertVideo(_ url: URL, at point: NSPoint? = nil) {
         guard let ref else { return }

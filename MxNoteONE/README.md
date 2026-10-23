@@ -207,6 +207,18 @@ Section and New Section Group. Right-click a page for its own menu.
   double-clicking the video plays or pauses it. Right-click for Play / Stop, **Use This Frame as Poster**, Open in
   Viewer and Save Video As…. Videos in password-protected sections play from a decrypted temporary copy that is
   removed when the page closes. Exports link the video file; OneNote sync uploads it as an attachment.
+- **Transcripts and recaps** (as for a Teams meeting recording): the control bar's transcript button
+  (speech bubble) or right-click the video:
+  - **Transcribe to Page** turns what's said into text on this Mac (Apple's Speech framework — SpeechAnalyzer; the
+    speech model for your language downloads the first time). A text box appears under the video: *Transcript —
+    name*, the length and language, then a paragraph per stretch of speech with its time. Click a time to play the
+    video from there. The transcript is also kept with the video, so search finds its words and a recap can be made
+    after the text box was edited or deleted. Your Mac's language is used when the transcriber has it, else US English.
+  - **Recap with Apple Intelligence** (on this Mac, FoundationModels; needs Apple Intelligence turned on) writes
+    *Recap — name* beside the video (or under it when there's no room): an overview, key points, **action items** as
+    To Do tags (so they show in the Tag Summary), and **chapters** with times that play the video. It transcribes
+    first when there's no transcript yet. Long transcripts are summarized part by part, then recapped.
+  - Progress shows over the picture; the same menu stops the work. Nothing leaves the Mac.
 - **Snap to Grid** (View tab or View ▸ Snap to Grid, ⌃⌘G — as in OneNote for Windows): containers, pictures, tables
   and shapes line up on the page grid when you place, drag, resize or nudge them (arrow keys move one grid step). The
   grid is the page's rule lines or grid when it has them, otherwise 12 points (shown as dots while you drag). Hold ⌥
@@ -800,7 +812,7 @@ The inspector's **Tables** tab lists every table in the notebook with its name, 
 **View ▸ Quick Help** (⌥⌘/) shows a panel at the bottom of the sidebar — like Logic Pro's — telling what's under the
 pointer in a sentence or two, with its shortcut: any toolbar tool or section; a note in a score (its pitch, length,
 bar, voice, dynamics and marks); a table cell (its formula and value, number format, merging); a link (where it goes,
-its hover text); a text box, picture, attachment, recording, video (and each of its controls), chart, the page title or the page itself. Over nothing
+its hover text); a text box, picture, attachment, recording, video (and each of its controls, including Transcript and Recap), chart, the page title or the page itself. Over nothing
 it can describe, it tells about what's being worked on — the selected notes, the cell being typed in, the text being
 typed. Every toolbar tool has a short one- or two-word tooltip; Quick Help has the details.
 

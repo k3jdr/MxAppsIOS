@@ -696,6 +696,8 @@ final class TextElementView: ElementView, NSTextViewDelegate {
             ImportActivity.shared.locateMissingPictures()
             return true
         }
+        // A time in a video's transcript or recap: play the video from there.
+        if let url, VideoTranscriptText.follow(url) { return true }
         // Web links: the browser chosen in Settings.
         if let url, WebBrowser.isWeb(url) {
             WebBrowser.open(url)

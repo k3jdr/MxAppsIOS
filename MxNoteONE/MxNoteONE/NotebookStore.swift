@@ -1584,6 +1584,8 @@ enum PageIndexer {
                 texts.append(element.table?.rows.map { $0.joined(separator: " ") }.joined(separator: "\n") ?? "")
             case .file, .audio, .video, .image:
                 if let name = element.fileName { texts.append(name) }
+                // A video's transcript is found by search too.
+                if let transcript = element.transcript { texts.append(transcript.map(\.text).joined(separator: " ")) }
             case .diagram:
                 // A diagram's name and its shapes' labels.
                 texts.append([element.fileName, element.diagramText].compactMap { $0 }.joined(separator: " "))

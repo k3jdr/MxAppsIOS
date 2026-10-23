@@ -238,6 +238,10 @@ struct LinkInfo {
             symbol = "envelope"
             title = url.absoluteString.replacingOccurrences(of: "mailto:", with: "").components(separatedBy: "?").first ?? ""
             detail = "Email"
+        } else if let (_, seconds) = VideoTranscriptText.target(url) {
+            symbol = "play.rectangle"
+            title = "Play from \(VideoControlBar.clock(seconds))"
+            detail = "Plays the video on this page from this moment."
         } else if url.isFileURL {
             symbol = "doc"
             title = url.lastPathComponent
@@ -256,6 +260,7 @@ struct LinkInfo {
             NotebookStore.shared.openLink(url)
         } else if url.scheme == OneNoteImport.missingScheme {
             ImportActivity.shared.locateMissingPictures()
+        } else if VideoTranscriptText.follow(url) {
         } else {
             WebBrowser.open(url)
         }

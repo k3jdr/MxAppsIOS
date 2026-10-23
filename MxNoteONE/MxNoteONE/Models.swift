@@ -468,8 +468,17 @@ struct PageElement: Codable, Identifiable {
     var map: MapData?
     /// A DBML database diagram: its DBML, where its tables were dragged, its lines' curves and its notes.
     var dbml: DBMLData?
+    /// A video's transcript (Transcribe to Page), kept for recaps even when its text box is edited or deleted.
+    var transcript: [TranscriptSegment]?
 
     var frame: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+}
+
+/// A phrase heard in a video, with when it was said (seconds).
+struct TranscriptSegment: Codable, Hashable {
+    var start: Double
+    var end: Double
+    var text: String
 }
 
 /// Ink: pen and highlighter strokes and shapes.
