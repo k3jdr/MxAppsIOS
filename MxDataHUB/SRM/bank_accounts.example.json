@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to bank_accounts.local.json (not in git). dropFolders: where you save PNC Online Banking downloads (QFX / OFX anywhere in them; CSV in a sub-folder named by the account's code). accounts: the account number's last four digits → the checking account's code in MxPortMGR (an account's own last four digits, set in MxPortMGR, map it too).",
+  "dropFolders": ["~/MyCodeGIT/MxDataSRM/src-bank"],
+  "accounts": {"1234": "PNC_CHECKING"}
+}

@@ -72,6 +72,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
+import bank
+
 VERSION = 1
 PORT = 8774
 LOADER = "http://127.0.0.1:8770"
@@ -95,6 +97,9 @@ DESCRIBE = {
         {"method": "GET", "path": "/securities", "summary": "Search securities (ticker, name, ISIN, CUSIP) with the latest price"},
         {"method": "GET", "path": "/benchmarks/{code}/weights", "summary": "A benchmark's latest weights with sectors"},
         {"method": "GET", "path": "/accounts", "summary": "Personal accounts with value and cost"},
+        {"method": "GET", "path": "/bank/accounts/{code}/register", "summary": "A checking account's shared check register and the bank's lines not in it"},
+        {"method": "POST", "path": "/bank/accounts/{code}/transactions", "summary": "Add a register entry (check, debit, deposit …)"},
+        {"method": "GET", "path": "/expense-accounts", "summary": "Expense accounts with their payees and this year's totals"},
         {"method": "GET", "path": "/accounts/{code}", "summary": "An account with its open tax lots, valued"},
         {"method": "PUT", "path": "/accounts/{code}", "summary": "Save an account as a new version (version-checked: 409 when it changed since it was opened); rewrites today's holdings"},
         {"method": "GET", "path": "/accounts/{code}/versions", "summary": "Every saved version of an account, newest first"},
@@ -1381,6 +1386,10 @@ class Handler(BaseHTTPRequestHandler):
                     out = delete_link(conn, parts[1], parts[2])
                 elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "load-prices" and method == "POST":
                     out = load_prices(conn, parts[1])
+                elif parts[:1] in (["bank"], ["expense-accounts"], ["payees"]):
+                    out = bank.route(conn, method, parts, body, q)
+                    if out is None:
+                        return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 else:
                     return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 if isinstance(out, dict):
@@ -1391,7 +1400,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise
             finally:
                 conn.close()
-        except Conflict as e:
+        except (Conflict, bank.Conflict) as e:
             return self.send_json(409, dict(e.payload, error=str(e)))
         except LookupError as e:
             return self.send_json(404, {"error": str(e).strip("'\"")})

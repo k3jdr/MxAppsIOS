@@ -10,7 +10,17 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: PortStore
-    @AppStorage("sidebarReportsExpanded") private var reportsExpanded = true
+    /// The sidebar sections folded away, by name (comma-separated).
+    @AppStorage("sidebarCollapsed") private var collapsed = ""
+
+    private func expanded(_ group: Screen.Group) -> Binding<Bool> {
+        Binding(get: { !collapsed.split(separator: ",").contains(Substring(group.rawValue)) },
+                set: { open in
+                    var names = Set(collapsed.split(separator: ",").map(String.init))
+                    if open { names.remove(group.rawValue) } else { names.insert(group.rawValue) }
+                    collapsed = names.sorted().joined(separator: ",")
+                })
+    }
 
     private func sidebarRows(_ group: Screen.Group) -> some View {
         ForEach(Screen.allCases.filter { $0.group == group }) { screen in
@@ -26,13 +36,9 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: Binding(get: { Optional(store.screen) }, set: { if let s = $0 { store.screen = s } })) {
+                // Every section expands and collapses (its disclosure arrow, shown on hover), kept across launches.
                 ForEach(Screen.Group.sidebar, id: \.self) { group in
-                    if group == .reports {
-                        // Knowledge Library expands and collapses (its disclosure arrow, shown on hover).
-                        Section(group.rawValue, isExpanded: $reportsExpanded) { sidebarRows(group) }
-                    } else {
-                        Section(group.rawValue) { sidebarRows(group) }
-                    }
+                    Section(group.rawValue, isExpanded: expanded(group)) { sidebarRows(group) }
                 }
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
@@ -123,6 +129,8 @@ struct ContentView: View {
     @ViewBuilder
     private var screen: some View {
         switch store.screen {
+        case .checking: CheckingView(store: store)
+        case .expenses: ExpenseAccountsView(store: store)
         case .welcome: WelcomeView(store: store)
         case .choosePath: ChoosePathView(store: store)
         case .whyOptimize: WhyOptimizeView(store: store)

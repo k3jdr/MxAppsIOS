@@ -300,7 +300,7 @@ nonisolated enum AccountsClient {
     }()
     static let service = "accounts (Python, port 8774)"
 
-    private static func request<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil, timeout: Double = 60, as: T.Type) async throws -> T {
+    static func request<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil, timeout: Double = 60, as: T.Type) async throws -> T {
         var r = URLRequest(url: URL(string: base + path)!, timeoutInterval: timeout)
         r.httpMethod = method
         if let body {

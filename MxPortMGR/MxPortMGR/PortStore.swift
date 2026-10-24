@@ -13,6 +13,7 @@ import Observation
 enum Screen: String, CaseIterable, Identifiable {
     // In the sidebar's order (Back and Next follow it). Welcome and Choose Your Path aren't in the sidebar: the Guide
     // menu opens them.
+    case checking, expenses
     case welcome, choosePath
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
@@ -22,14 +23,16 @@ enum Screen: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     enum Group: String, CaseIterable {
-        case start = "Start Here", mine = "My Portfolio", reports = "Knowledge Library", library = "Library"
+        case accounts = "Accounts", start = "Start Here", mine = "My Portfolio", reports = "Knowledge Library",
+             library = "Data Library"
 
         /// The sidebar's sections (Start Here's screens are in the Guide menu only).
-        static let sidebar: [Group] = [.mine, .reports, .library]
+        static let sidebar: [Group] = [.accounts, .mine, .reports, .library]
     }
 
     var group: Group {
         switch self {
+        case .checking, .expenses: .accounts
         case .welcome, .choosePath: .start
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
@@ -40,6 +43,8 @@ enum Screen: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .checking: "Checking Accounts"
+        case .expenses: "Expense Accounts"
         case .welcome: "Welcome"
         case .choosePath: "Choose Your Path"
         case .whyOptimize: "Why Optimize?"
@@ -74,6 +79,8 @@ enum Screen: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .checking: "checkmark.rectangle.stack"
+        case .expenses: "tray.2"
         case .welcome: "hand.wave"
         case .choosePath: "signpost.right.and.left"
         case .whyOptimize: "slider.horizontal.below.square.and.square.filled"
@@ -104,8 +111,10 @@ enum Screen: String, CaseIterable, Identifiable {
     static let myPath: [Screen] = [.myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution]
 
     /// The next and previous screens in the guide's order.
-    var next: Screen? { Screen.allCases.firstIndex(of: self).flatMap { $0 + 1 < Screen.allCases.count ? Screen.allCases[$0 + 1] : nil } }
-    var previous: Screen? { Screen.allCases.firstIndex(of: self).flatMap { $0 > 0 ? Screen.allCases[$0 - 1] : nil } }
+    /// The screens Back and Next step through: the sidebar's, in its order.
+    static let guide: [Screen] = allCases.filter { Group.sidebar.contains($0.group) }
+    var next: Screen? { Screen.guide.firstIndex(of: self).flatMap { $0 + 1 < Screen.guide.count ? Screen.guide[$0 + 1] : nil } }
+    var previous: Screen? { Screen.guide.firstIndex(of: self).flatMap { $0 > 0 ? Screen.guide[$0 - 1] : nil } }
 }
 
 enum EngineChoice: String, CaseIterable, Identifiable {
