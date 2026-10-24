@@ -87,19 +87,22 @@ CATEGORIES = [
     {"id": "identifiers", "name": "Identifiers & issuer data",
      "loaders": ["openfigi", "fmp-profiles", "inherit-sectors", "sec-submissions", "gleif"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
-    {"id": "prices", "name": "Prices & index levels", "loaders": ["massive-prices", "fmp-prices", "fmp-otc-prices", "nasdaq-prices", "vanguard-funds",
+    {"id": "prices", "name": "Prices & index levels", "loaders": ["massive-prices", "fmp-prices", "fmp-otc-prices", "nasdaq-prices", "vanguard-funds", "blackrock-funds", "fund-families",
                                                        "listed-derivatives", "trust-navs", "fmp-index-levels"],
      "description": "End-of-day prices (Massive's daily file for every U.S. exchange-listed security; FMP for "
                     "benchmark and portfolio members, with adjusted closes, and for every OTC listing — ADRs and "
                     "foreign ordinary lines, which Massive's file doesn't carry; Nasdaq.com, free and keyless, for the "
                     "stock, bond and mutual funds held and any security FMP left without a recent price), every "
-                    "Vanguard mutual fund with its daily NAV (Vanguard's product list; history from Nasdaq.com), units, "
+                    "Vanguard mutual fund with its daily NAV (Vanguard's product list; history from Nasdaq.com), BlackRock's "
+                    "funds — iShares ETFs, mutual funds and closed-end funds — in the BlackRock family with expense "
+                    "ratios (BlackRock's and iShares' product lists; mutual fund NAV history from Nasdaq.com), units, "
                     "warrants and rights (what they hold, CUSIP / ISIN / sector from FMP, FMP then Nasdaq.com prices), "
                     "collective trusts from statement NAVs and their proxy funds, and benchmark levels.",
      "cadence": "daily",
      # FMP needs an API key; when it fails, nasdaq-prices still runs and fills the gaps.
      # The Vanguard list is one more source of NAVs: when it fails, the trusts and index levels still load.
-     "continueAfterFailure": ["massive-prices", "fmp-prices", "fmp-otc-prices", "vanguard-funds", "listed-derivatives"]},
+     "continueAfterFailure": ["massive-prices", "fmp-prices", "fmp-otc-prices", "vanguard-funds", "blackrock-funds",
+                              "fund-families", "listed-derivatives"]},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
     {"id": "bonds", "name": "Bonds: U.S. Treasuries", "loaders": ["treasuries"],
@@ -135,7 +138,7 @@ RUN_NAMES = {
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],
     "treasuries": ["treasuries"], "massive-prices": ["massive_prices"], "listed-derivatives": ["listed_derivatives"],
-    "fmp-symbols": ["fmp_symbols"], "policy-benchmarks": ["policy_benchmarks"], "inherit-sectors": ["inherit_sectors"],
+    "fmp-symbols": ["fmp_symbols"], "policy-benchmarks": ["policy_benchmarks"], "inherit-sectors": ["inherit_sectors"], "blackrock-funds": ["blackrock_funds"], "fund-families": ["fund_families"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "..", "..", "MxDataHUB", "SRM"))

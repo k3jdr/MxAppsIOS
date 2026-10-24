@@ -40,7 +40,7 @@ import traceback
 
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
-from srmlib.loaders import (derivatives, earnings_symbols, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
+from srmlib.loaders import (blackrock, derivatives, earnings_symbols, fund_families, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
                              nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
@@ -66,6 +66,8 @@ LOADERS = {
     "fmp-otc-prices": fmp.load_otc_prices,      # end-of-day prices of every OTC listing (fmp-prices --otc)
     "nasdaq-prices": nasdaq_prices.run,         # fund prices (ETFs, ETNs, closed-end and mutual funds) and gaps, no key
     "vanguard-funds": vanguard.run,             # every Vanguard mutual fund (Vanguard's list), daily NAV; history from Nasdaq.com
+    "blackrock-funds": blackrock.run,           # iShares ETFs, BlackRock mutual funds and CEFs: family profiles, NAVs
+    "fund-families": fund_families.run,         # every other family's mutual funds and ETFs (FMP's fund screener), NAVs
     "trust-navs": trust_navs.run,               # collective trusts: statement NAVs carried by a proxy fund's returns
     "mutual-funds": mutual_funds.run,           # add mutual funds from Nasdaq.com (--symbols / --search), with prices
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
