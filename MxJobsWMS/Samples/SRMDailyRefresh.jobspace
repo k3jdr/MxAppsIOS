@@ -1642,7 +1642,7 @@
   },
   "subscriptions" : [
     {
-      "auth" : "queryParameter",
+      "auth" : "header",
       "baseURL" : "https://api.openfigi.com",
       "defaultHeaders" : [
         {

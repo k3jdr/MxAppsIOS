@@ -1,0 +1,1420 @@
+{
+  "description" : "MxDataHUB's daily automation: refresh the reference data and the listed universe, benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions (srm.py load all); check data quality, and ask the data steward to approve the report and any backfills.",
+  "format" : "mxjobspace",
+  "formatVersion" : 1,
+  "links" : [
+    {
+      "from" : "40D6048E-C9BF-4D85-ADF5-419C849E8272",
+      "id" : "F7173808-4039-4AE2-85E3-5DBAA89C94A0",
+      "label" : "",
+      "to" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C"
+    },
+    {
+      "from" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C",
+      "id" : "FADA7E4C-100C-4F9A-BEC9-28601FBAFF8F",
+      "label" : "",
+      "to" : "77400A61-E12F-4556-B4E1-3EECC6BB3FED"
+    },
+    {
+      "from" : "77400A61-E12F-4556-B4E1-3EECC6BB3FED",
+      "id" : "B73C7413-C5E0-4109-8BC7-9D8DE43717BC",
+      "label" : "",
+      "to" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0"
+    },
+    {
+      "from" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0",
+      "id" : "1B0780C8-D4FA-4715-A50C-3470EA6C3406",
+      "label" : "",
+      "to" : "4BA25880-987D-4B9F-B388-7F6C84FAD937"
+    },
+    {
+      "from" : "4BA25880-987D-4B9F-B388-7F6C84FAD937",
+      "id" : "B2D19BE8-A686-4EFD-A445-2214C6530611",
+      "label" : "",
+      "to" : "7FD24ED3-E7FA-4776-BF18-0A5A2C6B5A59"
+    },
+    {
+      "from" : "7FD24ED3-E7FA-4776-BF18-0A5A2C6B5A59",
+      "id" : "8E95D8F8-123E-4EFB-B049-9352194078A1",
+      "label" : "",
+      "to" : "DDA724CF-7D1D-42B1-9DBD-1603C033B467"
+    },
+    {
+      "from" : "DDA724CF-7D1D-42B1-9DBD-1603C033B467",
+      "id" : "B769C0AD-95D3-4568-9448-DFF395CEE20E",
+      "label" : "quality",
+      "to" : "7FD24ED3-E7FA-4776-BF18-0A5A2C6B5A59"
+    },
+    {
+      "from" : "7FD24ED3-E7FA-4776-BF18-0A5A2C6B5A59",
+      "id" : "91D95586-4B85-472D-B3F0-8844AA92CF68",
+      "label" : "report",
+      "to" : "914277B3-B309-4337-ACEE-BEA81012262C"
+    },
+    {
+      "from" : "914277B3-B309-4337-ACEE-BEA81012262C",
+      "id" : "71E51FD1-DEB8-4BCF-AE56-98D37AF4AEB3",
+      "label" : "",
+      "to" : "148FAD17-6089-46D2-AD46-C518FD2F7251"
+    },
+    {
+      "from" : "148FAD17-6089-46D2-AD46-C518FD2F7251",
+      "id" : "E951F43B-5E9E-4D2D-A96D-ED55F78DC3AB",
+      "label" : "approved",
+      "to" : "FF524FAC-6E3D-4D36-B71A-B6C9113F9ED0"
+    },
+    {
+      "from" : "FF524FAC-6E3D-4D36-B71A-B6C9113F9ED0",
+      "id" : "D7D7AFAB-B32D-4625-B19C-1DEAA1CF9A0A",
+      "label" : "",
+      "to" : "048D5C44-30A6-4F4B-A9F2-0A2954091980"
+    },
+    {
+      "from" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C",
+      "id" : "D705CC89-0E0C-48E2-9B75-0AA4D4DB94AB",
+      "label" : "",
+      "to" : "9AEA8C61-D7DA-41B0-95FC-7BE33534C1B7"
+    },
+    {
+      "from" : "9AEA8C61-D7DA-41B0-95FC-7BE33534C1B7",
+      "id" : "4080B59E-EC1D-41D5-B54B-0D243E3F5E93",
+      "label" : "",
+      "to" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C"
+    },
+    {
+      "from" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C",
+      "id" : "4B6FF896-0221-4DBE-BDC5-61E9222DC360",
+      "label" : "",
+      "to" : "7C09F894-B6EF-4AEA-9125-D69D3E597057"
+    },
+    {
+      "from" : "7C09F894-B6EF-4AEA-9125-D69D3E597057",
+      "id" : "2F216DD7-FEFC-4799-8698-4F21150A1A9D",
+      "label" : "",
+      "to" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C"
+    },
+    {
+      "from" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C",
+      "id" : "5A255574-F0E4-4A6D-9443-837F5876F255",
+      "label" : "",
+      "to" : "1B6A1AAC-0D0B-4D9F-ABBE-BBD2DB74074D"
+    },
+    {
+      "from" : "1B6A1AAC-0D0B-4D9F-ABBE-BBD2DB74074D",
+      "id" : "0D0E16B5-9CCC-4C29-8D0B-46D2D1726D3E",
+      "label" : "",
+      "to" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C"
+    },
+    {
+      "from" : "77400A61-E12F-4556-B4E1-3EECC6BB3FED",
+      "id" : "81CFB577-7F04-455A-A67C-E55192BCB93F",
+      "label" : "",
+      "to" : "7CECEFAE-E278-40BA-9AB2-66564D9F7B0E"
+    },
+    {
+      "from" : "7CECEFAE-E278-40BA-9AB2-66564D9F7B0E",
+      "id" : "AB2FEDD5-A84C-41D5-94D5-60A8AE108011",
+      "label" : "",
+      "to" : "77400A61-E12F-4556-B4E1-3EECC6BB3FED"
+    },
+    {
+      "from" : "77400A61-E12F-4556-B4E1-3EECC6BB3FED",
+      "id" : "57445ECB-ACE9-490E-AC91-EEBE64BE4034",
+      "label" : "",
+      "to" : "E046C506-8616-4F57-AD17-8F3FA202FE7C"
+    },
+    {
+      "from" : "E046C506-8616-4F57-AD17-8F3FA202FE7C",
+      "id" : "1156A8EF-7D7C-45C1-AC31-2CF71F615B7E",
+      "label" : "",
+      "to" : "77400A61-E12F-4556-B4E1-3EECC6BB3FED"
+    },
+    {
+      "from" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0",
+      "id" : "D9E70486-8B43-4B0E-ABA3-3DABD999AA23",
+      "label" : "",
+      "to" : "13150E6B-A6D6-4EF4-994A-9C7C4BE5E551"
+    },
+    {
+      "from" : "13150E6B-A6D6-4EF4-994A-9C7C4BE5E551",
+      "id" : "5DC7EFB3-D578-4C28-ACCB-C5231E8DE904",
+      "label" : "",
+      "to" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0"
+    },
+    {
+      "from" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0",
+      "id" : "C9EE26A7-8308-47FD-8627-DD50FD985245",
+      "label" : "",
+      "to" : "E545A493-CC9C-4056-BF60-05322C32B1FB"
+    },
+    {
+      "from" : "E545A493-CC9C-4056-BF60-05322C32B1FB",
+      "id" : "EF80BE16-0691-44D2-B2E7-90E7A06228A3",
+      "label" : "",
+      "to" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0"
+    },
+    {
+      "from" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0",
+      "id" : "A804AA30-FDF3-4A17-A5D6-348ED07ADB06",
+      "label" : "",
+      "to" : "642A5D6C-DFBD-40F3-8B52-FAB3C5845D54"
+    },
+    {
+      "from" : "642A5D6C-DFBD-40F3-8B52-FAB3C5845D54",
+      "id" : "68284D0B-5B0F-43BA-909A-51A220EC3152",
+      "label" : "",
+      "to" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0"
+    },
+    {
+      "from" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0",
+      "id" : "F985A9FE-AC19-4DDB-8454-47C3E0032F9D",
+      "label" : "",
+      "to" : "CB6C61D3-D746-4746-B2B7-516021256D8B"
+    },
+    {
+      "from" : "CB6C61D3-D746-4746-B2B7-516021256D8B",
+      "id" : "E5499764-1A22-4D4E-9B29-95B305418B70",
+      "label" : "",
+      "to" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0"
+    },
+    {
+      "from" : "4BA25880-987D-4B9F-B388-7F6C84FAD937",
+      "id" : "8DC50AAA-822D-4DE4-A23D-9402E44B4AD5",
+      "label" : "",
+      "to" : "E13EFB18-3CE0-4F4B-933A-B431AAFAAA81"
+    },
+    {
+      "from" : "E13EFB18-3CE0-4F4B-933A-B431AAFAAA81",
+      "id" : "BA41AC1D-554C-40AE-8A84-AF44920B1A91",
+      "label" : "",
+      "to" : "4BA25880-987D-4B9F-B388-7F6C84FAD937"
+    },
+    {
+      "from" : "4BA25880-987D-4B9F-B388-7F6C84FAD937",
+      "id" : "F9215ADD-A5F7-41FD-A4A9-468E62F66285",
+      "label" : "",
+      "to" : "CF1170D6-4027-499B-BAFB-8381A9915F34"
+    },
+    {
+      "from" : "CF1170D6-4027-499B-BAFB-8381A9915F34",
+      "id" : "A89F7367-9624-45A6-961F-6AE9E112D594",
+      "label" : "",
+      "to" : "4BA25880-987D-4B9F-B388-7F6C84FAD937"
+    },
+    {
+      "from" : "4BA25880-987D-4B9F-B388-7F6C84FAD937",
+      "id" : "F22918F7-7189-4BE9-BD67-CDB1ACCD6020",
+      "label" : "",
+      "to" : "1118EE1F-997B-4734-B6F5-BAD2F70B8C9A"
+    },
+    {
+      "from" : "1118EE1F-997B-4734-B6F5-BAD2F70B8C9A",
+      "id" : "EA9376DA-9F7E-45B1-ABA5-516E5C537678",
+      "label" : "",
+      "to" : "4BA25880-987D-4B9F-B388-7F6C84FAD937"
+    },
+    {
+      "from" : "4BA25880-987D-4B9F-B388-7F6C84FAD937",
+      "id" : "5C245492-E01C-4542-BA68-26C4279F12B6",
+      "label" : "",
+      "to" : "CB40950D-AB12-46EA-BD75-9A57F04D922F"
+    },
+    {
+      "from" : "CB40950D-AB12-46EA-BD75-9A57F04D922F",
+      "id" : "9305DBA2-DE7A-455F-89F6-70FED4EEA1AB",
+      "label" : "",
+      "to" : "4BA25880-987D-4B9F-B388-7F6C84FAD937"
+    }
+  ],
+  "name" : "SRM Daily Securities Master Refresh",
+  "nodes" : [
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "40D6048E-C9BF-4D85-ADF5-419C849E8272",
+      "kind" : "trigger",
+      "notes" : "After the close, once the SPDR holdings files and end-of-day prices are published.",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "run",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "schedule" : {
+        "intervalMinutes" : 60,
+        "mode" : "weekdays",
+        "time" : "18:30",
+        "timeZone" : "America/New_York"
+      },
+      "title" : "Weekday SRM refresh",
+      "x" : 300,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Turn the analyst's report into the day's SRM summary for the data steward, and a list of follow-up actions (re-runs, backfills) with their estimated API calls.",
+        "model" : "",
+        "outputFormat" : "{summary, followUps}"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "914277B3-B309-4337-ACEE-BEA81012262C",
+      "kind" : "instructionSet",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "srmReport",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "SRM daily report & follow-ups",
+      "x" : 2700,
+      "y" : 120
+    },
+    {
+      "approval" : {
+        "approver" : "Data steward",
+        "channel" : "inApp",
+        "expiresAfterMinutes" : 720,
+        "requireComment" : false,
+        "summaryTemplate" : "SRM daily refresh for {{today}} is loaded. Approve the report and the follow-ups?"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "148FAD17-6089-46D2-AD46-C518FD2F7251",
+      "kind" : "approvalGate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "approved",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Data steward approval",
+      "x" : 2940,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "execution" : {
+        "confirmBeforeSend" : true,
+        "mode" : "dryRun",
+        "target" : "srm.py (MxDataHUB/SRM)"
+      },
+      "id" : "FF524FAC-6E3D-4D36-B71A-B6C9113F9ED0",
+      "kind" : "executeRequest",
+      "notes" : "Long, API-hungry loads only run after approval: e.g. fmp-corporate-actions --history (2 calls per symbol) or fmp-profiles --all-securities (~13,000 calls, about an hour).",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "backfills",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Run approved backfills",
+      "x" : 3180,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "048D5C44-30A6-4F4B-A9F2-0A2954091980",
+      "kind" : "outcomeReport",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "Loads, counts, rejects, data-quality checks and the follow-ups run",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "report" : {
+        "detailed" : true,
+        "includeFailures" : true,
+        "recipients" : "Data steward"
+      },
+      "title" : "SRM daily load report",
+      "x" : 3420,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Refresh venues, currencies, the US listed universe and issuers. Report securities added, listings closed and any loader that did not succeed.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "9491F58C-1B5A-4725-9DDA-A3151B6C2B7C",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "universeStage",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Universe agent",
+      "x" : 530,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Load today's S&P 500 / 400 / 600, Dow and Nasdaq-100 members and weights. Flag benchmarks whose member count or weight sum moved unexpectedly.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "77400A61-E12F-4556-B4E1-3EECC6BB3FED",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "constituentsStage",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Benchmark constituents agent",
+      "x" : 1135,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Fill FIGIs, ISINs, CUSIPs, sectors, issuer details and LEIs for benchmark and portfolio members. Summarise identifier conflicts and rejects.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "9517253A-2353-4153-B6B9-D6FF5E67F8F0",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "enrichmentStage",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Identifier enrichment agent",
+      "x" : 1855,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Load end-of-day prices (FMP, then Nasdaq.com for funds and gaps), index levels and corporate actions. Note symbols without a price for the last trading day and corporate actions that need attention (splits, delistings).",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "4BA25880-987D-4B9F-B388-7F6C84FAD937",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "marketStage",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Market data agent",
+      "x" : 2805,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Combine every stage's load results with the status checks. Produce the daily SRM report and a follow-up list: loaders to re-run, and backfills worth their API budget (e.g. fmp-corporate-actions --history, fmp-profiles --all-securities).",
+        "model" : "",
+        "outputFormat" : "{report, failedLoads, warnings, followUps: [{loader, options, reason, apiCalls}]}"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "7FD24ED3-E7FA-4776-BF18-0A5A2C6B5A59",
+      "kind" : "aggregate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "srmDaily",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Data quality analyst",
+      "x" : 3410,
+      "y" : 360
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/reference",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 300
+      },
+      "id" : "9AEA8C61-D7DA-41B0-95FC-7BE33534C1B7",
+      "kind" : "apiRead",
+      "notes" : "ISO 10383 market identifier codes and ISO 4217 currencies.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "01F4BAA5-D017-4AAF-8985-6A937D5D1C5D",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "reference",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Reference data (ISO MICs, currencies)",
+      "x" : 300,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/nasdaqtrader",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 600
+      },
+      "id" : "7C09F894-B6EF-4AEA-9125-D69D3E597057",
+      "kind" : "apiRead",
+      "notes" : "US listed securities, listings and tickers; closes listings that left the files.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "7470352B-5CE8-4848-B90D-C65067F51C56",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "universe",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Listed universe (Nasdaq Trader)",
+      "x" : 530,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/sec-tickers",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 600
+      },
+      "id" : "1B6A1AAC-0D0B-4D9F-ABBE-BBD2DB74074D",
+      "kind" : "apiRead",
+      "notes" : "CIKs → issuers, linked to the listed securities.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "F2B14E12-B885-4006-AD9A-D8B8B8DB904D",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "issuers",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Issuers (SEC company tickers)",
+      "x" : 760,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/ssga",
+        "query" : [
+          {
+            "id" : "7E4F3F0A-02F5-47B7-B0F9-F98B70F61A18",
+            "key" : "benchmarks",
+            "value" : "{{benchmarks}}"
+          }
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+        {
+          "id" : "2626B301-8EA9-45B3-9D79-0D63D52DBACA",
+          "name" : "benchmarks",
+          "required" : false,
+          "type" : "text",
+          "value" : "SP500 DJIA SP400 SP600"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 1,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 600
+      },
+      "id" : "7CECEFAE-E278-40BA-9AB2-66564D9F7B0E",
+      "kind" : "apiRead",
+      "notes" : "SPY, DIA, MDY and SPSM daily holdings: members, weights, shares, CUSIP, SEDOL.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "9EB26B42-563E-449F-B647-9DD649A18590",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "spdrHoldings",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "S&P / Dow constituents (SSGA SPDR)",
+      "x" : 1020,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/nasdaq100",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 1,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 300
+      },
+      "id" : "E046C506-8616-4F57-AD17-8F3FA202FE7C",
+      "kind" : "apiRead",
+      "notes" : "Nasdaq.com list with market caps (plain cap weights).",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "3E7B288B-314F-4DB9-9646-6A87933B3FF0",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "nasdaq100",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Nasdaq-100 members",
+      "x" : 1250,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/openfigi",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 1800
+      },
+      "id" : "13150E6B-A6D6-4EF4-994A-9C7C4BE5E551",
+      "kind" : "apiRead",
+      "notes" : "Composite, share-class and exchange FIGIs by CUSIP, else ticker; 250 requests/min.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "1EF9F733-61C4-4F0D-8D57-8B61FA64804B",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "figis",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "FIGIs (OpenFIGI)",
+      "x" : 1510,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/fmp-profiles",
+        "query" : [
+          {
+            "id" : "148FBAB2-2666-4358-A191-59C3A5C67ED4",
+            "key" : "max",
+            "value" : "{{maxCalls}}"
+          }
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+        {
+          "id" : "FEF4C63C-DBA0-4A1A-93BC-2CC76FCC563B",
+          "name" : "maxCalls",
+          "required" : false,
+          "type" : "text",
+          "value" : ""
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 1,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 1800
+      },
+      "id" : "E545A493-CC9C-4056-BF60-05322C32B1FB",
+      "kind" : "apiRead",
+      "notes" : "ISIN, CUSIP, CIK, sector / industry, market cap for benchmark and portfolio members.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "0169F113-DEE4-4CA5-8978-5BF0E63C1100",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "profiles",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Profiles: ISIN, sector (FMP)",
+      "x" : 1740,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/sec-submissions",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 1800
+      },
+      "id" : "642A5D6C-DFBD-40F3-8B52-FAB3C5845D54",
+      "kind" : "apiRead",
+      "notes" : "SIC, state of incorporation, EIN, fiscal year end, former names.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "B0B6345D-AECB-4AF1-A403-33ECD06E82E6",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "secSubmissions",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Issuer details (SEC submissions)",
+      "x" : 1970,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/gleif",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 1800
+      },
+      "id" : "CB6C61D3-D746-4746-B2B7-516021256D8B",
+      "kind" : "apiRead",
+      "notes" : "ISIN → LEI file and LEI records: legal form, entity status, countries.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "0D00D99F-4FD1-45E4-BC47-6180706FFC5C",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "leis",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "LEIs (GLEIF)",
+      "x" : 2200,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/fmp-prices",
+        "query" : [
+          {
+            "id" : "2F8DBB9A-FE5D-4898-B6CD-51F49D049012",
+            "key" : "since",
+            "value" : "{{since}}"
+          }
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+        {
+          "id" : "6A5F2F8B-CC2E-4BD6-B73B-F73719AFF839",
+          "name" : "since",
+          "required" : false,
+          "type" : "date",
+          "value" : ""
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 1,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 3600
+      },
+      "id" : "E13EFB18-3CE0-4F4B-933A-B431AAFAAA81",
+      "kind" : "apiRead",
+      "notes" : "EOD prices, incremental after the first 2 years. Needs an FMP API key; when it fails, the Nasdaq.com step fills the gaps.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "62EC86B7-5852-4B21-B503-02402215DAE5",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "prices",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "End-of-day prices (FMP)",
+      "x" : 2460,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/nasdaq-prices",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 1,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 3600
+      },
+      "id" : "CF1170D6-4027-499B-BAFB-8381A9915F34",
+      "kind" : "apiRead",
+      "notes" : "Free, no API key: EOD prices for the stock and bond funds (ETFs, ETNs, closed-end funds) held in portfolios and personal accounts, and for any benchmark or portfolio security FMP left without a recent price.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "1176E977-0C05-421A-BD5A-3BC9C21A665F",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "fundPrices",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Fund & fallback prices (Nasdaq.com)",
+      "x" : 2690,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/fmp-index-levels",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 600
+      },
+      "id" : "1118EE1F-997B-4734-B6F5-BAD2F70B8C9A",
+      "kind" : "apiRead",
+      "notes" : "^GSPC and ^DJI levels on the current plan.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "D0E47175-4B27-499C-BC82-3E090A956885",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "indexLevels",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Index levels (FMP)",
+      "x" : 2920,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/fmp-corporate-actions",
+        "query" : [
+          {
+            "id" : "07BF1A0A-5A4B-41ED-BDC1-0DC2FC1E5F8E",
+            "key" : "months",
+            "value" : "{{months}}"
+          }
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+        {
+          "id" : "E913D473-04E9-4A43-968F-FD0F1E11BC62",
+          "name" : "months",
+          "required" : false,
+          "type" : "number",
+          "value" : ""
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 3600
+      },
+      "id" : "CB40950D-AB12-46EA-BD75-9A57F04D922F",
+      "kind" : "apiRead",
+      "notes" : "Dividends, splits, symbol changes and delistings from the FMP calendars.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "34A26FF4-F45A-4EEA-A6C3-1175C5481BF1",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "corporateActions",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Corporate actions (FMP)",
+      "x" : 3150,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "GET",
+        "path" : "/status",
+        "query" : [
+
+        ],
+        "subscriptionID" : "1C812932-38A2-456F-8590-C8278FB0ACFA"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 120
+      },
+      "id" : "DDA724CF-7D1D-42B1-9DBD-1603C033B467",
+      "kind" : "apiRead",
+      "notes" : "Read-only: migrations, row counts, identifier coverage, benchmarks, price freshness, recent loads.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "03953765-6CC3-4280-9BC2-81BC3536F4CD",
+            "op" : "==",
+            "path" : "summary.failed",
+            "value" : "0"
+          }
+        ],
+        "description" : "No failed data-quality check: benchmarks and prices fresh, weights sum to 1, no failed loads (identifier coverage only warns)",
+        "outputName" : "quality",
+        "requiredFields" : [
+          "summary.failed",
+          "checks",
+          "benchmarks",
+          "prices.lastDate"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "SRM status & data quality",
+      "x" : 3410,
+      "y" : 600
+    }
+  ],
+  "run" : {
+    "agents" : "run",
+    "breakpointsEnabled" : true,
+    "data" : "mock",
+    "operations" : "interactive",
+    "stepDelay" : 0.3,
+    "stopOnError" : true
+  },
+  "subscriptions" : [
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8770",
+      "defaultHeaders" : [
+        {
+          "id" : "200B3699-31B4-4AC2-BD21-A3EDCE1E9C05",
+          "key" : "X-SRM-Dry-Run",
+          "value" : "1"
+        }
+      ],
+      "docsURL" : "",
+      "id" : "1C812932-38A2-456F-8590-C8278FB0ACFA",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "SRM loader service",
+      "notes" : "Start it with: python3 Services/mxservices.py start (needs psycopg2, like srm.py). X-SRM-Dry-Run: 1 makes every load report its srm.py command without running it — remove the header to load for real. Database and API keys come from srm.py's own configuration.",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MxAppsIOS/MxDataHUB/SRM",
+      "provider" : "MxDataHUB/SRM (srm.py) on this Mac",
+      "rateLimitPerMinute" : 0
+    }
+  ]
+}
