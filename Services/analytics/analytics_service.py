@@ -109,7 +109,7 @@ def benchmarks(conn):
 
 
 def portfolio_info(conn, code):
-    rows = fetch(conn, """SELECT p.portfolio_id, p.code, p.name, b.code AS benchmark
+    rows = fetch(conn, """SELECT p.portfolio_id, p.code, p.name, b.code AS benchmark, p.cash_balance
                             FROM srm.portfolio p LEFT JOIN srm.benchmark b ON b.benchmark_id = p.benchmark_id
                            WHERE upper(p.code) = upper(%s)""", (code,))
     if not rows:
@@ -148,26 +148,33 @@ def benchmark_weights(conn, code, as_of):
 
 
 def security_meta(conn, ids):
-    rows = fetch(conn, """SELECT security_id, coalesce(ticker, fmp_symbol, security_id::text) AS ticker, name,
-                                 coalesce(sector, 'Unclassified') AS sector
-                            FROM srm.v_security WHERE security_id = ANY(%s)""", (list(ids),))
+    # A fund has no sector: it is grouped by its family's style (Stock Funds, Bond Funds …), so attribution against a
+    # blended benchmark shows the stock / bond mix as allocation.
+    rows = fetch(conn, """SELECT v.security_id, coalesce(v.ticker, v.fmp_symbol, v.security_id::text) AS ticker, v.name,
+                                 coalesce(v.sector, f.style, 'Unclassified') AS sector
+                            FROM srm.v_security v LEFT JOIN srm.fund_profile f USING (security_id)
+                           WHERE v.security_id = ANY(%s)""", (list(ids),))
     return {r["security_id"]: r for r in rows}
 
 
 def price_panel(conn, ids, start, end):
-    """Adjusted closes (dates × securities) from each security's best-priced listing."""
+    """Closes (dates × securities): for each security one listing and one source over the whole window — the one with
+    the most days there, an adjusted source (FMP) preferred when it covers nearly as many. Mixing sources day by day
+    (FMP's dividend-adjusted closes, Massive's or Nasdaq.com's unadjusted ones on the same listing) would put false
+    returns into the series wherever the source switches."""
     rows = fetch(conn, """
-        WITH best AS (
-            SELECT DISTINCT ON (l.security_id) l.security_id, l.listing_id
-              FROM srm.listing l
-             WHERE l.security_id = ANY(%s)
-               AND EXISTS (SELECT 1 FROM srm.price p WHERE p.listing_id = l.listing_id)
-             ORDER BY l.security_id, l.is_primary DESC,
-                      (SELECT count(*) FROM srm.price p WHERE p.listing_id = l.listing_id) DESC)
+        WITH counts AS (
+            SELECT l.security_id, p.listing_id, p.source_id, count(*) AS n, bool_or(p.adj_close IS NOT NULL) AS adjusted
+              FROM srm.listing l JOIN srm.price p ON p.listing_id = l.listing_id
+             WHERE l.security_id = ANY(%s) AND p.price_date BETWEEN %s AND %s
+             GROUP BY 1, 2, 3),
+        best AS (
+            SELECT DISTINCT ON (security_id) security_id, listing_id, source_id FROM counts
+             ORDER BY security_id, n * CASE WHEN adjusted THEN 1.05 ELSE 1 END DESC)
         SELECT b.security_id, p.price_date, coalesce(p.adj_close, p.close) AS px
-          FROM best b JOIN srm.price p ON p.listing_id = b.listing_id
+          FROM best b JOIN srm.price p ON p.listing_id = b.listing_id AND p.source_id = b.source_id
          WHERE p.price_date BETWEEN %s AND %s
-         ORDER BY p.price_date""", (list(ids), start, end))
+         ORDER BY p.price_date""", (list(ids), start, end, start, end))
     dates = sorted({r["price_date"] for r in rows})
     index = {d: i for i, d in enumerate(dates)}
     ids = list(ids)
@@ -202,6 +209,46 @@ def daily_returns(panel, min_coverage=0.9):
         col[:first] = col[first]
     r = p[1:] / p[:-1] - 1
     return np.nan_to_num(r, nan=0.0, posinf=0.0, neginf=0.0), keep
+
+
+MARKET_PROXY = "VTI"
+
+
+def factor_betas(conn, returns, dates, market_col):
+    """(market betas, rate betas) of each column: OLS of daily returns on the market proxy's return and the daily
+    change in the 10-year Treasury yield (as a decimal). Zeros where the inputs are missing."""
+    n, k = returns.shape
+    if market_col is None or len(dates) < 3 or n < 30:
+        return np.zeros(k), np.zeros(k)
+    rows = fetch(conn, """SELECT obs_date, value FROM srm.market_series_value WHERE series_code = 'DGS10'
+                           AND obs_date BETWEEN %s AND %s""", (dates[0], dates[-1])) \
+        if fetch(conn, "SELECT to_regclass('srm.market_series_value') IS NOT NULL AS ok")[0]["ok"] else []
+    yields = {r["obs_date"]: float(r["value"]) / 100 for r in rows}
+    level, series = None, []
+    for d in dates:                      # the yield on each kept date, carried over days FRED has none
+        level = yields.get(d, level)
+        series.append(level)
+    first = next((y for y in series if y is not None), 0.0)
+    series = np.array([y if y is not None else first for y in series])
+    dy = np.diff(series)                 # one per return row
+    x = np.column_stack([np.ones(n), returns[:, market_col], dy[:n]])
+    coef, *_ = np.linalg.lstsq(x, returns, rcond=None)
+    return coef[1], coef[2]
+
+
+def risk_free(conn, as_of):
+    if not fetch(conn, "SELECT to_regclass('srm.market_series_value') IS NOT NULL AS ok")[0]["ok"]:
+        return None
+    rows = fetch(conn, """SELECT value FROM srm.market_series_value WHERE series_code = 'DGS3MO' AND obs_date <= %s
+                           ORDER BY obs_date DESC LIMIT 1""", (as_of,))
+    return round(float(rows[0]["value"]) / 100, 6) if rows else None
+
+
+def last_prices(conn, ids):
+    rows = fetch(conn, """SELECT s AS security_id, lp.close, lp.price_date FROM unnest(%s::bigint[]) s
+                           LEFT JOIN LATERAL srm.last_price(s) lp ON true""", (list(ids),))
+    by = {r["security_id"]: r for r in rows}
+    return [float(by[s]["close"]) if by.get(s) and by[s]["close"] is not None else None for s in ids]
 
 
 def ledoit_wolf(returns):
@@ -245,6 +292,13 @@ def build_inputs(conn, req, base_url):
     portfolio = req.get("portfolio") or None
     benchmark = req.get("benchmark") or None
 
+    # Securities asked for by ticker (or any identifier), besides a portfolio's and a benchmark's.
+    extra, unknown = [], []
+    for t in req.get("securities") or []:
+        row = fetch(conn, """SELECT coalesce(srm.us_security(%s),
+                                    (SELECT security_id FROM srm.resolve_identifier(%s) LIMIT 1)) AS sid""", (t, t))
+        (extra if row and row[0]["sid"] else unknown).append(row[0]["sid"] if row and row[0]["sid"] else t)
+
     current, snap, info = ({}, None, None)
     if portfolio:
         current, snap, info = portfolio_weights(conn, portfolio, as_of)
@@ -253,9 +307,13 @@ def build_inputs(conn, req, base_url):
         raise ValueError("a benchmark is needed for %s mode (or a portfolio that has one)" % mode)
     bench, bench_date = (benchmark_weights(conn, benchmark, as_of) if benchmark else ({}, None))
 
-    ids = list(dict.fromkeys(list(bench) + list(current)))
+    ids = list(dict.fromkeys(list(bench) + list(current) + extra))
     if not ids:
-        raise ValueError("nothing to analyse: give a portfolio and/or a benchmark")
+        raise ValueError("nothing to analyse: give a portfolio, a benchmark or securities"
+                         + (" (unknown: %s)" % ", ".join(map(str, unknown)) if unknown else ""))
+    market_id = fetch(conn, "SELECT srm.us_security(%s) AS sid", (MARKET_PROXY,))[0]["sid"]
+    if market_id and market_id not in ids:
+        ids.append(market_id)             # for betas; dropped from the output unless asked for
     start = as_of - dt.timedelta(days=int(lookback * 365 / TRADING_DAYS) + 10)
     dates, panel = price_panel(conn, ids, start, as_of)
     if len(dates) < 60:
@@ -270,6 +328,14 @@ def build_inputs(conn, req, base_url):
     meta = security_meta(conn, ids + excluded)
 
     returns, kept = daily_returns(panel)
+    betas, rate_betas = factor_betas(conn, returns, np.array(dates)[kept], ids.index(market_id) if market_id in ids else None)
+    market_vol = float(returns[:, ids.index(market_id)].std() * math.sqrt(TRADING_DAYS)) if market_id in ids else None
+    if market_id in ids and market_id not in bench and market_id not in current and market_id not in extra:
+        j = ids.index(market_id)
+        ids.pop(j)
+        panel = np.delete(panel, j, axis=1)
+        returns = np.delete(returns, j, axis=1)
+        betas, rate_betas = np.delete(betas, j), np.delete(rate_betas, j)
     cov_daily, delta = ledoit_wolf(returns)
     cov = cov_daily * TRADING_DAYS
     vol = np.sqrt(np.diag(cov))
@@ -319,6 +385,16 @@ def build_inputs(conn, req, base_url):
                        "to": str(np.array(dates)[kept][-1]), "shrinkage": round(delta, 4),
                        "covarianceModel": "Ledoit-Wolf shrinkage to scaled identity, annualised ×252"},
         "alpha": alpha_summary,
+        # Market beta (vs MARKET_PROXY) and rate beta (return per 1.00 rise in the 10-year Treasury yield, as a
+        # decimal: ≈ −duration for a bond fund), from one regression on the same daily returns; the latest 3-month
+        # Treasury yield as the risk-free rate.
+        "betas": [round(float(x), 4) for x in betas],
+        "rateBetas": [round(float(x), 4) for x in rate_betas],
+        "marketProxy": MARKET_PROXY,
+        "marketVol": round(market_vol, 6) if market_vol is not None else None,
+        "riskFree": risk_free(conn, as_of),
+        "lastPrices": last_prices(conn, ids),
+        "unknown": [str(u) for u in unknown],
     }
     inputs_id = uuid.uuid4().hex[:12]
     with CACHE_LOCK:
@@ -396,14 +472,27 @@ def benchmark_snapshot(conn, code, day):
     return {r["security_id"]: float(r["weight"]) / total for r in rows}
 
 
+CASH_ID = -1   # the account's uninvested cash, as an asset in attribution
+
+
 def portfolio_snapshot(conn, info, day):
-    """Weights of the portfolio's snapshot on `day`, valued with prices on or before that day."""
-    rows = fetch(conn, "SELECT security_id, weight FROM srm.portfolio_valuation(%s, %s)", (info["portfolio_id"], day))
+    """Weights of the portfolio's snapshot on `day`, valued with prices on or before that day. The account's cash
+    (srm.portfolio.cash_balance: today's, the only one kept) is an asset of its own, CASH_ID, next to the holdings'
+    market value on that day."""
+    rows = fetch(conn, "SELECT security_id, weight, market_value FROM srm.portfolio_valuation(%s, %s)",
+                 (info["portfolio_id"], day))
     weights = {r["security_id"]: float(r["weight"]) for r in rows if r["weight"] is not None}
     total = sum(weights.values())
     if total <= 0:
         raise ValueError("portfolio %s has no valued holdings on %s (prices missing?)" % (info["code"], day))
-    return {k: v / total for k, v in weights.items()}
+    weights = {k: v / total for k, v in weights.items()}
+    invested = sum(float(r["market_value"]) for r in rows if r["market_value"] is not None)
+    cash = float(info.get("cash_balance") or 0)
+    if cash > 0 and invested > 0:
+        share = cash / (invested + cash)
+        weights = {k: v * (1 - share) for k, v in weights.items()}
+        weights[CASH_ID] = share
+    return weights
 
 
 def snapshot_runs(months, chosen):
@@ -606,6 +695,14 @@ def attribution(conn, req):
         pa = np.array([last_price(j, a) for j in range(len(ids))])
         pb = np.array([last_price(j, b) for j in range(len(ids))])
         r_by_period.append(pb / pa - 1)
+    if any(CASH_ID in m for m in p_maps.values()):
+        # Cash earns the 3-month Treasury yield, a month at a time; it is its own group, so holding it shows as allocation.
+        rf = risk_free(conn, end) or 0.0
+        ids = ids + [CASH_ID]
+        meta[CASH_ID] = {"ticker": "CASH", "sector": "Cash"}
+        r_by_period = [np.append(r, rf / 12) for r in r_by_period]
+        wp_by_period = [vector(p_maps[d]) for d, _ in p_chosen]
+        wb_by_period = [vector(b_maps[d]) for d, _ in b_chosen]
     res = brinson_carino([meta[s]["ticker"] for s in ids], [meta[s]["sector"] for s in ids],
                          wp_by_period, wb_by_period, r_by_period, method)
     for k, (a, b) in enumerate(zip(bounds[:-1], bounds[1:])):

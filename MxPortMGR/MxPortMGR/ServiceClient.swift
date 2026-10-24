@@ -3,11 +3,10 @@
 //  MxPortMGR
 //
 //  The same optimizations through the Layer 3 services (MxAppsIOS/Services, started with
-//  `python3 Services/mxservices.py start`): the sample's inputs go inline (assets, sectors, benchmarkWeights,
-//  currentWeights, expectedReturns as alpha, covariance), so portfolio-java's /optimize/active and portfolio-cpp's
-//  /optimize/tracking work on exactly what the built-in engine sees, and the two answers can be compared. The analytics
-//  service's /attribution gets the sample's monthly returns and start-of-month weights inline the same way, or reads a
-//  real portfolio from the security master (MxDataHUB) by its code.
+//  `python3 Services/mxservices.py start`): the account's inputs from the analytics service go inline (assets,
+//  sectors, benchmarkWeights, currentWeights, expectedReturns as alpha, covariance), so portfolio-java's
+//  /optimize/active and portfolio-cpp's /optimize/tracking work on exactly what the built-in engine sees, and the two
+//  answers can be compared. The analytics service's /attribution reads the account from the security master by code.
 //
 
 import Foundation
@@ -104,29 +103,6 @@ nonisolated enum ServiceClient {
         let json = try await post("http://127.0.0.1:8772", "/attribution", ["portfolio": code, "method": method.rawValue],
                                   service: "analytics (Python, port 8772)")
         return attributionResult(json, method: method, engine: "analytics service · \(code) vs \(json["benchmark"] as? String ?? "")")
-    }
-
-    /// Attribution of the sample over the illustrative year by the analytics service, with the monthly returns and
-    /// start-of-month weights the built-in engine uses (AttributionEngine.months) passed inline.
-    static func attribution(sample p: Portfolio, method: AttributionEngine.Method) async throws -> AttributionResult {
-        let base = Universe.base
-        func weights(_ w: [Double]) -> [String: Double] {
-            Dictionary(uniqueKeysWithValues: w.indices.filter { w[$0] > 0 }.map { (base[$0].ticker, w[$0]) })
-        }
-        let periods: [[String: Any]] = AttributionEngine.months(p).map { m in
-            [
-                "period": m.month,
-                "returns": Dictionary(uniqueKeysWithValues: m.returns.indices.compactMap { i in m.returns[i].map { (base[i].ticker, $0) } }),
-                "portfolioWeights": weights(m.portfolio),
-                "benchmarkWeights": weights(m.benchmark),
-            ]
-        }
-        let body: [String: Any] = [
-            "portfolio": p.name, "benchmark": p.benchmark, "method": method.rawValue,
-            "assets": base.map(\.ticker), "sectors": base.map(\.sector), "periods": periods,
-        ]
-        let json = try await post("http://127.0.0.1:8772", "/attribution", body, service: "analytics (Python, port 8772)")
-        return attributionResult(json, method: method, engine: "analytics service · inline sample")
     }
 
     private static func attributionResult(_ json: [String: Any], method: AttributionEngine.Method, engine: String) -> AttributionResult {

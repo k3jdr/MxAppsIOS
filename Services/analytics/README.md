@@ -23,6 +23,14 @@ python3 analytics_service.py            # or: python3 Services/mxservices.py sta
 - Covariance: daily returns of adjusted closes over `lookbackDays`, Ledoit-Wolf shrinkage to a scaled identity,
   annualised ×252.
 - Alpha (active mode): Grinold α = IC × σ × z, z the winsorised cross-sectional score of 12-1 month momentum.
+- `"securities": ["VTI", "BND", …]` (with or without a portfolio / benchmark) adds securities by ticker; VTI, the
+  market proxy, is always priced. Each asset's market beta against VTI and rate beta against the daily change in the
+  10-year Treasury yield (DGS10, as a decimal: ≈ −duration for a bond fund) come from one regression on the same daily
+  returns; the payload adds `betas`, `rateBetas`, `marketProxy`, `marketVol` (VTI's annual volatility), `riskFree` (the
+  latest 3-month Treasury yield, DGS3MO), `lastPrices` and `unknown` (tickers not found).
+- Prices: one listing and one source per security over the whole window — the one with the most days, an adjusted
+  source (FMP) preferred when it covers nearly as many — so the series never switches between adjusted and unadjusted
+  closes.
 - The full payload (assets, names, sectors, benchmark and current weights, expected returns, covariance) is cached in
   memory (the last 20) under `/inputs/<id>`; the summary lists the universe size, exclusions, shrinkage and the top
   and bottom alpha names.
@@ -32,6 +40,10 @@ python3 analytics_service.py            # or: python3 Services/mxservices.py sta
 
 - Monthly periods; per period, by sector: allocation (wₚ − w_b)(R_b,s − R_b), selection w_b(Rₚ,s − R_b,s),
   interaction (wₚ − w_b)(Rₚ,s − R_b,s) (BHB measures allocation against zero).
+- Groups: the security's sector; a fund (no sector) by its family's style from `srm.fund_profile` (Stock Funds, Bond
+  Funds …, else Unclassified), so a blended benchmark's stock / bond mix shows as allocation; the account's cash
+  (`srm.portfolio.cash_balance`, today's — applied to every month) as the group Cash, earning the 3-month Treasury
+  yield.
 - Carino linking, so the linked effects add up to the compounded active return (`effects.residual` ≈ 0).
 - Also: per-period effects, sector table, top and bottom contributors, data gaps, and a `decisionContext`
   (`publish`, or `review` when prices are missing for more than 2% of weight or the residual is not zero).

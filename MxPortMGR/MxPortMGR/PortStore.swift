@@ -169,6 +169,8 @@ final class PortStore {
     }
 
     var portfolios: [Portfolio]
+    /// Bumped when the registry's risk numbers change outside srmInputs (SRMRegistry isn't observable).
+    var riskStamp = 0
     var selectedID: String {
         didSet {
             UserDefaults.standard.set(selectedID, forKey: "sample")
@@ -202,7 +204,8 @@ final class PortStore {
     var reportID = UserDefaults.standard.string(forKey: "report") ?? "jobs" {
         didSet { UserDefaults.standard.set(reportID, forKey: "report") }
     }
-    var currentReport: MarketReport { MarketReport.report(reportID) }
+    /// The open report, with its company (if it is about one) taken from the selected account.
+    var currentReport: MarketReport { MarketReport.report(reportID).resolved(for: portfolio) }
 
     func openReport(_ id: String) {
         reportID = id
@@ -250,7 +253,7 @@ final class PortStore {
         }
     }
 
-    /// Security-master symbols in the selected account (illustrative tickers are made up, so they never match).
+    /// Security-master symbols in the selected account.
     var heldEarningsKeys: Set<String> {
         guard portfolio.isSRM else { return [] }
         return Set(portfolio.holdings.compactMap { h in
@@ -268,16 +271,49 @@ final class PortStore {
     var errorMessage: String?
 
     init() {
-        var list = Samples.all
-        if let data = UserDefaults.standard.data(forKey: "myPortfolio"), let mine = try? JSONDecoder().decode(Portfolio.self, from: data) {
+        // Every account comes from the security master (loadAccounts): until it answers, the samples are empty
+        // placeholders and My Portfolio is the last copy kept on this Mac.
+        var list = Samples.lessons.map { l in
+            Portfolio(id: l.code, name: Samples.placeholderName(l.code), account: .taxable, benchmark: "SP500", style: l.style,
+                      holdings: [], lesson: l.lesson, lookFor: l.lookFor, trading: l.trading, symbol: l.symbol,
+                      source: "srm", srmCode: l.code)
+        }
+        if let data = UserDefaults.standard.data(forKey: "myPortfolioSRM"), let mine = try? JSONDecoder().decode(Portfolio.self, from: data),
+           mine.isSRM {
             list.append(mine)
         } else {
             list.append(Samples.myPortfolio)
         }
         portfolios = list
         let saved = UserDefaults.standard.string(forKey: "sample") ?? ""
-        selectedID = list.contains { $0.id == saved } ? saved : "core-satellite"
+        selectedID = list.contains { $0.id == saved } ? saved : "SAMPLE_CORE_SATELLITE"
         if let s = UserDefaults.standard.string(forKey: "screen").flatMap(Screen.init(rawValue:)) { screen = s }
+    }
+
+    /// Why the accounts couldn't be read (accounts service or database down), shown instead of any data.
+    var dataProblem: String?
+    var accountsLoaded = false
+
+    /// Reads every account from the security master: the samples and My Portfolio, with their benchmarks.
+    func loadAccounts() async {
+        do {
+            srmBenchmarks = try await AccountsClient.benchmarks()
+            for l in Samples.lessons {
+                let a = try await AccountsClient.account(l.code)
+                var p = Samples.portfolio(a, lesson: l)
+                apply(a, to: &p)
+                if let i = portfolios.firstIndex(where: { $0.id == l.code }) { portfolios[i] = p }
+                await useSRMBenchmark(p.benchmark)
+            }
+            dataProblem = nil
+            accountsLoaded = true
+        } catch {
+            dataProblem = "The sample accounts are in the security master: " + error.localizedDescription
+                + " Start the services (python3 Services/mxservices.py start) and make sure the database is reachable."
+        }
+        await openSRMAccount(srmCode)
+        clearResults()
+        srmInputs = nil
     }
 
     var portfolio: Portfolio {
@@ -286,8 +322,8 @@ final class PortStore {
             guard let i = portfolios.firstIndex(where: { $0.id == newValue.id }) else { return }
             portfolios[i] = newValue
             if newValue.id == "mine", let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: newValue.isSRM ? "myPortfolioSRM" : "myPortfolio")
-                if newValue.isSRM { scheduleSRMSave() }
+                UserDefaults.standard.set(data, forKey: "myPortfolioSRM")
+                scheduleSRMSave()
             }
             clearResults()
             srmInputs = nil
@@ -309,19 +345,6 @@ final class PortStore {
     var srmInputsNote: String?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
 
-    /// Switches My Portfolio between the illustrative universe and the security master; each keeps its own holdings.
-    func setMySource(srm: Bool) async {
-        guard let i = portfolios.firstIndex(where: { $0.id == "mine" }), portfolios[i].isSRM != srm else { return }
-        UserDefaults.standard.set(srm ? "srm" : "illustrative", forKey: "mySource")
-        if srm {
-            await openSRMAccount(srmCode)
-        } else {
-            let data = UserDefaults.standard.data(forKey: "myPortfolio")
-            portfolios[i] = data.flatMap { try? JSONDecoder().decode(Portfolio.self, from: $0) } ?? Samples.myPortfolio
-            clearResults()
-        }
-    }
-
     /// Loads (or starts) the account `code` from the security master as My Portfolio.
     func openSRMAccount(_ code: String) async {
         srmBusy = true
@@ -330,11 +353,8 @@ final class PortStore {
             srmBenchmarks = try await AccountsClient.benchmarks()
             srmAccountCodes = (try? await AccountsClient.accounts()) ?? []
             var mine = Samples.myPortfolio
-            mine.source = "srm"
             mine.srmCode = code
-            mine.holdings = []
-            mine.benchmark = srmBenchmarks.first { $0.code == "SP500" }?.code ?? srmBenchmarks.first?.code ?? "MXEQ"
-            mine.lesson = "Your account in the security master (srm on 192.168.0.223): real securities and prices, tax lots, and risk inputs from the analytics service."
+            mine.benchmark = srmBenchmarks.first { $0.code == "SP500" }?.code ?? srmBenchmarks.first?.code ?? "SP500"
             if srmAccountCodes.contains(where: { $0.caseInsensitiveCompare(code) == .orderedSame }) {
                 let account = try await AccountsClient.account(code)
                 apply(account, to: &mine)
@@ -349,17 +369,20 @@ final class PortStore {
             clearResults()
             srmInputs = nil
         } catch {
-            errorMessage = error.localizedDescription + " My Portfolio in the security master needs the accounts service: python3 Services/mxservices.py start accounts"
+            dataProblem = dataProblem ?? ("My Portfolio is in the security master: " + error.localizedDescription
+                + " Start the accounts service: python3 Services/mxservices.py start accounts")
         }
     }
 
     /// Holdings and lots from the service's account.
     private func apply(_ a: SRMAccount, to p: inout Portfolio) {
         p.srmCode = a.code
-        p.name = "My Portfolio"
         p.account = a.accountType == "retirement" ? .retirement : a.accountType == "roth" ? .roth : .taxable
         if let b = a.benchmark { p.benchmark = b }
-        if a.approach == "active" { myApproach = .active } else if a.approach == "passive" { myApproach = .passive }
+        if p.id == "mine" {
+            p.name = "My Portfolio"
+            if a.approach == "active" { myApproach = .active } else if a.approach == "passive" { myApproach = .passive }
+        }
         var byKey: [String: [SRMLot]] = [:]
         var order: [String] = []
         for lot in a.lots {
@@ -475,14 +498,17 @@ final class PortStore {
         portfolio = mine
     }
 
-    /// Analytics-service inputs for the srm account (saved first, so the service sees the latest lots).
+    /// Analytics-service inputs for the selected account (My Portfolio is saved first, so the service sees its lots).
     func loadSRMInputs() async {
         let p = portfolio
-        guard p.isSRM, let code = p.srmCode else { return }
-        saveTask?.cancel()
-        await saveSRMAccount()
+        guard let code = p.srmCode else { return }
+        if p.id == "mine" {
+            saveTask?.cancel()
+            await saveSRMAccount()
+        }
         do {
-            let mode = myApproach == .active ? "active" : "tracking"
+            let active = p.id == "mine" ? myApproach == .active : p.style != .passive
+            let mode = active ? "active" : "tracking"
             let (inputs, note) = try await ServiceClient.srmInputs(portfolio: code, benchmark: p.benchmark, mode: mode)
             srmInputs = inputs
             srmInputsNote = note
@@ -492,30 +518,17 @@ final class PortStore {
         }
     }
 
-    /// Adds a security to My Portfolio (to the position if already held), with a tax lot when a cost is given.
-    func addToMine(_ ticker: String, value: Double, cost: Double?, acquired: Date?) {
-        guard var mine = portfolios.first(where: { $0.id == "mine" }), value > 0 else { return }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let lot = cost.map { TaxLot(acquired: formatter.string(from: acquired ?? Date()), share: 0, costBasis: $0) }
-        if let i = mine.holdings.firstIndex(where: { $0.ticker == ticker }) {
-            var h = mine.holdings[i]
-            let old = h.value, total = old + value
-            if h.lots.isEmpty, lot != nil { h.lots = [TaxLot(acquired: "—", share: 1, costBasis: old)] }
-            if !h.lots.isEmpty {
-                h.lots = h.lots.map { var l = $0; l.share *= old / total; return l }
-                var l = lot ?? TaxLot(acquired: formatter.string(from: Date()), share: 0, costBasis: value)
-                l.share = value / total
-                h.lots.append(l)
-            }
-            h.value = total
-            mine.holdings[i] = h
-        } else {
-            var h = Holding(ticker: ticker, value: value)
-            if var l = lot { l.share = 1; h.lots = [l] }
-            mine.holdings.append(h)
+    /// Gives the selected account's holdings their market and rate betas from the analytics service when they don't
+    /// have them yet (the report walkthroughs and the Morning Briefing move each holding by them).
+    func ensureHoldingRisk() async {
+        let missing = portfolio.holdings.compactMap(\.security).filter { !$0.hasRisk && $0.assetClass != .cash }
+        guard !missing.isEmpty else { return }
+        do {
+            _ = try await ServiceClient.riskInputs(securities: missing.map(\.displayTicker))
+            riskStamp += 1
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        portfolio = mine
     }
 
     func removeFromMine(_ ticker: String) {
@@ -524,20 +537,17 @@ final class PortStore {
         portfolio = mine
     }
 
+    /// Reads My Portfolio again from the security master (dropping unsaved edits).
     func resetMyPortfolio() {
-        UserDefaults.standard.removeObject(forKey: "myPortfolio")
-        UserDefaults.standard.set("illustrative", forKey: "mySource")
-        if let i = portfolios.firstIndex(where: { $0.id == "mine" }) { portfolios[i] = Samples.myPortfolio }
-        clearResults()
+        Task { await openSRMAccount(srmCode) }
     }
 
-    /// Copies a sample's holdings into My Portfolio to edit.
+    /// Copies a sample's holdings and lots into My Portfolio to edit; saved to the security master.
     func copyToMine(_ p: Portfolio) {
-        var mine = Samples.myPortfolio
-        mine.holdings = p.holdings.filter { $0.security != nil }
+        guard var mine = portfolios.first(where: { $0.id == "mine" }) else { return }
+        mine.holdings = p.holdings
         mine.benchmark = p.benchmark
         mine.account = p.account
-        UserDefaults.standard.set("illustrative", forKey: "mySource")
         portfolio = mine
         selectedID = "mine"
     }
@@ -550,15 +560,15 @@ final class PortStore {
         for k in reports.keys { reports[k]?.result = nil }
     }
 
-    /// The optimizers' inputs: the illustrative factor model, or for a security-master account the analytics service's.
-    var inputs: OptimizationInputs { portfolio.isSRM ? srmInputs ?? .empty : OptimizationInputs(portfolio: portfolio) }
+    /// The optimizers' inputs: the analytics service's for the selected account (empty until loaded).
+    var inputs: OptimizationInputs { srmInputs ?? .empty }
 
     func go(_ s: Screen) { screen = s }
 
     // MARK: Runs
 
     func optimize() async {
-        if portfolio.isSRM, srmInputs == nil { await loadSRMInputs() }
+        if srmInputs == nil { await loadSRMInputs() }
         guard inputs.n > 0 else { return }
         let inputs = inputs, settings = activeSettings
         busy = true
@@ -576,7 +586,7 @@ final class PortStore {
     }
 
     func buildTracker() async {
-        if portfolio.isSRM, srmInputs == nil { await loadSRMInputs() }
+        if srmInputs == nil { await loadSRMInputs() }
         guard inputs.n > 0 else { return }
         let inputs = inputs, settings = trackingSettings
         busy = true
@@ -600,50 +610,14 @@ final class PortStore {
         busy = true
         defer { busy = false }
         do {
-            if p.isSRM, let code = p.srmCode {
-                await saveSRMAccount()
-                attribution = try await ServiceClient.attribution(portfolio: code, method: method)
-                message = "Attribution: \(attribution!.engine)"
-            } else if attributeMaster {
-                attribution = try await ServiceClient.attribution(portfolio: masterPortfolio, method: method)
-                message = "Attribution: \(attribution!.engine)"
-            } else if engine == .services {
-                // The sample's monthly inputs go to the analytics service inline; the built-in engine checks its numbers.
-                var service = try await ServiceClient.attribution(sample: p, method: method)
-                let builtIn = await Task.detached { AttributionEngine.run(p, method: method) }.value
-                let gap = Self.attributionDifference(service, builtIn)
-                service.assumptions = builtIn.assumptions.dropLast() + service.assumptions
-                service.reasons += builtIn.reasons.filter { $0.hasSuffix("not in the security master") }
-                attribution = service
-                message = gap < 1e-5
-                    ? "Attribution: \(service.engine) — matches the built-in engine (largest difference \(String(format: "%.1e", gap)))"
-                    : "Attribution: \(service.engine) — differs from the built-in engine by up to \(String(format: "%.2e", gap))"
-            } else {
-                attribution = await Task.detached { AttributionEngine.run(p, method: method) }.value
-                message = "Attribution: \(attribution!.engine)"
-            }
+            // The analytics service attributes the account from its holdings history in the security master.
+            let code = attributeMaster ? masterPortfolio : (p.srmCode ?? "")
+            if p.id == "mine", !attributeMaster { await saveSRMAccount() }
+            attribution = try await ServiceClient.attribution(portfolio: code, method: method)
+            message = "Attribution: \(attribution!.engine)"
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    /// The largest difference between two attributions' returns and effects: totals, by sector and by month.
-    nonisolated static func attributionDifference(_ a: AttributionResult, _ b: AttributionResult) -> Double {
-        var d = [a.portfolioReturn - b.portfolioReturn, a.benchmarkReturn - b.benchmarkReturn,
-                 a.allocation - b.allocation, a.selection - b.selection, a.interaction - b.interaction]
-        let bGroups = Dictionary(uniqueKeysWithValues: b.groups.map { ($0.group, $0) })
-        for g in a.groups {
-            guard let h = bGroups[g.group] else { d.append(g.total); continue }
-            d += [g.portfolioWeight - h.portfolioWeight, g.benchmarkWeight - h.benchmarkWeight,
-                  g.allocation - h.allocation, g.selection - h.selection, g.interaction - h.interaction]
-        }
-        for h in b.groups where !a.groups.contains(where: { $0.group == h.group }) { d.append(h.total) }
-        if a.periods.count != b.periods.count { return .infinity }
-        for (x, y) in zip(a.periods, b.periods) {
-            d += [x.portfolioReturn - y.portfolioReturn, x.benchmarkReturn - y.benchmarkReturn,
-                  x.allocation - y.allocation, x.selection - y.selection, x.interaction - y.interaction]
-        }
-        return d.map(abs).max() ?? 0
     }
 
     func reportState(_ r: MarketReport) -> ReportState {

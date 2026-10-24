@@ -219,16 +219,6 @@ nonisolated enum Briefing {
 
     static let fedOdds: [(String, Double)] = [("Cut 0.50", 4), ("Cut 0.25", 58), ("Hold", 36), ("Hike 0.25", 2)]
 
-    static let analysts: [(String, String, String, String)] = [
-        ("HLX", "Upgrade", "Hold → Buy, target $355", "Harbor Street Research (fictional)"),
-        ("ROV", "Downgrade", "Buy → Hold, target $36", "Northline Capital Markets (fictional)"),
-        ("VTA", "Initiate", "Outperform, target $165", "Meridian Securities (fictional)"),
-        ("PTR", "Downgrade", "Overweight → Neutral", "Harbor Street Research (fictional)"),
-        ("CSH", "Target cut", "$170 → $158", "Bayview Partners (fictional)"),
-    ]
-
-    static let earnings: [(String, String)] = [("FBK", "Before the open"), ("PLX", "Before the open"), ("NWD", "After the close"), ("STM", "After the close")]
-
     static let flows: [(String, Double)] = [("U.S. equity", -8.2), ("International equity", 1.0), ("Emerging markets", -0.6), ("Bonds", 3.1), ("Money market", 21.4)]
 
     static let credit: [(String, Double, Double)] = [("Investment-grade spread", 0.92, 0.03), ("High-yield spread", 3.18, 0.12)]
@@ -238,16 +228,17 @@ struct MorningBriefingView: View {
     @Bindable var store: PortStore
 
     var body: some View {
+        let _ = store.riskStamp
         let p = store.portfolio
         let preMarket = MarketReport.accountMove(p, market: Briefing.futuresMove, rate: Briefing.futuresRate)
         StepPage(store: store, subtitle: "\(Briefing.date): the ten things many institutional PMs review before the open.", lessonTitle: "How to read a morning briefing", lesson: [
             "A briefing answers three questions: what happened overnight, what is scheduled today, and how investors are positioned and feeling.",
             "Professionals use it to manage risk around events in the next hours and days. For a long-term account, it is context — what you'll read about today — not a to-do list.",
-            "Every number here is illustrative. Point at a panel for what it measures and how a long-term investor might use it.",
+            "The market panels are an illustrative morning in the shape of a real one; your account and today's earnings list are real (security master, Nasdaq.com and FMP). Point at a panel for what it measures and how a long-term investor might use it.",
         ]) {
             HStack(spacing: 10) {
                 MetricTile(title: "Your account before the open", value: money(preMarket), caption: "if it moved with S&P futures (\(signedPct(Briefing.futuresMove, 1)))",
-                           tint: Color.signed(preMarket), help: "An estimate from the futures move and the factor model: what \(p.name) would be worth at the open if prices followed the futures. It often changes by the close.")
+                           tint: Color.signed(preMarket), help: "An estimate from the futures move and each holding's market and rate betas (analytics service, from real prices): what \(p.name) would be worth at the open if prices followed the futures. It often changes by the close.")
                 MetricTile(title: "Next big event", value: "CPI 8:30", caption: "consensus core +0.3% m/m", tint: .orange, help: "The highest-impact release on today's calendar.")
                 MetricTile(title: "VIX", value: String(format: "%.1f", Briefing.vix.last!), caption: "+2.8 today, long-run average ≈ 19", tint: .orange, help: "The market's expected 30-day volatility of the S&P 500, from option prices; it rises when investors pay up for protection.")
                 MetricTile(title: "Fed: odds of a cut next meeting", value: "62%", caption: "from fed funds futures", help: "Probabilities implied by fed funds futures prices.")
@@ -302,26 +293,23 @@ struct MorningBriefingView: View {
                 }
                 panel(6, "Analyst upgrades and downgrades", "arrow.up.arrow.down", "Changes in ratings and price targets from sell-side research, published before the open.",
                       "Single-stock moves on ratings are often short-lived; they matter more for concentrated accounts.") {
-                    ForEach(Briefing.analysts, id: \.0) { a in
-                        HStack(spacing: 8) {
-                            Text(a.0).font(.callout.monospaced()).frame(width: 44, alignment: .leading)
-                            Text(a.1).font(.callout.weight(.semibold)).foregroundStyle(a.1 == "Upgrade" || a.1 == "Initiate" ? .green : .red).frame(width: 84, alignment: .leading)
-                            Text(a.2).font(.callout)
-                            Spacer()
-                            if held(a.0) { Text("you hold").font(.caption2).padding(.horizontal, 5).background(Color.accentColor.opacity(0.15), in: Capsule()) }
-                        }
-                        .help(a.3)
-                    }
+                    Text("No source of analyst ratings is loaded in the security master yet, so there is nothing real to show here.")
+                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 panel(7, "Earnings releases", "chart.bar.doc.horizontal", "Companies reporting today, before the open or after the close.",
                       "Check whether you hold them directly; through an index fund each is a small part of the account.") {
-                    ForEach(Briefing.earnings, id: \.0) { e in
+                    let today = (store.earnings.days[EarningsDates.today()]?.listed ?? []).sorted { $0.capKey > $1.capKey }.prefix(6)
+                    if today.isEmpty {
+                        Text(store.earnings.isLoading(EarningsDates.today()) ? "Reading today's earnings list…" : "No companies on today's list.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(Array(today)) { e in
                         HStack {
-                            Text(e.0).font(.callout.monospaced()).frame(width: 44, alignment: .leading)
-                            Text(Universe.security(e.0)?.name ?? "").font(.callout)
+                            Text(e.symbol).font(.callout.monospaced()).frame(width: 52, alignment: .leading)
+                            Text(e.name).font(.callout).lineLimit(1)
                             Spacer()
-                            Text(e.1).font(.caption).foregroundStyle(.secondary)
-                            if held(e.0) { Text("you hold").font(.caption2).padding(.horizontal, 5).background(Color.accentColor.opacity(0.15), in: Capsule()) }
+                            Text(e.time.title).font(.caption).foregroundStyle(.secondary)
+                            if store.heldEarningsKeys.contains(e.key) { Text("you hold").font(.caption2).padding(.horizontal, 5).background(Color.accentColor.opacity(0.15), in: Capsule()) }
                         }
                     }
                     HStack(spacing: 14) {
@@ -360,9 +348,10 @@ struct MorningBriefingView: View {
                 }
             }
         }
+        .task { if store.earnings.days[EarningsDates.today()] == nil { _ = await store.earnings.load([EarningsDates.today()]) } }
+        .task(id: store.portfolio.holdings.map(\.ticker)) { await store.ensureHoldingRisk() }
     }
 
-    private func held(_ ticker: String) -> Bool { store.portfolio.holdings.contains { $0.ticker == ticker } }
 
     private func panel<Content: View>(_ n: Int, _ title: String, _ symbol: String, _ what: String, _ use: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {

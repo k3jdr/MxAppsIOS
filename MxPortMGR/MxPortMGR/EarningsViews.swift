@@ -234,7 +234,7 @@ struct EarningsDayView: View {
             MetricTile(title: "In your account", value: store.portfolio.isSRM ? mine.count.formatted() : "—",
                        caption: store.portfolio.isSRM ? mine.prefix(4).map(\.symbol).joined(separator: " ") : "My Portfolio in the security master",
                        tint: mine.isEmpty ? .primary : .accentColor,
-                       help: "Companies you hold directly in My Portfolio from the security master (real tickers). The samples' companies are made up, so they never match.")
+                       help: "Companies held directly in the account selected in the toolbar (My Portfolio or a sample), from the security master.")
         }
     }
 

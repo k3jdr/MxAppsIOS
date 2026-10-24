@@ -16,7 +16,7 @@ struct SamplesView: View {
         StepPage(store: store, subtitle: "Accounts built to show the cases real portfolios run into. Use one in the report walkthroughs, or copy it into My Portfolio, to learn to read the results.", lesson: [
             "Each sample is one edge case: what a tool should flag, and what its results look like when something is unusual.",
             "Use a sample in the report walkthroughs — the same news lands very differently on a concentrated, an income and a cash-heavy account — or copy it into My Portfolio to work through its steps.",
-            "My Portfolio is yours to edit, in the same illustrative universe; it is remembered between launches.",
+            "Every sample is an account in the security master, built from real securities bought on real dates at their real closes (srm.py load sample-portfolios). My Portfolio is yours to edit, kept there too.",
         ]) {
             AdaptiveColumns(minimum: 340, spacing: 14, rowSpacing: 14) {
                 ForEach(store.portfolios) { p in card(p).copyBlock() }

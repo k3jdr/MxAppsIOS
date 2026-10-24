@@ -266,7 +266,7 @@ struct HoldingsTable: View {
             }
             // Every row visible, up to 40.
             .frame(minHeight: CGFloat(max(min(p.holdings.count, 40), 6)) * 26 + 34)
-            // The links on the security master's holdings (illustrative ones are kept on this Mac).
+            // The links on the holdings, kept in the security master.
             .task(id: p.holdings.map(\.ticker)) {
                 await SecurityLinks.shared.load(securityIDs: p.holdings.compactMap { LinkTarget.holding($0)?.securityID })
             }
@@ -367,7 +367,7 @@ struct OptimizeView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: "Turn forecasts into position sizes, inside limits you choose.", lesson: [
-            "The optimizer maximises forecast active return minus a penalty for active risk, starting from the benchmark. Here the forecasts are an illustrative alpha for each company — the kind of view a manager or a research service provides.",
+            "The optimizer maximises forecast active return minus a penalty for active risk, starting from the benchmark. Here the forecasts are the analytics service's momentum alpha for each company (12-1 month price momentum, scaled by an information coefficient) — a simple, transparent stand-in for the view a manager or a research service provides.",
             "The tracking-error target is your risk budget: how far from the benchmark you are willing to be. The weight, active-weight and sector limits stop the optimizer from betting everything on its favourite forecast.",
             "Read the result as a conversation: which limits bind tell you what is holding the portfolio back; the decision says whether the improvement is worth the trading.",
         ]) {
@@ -715,14 +715,14 @@ struct AttributionView: View {
     }
 
     private var controls: some View {
-        Box(title: "Attribute", symbol: "slider.horizontal.3", help: "What to attribute — the sample over the illustrative year, or a real portfolio in the security master through the analytics service — and the method.") {
+        Box(title: "Attribute", symbol: "slider.horizontal.3", help: "What to attribute — the selected account, or another portfolio in the security master — with the analytics service, over its real holdings history and returns, and the method.") {
             HStack(spacing: 14) {
                 Picker("Source", selection: $store.attributeMaster) {
-                    Text("This account, illustrative year").tag(false)
-                    Text("Security-master portfolio (analytics service)").tag(true)
+                    Text("This account").tag(false)
+                    Text("Another security-master portfolio").tag(true)
                 }
                 .frame(width: 420)
-                .help("Attribute the sample here, or a portfolio from MxDataHUB with the analytics service on port 8772")
+                .help("Attribute the account selected in the toolbar, or another portfolio from MxDataHUB, with the analytics service on port 8772")
                 if store.attributeMaster {
                     TextField("Portfolio code", text: $store.masterPortfolio).frame(width: 160)
                         .help("A portfolio code from MxDataHUB ▸ Portfolios, e.g. DEMO_GROWTH")

@@ -5,7 +5,7 @@
 //  MxPortMGR's side of the links on tickers and names (Shared/Links): which security a row of Earnings by Day or My
 //  Holdings is, and where its link is kept — in the security master through the accounts service (Services/accounts,
 //  /links), so it shows in MxDataHUB too. A company in Earnings by Day is looked up by its ticker; a holding from the
-//  security master by its id; the illustrative market's made-up securities keep their links on this Mac.
+//  security master by its id.
 //
 
 import Foundation

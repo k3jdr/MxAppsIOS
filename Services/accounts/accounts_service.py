@@ -38,6 +38,7 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          expenditure, depreciation and free cash flow, newest first: from the security
                                          master (srm.fundamental_quarter, V015) when srm.py load fmp-fundamentals has
                                          loaded the company in the last 14 days, else from FMP; source=fmp asks FMP
+    POST /prices/monthly                 {tickers: [...], months: 12} → month-end closes per ticker (one source each)
     POST /securities/lookup              {tickers: [...]} → the security master's security for each (current U.S.
                                          listing, OTC included): name, type, MIC, country, market cap
     GET  /market/series                  the market series in the security master (V015: VIX family, Treasury yields,
@@ -154,14 +155,16 @@ SECURITY_COLUMNS = f"""
     (SELECT md.beta FROM srm.security_market_data md WHERE md.security_id = v.security_id AND md.beta IS NOT NULL
       ORDER BY md.as_of_date DESC LIMIT 1) AS beta,
     (SELECT md.market_cap FROM srm.security_market_data md WHERE md.security_id = v.security_id AND md.market_cap IS NOT NULL
-      ORDER BY md.as_of_date DESC LIMIT 1) AS market_cap"""
+      ORDER BY md.as_of_date DESC LIMIT 1) AS market_cap,
+    (SELECT fp.expense_ratio FROM srm.fund_profile fp WHERE fp.security_id = v.security_id) AS expense_ratio"""
 
 
 def security_out(r):
     return {"securityId": r["security_id"], "ticker": r["ticker"], "mic": r["mic"], "name": r["name"],
             "securityType": r["security_type"], "assetClass": r["asset_class"], "sector": r["sector"],
             "industry": r["industry"], "isin": r["isin"], "cusip": r["cusip"], "kind": kind_of(r),
-            "price": r["price"], "priceDate": r["price_date"], "beta": r["beta"], "marketCap": r["market_cap"]}
+            "price": r["price"], "priceDate": r["price_date"], "beta": r["beta"], "marketCap": r["market_cap"],
+            "expenseRatio": float(r["expense_ratio"]) / 100 if r.get("expense_ratio") is not None else None}
 
 
 SORTS = {
@@ -827,6 +830,35 @@ def lookup_tickers(conn, body):
                                          "country": r["country_code"], "marketCap": r["market_cap"]} for r in rows}}
 
 
+# --- Month-end prices (MxPortMGR's Rebalance Bands: how the mix drifted over the past year) ---------------------
+
+def monthly_prices(conn, body):
+    """Month-end closes of these tickers over the last `months` months: {ticker: [{date, close}]}. One price source
+    per security (the one with the most days; FMP's adjusted closes preferred when they cover nearly as many)."""
+    tickers = sorted({str(t).strip().upper() for t in body.get("tickers") or [] if str(t).strip()})[:500]
+    months = min(max(int(body.get("months") or 12), 1), 60)
+    rows = fetch(conn, """
+        WITH t AS (SELECT t AS ticker, srm.us_security(t) AS sid FROM unnest(%s::text[]) t),
+        counts AS (
+            SELECT t.ticker, p.listing_id, p.source_id, count(*) AS n, bool_or(p.adj_close IS NOT NULL) AS adjusted
+              FROM t JOIN srm.listing l ON l.security_id = t.sid JOIN srm.price p ON p.listing_id = l.listing_id
+             WHERE p.price_date >= current_date - make_interval(months => %s + 1)
+             GROUP BY 1, 2, 3),
+        best AS (SELECT DISTINCT ON (ticker) ticker, listing_id, source_id FROM counts
+                  ORDER BY ticker, n * CASE WHEN adjusted THEN 1.05 ELSE 1 END DESC),
+        daily AS (
+            SELECT b.ticker, p.price_date, coalesce(p.adj_close, p.close) AS close,
+                   row_number() OVER (PARTITION BY b.ticker, date_trunc('month', p.price_date)
+                                      ORDER BY p.price_date DESC) AS rn
+              FROM best b JOIN srm.price p ON p.listing_id = b.listing_id AND p.source_id = b.source_id
+             WHERE p.price_date >= current_date - make_interval(months => %s + 1))
+        SELECT ticker, price_date, close FROM daily WHERE rn = 1 ORDER BY ticker, price_date""", (tickers, months, months))
+    out = {}
+    for r in rows:
+        out.setdefault(r["ticker"], []).append({"date": r["price_date"], "close": float(r["close"])})
+    return {"months": months, "prices": out}
+
+
 # --- Market series (srm.market_series, V015) -------------------------------------------------------------------------
 
 def market_series(conn, q):
@@ -1012,6 +1044,8 @@ class Handler(BaseHTTPRequestHandler):
                     out = market_series(conn, q)
                     if isinstance(out, str):
                         return self.send_text(200, out, "text/csv; charset=utf-8")
+                elif parts == ["prices", "monthly"] and method == "POST":
+                    out = monthly_prices(conn, body)
                 elif parts == ["securities", "lookup"] and method == "POST":
                     out = lookup_tickers(conn, body)
                 elif parts == ["links", "query"] and method == "POST":

@@ -206,8 +206,10 @@ def load_prices(conn, cfg, args):
                 run.reject(symbol, "no current listing to attach prices to")
                 continue
             listing_id, currency, last = row
-            start = max(since, (last - datetime.timedelta(days=5)).isoformat()) if last else since
-            if last and last >= datetime.date.today() - datetime.timedelta(days=1) and not args.force:
+            # backfill (sample-portfolios): from --since even when recent prices exist, for older history.
+            backfill = getattr(args, "backfill", False)
+            start = max(since, (last - datetime.timedelta(days=5)).isoformat()) if last and not backfill else since
+            if last and last >= datetime.date.today() - datetime.timedelta(days=1) and not args.force and not backfill:
                 continue
             try:
                 data = api.get("historical-price-eod/full", symbol=symbol, **{"from": start})

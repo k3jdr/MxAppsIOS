@@ -36,25 +36,6 @@ nonisolated struct OptimizationInputs: Sendable {
 
     static let empty = OptimizationInputs(assets: [], sectors: [], benchmark: [], current: [], alpha: [], cov: [])
 
-    /// The benchmark's members and the account's look-through holdings (unknown tickers left out).
-    init(portfolio: Portfolio) {
-        let b = portfolio.benchmarkInfo.weights
-        let c = portfolio.lookThrough
-        let names = Set(b.keys).union(c.keys)
-        let ordered = Universe.base.map(\.ticker).filter { names.contains($0) }
-        assets = ordered
-        sectors = ordered.map { Universe.security($0)?.sector ?? "Unknown" }
-        benchmark = ordered.map { b[$0] ?? 0 }
-        let cs = c.values.reduce(0, +)
-        current = ordered.map { cs > 0 ? (c[$0] ?? 0) / cs : 0 }
-        alpha = ordered.map { Universe.security($0)?.alpha ?? 0 }
-        let idx = ordered.map { Universe.baseIndex[$0]! }
-        let n = ordered.count
-        var m = [Double](repeating: 0, count: n * n)
-        for i in 0..<n { for j in 0..<n { m[i * n + j] = Universe.covariance[idx[i]][idx[j]] } }
-        cov = m
-    }
-
     func mul(_ x: [Double]) -> [Double] {
         var out = [Double](repeating: 0, count: n)
         cov.withUnsafeBufferPointer { c in

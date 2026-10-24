@@ -112,9 +112,14 @@ struct TrackView: View {
         let p = store.portfolio
         let trackerTax = store.taxEstimate(r.trades)
         let fundTax = store.sellAllTaxEstimate()
-        let fund = p.benchmark == "MXEQ" ? "MXTM" : "MXTM + MXBD at \(p.benchmark)'s mix"
-        let fundFee = p.benchmark == "MXEQ" ? 0.0003 : 0.00034
-        return Box(title: "Three ways to be passive", symbol: "scalemass", help: "Today's account, the tracker, and one index fund side by side: tracking error, cost and the tax of switching (illustrative).") {
+        // The one-fund alternative: VTI for a stock benchmark; VTI and BND at a blended benchmark's mix (BAL6040, BAL3070).
+        let parts = Portfolio.classes(of: p.benchmarkInfo.weights)
+        let stockShare = parts[.equity] ?? 1
+        let blended = stockShare < 0.999
+        let fund = blended ? "VTI + BND at \(p.benchmark)'s mix" : "VTI"
+        let vtiFee = Universe.security("VTI")?.fee, bndFee = Universe.security("BND")?.fee
+        let fundFee: Double? = blended ? vtiFee.flatMap { v in bndFee.map { v * stockShare + $0 * (1 - stockShare) } } : vtiFee
+        return Box(title: "Three ways to be passive", symbol: "scalemass", help: "Today's account, the tracker, and one index fund side by side: tracking error, yearly fee (expense ratios from the security master's fund profiles) and the tax of switching.") {
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
                 GridRow { Text("").bold(); Text("Tracking error").bold(); Text("Yearly fee").bold(); Text("Trades").bold(); Text("Tax to switch").bold(); Text("Notes").bold() }
                 Divider().gridCellColumns(6)
@@ -137,7 +142,7 @@ struct TrackView: View {
                 GridRow {
                     Text("One index fund (\(fund))")
                     Text("≈ 0.05%").monospacedDigit()
-                    Text(pct(fundFee, 2)).monospacedDigit()
+                    Text(fundFee.map { pct($0, 2) } ?? "—").monospacedDigit()
                     Text("\(p.holdings.count + 1)")
                     Text(p.account.isTaxable ? money(fundTax.tax) : "none").monospacedDigit()
                     Text("Simplest; the fund rebalances itself. Switching in a taxable account can be done gradually.").foregroundStyle(.secondary)
@@ -154,6 +159,9 @@ struct BandsView: View {
     @Bindable var store: PortStore
     @State private var relative = false
     @State private var toEdge = false
+    /// The account's stock share at each month-end of the past year, holding today's positions (real closes).
+    @State private var history: [(month: String, equity: Double)] = []
+    @State private var historyNote: String?
 
     var body: some View {
         let p = store.portfolio
@@ -161,7 +169,6 @@ struct BandsView: View {
         let now = p.classWeights()
         let band: (AssetClass) -> Double = { c in relative ? (targets[c] ?? 0) * 0.25 : store.bandWidth }
         let outside = AssetClass.allCases.filter { abs((now[$0] ?? 0) - (targets[$0] ?? 0)) > band($0) + 1e-9 }
-        let drift = AttributionEngine.drift(p).account.map { Portfolio.classes(of: Dictionary(uniqueKeysWithValues: zip(Universe.base.map(\.ticker), $0))) }
         let trades = rebalanceTrades(p, targets: targets, band: band, toEdge: toEdge)
         let estimate = store.taxEstimate(trades)
         StepPage(store: store, subtitle: "When to trade back to the plan's mix — by rule, not by mood.", lesson: [
@@ -198,19 +205,24 @@ struct BandsView: View {
                         BandTrack(label: c.rawValue, target: targets[c] ?? 0, band: band(c), now: now[c] ?? 0)
                     }
                 }
-                Box(title: "Stocks through the year, untouched", symbol: "chart.line.uptrend.xyaxis", help: "The stock share month by month if the account is left alone through the illustrative year, with the band shaded.") {
+                Box(title: "Stocks over the past year, untouched", symbol: "chart.line.uptrend.xyaxis", help: "The stock share at each month-end of the past year if today's holdings had been held all along — real closes from the security master — with the band shaded: how the mix drifted to where it is now.") {
                     let t = (targets[.equity] ?? 0) * 100, b = band(.equity) * 100
-                    Chart {
-                        RectangleMark(xStart: .value("m", 0), xEnd: .value("m", 12), yStart: .value("lo", t - b), yEnd: .value("hi", t + b)).foregroundStyle(.green.opacity(0.15))
-                        ForEach(Array(drift.enumerated()), id: \.offset) { i, w in
-                            LineMark(x: .value("Month", i), y: .value("Stocks %", (w[.equity] ?? 0) * 100))
-                            PointMark(x: .value("Month", i), y: .value("Stocks %", (w[.equity] ?? 0) * 100))
-                                .foregroundStyle(abs((w[.equity] ?? 0) * 100 - t) > b ? .red : .accentColor)
+                    if history.isEmpty {
+                        Text(historyNote ?? "Reading month-end prices from the security master…").font(.callout).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 220, alignment: .center)
+                    } else {
+                        Chart {
+                            RectangleMark(xStart: .value("m", history.first!.month), xEnd: .value("m", history.last!.month),
+                                          yStart: .value("lo", t - b), yEnd: .value("hi", t + b)).foregroundStyle(.green.opacity(0.15))
+                            ForEach(history, id: \.month) { h in
+                                LineMark(x: .value("Month", h.month), y: .value("Stocks %", h.equity * 100))
+                                PointMark(x: .value("Month", h.month), y: .value("Stocks %", h.equity * 100))
+                                    .foregroundStyle(abs(h.equity * 100 - t) > b ? .red : .accentColor)
+                            }
                         }
+                        .chartYAxisLabel("stocks %")
+                        .frame(height: 220)
                     }
-                    .chartXAxisLabel("months from today")
-                    .chartYAxisLabel("stocks %")
-                    .frame(height: 220)
                 }
             }
             Box(title: trades.isEmpty ? "No trades needed" : "Trades to rebalance", symbol: "list.bullet.rectangle", help: "Sells of the overweight class (in proportion to its holdings) and buys of the underweight class (its holdings, or an index fund).") {
@@ -233,6 +245,33 @@ struct BandsView: View {
                 }
             }
             if !trades.isEmpty { TaxBox(store: store, estimate: estimate) }
+        }
+        .task(id: "\(p.id)\(p.holdings.count)\(Int(p.total))") { await loadHistory(p) }
+    }
+
+    /// Today's quantities at each month-end close of the past year (cash at its value), as the stock share.
+    private func loadHistory(_ p: Portfolio) async {
+        let held = p.holdings.filter { $0.ticker != "CASH" && $0.security != nil }
+        let tickers = held.compactMap { $0.security?.displayTicker }
+        guard !tickers.isEmpty else { history = []; historyNote = "No holdings to price."; return }
+        do {
+            let prices = try await AccountsClient.monthlyPrices(tickers, months: 12)
+            let cash = p.holdings.filter { $0.ticker == "CASH" }.reduce(0) { $0 + $1.value }
+            let months = Set(prices.values.flatMap { $0.map { String($0.date.prefix(7)) } }).sorted()
+            history = months.compactMap { m in
+                var equity = 0.0, total = cash
+                for h in held {
+                    guard let s = h.security, let close = prices[s.displayTicker]?.first(where: { $0.date.hasPrefix(m) })?.close else { continue }
+                    let q = h.quantity ?? (s.price > 0 ? h.value / s.price : 0)
+                    total += q * close
+                    if s.assetClass == .equity { equity += q * close }
+                }
+                return total > 0 ? (m, equity / total) : nil
+            }
+            historyNote = history.isEmpty ? "The security master has no month-end prices for these holdings." : nil
+        } catch {
+            history = []
+            historyNote = error.localizedDescription
         }
     }
 
@@ -265,7 +304,7 @@ struct BandsView: View {
             guard abs(want - have) > 1e-6 else { continue }
             let members = p.holdings.filter { classOf($0) == c }
             if members.isEmpty {
-                let fund = c == .equity ? "MXTM" : c == .bond ? "MXBD" : "CASH"
+                let fund = c == .equity ? "VTI" : c == .bond ? "BND" : "CASH"
                 trades.append(Trade(asset: fund, from: 0, to: want))
             } else {
                 let total = members.reduce(0) { $0 + p.weight($1) }

@@ -5,9 +5,11 @@ A portfolio-management IDE for macOS that **teaches**: it walks you through sett
 rebalancing, attribution — matters before showing the numbers, and lets you simulate what everyday reactions to market
 news cost over the long run.
 
-> **Educational only.** The companies, prices, reports and futures are illustrative — made up in the shape of real
-> ones — except on the earnings screens (Market Reports ▸ Earnings Calendar and Earnings by Day), which show real
-> companies' reports as Nasdaq.com and FMP publish them, and in My Portfolio from the security master. Nothing in
+> **Educational only.** Every security, price, benchmark and account — My Portfolio and the samples — is real data
+> from the security master (MxDataHUB's `srm` schema), with risk estimated from real daily prices by the analytics
+> service; the earnings screens show real companies' reports as Nasdaq.com and FMP publish them. The report
+> walkthroughs and the Morning Briefing's market panels are scenarios — made-up numbers in the shape of real releases,
+> labelled as such — and a walkthrough about one company uses the account's own stock with invented numbers. Nothing in
 > MxPortMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
 > status bar says so on every screen.
 
@@ -90,15 +92,10 @@ the foot of each step.
 The clear path for your own account, in six steps. Every My Portfolio
 step works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each step shows
 the account and sets **My approach** — *Active* or *Passive index* — its account type, and **Start From a Sample**
-(copy any sample's holdings, lots and benchmark) or reset to the three-fund starter.
+(copy any sample's holdings, lots and benchmark) or reset to the account as saved in the security master.
 
-**Add Securities…** (⇧⌘N, above the holdings table) opens a dialog listing every security in the illustrative
-universe — the 36 companies, **individual bonds** (U.S. Treasury notes and bonds from 2028 to 2056, a TIPS, investment-
-grade and high-yield corporates, a California general-obligation muni), the bond and index funds, and cash. Search by
-ticker, name or issuer, filter by type and sector, and select one for its details (price or price per 100 face,
-coupon, maturity, rating, yield, duration, beta, model volatility and expected return, and what kind of security it
-is). Add it by dollar amount, shares or face value, optionally with a tax lot (cost basis and purchase date); adding a
-security already held adds to the position and its lots. Each holding row has a trash button to remove it.
+**Add Securities…** (⇧⌘N, above the holdings table) searches the security master (see *My Portfolio in the security
+master* below). Each holding row has a trash button to remove it.
 
 1. **My Holdings** — add, edit and remove holdings (shares, values, tax lots); value, look-through securities,
    weighted fee, unrealised gain; asset mix; *Check before you go on* (unknown or unpriced holdings, a single name over
@@ -130,18 +127,16 @@ Tracking Error & Drift screen, was retired on 2026-10-22.)
 
 #### My Portfolio in the security master
 
-The bar's **Data** switch chooses where My Portfolio lives:
-
-* **Illustrative universe** — the made-up market the samples use, remembered on this Mac.
-* **Security master (srm)** — real securities, prices and benchmarks in MxDataHUB's PostgreSQL database (`srm` on
-  192.168.0.223), through the **accounts** Layer 3 service (`Services/accounts`, port 8774; start it with
-  `python3 Services/mxservices.py start`). The account is an `srm.portfolio` with an account type, approach, cash
+My Portfolio lives in the security master — real securities, prices and benchmarks in MxDataHUB's PostgreSQL
+database (`srm` on 192.168.0.223) — through the **accounts** Layer 3 service (`Services/accounts`, port 8774; start it
+with `python3 Services/mxservices.py start`). If the service or the database can't be reached, a banner says so, with
+*Try Again* and a link to Library ▸ Layer 3 Services; nothing is made up in its place. The account is an `srm.portfolio` with an account type, approach, cash
   balance and open **tax lots** (`srm.portfolio_tax_lot`, migration V011); every change is saved a moment later (or
   with **Save**), and the day's holdings snapshot is rewritten from the lots, so MxDataHUB ▸ Portfolios shows it (with
-  a Tax Lots view and *Open in MxPortMGR*) and the analytics service can analyse it. **Account** names the code
-  (default `MY_PORTFOLIO`); **Open** lists the personal accounts already there.
+a Tax Lots view and *Open in MxPortMGR*) and the analytics service can analyse it. **Account** names the code
+(default `MY_PORTFOLIO`); **Open** lists the personal accounts already there.
 
-In security-master mode **Add Securities…** searches srm by ticker, name, ISIN or CUSIP (stocks, funds, bond funds)
+**Add Securities…** searches srm by ticker, name, ISIN or CUSIP (stocks, funds, bond funds)
 across all 13,000-odd active securities, 200 at a time (*Show More*), largest companies first. Click any column header
 (Ticker, Name, Type, Sector, Exchange, Price, As of, Market value) to sort by it — in the database, across every match —
 and use the **filter row** like a spreadsheet's autofilter: ticker / name contains, Type, Sector and Exchange menus of
@@ -152,7 +147,11 @@ service to load them (`srm.py load nasdaq-prices --symbols …` — Nasdaq.com's
 benchmark is any benchmark loaded in srm (S&P 500, Nasdaq-100, Dow, S&P 400 / 600, custom); Risk, Optimize and Build
 the Tracker use the analytics service's Ledoit-Wolf covariance from two years of srm prices (holdings without enough
 price history and cash are left out and listed), and Attribution uses its `/attribution` for the account's code.
-Securities whose tickers clash with the illustrative universe show as `TICKER:MIC` internally.
+Each security's market beta (against VTI), rate beta (against daily changes in the 10-year Treasury yield; ≈ −duration
+for a bond fund), volatility and momentum alpha come from the same `/inputs`, and the risk-free rate is the latest
+3-month Treasury yield; the equity premium (5%) is the one assumption, and the screens say so. A fund's fee is its
+expense ratio from the security master (Vanguard funds; other families' show none). A ticker two securities share
+shows as `TICKER:MIC` internally.
 
 `mxportmgr://my-portfolio/CODE` (from MxDataHUB or MxJobsWMS ▸ Window ▸ Open MxPortMGR) opens My Portfolio on that
 security-master account.
@@ -179,11 +178,12 @@ markets within seconds, others shape positioning over weeks or months.
     links and when you last changed them, then the report's publisher and schedule, the drivers it moves and its
     impact, its official source (a click opens it), and **Edit Notes…** and **Open Walkthrough**.
   * A speech-bubble mark follows the name of a report with notes. Notes are kept on this Mac (`reportNotes`).
-* **Morning Briefing** — an illustrative morning's ten items: overnight markets, Treasury yield changes (with the
+* **Morning Briefing** — ten panels: an illustrative morning's overnight markets, Treasury yield changes (with the
   2Y–10Y and 3M–10Y spreads), the economic calendar (consensus, prior, impact; each release opens its walkthrough),
-  an economic surprise index, Fed funds futures probabilities, analyst upgrades and downgrades (fictional firms),
-  earnings releases (marked "you hold"), weekly fund flows, credit spreads and the VIX — with what the selected
-  account would be worth if it opened with the futures. Each panel says what it measures and how a long-term investor
+  an economic surprise index, Fed funds futures probabilities, weekly fund flows, credit spreads and the VIX; today's
+  **real** earnings releases (the six largest from Earnings by Day, marked "you hold"); an analyst-ratings panel that
+  says no source is loaded yet — with what the selected account would be worth if it opened with the futures (each
+  holding's real market and rate betas). Each panel says what it measures and how a long-term investor
   might use it. Its earnings panel links to today's real list (Earnings by Day).
 * **Earnings Calendar** — real earnings reports by **month** or **week** (◀ ▶ and Today step through them). A month
   cell shows the number of U.S.-listed companies reporting, for past days a bar and count of how many beat (green),
@@ -282,8 +282,11 @@ dip, reacting to every scary headline, going all in on good news, taking profits
 yields, betting against or following the crowd, and — for the single-company reports — selling the stock into the
 index, doubling down, buying more of a winner, or selling and buying back later.
 
-The day's move is expressed in the factor model (market, rates, sectors, one company), so it lands on any account
-through its own holdings. **The Long Run** runs the **Behaviour Lab**: every reaction and *Stay with the plan* on the
+The day's move is a market move, a change in the 10-year yield, sector moves and one company's move; it lands on
+the account through each holding's real market and rate betas and its sector. The single-company reports (Earnings,
+Earnings Revisions, Semiconductors, Bank Earnings, EIA Petroleum) name no company of their own: theirs is the
+account's largest stock in the report's sector (or its largest stock), named in the text with the numbers marked
+hypothetical; an account with no single stock gets only the sector and market move. **The Long Run** runs the **Behaviour Lab**: every reaction and *Stay with the plan* on the
 *same* simulated futures (100 / 300 / 1,000 futures of 10 / 20 / 30 years). Stocks follow a GARCH(1,1) daily model
 with fat tails, so calm and stormy stretches alternate and the best days cluster near the worst; bonds and a single
 stock are tied to it; optional stress futures are shaped like **2020** (fast crash and recovery), **2007–09** (long bear
@@ -310,7 +313,7 @@ into `../Shared/Links` — shared with MxDataHUB's Securities and Portfolio Hold
   the address itself). The hover card shows the words; the pointer resting on them shows the address. In place of
   MxNoteONE's list of notebook pages it offers pages about the security: Nasdaq.com's quote and earnings pages (or the
   ETF / fund page), SEC EDGAR filings, Yahoo Finance, and a web search for the company's investor relations. A made-up
-  security of the illustrative market has none, but any address works. *Remove Link* takes it off.
+  security without a ticker has none, but any address works. *Remove Link* takes it off.
 * **Links to your notes in MxNoteONE**: right-click a page, paragraph, section or notebook in MxNoteONE ▸ *Copy Link
   to …*, then in the Link dialog press **Use the Link Copied in MxNoteONE** (it shows when MxNoteONE's link is on the
   clipboard) — or paste the `mxnoteone://…` address. The title copied with it (the page's, section's or paragraph's) is
@@ -328,8 +331,7 @@ A link belongs to the security and the column, not the table or the app: it is k
 (`srm.security_link`, migration V014) through the accounts service (`/links`), so it shows in Earnings by Day, in My
 Holdings (My Portfolio from the security master) and in **MxDataHUB** (Securities, Portfolios ▸ Holdings), and a link
 made there shows here. A company in Earnings by Day is found by its ticker's current U.S. listing (`srm.us_security`:
-BRK.B, BRK-B and BRK/B alike). Links stay on this Mac for the illustrative market's made-up securities and for tickers
-the security master doesn't list; a link saved while the accounts service can't be reached is kept here too, and goes to
+BRK.B, BRK-B and BRK/B alike). Links stay on this Mac for tickers the security master doesn't list; a link saved while the accounts service can't be reached is kept here too, and goes to
 the security master the next time it answers (the dialog says where each link is kept). Links made on this Mac before
 are sent there the same way, unless the security master already has one for that ticker or name.
 
@@ -357,30 +359,31 @@ the database through the accounts service (`POST /securities/browse`, `/securiti
 
 ## Sample portfolios (Library ▸ Sample Portfolios)
 
-Each sample is an edge case. *Use* makes it the account of the report walkthroughs and the Morning Briefing; *Copy to
-My Portfolio* (or My Portfolio's *Start From a Sample*) makes an editable copy to work through the six steps.
+Each sample is an edge case, and an account in the security master: `srm.py load sample-portfolios` (MxDataHUB/SRM,
+run through the srm-loader service so it shows in Data Refresh ▸ Activity) writes them with real securities, tax lots
+costed at the real close on each purchase date, cash and a benchmark, managed by "MxPortMGR samples". The app reads
+them through the accounts service like My Portfolio and keeps only each one's lesson (`Samples.swift`). *Use* makes
+it the account of the report walkthroughs and the Morning Briefing; *Copy to My Portfolio* (or My Portfolio's *Start
+From a Sample*) copies its holdings, lots and benchmark into My Portfolio to work through the six steps.
 
-
-| Sample | Account | Benchmark | Edge case |
+| Sample (code) | Account | Benchmark | Edge case |
 | --- | --- | --- | --- |
-| Core & Satellite (active) | Retirement | MXEQ | The ordinary active case: 70% index fund plus eight conviction names |
-| Concentrated Employer Stock | Taxable | MXEQ | 48% in one company, low-basis lots from 2012 plus a short-term lot |
-| Sector-Heavy Technology | Taxable | MXEQ | Over 60% technology through overlapping funds and names (only visible by look-through) |
-| Retiree Income (bond-heavy) | Retirement | MX3070 | 66% bonds plus rate-sensitive dividend stocks |
-| Cash-Heavy, Waiting to Invest | Taxable | MX6040 | 45% cash kept back "for the dip" |
-| High-Turnover Trader | Taxable | MXEQ | Holdings replaced every month; every lot short-term |
-| Direct-Index Tracker, Drifted | Taxable | MXEQ | 22 of 36 names bought at index weights two years ago, never rebalanced |
-| Tax-Lot Harvesting Case | Taxable | MX6040 | Lots at large gains and at losses; FIFO vs highest-cost-first; harvesting |
-| 60/40 Outside Its Band | Retirement | MX6040 | Drifted to 71/29 after a rally |
-| Missing & Messy Data | Taxable | MXEQ | An unknown security, a stale price, months of missing returns (attribution says *review*) |
-| My Portfolio | yours | yours | Editable; *Copy to My Portfolio* starts it from any sample; remembered between launches |
+| Core & Satellite (`SAMPLE_CORE_SATELLITE`) | Retirement | SP500 | The ordinary active case: a total-market fund plus eight S&P 500 names |
+| Concentrated Employer Stock (`SAMPLE_EMPLOYER_STOCK`) | Taxable | SP500 | Nearly half in MSFT, low-basis lots from years back plus a short-term lot |
+| Sector-Heavy Technology (`SAMPLE_TECH_HEAVY`) | Taxable | SP500 | Most of the account in technology through a fund and overlapping names |
+| Retiree Income (`SAMPLE_INCOME`) | Retirement | BAL3070 | Mostly bond funds plus rate-sensitive dividend stocks |
+| Cash-Heavy, Waiting to Invest (`SAMPLE_CASH_HEAVY`) | Taxable | BAL6040 | 45% cash kept back "for the dip" |
+| High-Turnover Trader (`SAMPLE_TRADER`) | Taxable | SP500 | Every lot under a year old |
+| Direct-Index Tracker, Drifted (`SAMPLE_DRIFTED_TRACKER`) | Taxable | SP500 | The 22 largest S&P 500 names at their 2024-10-21 index weights, never rebalanced |
+| Tax-Lot Harvesting Case (`SAMPLE_TAX_LOTS`) | Taxable | BAL6040 | Lots at large gains and at losses; FIFO vs highest-cost-first; harvesting |
+| 60/40 Outside Its Band (`SAMPLE_6040_DRIFT`) | Retirement | BAL6040 | Drifted past 70/30 after a rally |
+| Missing & Messy Data (`SAMPLE_MISSING_DATA`) | Taxable | SP500 | A delisted security with no price (ACVA), a unit with a short history (ALUB.U) |
+| My Portfolio (`MY_PORTFOLIO`) | yours | yours | Editable; *Copy to My Portfolio* starts it from any sample |
 
-**The illustrative market** (`Universe.swift`): 36 fictional companies in eleven sectors, six bond funds (short,
-aggregate, long Treasury, inflation-protected, corporate, municipal), cash, and three index funds held by look-through
-(MXTM total market, MXBD total bond, MXTK technology). Covariance from market, sector and interest-rate factors plus
-each company's own risk; illustrative alpha forecasts; three cap-weighted benchmarks — **MXEQ** (MX Equity Market 36),
-**MX6040** (balanced 60/40), **MX3070** (income 30/70). Attribution uses twelve months of illustrative returns
-(2025-11 to 2026-10, with a spring sell-off and recovery).
+**BAL6040** and **BAL3070** are blended benchmarks the same loader writes (VTI / BND at 60/40 and 30/70, month-end
+snapshots for two years). Attribution needs history: the samples have one holdings snapshot (the day they were
+loaded), and the S&P 500's weights in the security master start in October 2026, so a year's attribution uses today's
+weights throughout and says *review*.
 
 ## Engines — built-in and Layer 3 services
 
@@ -391,12 +394,11 @@ The built-in engines follow the Layer 3 contracts (`../Services/contracts/README
 | Optimize | Active mean-variance vs the benchmark, box + sector-band penalty, λ by bisection to the tracking-error target, FISTA | **portfolio-java** `POST /optimize/active` (127.0.0.1:8766), inputs sent inline |
 | Build the Tracker | Minimum tracking error with ≤ N names (stratified selection exactly as portfolio-cpp's) | **portfolio-cpp** `POST /optimize/tracking` (127.0.0.1:8767), inputs sent inline |
 | Risk | Volatility, VaR / ES, tracking error, beta, risk contributions (portfolio-cpp's `/risk` formulas) | — |
-| Attribution | Monthly sector Brinson-Fachler / Brinson-Hood-Beebower, Carino-linked, data gaps → *review* | **analytics** `POST /attribution` (127.0.0.1:8772): the sample's monthly returns and start-of-month weights sent inline, checked against the built-in result; or a real **security-master portfolio** by code (MxDataHUB ▸ Portfolios, e.g. `DEMO_GROWTH`) — Attribution ▸ Source |
+| Attribution | — | **analytics** `POST /attribution` (127.0.0.1:8772) for the account's code (or another security-master portfolio, e.g. `DEMO_GROWTH`): monthly Brinson-Fachler / Brinson-Hood-Beebower by sector (funds by their family's style, cash as its own group earning the 3-month Treasury yield), Carino-linked, data gaps → *review* |
+| Risk inputs | — | **analytics** `POST /inputs`: Ledoit-Wolf covariance, betas, rate betas, momentum alpha, risk-free rate |
 
-On the samples the built-in active optimizer matches portfolio-java to the published weight precision, and the
-built-in tracker matches portfolio-cpp's tracking error, and built-in attribution matches the analytics service's
-returns, effects (total, by sector, by month) and weights to its 6-decimal rounding on every sample and both methods —
-the status line says so (or by how much they differ) after each services run. Start the services with
+The built-in active optimizer matches portfolio-java to the published weight precision, and the built-in tracker
+matches portfolio-cpp's tracking error. Start the services with
 `python3 Services/mxservices.py start`; **Library ▸ Layer 3 Services** is the shared `ServicesView` (what each
 service is for, whether it runs, how to start it). Failures (a service not running, the security-master database not
 reachable) are shown as alerts with a link to that screen.
@@ -414,11 +416,11 @@ service catalog and view). Sandboxed with outgoing network connections (for the 
 configuration is compiled with `-O`: the optimizers and the simulator are numeric loops that are ~75× slower
 unoptimised.
 
-Launch arguments for demos and tests: `-mySource srm -srmAccount CODE` (My Portfolio from the security master), `-addSecurities YES` (open Add Securities), `-screen myImprove` (any `Screen` case), `-sample employer-stock` (a sample
-id), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
-hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding MXTM` selects a holding in My Holdings. Debug builds only:
+Launch arguments for demos and tests: `-srmAccount CODE` (My Portfolio's security-master account), `-addSecurities YES` (open Add Securities), `-screen myImprove` (any `Screen` case), `-sample SAMPLE_EMPLOYER_STOCK` (a sample's
+code), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
+hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding VTI` selects a holding in My Holdings. Debug builds only:
 `-linkEdit symbol` (or `name`) opens the Link dialog for the selected company or holding, and `-linkHoverTest ID`
-(e.g. `META|symbol`, `mx:MXTM|name`) shows a linked cell's hover card as if the pointer rested on it, and
+(e.g. `META|symbol`) shows a linked cell's hover card as if the pointer rested on it, and
 `-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard).
 
 ## Files
@@ -429,10 +431,10 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ContentView.swift` | Sidebar guide with Quick Help docked, toolbar pickers, status bar, launch arguments |
 | `Navigation.swift` | Back and Forward: the places visited, the toolbar's ‹ ›, the Go menu, ⌃← ⌃→ and a mouse's side buttons |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
-| `Universe.swift`, `Portfolio.swift`, `Samples.swift` | The illustrative market, accounts and checks, the samples |
-| `SRMData.swift` | Security-master securities and benchmarks registry, the accounts-service client, analytics inputs for srm accounts |
-| `AddSecuritiesSheet.swift` | Add Securities: illustrative universe or security master |
-| `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | Built-in engines and the Layer 3 service client |
+| `Universe.swift`, `Portfolio.swift`, `Samples.swift` | Security, benchmark and the lookups into the registry; accounts and checks; the samples' lessons |
+| `SRMData.swift` | Security-master securities and benchmarks registry (with the analytics service's risk numbers), the accounts-service client, analytics inputs |
+| `AddSecuritiesSheet.swift` | Add Securities: search the security master |
+| `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | The built-in optimizers, the attribution result, and the Layer 3 service client |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing |
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |

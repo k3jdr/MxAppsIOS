@@ -16,6 +16,7 @@ struct ReportView: View {
     private var state: ReportState { store.reportState(report) }
 
     var body: some View {
+        let _ = store.riskStamp
         StepPage(store: store, subtitle: report.headline, lessonTitle: "What this walkthrough shows", lesson: [
             "How to read the \(report.title) — what each number means and what the market watches.",
             "What the day's move does to the account selected in the toolbar, holding by holding.",
@@ -51,6 +52,7 @@ struct ReportView: View {
                 }
             }
         }
+        .task(id: store.portfolio.holdings.map(\.ticker)) { await store.ensureHoldingRisk() }
     }
 
     /// The report's tier and drivers, and a menu of every report by tier.
@@ -229,7 +231,7 @@ struct ReportView: View {
         let rows = p.holdings.compactMap { h -> (Holding, Double)? in h.security.map { (h, report.shock($0)) } }
         let total = rows.reduce(0) { $0 + $1.0.value * $1.1 }
         return VStack(alignment: .leading, spacing: 12) {
-            if p.id != report.suggestedSample, let s = Samples.all.first(where: { $0.id == report.suggestedSample }) {
+            if p.id != report.suggestedSample, let s = store.portfolios.first(where: { $0.id == report.suggestedSample }) {
                 HStack {
                     Image(systemName: "lightbulb").foregroundStyle(.yellow)
                     Text("This report hits “\(s.name)” hardest. You can try it with any account, or:")

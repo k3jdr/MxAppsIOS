@@ -31,6 +31,18 @@ struct ContentView: View {
             .quickHelpDock()
         } detail: {
             VStack(spacing: 0) {
+                if let problem = store.dataProblem {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Text(problem).font(.callout).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button("Try Again") { Task { await store.loadAccounts() } }
+                        Button("Layer 3 Services…") { store.go(.services) }
+                    }
+                    .padding(10)
+                    .background(.orange.opacity(0.12))
+                    Divider()
+                }
                 screen
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // Every screen's text can be selected and copied: lessons, figures, cards, table cells; a whole
@@ -59,9 +71,7 @@ struct ContentView: View {
                 store.go(.myPortfolio)
                 if let code {
                     store.srmCode = code
-                    Task {
-                        if store.portfolio.isSRM { await store.openSRMAccount(code) } else { await store.setMySource(srm: true) }
-                    }
+                    Task { await store.openSRMAccount(code) }
                 }
             }
         }
@@ -199,7 +209,8 @@ struct ContentView: View {
         }
         #endif
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
-        if defaults.string(forKey: "mySource") == "srm" { Task { await store.openSRMAccount(store.srmCode) } }
+        // Every account — the samples and My Portfolio — comes from the security master.
+        Task { await store.loadAccounts() }
         if defaults.bool(forKey: "addSecurities") { store.go(.myPortfolio); store.addingSecurities = true }
         if store.screen == .reportWalkthrough, defaults.object(forKey: "reportStep") != nil {
             let r = store.currentReport

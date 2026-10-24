@@ -136,14 +136,14 @@ struct StepFooter: View {
 
 
 struct EducationalBanner: View {
-    /// The earnings screens show real companies' reports rather than illustrative data.
+    /// The earnings screens: real companies' reports as published.
     var realData = false
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "graduationcap")
             Text(realData ? "Educational use: real earnings reports from Nasdaq.com and FMP, as published — not investment advice and not a recommendation to buy or sell anything."
-                 : "Educational simulation with illustrative data — not investment advice, not a forecast, and not a recommendation to buy or sell anything.")
+                 : "Educational: real securities and prices from the security master; scenarios and simulations are labelled as such — not investment advice, not a forecast, and not a recommendation to buy or sell anything.")
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -292,20 +292,11 @@ struct MyPortfolioBar: View {
             HStack(spacing: 12) {
                 Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(p.isSRM ? "My Portfolio · \(p.srmCode ?? "")" : "My Portfolio").font(.headline)
+                    Text("My Portfolio · \(p.srmCode ?? "")").font(.headline)
                     Text("\(p.account.rawValue) · \(money(p.total)) · \(p.holdings.count) holdings · vs \(p.benchmark)")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("Data").font(.callout)
-                Picker("Data", selection: Binding(get: { p.isSRM }, set: { v in Task { await store.setMySource(srm: v) } })) {
-                    Text("Illustrative universe").tag(false)
-                    Text("Security master (srm)").tag(true)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .fixedSize()
-                .help("Illustrative: the made-up market every sample uses. Security master: real securities, prices and benchmarks in MxDataHUB's srm database on 192.168.0.223, saved there with your tax lots.")
                 Text("My approach").font(.callout)
                 Picker("My approach", selection: $store.myApproach) {
                     Text("Active").tag(PortfolioStyle.active)
@@ -323,7 +314,6 @@ struct MyPortfolioBar: View {
                 .help("Taxable accounts pay tax on realised gains; retirement accounts don't when you trade")
             }
             HStack(spacing: 10) {
-                if p.isSRM {
                     Image(systemName: "cylinder.split.1x2").foregroundStyle(.secondary)
                     Text("Account").font(.callout)
                     TextField("Code", text: $code, onCommit: { open() }).frame(width: 150)
@@ -343,24 +333,19 @@ struct MyPortfolioBar: View {
                     if store.srmBusy { ProgressView().controlSize(.small) }
                     Text(store.srmStatus ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     Spacer(minLength: 0)
-                } else {
-                    Text("Illustrative universe: fictional companies, bonds and funds — remembered on this Mac.").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
                     Menu("Start From a Sample") {
-                        ForEach(Samples.all) { p in Button(p.name) { store.copyToMine(p) } }
-                        Divider()
-                        Button("Reset to the Three-Fund Starter") { store.resetMyPortfolio() }
+                        ForEach(store.portfolios.filter { $0.id != "mine" }) { s in Button(s.name) { store.copyToMine(s) } }
                     }
                     .fixedSize()
-                    .help("Replace My Portfolio with a copy of a sample's holdings, lots and benchmark")
-                }
+                    .disabled(!store.accountsLoaded)
+                    .help("Replace My Portfolio's holdings with a copy of a sample account's holdings, lots and benchmark (saved to the security master)")
             }
         }
         .padding(10)
         .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .onAppear { code = store.srmCode }
         .onChange(of: store.srmCode) { code = store.srmCode }
-        .quickHelpArea("My Portfolio", "Your own account. Data: the illustrative universe (remembered on this Mac) or the security master — real securities and prices in MxDataHUB's srm database, saved there as a personal account with tax lots through the accounts service (port 8774). Choose how you run it — active or passive index — and steps 4 and 5 follow.", symbol: "person.crop.circle")
+        .quickHelpArea("My Portfolio", "Your own account in the security master — real securities and prices in MxDataHUB's srm database, saved there as a personal account with tax lots through the accounts service (port 8774). Choose how you run it — active or passive index — and steps 4 and 5 follow.", symbol: "person.crop.circle")
     }
 
     private func open() {

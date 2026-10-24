@@ -5,8 +5,10 @@
 //  Three walkthroughs of the reports that move markets day to day — the monthly jobs report, a company's earnings
 //  report, and a yield-curve / bond-market report. Each is an illustrative report (made-up numbers in the shape of
 //  real ones), a guide to reading it, the day's market move it caused, what that move does to the selected account,
-//  the reactions people commonly have, and the takeaways. The move is expressed in the factor model (market, rates,
-//  sectors, one company), so it lands on any sample account through its own holdings.
+//  the reactions people commonly have, and the takeaways. The move is a market move, a change in yields, sector moves
+//  and one company's move; it lands on the account through each holding's market and rate betas (the analytics
+//  service's, from real prices). A report about one company names no real or fictional one: its company is the
+//  account's own largest stock (in the report's sector), and the text says the numbers are invented.
 //
 
 import Foundation
@@ -99,13 +101,16 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
     var reading: [String]
     var terms: [ReportTerm]
     var moves: [MarketMove]
-    /// The day's move in the factor model.
+    /// The day's move: the market, the 10-year yield (in decimal), sectors (GICS names) and companies.
     var marketMove: Double
     var rateMove: Double
     var sectorMoves: [String: Double] = [:]
     var companyMoves: [String: Double] = [:]
     /// The company whose report it is: held directly it becomes the single-stock sleeve in the lab.
     var single: String? = nil
+    /// For a report about one company (MarketReport.company in companyMoves / single, {company} and {ticker} in the
+    /// text): the sector the account's stock is picked from, nil for any.
+    var companySector: String? = nil
     var reactions: [Reaction]
     var takeaways: [String]
     var suggestedSample: String
@@ -125,6 +130,52 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
 
     static let steps = ["The Report", "Reading It", "The Market's Move", "Your Account", "Your Reaction", "The Long Run", "Takeaways"]
 
+    /// The placeholder for the account's own company.
+    static let company = "{company}"
+
+    /// The account's largest directly held stock (in companySector when it holds one there).
+    static func heldCompany(_ p: Portfolio, sector: String?) -> Security? {
+        let stocks = p.holdings.compactMap { h -> (Security, Double)? in
+            h.security.flatMap { $0.assetClass == .equity && !$0.isFund ? ($0, h.value) : nil }
+        }
+        let inSector = stocks.filter { sector == nil || Self.gicsSector($0.0.sector) == sector }
+        return (inSector.isEmpty ? stocks : inSector).max { $0.1 < $1.1 }?.0
+    }
+
+    /// This report with its company filled in from the account (unchanged when the report names no company).
+    func resolved(for p: Portfolio) -> MarketReport {
+        guard companyMoves[Self.company] != nil || single == Self.company else { return self }
+        let held = Self.heldCompany(p, sector: companySector)
+        // Nasdaq's listing names carry the share class ("Microsoft Corporation - Common Stock"): the company is enough.
+        let company = held.map { $0.name.replacingOccurrences(of: #"\s*-?\s*(Class [A-Z] )?(Common Stock|Ordinary Shares|Common Shares)$"#, with: "", options: .regularExpression) }
+        let name = held.map { "\(company ?? $0.name) (\($0.displayTicker))" } ?? companySector.map { "a company in \($0)" } ?? "a large company"
+        let ticker = held?.displayTicker ?? "the company"
+        func fill(_ t: String) -> String { t.replacingOccurrences(of: "{company}", with: name).replacingOccurrences(of: "{ticker}", with: ticker) }
+        var r = self
+        if let held {
+            if let m = companyMoves[Self.company] { r.companyMoves = [held.ticker: m] }
+            if single == Self.company { r.single = held.ticker }
+        } else {
+            r.companyMoves[Self.company] = nil
+            if single == Self.company { r.single = nil }
+        }
+        r.source = fill(source) + (held == nil ? " This account holds no single stock, so the move lands only through the sector and the market." : "")
+        r.headline = fill(headline)
+        r.lines = lines.map { ReportLine(label: fill($0.label), value: fill($0.value), expected: fill($0.expected), meaning: fill($0.meaning)) }
+        r.reading = reading.map(fill)
+        r.moves = moves.map { MarketMove(asset: fill($0.asset), move: $0.move, why: fill($0.why)) }
+        r.reactions = reactions.map { var x = $0; x.title = fill(x.title); x.summary = fill(x.summary); return x }
+        r.takeaways = takeaways.map(fill)
+        if var c = context { c.title = fill(c.title); c.note = fill(c.note); r.context = c }
+        return r
+    }
+
+    /// The reports' sector names (GICS) for the security master's (FMP's).
+    static func gicsSector(_ fmp: String) -> String {
+        ["Healthcare": "Health Care", "Financial Services": "Financials", "Consumer Cyclical": "Consumer Discretionary",
+         "Consumer Defensive": "Consumer Staples", "Basic Materials": "Materials"][fmp] ?? fmp
+    }
+
     /// The day's return of a security under this report.
     func shock(_ s: Security) -> Double {
         MarketReport.move(s, market: marketMove, rate: rateMove, sectors: sectorMoves, companies: companyMoves)
@@ -139,7 +190,7 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
         switch s.assetClass {
         case .cash: return 0
         case .bond: return s.rateBeta * rate + s.beta * market
-        case .equity: return s.beta * market + s.rateBeta * rate * 0.5 + (sectors[s.sector] ?? 0)
+        case .equity: return s.beta * market + s.rateBeta * rate * 0.5 + (sectors[gicsSector(s.sector)] ?? 0)
         }
     }
 
@@ -199,7 +250,7 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             ReportTerm(term: "Rate-cut expectations", definition: "Futures markets price how likely the central bank is to cut rates; weak jobs data raises those odds and lowers short-term yields."),
         ],
         moves: [
-            MarketMove(asset: "Stocks (MX Equity Market 36)", move: "−2.4%", why: "Slower growth means lower expected profits; fear of recession."),
+            MarketMove(asset: "Stocks (S&P 500)", move: "−2.4%", why: "Slower growth means lower expected profits; fear of recession."),
             MarketMove(asset: "Smaller and cyclical companies", move: "−3.5%", why: "Most sensitive to the economy (consumer discretionary, industrials, materials)."),
             MarketMove(asset: "2-year Treasury yield", move: "−0.22 points", why: "Traders expect the central bank to cut rates sooner."),
             MarketMove(asset: "Aggregate bond fund", move: "+0.8%", why: "Bond prices rise when yields fall."),
@@ -230,7 +281,7 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             "Selling after a fall locks in the loss, and the best days often come within weeks of the worst: being out for them is what does the long-term damage.",
             "If a weak report makes you want to sell, the plan may hold more risk than you are comfortable with. The fix is a calmer plan, chosen on a calm day — not a trade on a scary one.",
         ],
-        suggestedSample: "cash-heavy",
+        suggestedSample: "SAMPLE_CASH_HEAVY",
         tier: 1, publisher: "U.S. Bureau of Labor Statistics (BLS)", frequency: "Monthly, first Friday, 8:30 a.m. ET",
         keyMetrics: ["Nonfarm payroll growth", "Unemployment rate", "Average hourly earnings", "Labor force participation rate"],
         whyCare: ["Strong jobs numbers can signal economic strength — but also inflation pressure.", "Weak numbers raise expectations of Federal Reserve rate cuts."],
@@ -241,22 +292,22 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
 
     static let earnings = MarketReport(
         id: "earnings", title: "Earnings Report", symbol: "chart.bar.doc.horizontal",
-        source: "Quarterly results of Northwind Devices (NWD) — a fictional company; illustrative numbers in the shape of a real earnings release",
-        headline: "Northwind Devices misses on revenue and cuts guidance; shares fall 18% after hours",
+        source: "Hypothetical: a quarterly miss by {company}, this account's largest stock. The numbers are invented, in the shape of a real earnings release — they are not {ticker}'s results.",
+        headline: "{company} misses on revenue and cuts guidance; shares fall 18% after hours (hypothetical)",
         lines: [
-            ReportLine(label: "Revenue", value: "$41.2bn", expected: "$43.0bn", meaning: "Total sales. A 4% miss: demand for its main device line was weaker than analysts forecast."),
-            ReportLine(label: "Earnings per share (EPS)", value: "$1.42", expected: "$1.61", meaning: "Profit per share. The number most headlines lead with; compare it with the consensus, not with last quarter."),
-            ReportLine(label: "Gross margin", value: "41.0%", expected: "44.0%", meaning: "Share of revenue left after the cost of making the products. Falling margins mean price cuts or higher costs."),
-            ReportLine(label: "Next-quarter guidance", value: "$39–41bn", expected: "$44.5bn", meaning: "Management's own forecast. Often moves the stock more than the quarter just reported, because prices look forward."),
-            ReportLine(label: "Share buyback", value: "$10bn authorised", expected: "—", meaning: "The company will buy back its own shares, returning cash to shareholders."),
-            ReportLine(label: "Free cash flow", value: "$9.8bn", expected: "$10.5bn", meaning: "Cash left after investment; harder to flatter with accounting choices than earnings."),
+            ReportLine(label: "Revenue", value: "4% below consensus", expected: "the consensus estimate", meaning: "Total sales. A 4% miss: demand for its main products was weaker than analysts forecast."),
+            ReportLine(label: "Earnings per share (EPS)", value: "12% below consensus", expected: "the consensus estimate", meaning: "Profit per share. The number most headlines lead with; compare it with the consensus, not with last quarter."),
+            ReportLine(label: "Gross margin", value: "3 points lower", expected: "flat", meaning: "Share of revenue left after the cost of making the products. Falling margins mean price cuts or higher costs."),
+            ReportLine(label: "Next-quarter guidance", value: "10% below consensus", expected: "in line", meaning: "Management's own forecast. Often moves the stock more than the quarter just reported, because prices look forward."),
+            ReportLine(label: "Share buyback", value: "a new authorisation", expected: "—", meaning: "The company will buy back its own shares, returning cash to shareholders."),
+            ReportLine(label: "Free cash flow", value: "7% below expected", expected: "—", meaning: "Cash left after investment; harder to flatter with accounting choices than earnings."),
         ],
         reading: [
             "Compare with expectations: a 'record quarter' can still be a miss, and a loss can be a beat. The surprise moves the price.",
             "Guidance often matters most: here the forecast for next quarter is 10% below what analysts expected.",
             "Listen to the call: management's explanation (a product cycle? lost customers? a one-off?) decides whether the miss is temporary.",
             "Think about the business, not the share price: a good company can have a bad quarter; is the long-term story broken?",
-            "Check your exposure: if you hold an index fund you already own some — here NWD is about 13% of the MX Equity Market 36.",
+            "Check your exposure: if you hold an index fund you already own some — the largest companies are several percent of the S&P 500 each.",
         ],
         terms: [
             ReportTerm(term: "Beat / miss", definition: "Results above / below the consensus estimate of analysts."),
@@ -265,24 +316,23 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             ReportTerm(term: "Idiosyncratic risk", definition: "Risk specific to one company. Diversification removes most of it; a concentrated holding keeps all of it."),
         ],
         moves: [
-            MarketMove(asset: "Northwind Devices (NWD)", move: "−18%", why: "Lower expected profits for several quarters; the price resets to the new outlook."),
-            MarketMove(asset: "Technology suppliers and peers", move: "−3% to −5%", why: "Weak device demand may mean weak orders for suppliers."),
-            MarketMove(asset: "Stocks (MX Equity Market 36)", move: "−2.6%", why: "NWD is about 13% of the index; the rest of the market is down only 0.4%."),
+            MarketMove(asset: "{company}", move: "−18%", why: "Lower expected profits for several quarters; the price resets to the new outlook."),
+            MarketMove(asset: "Suppliers and peers", move: "−3% to −5%", why: "Weak demand may mean weak orders for suppliers."),
+            MarketMove(asset: "Stocks (S&P 500)", move: "−0.4% to −1%", why: "Depends on the company's weight in the index; the rest of the market is down only 0.4%."),
             MarketMove(asset: "Bonds", move: "≈ 0%", why: "One company's news rarely moves interest rates."),
         ],
         marketMove: -0.004, rateMove: 0,
-        sectorMoves: ["Technology": -0.035],
-        companyMoves: ["NWD": -0.18],
-        single: "NWD",
+        companyMoves: [MarketReport.company: -0.18],
+        single: MarketReport.company,
         reactions: [
             Reaction(id: "sell-single", title: "Sell the company, buy the index", symbol: "arrow.triangle.branch",
-                     summary: "Sell all NWD today and put the money in the broad stock index — a lasting change to a diversified plan.",
+                     summary: "Sell all {ticker} today and put the money in the broad stock index — a lasting change to a diversified plan.",
                      moves: [Move(from: .single, to: .stocks, fraction: 1)], after: .permanent),
             Reaction(id: "sell-wait", title: "Sell the company, wait in cash, buy it back", symbol: "hourglass",
-                     summary: "Sell NWD to cash today and buy it back after the months set below, 'once it has bottomed'.",
+                     summary: "Sell {ticker} to cash today and buy it back after the months set below, 'once it has bottomed'.",
                      moves: [Move(from: .single, to: .cash, fraction: 1)], after: .revert),
             Reaction(id: "double-down", title: "Double down", symbol: "plus.circle",
-                     summary: "Buy more NWD with all the cash and a fifth of the other stocks: 'it's on sale'. The new mix becomes the plan.",
+                     summary: "Buy more {ticker} with all the cash and a fifth of the other stocks: 'it's on sale'. The new mix becomes the plan.",
                      moves: [Move(from: .cash, to: .single, fraction: 1), Move(from: .stocks, to: .single, fraction: 0.2)], after: .permanent),
             Reaction(id: "sell-everything", title: "Sell all stocks", symbol: "arrow.down.to.line",
                      summary: "Stocks feel too risky: sell every stock and buy back after the months set below.",
@@ -294,14 +344,14 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             "Selling to wait for the bottom and buying back later is market timing: the rebound often comes on news you can't predict.",
             "Doubling down raises the stakes on the one risk diversification would remove. Compare the 10th-percentile outcomes, not just the medians.",
         ],
-        suggestedSample: "employer-stock",
+        suggestedSample: "SAMPLE_EMPLOYER_STOCK",
         tier: 3, publisher: "The company (press release, 10-Q filing, conference call)", frequency: "Quarterly, mostly in the four 'earnings seasons'",
         keyMetrics: ["Revenue", "Earnings per share (EPS)", "Margins", "Guidance"],
         whyCare: ["Ultimately stock prices follow earnings.", "Guidance often matters more than the current quarter's results."],
         drivers: [.profits], impact: 3, topFive: 4,
-        context: ReportSeries("NWD earnings per share: reported vs expected", unit: "$", kind: .bar,
-                              [("Q4 ’25", 1.58), ("Q1 ’26", 1.49), ("Q2 ’26", 1.55), ("Q3 ’26", 1.42)], reference: 1.61, referenceLabel: "expected this quarter",
-                              note: "Illustrative: the first miss after three quarters of meeting expectations."))
+        context: ReportSeries("Hypothetical EPS surprise, % vs consensus", unit: "%", kind: .bar,
+                              [("Q-3", 1.8), ("Q-2", 0.6), ("Q-1", 1.1), ("This quarter", -12.0)], reference: 0,
+                              note: "Invented: the first miss after three quarters of meeting expectations. Earnings by Day has {ticker}'s real results."))
 
     static let yieldCurve = MarketReport(
         id: "yield-curve", title: "Yield Curve Report", symbol: "chart.line.uptrend.xyaxis",
@@ -333,7 +383,7 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             MarketMove(asset: "Aggregate bond fund", move: "−1.7%", why: "Duration about 6."),
             MarketMove(asset: "Short Treasury fund (1–3 yr)", move: "−0.5%", why: "Short duration: barely affected, and now yields more."),
             MarketMove(asset: "Real estate and utilities", move: "−3%", why: "Their dividends compete with higher bond yields; they borrow a lot."),
-            MarketMove(asset: "Stocks (MX Equity Market 36)", move: "−1.5%", why: "Future profits are worth less when discounted at higher rates."),
+            MarketMove(asset: "Stocks (S&P 500)", move: "−1.5%", why: "Future profits are worth less when discounted at higher rates."),
         ],
         marketMove: -0.012, rateMove: 0.0028,
         sectorMoves: ["Real Estate": -0.018, "Utilities": -0.015, "Financials": 0.008],
@@ -357,7 +407,7 @@ nonisolated struct MarketReport: Identifiable, Hashable, Sendable {
             "The yield curve has a poor record as a timing tool: acting on it means guessing both whether and when a recession comes — and how markets will have moved by then.",
             "Owning both stocks and bonds is a plan for many kinds of years, including the rare ones when both fall together.",
         ],
-        suggestedSample: "income",
+        suggestedSample: "SAMPLE_INCOME",
         tier: 5, publisher: "U.S. Treasury market (daily yields from the Treasury Department)", frequency: "Continuous; most watched spreads: 2Y–10Y and 3M–10Y",
         keyMetrics: ["2-year, 10-year and 30-year yields", "2Y–10Y spread", "3M–10Y spread", "Inflation breakevens"],
         whyCare: ["An inverted curve has preceded many recessions.", "The slope influences sector allocation: banks, utilities, real estate and long-duration growth stocks all depend on it."],

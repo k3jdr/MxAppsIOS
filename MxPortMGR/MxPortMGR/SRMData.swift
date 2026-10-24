@@ -5,8 +5,8 @@
 //  My Portfolio in the security master (MxDataHUB's PostgreSQL schema srm on 192.168.0.223), through the Layer 3
 //  accounts service (Services/accounts, port 8774): search securities, read benchmark weights, load and save the
 //  account with its tax lots. Securities and benchmarks read from it are registered here so the rest of the app —
-//  which looks securities up by ticker — sees them next to the illustrative universe. A real ticker that clashes with
-//  an illustrative one is registered as TICKER:MIC.
+//  which looks securities up by ticker — sees them. Every security the app shows comes from here. A ticker two
+//  securities share (or the reserved CASH) is registered as TICKER:MIC.
 //
 
 import Foundation
@@ -31,6 +31,8 @@ nonisolated struct SRMSecurity: Codable, Hashable, Sendable, Identifiable {
     var beta: Double?
     var marketCap: Double?
     var weight: Double?
+    /// A fund's yearly expense ratio as a fraction (srm.fund_profile: Vanguard's funds and ETFs).
+    var expenseRatio: Double?
 
     // Non-optional sort keys for the table's sortable columns (the service does the sorting).
     var typeKey: String { securityType ?? "" }
@@ -63,6 +65,7 @@ nonisolated struct SRMLot: Codable, Hashable, Sendable {
     var priceDate: String?
     var beta: Double?
     var marketCap: Double?
+    var expenseRatio: Double?
     var lotId: Int?
     var acquired: String
     var quantity: Double
@@ -73,7 +76,7 @@ nonisolated struct SRMLot: Codable, Hashable, Sendable {
     var security: SRMSecurity {
         SRMSecurity(securityId: securityId, ticker: ticker, mic: mic, name: name, securityType: securityType, assetClass: assetClass,
                     sector: sector, industry: industry, isin: nil, cusip: nil, kind: kind, price: price, priceDate: priceDate,
-                    beta: beta, marketCap: marketCap)
+                    beta: beta, marketCap: marketCap, expenseRatio: expenseRatio)
     }
 }
 
@@ -114,6 +117,29 @@ nonisolated final class SRMRegistry: @unchecked Sendable {
     private var keyByID: [Int: String] = [:]
     private var keyByTicker: [String: String] = [:]
     private var benchmarks: [String: Benchmark] = [:]
+    private var _riskFree: Double?
+    private var _marketVol: Double?
+
+    /// The latest 3-month Treasury yield and the market proxy's volatility, from the last analytics inputs read.
+    var riskFree: Double? { lock.lock(); defer { lock.unlock() }; return _riskFree }
+    var marketVol: Double? { lock.lock(); defer { lock.unlock() }; return _marketVol }
+
+    /// The analytics service's numbers for these securities (by key): market beta, rate beta, volatility, alpha.
+    func applyRisk(keys: [String], betas: [Double]?, rateBetas: [Double]?, vols: [Double], alphas: [Double]?,
+                   riskFree: Double?, marketVol: Double?) {
+        lock.lock(); defer { lock.unlock() }
+        if let riskFree { _riskFree = riskFree }
+        if let marketVol { _marketVol = marketVol }
+        for (i, key) in keys.enumerated() {
+            guard var sec = securities[key] else { continue }
+            if let b = betas, i < b.count { sec.beta = b[i] }
+            if let r = rateBetas, i < r.count { sec.rateBeta = r[i] }
+            if i < vols.count { sec.volatility = vols[i] }
+            if let a = alphas, i < a.count { sec.alpha = a[i] }
+            sec.hasRisk = true
+            securities[key] = sec
+        }
+    }
 
     func security(_ key: String) -> Security? {
         lock.lock(); defer { lock.unlock() }
@@ -140,7 +166,7 @@ nonisolated final class SRMRegistry: @unchecked Sendable {
         return benchmarks.keys.sorted()
     }
 
-    /// Registers a security and returns its key: the ticker, or TICKER:MIC when the illustrative universe uses it.
+    /// Registers a security and returns its key: the ticker, or TICKER:MIC when another security already has it.
     @discardableResult
     func register(_ s: SRMSecurity) -> String {
         lock.lock(); defer { lock.unlock() }
@@ -150,7 +176,7 @@ nonisolated final class SRMRegistry: @unchecked Sendable {
         }
         let plain = s.ticker.uppercased()
         var key = plain
-        if Universe.bySymbol[plain] != nil || (securities[plain] != nil && securities[plain]?.srmID != s.securityId) {
+        if plain == "CASH" || (securities[plain] != nil && securities[plain]?.srmID != s.securityId) {
             key = "\(plain):\(s.mic ?? "SRM\(s.securityId)")"
         }
         securities[key] = Self.make(s, key: key, keeping: nil)
@@ -168,23 +194,27 @@ nonisolated final class SRMRegistry: @unchecked Sendable {
         return b
     }
 
-    /// A Security for the app's tools. Risk-model fields the security master doesn't hold are rough stand-ins
-    /// (beta 1 for a stock without one, a duration guessed from a bond fund's name); real covariances come from
-    /// the analytics service.
+    /// A Security for the app's tools: what the security master says about it, and — once the analytics service's
+    /// inputs have covered it — its estimated betas, volatility and alpha (kept when it is registered again).
     private static func make(_ s: SRMSecurity, key: String, keeping old: Security?) -> Security {
-        let bond = s.kind == "bond"
+        let bond = s.kind == "bond" || s.securityType == "Bond"
         let fund = s.kind == "fund"
-        let name = s.name.lowercased()
-        let duration: Double = !bond ? 0
-            : name.contains("short") || name.contains("1-3") || name.contains("0-3") || name.contains("t-bill") || name.contains("floating") ? 2
-            : name.contains("20+") || name.contains("long") || name.contains("extended") ? 17
-            : name.contains("7-10") || name.contains("intermediate") ? 7 : 6
-        return Security(ticker: key, name: s.name,
-                        sector: bond ? Universe.fixedIncome : s.sector ?? (fund ? "Diversified Fund" : "Unclassified"),
-                        assetClass: bond ? .bond : .equity,
-                        price: s.price ?? old?.price ?? 0, beta: s.beta ?? (bond ? 0 : 1), rateBeta: bond ? -duration : -0.8,
-                        idioVol: bond ? 0.01 : fund ? 0.04 : 0.25, marketCap: (s.marketCap ?? 0) / 1e9, alpha: 0, yield: 0,
-                        srmID: s.securityId, srmTicker: s.ticker, priceDate: s.priceDate ?? old?.priceDate, securityType: s.securityType)
+        var sec = Security(ticker: key, name: s.name,
+                           sector: bond ? Universe.fixedIncome : s.sector ?? (fund ? "Diversified Fund" : "Unclassified"),
+                           assetClass: bond ? .bond : .equity,
+                           price: s.price ?? old?.price ?? 0, beta: s.beta ?? 0, rateBeta: 0, volatility: nil,
+                           marketCap: s.marketCap.map { $0 / 1e9 } ?? old?.marketCap ?? 0, alpha: 0,
+                           srmID: s.securityId, srmTicker: s.ticker, priceDate: s.priceDate ?? old?.priceDate,
+                           securityType: s.securityType)
+        sec.fee = s.expenseRatio ?? old?.fee ?? 0
+        if let old, old.hasRisk {
+            sec.beta = old.beta
+            sec.rateBeta = old.rateBeta
+            sec.volatility = old.volatility
+            sec.alpha = old.alpha
+            sec.hasRisk = true
+        }
+        return sec
     }
 }
 
@@ -271,6 +301,16 @@ nonisolated enum AccountsClient {
         try await request("PUT", "/accounts/\(code)", body: body, as: SRMAccount.self)
     }
 
+    private struct MonthlyPage: Decodable {
+        var prices: [String: [MonthClose]]
+    }
+    struct MonthClose: Decodable, Sendable { var date: String; var close: Double }
+
+    /// Month-end closes over the last `months` months, by the security master's ticker.
+    static func monthlyPrices(_ tickers: [String], months: Int = 12) async throws -> [String: [MonthClose]] {
+        try await request("POST", "/prices/monthly", body: ["tickers": tickers, "months": months], as: MonthlyPage.self).prices
+    }
+
     static func loadPrices(_ code: String) async throws -> PriceLoad {
         try await request("POST", "/accounts/\(code)/load-prices", timeout: 600, as: PriceLoad.self)
     }
@@ -282,6 +322,19 @@ extension ServiceClient {
     static func srmInputs(portfolio code: String, benchmark: String?, mode: String) async throws -> (OptimizationInputs, String) {
         var body: [String: Any] = ["portfolio": code, "mode": mode]
         if let benchmark { body["benchmark"] = benchmark }
+        return try await riskInputs(body)
+    }
+
+    /// Risk inputs for securities by ticker (Learn, stress tests, Add Securities): covariance, betas, rate betas.
+    static func riskInputs(securities tickers: [String], benchmark: String? = nil) async throws -> (OptimizationInputs, String) {
+        var body: [String: Any] = ["securities": tickers, "mode": benchmark == nil ? "risk" : "absolute", "alpha": "none"]
+        if let benchmark { body["benchmark"] = benchmark }
+        return try await riskInputs(body)
+    }
+
+    /// POST /inputs, then the full matrices; registers every asset and gives it the service's betas, rate betas,
+    /// volatility and alpha (Universe.security then carries them), and the risk-free rate.
+    static func riskInputs(_ body: [String: Any]) async throws -> (OptimizationInputs, String) {
         let summary = try await post("http://127.0.0.1:8772", "/inputs", body, service: "analytics (Python, port 8772)")
         guard let url = (summary["inputsUrl"] as? String).flatMap(URL.init(string:)) else {
             throw Failure.rejected("analytics: no inputsUrl in the answer")
@@ -297,6 +350,12 @@ extension ServiceClient {
             SRMRegistry.shared.key(ticker: t) ?? SRMRegistry.shared.register(SRMSecurity(securityId: -1 - i, ticker: t, name: names[i], sector: sectors[i], kind: "stock"))
         }
         let current = (json["currentWeights"] as? [String: Double]) ?? [:]
+        let vols = cov.indices.map { cov[$0][$0].squareRoot() }
+        let marketIndex = (json["marketProxy"] as? String).flatMap { assets.firstIndex(of: $0) }
+        SRMRegistry.shared.applyRisk(keys: keys, betas: json["betas"] as? [Double], rateBetas: json["rateBetas"] as? [Double],
+                                     vols: vols, alphas: body["mode"] as? String == "active" ? json["expectedReturns"] as? [Double] : nil,
+                                     riskFree: json["riskFree"] as? Double,
+                                     marketVol: json["marketVol"] as? Double ?? marketIndex.map { vols[$0] })
         let inputs = OptimizationInputs(assets: keys, sectors: keys.map { Universe.security($0)?.sector ?? "Unclassified" },
                                         benchmark: json["benchmarkWeights"] as? [Double] ?? assets.map { _ in 0 },
                                         current: assets.map { current[$0] ?? 0 },

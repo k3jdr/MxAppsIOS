@@ -255,7 +255,7 @@ class SRM:
                 price_date = cur.fetchone()[0]
                 # Only the benchmarks the loaders refresh: custom ones built in MxDataHUB keep their build date.
                 cur.execute("""SELECT min(as_of_date), max(as_of_date) FROM srm.v_benchmark_summary
-                                WHERE provider IS DISTINCT FROM 'MxDataHUB'""")
+                                WHERE provider IS DISTINCT FROM 'MxDataHUB' AND provider IS DISTINCT FROM 'MxPortMGR'""")
                 bench_min, bench_max = cur.fetchone()
                 portfolio_min = None
                 if table_exists(cur, "srm.v_snapshot_coverage"):
@@ -401,7 +401,7 @@ def quality_checks(status, stale_days):
 
     for code, b in status["benchmarks"].items():
         age = business_days_between(b["as_of_date"], today) if b["as_of_date"] else None
-        if b.get("provider") != "MxDataHUB":    # custom benchmarks are built on request, not refreshed
+        if b.get("provider") not in ("MxDataHUB", "MxPortMGR"):    # custom and blended benchmarks aren't refreshed
             add("benchmark %s fresh" % code, age is not None and age <= stale_days,
                 "as of %s (%s business days old)" % (b["as_of_date"], age))
         weight = float(b["weight_sum"] or 0)

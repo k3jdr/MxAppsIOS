@@ -444,7 +444,7 @@ struct ComputeView: View {
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                Text("\(p.name) uses the illustrative universe's made-up companies, so its exposure can't be measured here. Choose My Portfolio kept in the security master (My Holdings ▸ Data) to see yours.")
+                Text("\(p.name) hasn't been read from the security master yet.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }

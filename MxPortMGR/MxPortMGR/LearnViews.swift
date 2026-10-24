@@ -18,7 +18,7 @@ struct WelcomeView: View {
     var body: some View {
         StepPage(store: store, subtitle: "A portfolio-management IDE that explains why before it shows how.", lessonTitle: "Before you start", lesson: [
             "MxPortMGR teaches how professional portfolio tools — optimization, risk, index tracking and attribution — apply to personal accounts, and what everyday decisions cost over the long run.",
-            "Everything runs on an illustrative market: 36 fictional companies, six bond funds, cash and three index funds. The reports and futures are made up in the shape of real ones.",
+            "Everything runs on real data from the security master: real securities, prices and benchmarks, sample accounts built from real purchases, and risk estimated from real daily prices. The market-report walkthroughs are scenarios in the shape of real releases, and the futures are simulations.",
             "It is educational. It never tells you what to buy or sell for your own accounts; talk to a licensed adviser about your situation.",
         ]) {
             HStack(alignment: .top, spacing: 14) {
@@ -122,28 +122,47 @@ struct WhyOptimizeView: View {
     @Bindable var store: PortStore
     @State private var names = 5.0
     @State private var stockShare = 0.6
+    /// Volatility of an equal-weighted portfolio of n S&P 500 members (the average over random draws).
+    @State private var diversification: [(Int, Double)] = []
+    /// Every mix of VTI (stocks) and BND (bonds): expected return and volatility.
+    @State private var mixes: [(stocks: Double, ret: Double, vol: Double)] = []
+    @State private var problem: String?
 
-    private static let order: [Security] = {
-        var rng = SeededRandom(seed: 5)
-        return Universe.base.filter { $0.assetClass == .equity }.shuffled(using: &rng)
-    }()
+    private static let maxNames = 50
 
-    /// Volatility of an equal-weighted portfolio of the first n names.
-    private static let diversification: [(Int, Double)] = (1...36).map { n in
-        let picks = order.prefix(n).map { Universe.baseIndex[$0.ticker]! }
-        var v = 0.0
-        for i in picks { for j in picks { v += Universe.covariance[i][j] } }
-        return (n, (v / Double(n * n)).squareRoot())
-    }
-
-    private static let mixes: [(stocks: Double, ret: Double, vol: Double)] = stride(from: 0.0, through: 1.0001, by: 0.05).map { x in
-        let w = Universe.blend([(Universe.equityIndexWeights, x), (Universe.bondIndexWeights, 1 - x)])
-        var v = 0.0, r = 0.0
-        for (a, wa) in w {
-            r += wa * Universe.expectedReturn(Universe.security(a)!)
-            for (b, wb) in w { v += wa * wb * Universe.covariance[Universe.baseIndex[a]!][Universe.baseIndex[b]!] }
+    /// Both charts from the analytics service: the S&P 500 members' covariance (Ledoit-Wolf on two years of real
+    /// prices) and VTI / BND's, with their betas and the 3-month Treasury yield.
+    private func load() async {
+        do {
+            let (sp, _) = try await ServiceClient.riskInputs(securities: [], benchmark: "SP500")
+            var rng = SeededRandom(seed: 5)
+            let n = sp.n
+            diversification = n < 2 ? [] : (1...min(Self.maxNames, n)).map { k in
+                var total = 0.0
+                for _ in 0..<40 {
+                    let picks = Array((0..<n).shuffled(using: &rng).prefix(k))
+                    var v = 0.0
+                    for i in picks { for j in picks { v += sp.cov[i * n + j] } }
+                    total += (v / Double(k * k)).squareRoot()
+                }
+                return (k, total / 40)
+            }
+            let (two, _) = try await ServiceClient.riskInputs(securities: ["VTI", "BND"])
+            guard let iv = two.assets.firstIndex(where: { Universe.security($0)?.displayTicker == "VTI" }),
+                  let ib = two.assets.firstIndex(where: { Universe.security($0)?.displayTicker == "BND" }) else {
+                throw ServiceClient.Failure.rejected("VTI or BND isn't in the security master with prices")
+            }
+            let rv = Universe.security(two.assets[iv]).map(Universe.expectedReturn) ?? 0
+            let rb = Universe.security(two.assets[ib]).map(Universe.expectedReturn) ?? 0
+            let c = { (i: Int, j: Int) in two.cov[i * two.n + j] }
+            mixes = stride(from: 0.0, through: 1.0001, by: 0.05).map { x in
+                let v = x * x * c(iv, iv) + (1 - x) * (1 - x) * c(ib, ib) + 2 * x * (1 - x) * c(iv, ib)
+                return (x, x * rv + (1 - x) * rb, v.squareRoot())
+            }
+            problem = nil
+        } catch {
+            problem = error.localizedDescription
         }
-        return (x, r, v.squareRoot())
     }
 
     var body: some View {
@@ -152,12 +171,22 @@ struct WhyOptimizeView: View {
             "More return usually needs more risk: the stock / bond mix sets most of an account's risk and long-run return.",
             "An optimizer turns three things into weights: forecasts (what you expect), a risk model (how things move together) and limits (what you won't do). It is only as good as its forecasts, which is why the limits matter.",
         ]) {
+            if let problem {
+                Box(title: "Needs the analytics service", symbol: "exclamationmark.triangle", help: "These charts are computed from real prices in the security master by the analytics service.") {
+                    Text(problem).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    Button("Try Again") { Task { await load() } }
+                }
+            } else if diversification.isEmpty || mixes.isEmpty {
+                Box(title: "Diversification and the stock / bond trade-off", symbol: "hourglass", help: "Reading the S&P 500's and VTI / BND's risk from the analytics service.") {
+                    HStack { ProgressView().controlSize(.small); Text("Estimating risk from two years of real prices (analytics service)…").foregroundStyle(.secondary) }
+                }
+            } else {
             HStack(alignment: .top, spacing: 14) {
                 Box(title: "Diversification: own risk fades, market risk stays", symbol: "circle.grid.3x3",
-                    help: "Volatility of an equal-weighted portfolio as you add companies. The first few cut risk sharply; after about 20 the line flattens near the market's own volatility.") {
-                    let selected = Self.diversification[Int(names) - 1]
+                    help: "Volatility of an equal-weighted portfolio of S&P 500 members chosen at random (the average of 40 draws), from two years of real daily prices. The first few names cut risk sharply; then the line flattens near the market's own volatility (VTI's, dashed).") {
+                    let selected = diversification[min(Int(names), diversification.count) - 1]
                     Chart {
-                        ForEach(Self.diversification, id: \.0) { p in
+                        ForEach(diversification, id: \.0) { p in
                             LineMark(x: .value("Companies", p.0), y: .value("Volatility", p.1 * 100))
                         }
                         RuleMark(y: .value("Market", Universe.marketVol * 100))
@@ -169,35 +198,36 @@ struct WhyOptimizeView: View {
                     .chartYAxisLabel("Volatility %")
                     .chartXAxisLabel("Companies held (equal weights)")
                     .frame(height: 220)
-                    Slider(value: $names, in: 1...36, step: 1) { Text("Companies") }
+                    Slider(value: $names, in: 1...Double(diversification.count), step: 1) { Text("Companies") }
                         .help("Number of companies held in equal weights")
                     Text("\(Int(names)) compan\(Int(names) == 1 ? "y" : "ies"): volatility \(pct(selected.1)) a year — in a bad year (about 1 in 6) the account could fall \(pct(selected.1 - 0.08)) or more.")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                 }
                 Box(title: "The trade-off: stocks for growth, bonds for stability", symbol: "chart.xyaxis.line",
-                    help: "Expected return and volatility of every mix of the stock and bond indexes, from all bonds (bottom left) to all stocks (top right).") {
-                    let m = Self.mixes.min { abs($0.stocks - stockShare) < abs($1.stocks - stockShare) ? true : false }!
+                    help: "Every mix of VTI (U.S. stocks) and BND (U.S. bonds), from all bonds (bottom left) to all stocks (top right): volatility from two years of real prices; expected return = the 3-month Treasury yield + beta × an assumed 5% equity premium.") {
+                    let m = mixes.min { abs($0.stocks - stockShare) < abs($1.stocks - stockShare) }!
                     Chart {
-                        ForEach(Self.mixes, id: \.stocks) { p in
+                        ForEach(mixes, id: \.stocks) { p in
                             LineMark(x: .value("Volatility", p.vol * 100), y: .value("Return", p.ret * 100))
                         }
                         PointMark(x: .value("Volatility", m.vol * 100), y: .value("Return", m.ret * 100)).symbolSize(80)
                             .annotation(position: .leading) { Text("\(Int(m.stocks * 100))/\(100 - Int(m.stocks * 100))").font(.caption) }
                     }
                     .chartXAxisLabel("Volatility %")
-                    .chartYAxisLabel("Expected return % (model)")
+                    .chartYAxisLabel("Expected return % (CAPM, assumed premium)")
                     .frame(height: 220)
                     Slider(value: $stockShare, in: 0...1, step: 0.05) { Text("Stocks") }
                         .help("Share of stocks in the mix")
-                    Text("\(Int(m.stocks * 100))% stocks: about \(pct(m.ret)) a year expected with \(pct(m.vol)) volatility in the illustrative model.")
-                        .font(.callout)
+                    Text("\(Int(m.stocks * 100))% VTI / \(100 - Int(m.stocks * 100))% BND: about \(pct(m.ret)) a year expected (the 3-month yield \(pct(Universe.riskFree, 2)) plus beta × a \(pct(Universe.equityPremium, 0)) premium, an assumption) with \(pct(m.vol)) volatility, measured.")
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
                 }
+            }
             }
             Box(title: "What an optimizer does", symbol: "wand.and.stars", help: "The optimizer's three inputs and its output.") {
                 HStack(alignment: .top, spacing: 12) {
                     step("Forecasts", "Expected returns or alpha: what you believe about each holding. Small errors here produce large errors in weights.")
                     Image(systemName: "plus").foregroundStyle(.secondary)
-                    step("Risk model", "How every pair of holdings moves together (a covariance matrix). Here: market, sector and interest-rate factors plus each company's own risk.")
+                    step("Risk model", "How every pair of holdings moves together (a covariance matrix). Here: estimated from two years of real daily prices in the security master, shrunk toward a simpler model (Ledoit-Wolf) so it stays stable.")
                     Image(systemName: "plus").foregroundStyle(.secondary)
                     step("Limits", "Largest position, how far from the benchmark, sector bands, a tracking-error budget, how much to trade.")
                     Image(systemName: "arrow.right").foregroundStyle(.secondary)
@@ -207,6 +237,7 @@ struct WhyOptimizeView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
+        .task { if diversification.isEmpty || mixes.isEmpty { await load() } }
     }
 
     private func step(_ title: String, _ text: String) -> some View {
