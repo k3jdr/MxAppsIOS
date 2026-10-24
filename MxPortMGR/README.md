@@ -137,7 +137,10 @@ a Tax Lots view and *Open in MxPortMGR*) and the analytics service can analyse i
 (default `MY_PORTFOLIO`); **Open** lists the personal accounts already there.
 
 **Add Securities…** searches srm by ticker, name, ISIN or CUSIP (stocks, funds, bond funds)
-across all 13,000-odd active securities, 200 at a time (*Show More*), largest companies first. Click any column header
+across all 16,000-odd active securities, 200 at a time (*Show More*), largest companies first. While it reads, the
+toolbar and the empty table say which step is running and for how long — finding the securities with their latest
+price and market value, then counting the values for the filter menus (after the rows show) — and list the steps done
+with their times. Click any column header
 (Ticker, Name, Type, Sector, Exchange, Price, As of, Market value) to sort by it — in the database, across every match —
 and use the **filter row** like a spreadsheet's autofilter: ticker / name contains, Type, Sector and Exchange menus of
 values with their counts (tick several), a price range, and with / without a price; a filtered column's title shows ⏷
@@ -349,7 +352,9 @@ are sent there the same way, unless the security master already has one for that
 MxDataHUB's Securities page in MxPortMGR: the security master's securities, searched by name or any identifier
 (ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI — current or past), filtered by **Type**, **In** (a benchmark's members
 on its latest date) and **Active only**, and by any column from its header (sort, the column's values with their
-counts, or a condition), a thousand at a time with Previous / Next. Selecting one shows its last year of closes, its
+counts, or a condition — numbers and dates compared as such), a thousand at a time with Previous / Next. Like Add
+Securities, the table shows Ticker, Name, Type, Sector, MIC, **Price**, **As of** and **Market value**, priced
+securities first and the largest first; the identifiers are in the details. Selecting one shows its last year of closes, its
 identifiers with their dates and sources (a table that copies), then its issuer and security facts, listings,
 classification, benchmark membership and corporate actions as one selectable text. Links on tickers and names are the
 same rows as MxDataHUB's (`Shared/Links`): ⌘K, the row's context menu, or a hover card's Edit Link…. MxPortMGR reads

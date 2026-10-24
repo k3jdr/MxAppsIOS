@@ -40,6 +40,11 @@ struct SRMAddSecurities: View {
     @State private var facetKey = ""
     @State private var selection: Int?
     @State private var searching = false
+    /// What the search is doing now, and since when (shown next to the spinner and over an empty table).
+    @State private var stage: String?
+    @State private var stageStart = Date()
+    /// The steps of this search so far, each with how long it took.
+    @State private var steps: [(String, Double)] = []
     @State private var error: String?
     @State private var shares = 10.0
     @State private var cost = 0.0
@@ -103,7 +108,15 @@ struct SRMAddSecurities: View {
                 TextField("Search ticker, name, ISIN or CUSIP", text: $search).textFieldStyle(.roundedBorder).frame(width: 280)
                 Picker("Show", selection: $kind) { ForEach(Kind.allCases) { Text($0.rawValue).tag($0) } }
                     .labelsHidden().pickerStyle(.segmented).fixedSize()
-                if searching { ProgressView().controlSize(.small) }
+                if searching, let stage {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        TimelineView(.periodic(from: stageStart, by: 1)) { t in
+                            Text("\(stage) \(Int(t.date.timeIntervalSince(stageStart)))s").font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        .help(stage)
+                    }
+                }
                 Spacer(minLength: 0)
                 if let error {
                     Text(error).font(.callout).foregroundStyle(.red).lineLimit(2)
@@ -135,6 +148,7 @@ struct SRMAddSecurities: View {
                     TableColumn("Market value", value: \.marketCapKey) { s in Text(s.marketCap.map { compact($0) } ?? "").monospacedDigit().foregroundStyle(.secondary) }.width(84)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay { if results.isEmpty && (searching || !steps.isEmpty) { progressPanel } }
                 // A click picks a row (the screens' text is selectable, the rows' words aren't).
                 .textSelection(.disabled)
                 .quickHelpArea("Security Master", "Every match in srm, a page at a time. Click a column header to sort by it (again to reverse) — across all matches, in the database. The filter row above narrows each column like a spreadsheet's autofilter: text contains, pick values with their counts, a price range, priced or not. A column title with ⏷ is filtered.", symbol: "cylinder.split.1x2")
@@ -161,6 +175,48 @@ struct SRMAddSecurities: View {
         }
         .onChange(of: selection) { cost = (selected?.price ?? 0) * shares }
         .onChange(of: shares) { cost = (selected?.price ?? 0) * shares }
+    }
+
+    // MARK: Progress
+
+    /// Over the empty table while the first page loads: each step done (with its time) and the one running.
+    private var progressPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(searching ? "Reading the security master" : "No securities match").font(.headline)
+            Text("The accounts service (127.0.0.1:8774) queries MxDataHUB's srm database on 192.168.0.223.")
+                .font(.callout).foregroundStyle(.secondary)
+            ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
+                Label { Text(step.0) + Text(String(format: "  %.1fs", step.1)).foregroundStyle(.secondary) } icon: {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                }
+            }
+            if searching, let stage {
+                Label { Text(stage) } icon: { ProgressView().controlSize(.small) }
+            }
+        }
+        .font(.callout)
+        .padding(16)
+        .frame(maxWidth: 520, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+    }
+
+    private var kindWords: String {
+        switch kind {
+        case .all: "stocks, ETFs, mutual funds and bond funds"
+        case .stocks: "stocks"
+        case .funds: "ETFs and mutual funds"
+        case .bonds: "bond funds"
+        }
+    }
+
+    private func begin(_ text: String) {
+        stage = text
+        stageStart = Date()
+    }
+
+    private func finish(_ text: String) {
+        steps.append((text, Date().timeIntervalSince(stageStart)))
     }
 
     // MARK: Filters
@@ -218,17 +274,37 @@ struct SRMAddSecurities: View {
     }
 
     /// The first page for the request (with fresh value counts when the search or kind changed), or the next page.
+    /// The rows come first; the filter menus' value counts (a second, heavier query) follow when the search or kind
+    /// changed, so the table fills without waiting for them.
     private func page(more: Bool) async {
         let r = request
         let key = "\(r.text)|\(r.kind)"
         searching = true
-        defer { searching = false }
+        defer { searching = false; stage = nil }
+        if !more { steps = [] }
         do {
-            let page = try await AccountsClient.search(r, offset: more ? results.count : 0, limit: pageSize, facets: !more && key != facetKey)
+            if more {
+                begin("Reading the next \(min(pageSize, total - results.count).formatted()) securities…")
+            } else {
+                let what = r.text.isEmpty ? kindWords : "\(kindWords) matching “\(r.text)”"
+                begin("Finding \(what), with each one's latest price and market value…")
+            }
+            let page = try await AccountsClient.search(r, offset: more ? results.count : 0, limit: pageSize)
+            guard r == request else { return }
             results = more ? results + page.securities : page.securities
             total = page.total
-            if let f = page.facets { facets = f; facetKey = key }
             error = nil
+            if !more {
+                finish("Found \(total.formatted()) \(kindWords); showing the first \(results.count.formatted())")
+            }
+            if !more && key != facetKey {
+                begin("Counting values for the filter menus…")
+                if let f = try await AccountsClient.search(r, offset: 0, limit: 1, facets: true).facets {
+                    facets = f
+                    facetKey = key
+                }
+                finish("Filter menus ready")
+            }
         } catch {
             self.error = error.localizedDescription
         }

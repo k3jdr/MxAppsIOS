@@ -274,17 +274,22 @@ def find(conn, q):
     else:
         order = relevance
     base = f"""
-        WITH px AS (SELECT DISTINCT ON (l.security_id) l.security_id, p.close, p.price_date
-                      FROM srm.price p JOIN srm.listing l USING (listing_id)
-                     ORDER BY l.security_id, p.price_date DESC),
-             cap AS (SELECT DISTINCT ON (security_id) security_id, market_cap FROM srm.security_market_data
-                      WHERE market_cap IS NOT NULL ORDER BY security_id, as_of_date DESC),
-             b AS (SELECT v.security_id, coalesce(v.ticker, v.fmp_symbol, v.security_id::text) AS ticker, v.mic, v.name,
+        WITH b AS (SELECT v.security_id, coalesce(v.ticker, v.fmp_symbol, v.security_id::text) AS ticker, v.mic, v.name,
                           v.security_type, v.asset_class, v.sector, v.industry, v.isin, v.cusip,
                           (v.name ~* '{BOND_NAME}') AS is_bond, px.close AS price, px.price_date, c.market_cap
                      FROM srm.v_security v
-                     LEFT JOIN px ON px.security_id = v.security_id
-                     LEFT JOIN cap c ON c.security_id = v.security_id
+                     -- The latest price on any of its listings, and the latest market value: index lookups per
+                     -- security (srm.price has millions of rows since the Massive daily files; scanning it took 10 s).
+                     LEFT JOIN LATERAL (
+                         SELECT p.close, p.price_date FROM srm.listing l
+                          CROSS JOIN LATERAL (SELECT p.close, p.price_date FROM srm.price p WHERE p.listing_id = l.listing_id
+                                               ORDER BY p.price_date DESC LIMIT 1) p
+                          WHERE l.security_id = v.security_id
+                          ORDER BY p.price_date DESC LIMIT 1) px ON true
+                     LEFT JOIN LATERAL (
+                         SELECT md.market_cap FROM srm.security_market_data md
+                          WHERE md.security_id = v.security_id AND md.market_cap IS NOT NULL
+                          ORDER BY md.as_of_date DESC LIMIT 1) c ON true
                     WHERE {' AND '.join(where)})"""
     sql = base + f"""
         SELECT b.*, count(*) OVER () AS total,
@@ -440,12 +445,16 @@ def load_prices(conn, code):
 
 # The list's columns that sort and filter: column title -> v_security column (as MxDataHUB's SRMStore).
 BROWSE_COLUMNS = {"Ticker": "v.ticker", "Name": "v.name", "Type": "v.security_type", "ISIN": "v.isin",
-                  "CUSIP": "v.cusip", "Composite FIGI": "v.composite_figi", "Sector": "v.sector", "MIC": "v.mic"}
+                  "CUSIP": "v.cusip", "Composite FIGI": "v.composite_figi", "Sector": "v.sector", "MIC": "v.mic",
+                  "Price": "px.close", "As of": "px.price_date", "Market value": "c.market_cap"}
+# Columns compared as numbers or dates (the rest as text).
+BROWSE_TYPES = {"Price": "numeric", "As of": "date", "Market value": "numeric"}
 BROWSE_PAGE = 1000
 
 
-def grid_condition(f, expr, params):
-    """One column filter as SQL on `expr`, compared as text — Shared/GridFilters' GridSQL.condition."""
+def grid_condition(f, expr, params, sql_type=None):
+    """One column filter as SQL on `expr`, compared as text — Shared/GridFilters' GridSQL.condition; the greater /
+    less / between conditions compare as `sql_type` (numeric, date) when given."""
     text = expr + "::text"
     if "values" in f:
         values = f.get("values") or []
@@ -468,6 +477,8 @@ def grid_condition(f, expr, params):
               "is less than": text + " < %s", "is less than or equal to": text + " <= %s"}
     if op in simple:
         params.append(v1)
+        if sql_type and op.startswith("is "):
+            return expr + simple[op][len(text):].replace("%s", "%s::" + sql_type)
         return simple[op]
     if op == "does not equal":
         params.append(v1)
@@ -480,6 +491,8 @@ def grid_condition(f, expr, params):
         return "right(lower(%s), length(%%s)) = lower(%%s)" % text
     if op == "is between":
         params += [v1, v2]
+        if sql_type:
+            return "%s BETWEEN %%s::%s AND %%s::%s" % (expr, sql_type, sql_type)
         return text + " BETWEEN %s AND %s"
     raise ValueError("unknown filter operator: %s" % op)
 
@@ -493,17 +506,32 @@ def browse_source(body, params, except_column=None):
     conditions = []
     for name, f in sorted((body.get("filters") or {}).items()):
         if name != except_column and name in BROWSE_COLUMNS and isinstance(f, dict):
-            conditions.append(grid_condition(f, BROWSE_COLUMNS[name], params))
+            conditions.append(grid_condition(f, BROWSE_COLUMNS[name], params, BROWSE_TYPES.get(name)))
     params[:0] = [text, text, text, type_, type_, benchmark, benchmark, active]
     return """
           FROM srm.v_security v
-          LEFT JOIN m ON m.security_id = v.security_id
+          LEFT JOIN m ON m.security_id = v.security_id""" + BROWSE_PRICE_JOINS + """
          WHERE (%s = '' OR m.security_id IS NOT NULL OR v.name ILIKE '%%' || %s || '%%'
                 OR v.issuer_name ILIKE '%%' || %s || '%%')
            AND (%s = 'All' OR v.security_type = %s)
            AND (%s = '' OR v.security_id IN (
                 SELECT w.security_id FROM srm.benchmark b, srm.benchmark_weights(b.benchmark_id) w WHERE b.code = %s))
            AND (NOT %s OR v.is_active)""" + ("".join("\n           AND " + c for c in conditions))
+
+
+# The latest price on any listing and the latest market value, per security (index lookups: srm.price is too large
+# to scan for every search).
+BROWSE_PRICE_JOINS = """
+          LEFT JOIN LATERAL (
+              SELECT p.close, p.price_date FROM srm.listing l
+               CROSS JOIN LATERAL (SELECT p.close, p.price_date FROM srm.price p WHERE p.listing_id = l.listing_id
+                                    ORDER BY p.price_date DESC LIMIT 1) p
+               WHERE l.security_id = v.security_id
+               ORDER BY p.price_date DESC LIMIT 1) px ON true
+          LEFT JOIN LATERAL (
+              SELECT md.market_cap FROM srm.security_market_data md
+               WHERE md.security_id = v.security_id AND md.market_cap IS NOT NULL
+               ORDER BY md.as_of_date DESC LIMIT 1) c ON true"""
 
 
 def browse_matches(text):
@@ -523,17 +551,21 @@ def browse(conn, body):
     sort = body.get("sort") or None
     if sort and sort.get("column") in BROWSE_COLUMNS:
         order.append("%s %s NULLS LAST" % (BROWSE_COLUMNS[sort["column"]], "ASC" if sort.get("ascending", True) else "DESC"))
-    order += ["m.rank NULLS LAST", "(v.ticker = upper(%s)) DESC NULLS LAST", "v.name", "v.security_id"]
+    # Then, as in Add Securities: priced securities first, the largest by market value.
+    order += ["m.rank NULLS LAST", "(v.ticker = upper(%s)) DESC NULLS LAST", "(px.close IS NOT NULL) DESC",
+              "c.market_cap DESC NULLS LAST", "v.name", "v.security_id"]
     rows = fetch(conn, with_m + """
         SELECT v.security_id, coalesce(v.ticker, '') AS ticker, v.name, v.security_type, coalesce(v.isin, '') AS isin,
                coalesce(v.cusip, '') AS cusip, coalesce(v.composite_figi, '') AS figi, coalesce(v.sector, '') AS sector,
-               coalesce(v.mic::text, '') AS mic, v.is_active, count(*) OVER () AS total""" + source + """
+               coalesce(v.mic::text, '') AS mic, v.is_active, px.close::float8 AS price, px.price_date::text AS price_date,
+               c.market_cap::float8 AS market_cap, count(*) OVER () AS total""" + source + """
          ORDER BY """ + ", ".join(order) + """
          LIMIT %s OFFSET %s""", mparams + params + [text, limit, offset])
     return {"total": int(rows[0]["total"]) if rows else 0, "offset": offset,
             "securities": [{"id": r["security_id"], "ticker": r["ticker"], "name": r["name"], "type": r["security_type"],
                             "isin": r["isin"], "cusip": r["cusip"], "figi": r["figi"], "sector": r["sector"],
-                            "mic": r["mic"], "isActive": r["is_active"]} for r in rows]}
+                            "mic": r["mic"], "isActive": r["is_active"], "price": r["price"], "priceDate": r["price_date"],
+                            "marketCap": r["market_cap"]} for r in rows]}
 
 
 def browse_values(conn, body):
@@ -544,8 +576,9 @@ def browse_values(conn, body):
     with_m, mparams = browse_matches((body.get("q") or "").strip())
     params = []
     source = browse_source(body, params, except_column=column)
-    rows = fetch(conn, with_m + "\n        SELECT %s::text AS value, count(*) AS n" % BROWSE_COLUMNS[column] + source
-                 + "\n         GROUP BY 1 ORDER BY 1 NULLS FIRST LIMIT 1001", mparams + params)
+    expr = BROWSE_COLUMNS[column]
+    rows = fetch(conn, with_m + "\n        SELECT %s::text AS value, count(*) AS n" % expr + source
+                 + "\n         GROUP BY %s ORDER BY %s NULLS FIRST LIMIT 1001" % (expr, expr), mparams + params)
     return {"values": [{"value": r["value"], "count": int(r["n"])} for r in rows[:1000]], "truncated": len(rows) > 1000}
 
 

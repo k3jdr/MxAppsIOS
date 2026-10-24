@@ -28,6 +28,10 @@ struct SecurityRow: Identifiable, Hashable, Decodable {
     var sector: String
     var mic: String
     var isActive: Bool
+    /// The latest close on any listing, its date, and the latest market value (the detail's security has none).
+    var price: Double?
+    var priceDate: String?
+    var marketCap: Double?
 }
 
 struct IdentifierRow: Identifiable, Hashable, Decodable {
@@ -105,8 +109,8 @@ final class SecuritiesStore {
     static let shared = SecuritiesStore()
     static let pageSize = 1000
     /// The results' columns that sort and filter (the service maps them to v_security's).
-    static let columnTypes = ["Ticker", "Name", "Type", "ISIN", "CUSIP", "Composite FIGI", "Sector", "MIC"]
-        .reduce(into: [String: String]()) { $0[$1] = "text" }
+    static let columnTypes = ["Ticker", "Name", "Type", "Sector", "MIC"].reduce(into: [String: String]()) { $0[$1] = "text" }
+        .merging(["Price": "numeric", "As of": "date", "Market value": "numeric"]) { a, _ in a }
 
     var query = ""
     var typeFilter = "All"
@@ -269,16 +273,22 @@ struct SecuritiesView: View {
 
     /// The tables' columns as text, for ⌘C and Copy Row (Shared/Copy/TableCopy.swift).
     static let resultsText = TableText<SecurityRow>(
-        titles: ["Ticker", "Name", "Type", "ISIN", "CUSIP", "Composite FIGI", "Sector", "MIC"],
-        cells: { [$0.ticker, $0.name, $0.type, $0.isin, $0.cusip, $0.figi, $0.sector, $0.mic] })
+        titles: ["Ticker", "Name", "Type", "Sector", "MIC", "Price", "As of", "Market value"],
+        cells: { [$0.ticker, $0.name, $0.type, $0.sector, $0.mic, $0.price.map { String(format: "%.2f", $0) } ?? "",
+                  $0.priceDate ?? "", $0.marketCap.map { String(format: "%.0f", $0) } ?? ""] })
     static let identifiersText = TableText<IdentifierRow>(
         titles: ["Type", "Value", "MIC", "From", "To", "Source"],
         cells: { [$0.type, $0.value, $0.mic, $0.from == "1900-01-01" ? "" : $0.from, $0.to.isEmpty ? "current" : $0.to, $0.source] })
 
     @State private var identifierSelection = Set<IdentifierRow.ID>()
 
+    static func compact(_ x: Double) -> String {
+        x >= 1e12 ? String(format: "$%.2fT", x / 1e12) : x >= 1e9 ? String(format: "$%.1fB", x / 1e9) : x >= 1e6 ? String(format: "$%.0fM", x / 1e6) : money(x)
+    }
+
     var body: some View {
-        SplitPanes(id: "portSecurities", widths: 460...720, ideal: 560, trailingMinimum: 440) {
+        // A new id: the pane is wider since it shows prices (a width saved for the old columns would hide them).
+        SplitPanes(id: "portSecuritiesPrices", widths: 560...980, ideal: 820, trailingMinimum: 380) {
             searchPanel
         } trailing: {
             detailPanel
@@ -326,14 +336,18 @@ struct SecuritiesView: View {
             .onChange(of: master.activeOnly) { Task { await master.search() } }
 
             Table(master.results, selection: $master.selectedID) {
-                TableColumn("Ticker") { r in LinkedCell(target: .master(r)) }.width(min: 50, ideal: 70)
-                TableColumn("Name") { r in LinkedCell(target: .master(r, .name)) }.width(min: 140, ideal: 220)
-                TableColumn("Type", value: \.type).width(min: 60, ideal: 90)
-                TableColumn("ISIN", value: \.isin).width(min: 90, ideal: 110)
-                TableColumn("CUSIP", value: \.cusip).width(min: 70, ideal: 85)
-                TableColumn("Composite FIGI", value: \.figi).width(min: 90, ideal: 110)
-                TableColumn("Sector", value: \.sector).width(min: 60, ideal: 120)
-                TableColumn("MIC", value: \.mic).width(min: 56, ideal: 60)
+                TableColumn("Ticker") { r in LinkedCell(target: .master(r)) }.width(min: 44, ideal: 58)
+                TableColumn("Name") { r in LinkedCell(target: .master(r, .name)) }.width(min: 110, ideal: 150)
+                TableColumn("Type", value: \.type).width(min: 50, ideal: 72)
+                TableColumn("Sector", value: \.sector).width(min: 50, ideal: 88)
+                TableColumn("MIC", value: \.mic).width(min: 40, ideal: 46)
+                TableColumn("Price") { r in
+                    Text(r.price.map(money) ?? "no prices").monospacedDigit().foregroundStyle(r.price == nil ? .orange : .primary)
+                }
+                .width(min: 56, ideal: 70)
+                TableColumn("As of") { r in Text(r.priceDate ?? "").foregroundStyle(.secondary) }.width(min: 84, ideal: 90)
+                TableColumn("Market value") { r in Text(r.marketCap.map(Self.compact) ?? "").monospacedDigit().foregroundStyle(.secondary) }
+                    .width(min: 56, ideal: 72)
             }
             .columnHeaderFilters(
                 types: SecuritiesStore.columnTypes, options: master.options,
@@ -346,7 +360,7 @@ struct SecuritiesView: View {
             }
             .copiesSelectedRows(master.results, selected: master.selectedID, as: Self.resultsText)
             .task(id: master.results.map(\.id)) { await SecurityLinks.shared.load(securityIDs: master.results.map(\.id)) }
-            .quickHelpArea("Securities", "The securities found, a thousand at a time. Click a column's header to sort it or filter it by its values or a condition; select one for its details on the right. ⌘C copies the selected row; right-click for its link.", symbol: "tablecells")
+            .quickHelpArea("Securities", "The securities found, a thousand at a time, with the latest price, its date and the market value. The identifiers (ISIN, CUSIP, FIGI …) are in the details on the right. Click a column's header to sort it or filter it by its values or a condition; select one for its details on the right. ⌘C copies the selected row; right-click for its link.", symbol: "tablecells")
             pageBar
             if !master.options.isEmpty { sortAndFilterLine }
             if let problem = master.problem {
