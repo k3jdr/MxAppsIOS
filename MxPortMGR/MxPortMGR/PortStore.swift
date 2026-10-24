@@ -16,13 +16,13 @@ enum Screen: String, CaseIterable, Identifiable {
     case welcome, choosePath
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
-    case whyOptimize, whyAttribution, activeVsPassive
-    case securities, samples, services
+    case whyOptimize, whyAttribution, activeVsPassive, samples
+    case securities, services
 
     var id: String { rawValue }
 
     enum Group: String, CaseIterable {
-        case start = "Start Here", mine = "My Portfolio", reports = "Market Reports", library = "Library"
+        case start = "Start Here", mine = "My Portfolio", reports = "Knowledge Library", library = "Library"
 
         /// The sidebar's sections (Start Here's screens are in the Guide menu only).
         static let sidebar: [Group] = [.mine, .reports, .library]
@@ -33,8 +33,8 @@ enum Screen: String, CaseIterable, Identifiable {
         case .welcome, .choosePath: .start
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
-             .whyOptimize, .whyAttribution, .activeVsPassive: .reports
-        case .securities, .samples, .services: .library
+             .whyOptimize, .whyAttribution, .activeVsPassive, .samples: .reports
+        case .securities, .services: .library
         }
     }
 

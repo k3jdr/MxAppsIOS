@@ -2,7 +2,7 @@
 //  ReportNotes.swift
 //  MxPortMGR
 //
-//  Your own notes on a report, in Market Reports ▸ Report Library ("Which drivers each report moves"): right-click a
+//  Your own notes on a report, in Knowledge Library ▸ Report Library ("Which drivers each report moves"): right-click a
 //  report's name to add or edit them — formatted text that can hold links of its own (web pages, email, pages in
 //  MxNoteONE), written as a link's hover text is (Shared/Links/LinkTips.swift) — and resting the pointer on the name
 //  shows them on a hover card, as MxNoteONE shows a link's hover text, beside what the report is: its publisher, how

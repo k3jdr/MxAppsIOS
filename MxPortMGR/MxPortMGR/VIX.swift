@@ -2,7 +2,7 @@
 //  VIX.swift
 //  MxPortMGR
 //
-//  Market Reports ▸ VIX: the Cboe Volatility Index, real data. Today's close and where it stands against 1990 to now,
+//  Knowledge Library ▸ VIX: the Cboe Volatility Index, real data. Today's close and where it stands against 1990 to now,
 //  its history with the calm-to-panic regimes shaded, the term structure (the 9-day, 30-day, 3-month and 6-month
 //  indexes), and every spike above 35 with how long the VIX took to come back under 20 — the lesson being that fear
 //  peaks when selling feels most urgent, and passes.

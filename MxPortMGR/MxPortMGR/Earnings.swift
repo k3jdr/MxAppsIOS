@@ -2,7 +2,7 @@
 //  Earnings.swift
 //  MxPortMGR
 //
-//  Real earnings reports for Market Reports ▸ Earnings by Day and Earnings Calendar, from two sources merged by symbol:
+//  Real earnings reports for Knowledge Library ▸ Earnings by Day and Earnings Calendar, from two sources merged by symbol:
 //
 //  * Nasdaq.com's earnings calendar (api.nasdaq.com, free, no key): every U.S.-listed company reporting on a day —
 //    symbol, company, market cap, before the open or after the close, fiscal quarter, the consensus EPS forecast

@@ -2,8 +2,8 @@
 //  ReportsHubViews.swift
 //  MxPortMGR
 //
-//  Market Reports ▸ Report Library — the hierarchy of reports portfolio managers watch, by tier, with what each
-//  measures, why PMs care, which price drivers it moves, and the five with the greatest impact — and Market Reports ▸
+//  Knowledge Library ▸ Report Library — the hierarchy of reports portfolio managers watch, by tier, with what each
+//  measures, why PMs care, which price drivers it moves, and the five with the greatest impact — and Knowledge Library ▸
 //  Morning Briefing, the ten things many institutional PMs review before the open, on an illustrative morning.
 //
 
@@ -344,7 +344,7 @@ struct MorningBriefingView: View {
                     .frame(height: 120)
                     Button("The real VIX, since 1990") { store.go(.vix) }
                         .buttonStyle(.link)
-                        .help("Market Reports ▸ VIX: real data from Cboe")
+                        .help("Knowledge Library ▸ VIX: real data from Cboe")
                 }
             }
         }

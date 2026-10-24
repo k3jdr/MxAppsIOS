@@ -2,7 +2,7 @@
 //  Compute.swift
 //  MxPortMGR
 //
-//  Market Reports ▸ Compute: AI compute as an asset theme, followed through the money the hyperscalers spend on it.
+//  Knowledge Library ▸ Compute: AI compute as an asset theme, followed through the money the hyperscalers spend on it.
 //  Their quarterly capital expenditure (data centres, chips, networking, power) — each company's and combined, its
 //  growth, how much of their revenue and operating cash flow it takes, and depreciation catching up — beside the
 //  revenue of the companies that money goes to (chips, memory, networking, power and cooling, data-centre space), and

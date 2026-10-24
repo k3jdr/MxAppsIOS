@@ -28,7 +28,7 @@ struct ContentView: View {
             List(selection: Binding(get: { Optional(store.screen) }, set: { if let s = $0 { store.screen = s } })) {
                 ForEach(Screen.Group.sidebar, id: \.self) { group in
                     if group == .reports {
-                        // Market Reports expands and collapses (its disclosure arrow, shown on hover).
+                        // Knowledge Library expands and collapses (its disclosure arrow, shown on hover).
                         Section(group.rawValue, isExpanded: $reportsExpanded) { sidebarRows(group) }
                     } else {
                         Section(group.rawValue) { sidebarRows(group) }

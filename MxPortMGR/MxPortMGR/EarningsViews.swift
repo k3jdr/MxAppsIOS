@@ -2,7 +2,7 @@
 //  EarningsViews.swift
 //  MxPortMGR
 //
-//  Market Reports ▸ Earnings Calendar and Earnings by Day: real companies' reports (sources in Earnings.swift). The
+//  Knowledge Library ▸ Earnings Calendar and Earnings by Day: real companies' reports (sources in Earnings.swift). The
 //  calendar shows a month or a week — past days with how many companies beat or missed the consensus, upcoming days
 //  with who reports and what analysts expect — and a day opens Earnings by Day: every company reporting that day,
 //  with its time, EPS and revenue estimates and results, and the selected company's history.
