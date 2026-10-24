@@ -56,6 +56,11 @@ struct EditHoldingSheet: View {
     private var price: Double? { holding?.security.flatMap { $0.price > 0 ? $0.price : nil } }
     private var shares: Double { rows.reduce(0) { $0 + $1.shares } }
     private var cost: Double { rows.reduce(0) { $0 + $1.cost } }
+    /// The lot list's height: all of its rows up to what leaves the rest of the sheet on screen.
+    private var lotsHeight: CGFloat {
+        let screen = NSScreen.main?.visibleFrame.height ?? 800
+        return min(CGFloat(rows.count) * 30 + 26, max(160, screen - 380))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -74,31 +79,48 @@ struct EditHoldingSheet: View {
                 }
                 Text("Each tax lot: when it was bought, how many shares, and what they cost in total. The holding's shares are the lots' total. Changing a lot's shares changes its cost in proportion (a partial sale); change the cost after it to correct it.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
-                    GridRow {
-                        Text("Bought").font(.caption).foregroundStyle(.secondary)
-                        Text("Shares").font(.caption).foregroundStyle(.secondary)
-                        Text("Total cost ($)").font(.caption).foregroundStyle(.secondary)
-                        Text("Cost / share").font(.caption).foregroundStyle(.secondary)
-                        Text("")
-                    }
-                    ForEach($rows) { $r in
-                        GridRow {
-                            DatePicker("", selection: $r.acquired, in: ...Date(), displayedComponents: .date).labelsHidden().fixedSize()
-                            TextField("", value: Binding(get: { r.shares }, set: { v in
-                                // Scale the lot's cost with its shares, as a partial sale or a split would.
-                                if r.shares > 0, v >= 0 { r.cost *= v / r.shares }
-                                r.shares = max(0, v)
-                            }), format: .number.precision(.fractionLength(0...6))).frame(width: 110)
-                            TextField("", value: $r.cost, format: .number.precision(.fractionLength(0...2))).frame(width: 120)
-                            Text(r.shares > 0 ? money(r.cost / r.shares) : "—").monospacedDigit().foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
-                            Button { rows.removeAll { $0.id == r.id } } label: { Image(systemName: "minus.circle") }
-                                .buttonStyle(.borderless)
-                                .help("Remove this lot")
+                // A plan account has a lot per trade day — dozens a fund — so the lots scroll inside a height that
+                // fits the screen, and the totals and the Cancel / Done buttons stay in view.
+                ScrollViewReader { scroller in
+                    ScrollView(.vertical) {
+                        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
+                            GridRow {
+                                Text("Bought").font(.caption).foregroundStyle(.secondary)
+                                Text("Shares").font(.caption).foregroundStyle(.secondary)
+                                Text("Total cost ($)").font(.caption).foregroundStyle(.secondary)
+                                Text("Cost / share").font(.caption).foregroundStyle(.secondary)
+                                Text("")
+                            }
+                            ForEach($rows) { $r in
+                                GridRow {
+                                    DatePicker("", selection: $r.acquired, in: ...Date(), displayedComponents: .date).labelsHidden().fixedSize()
+                                    TextField("", value: Binding(get: { r.shares }, set: { v in
+                                        // Scale the lot's cost with its shares, as a partial sale or a split would.
+                                        if r.shares > 0, v >= 0 { r.cost *= v / r.shares }
+                                        r.shares = max(0, v)
+                                    }), format: .number.precision(.fractionLength(0...6))).frame(width: 110)
+                                    TextField("", value: $r.cost, format: .number.precision(.fractionLength(0...2))).frame(width: 120)
+                                    Text(r.shares > 0 ? money(r.cost / r.shares) : "—").monospacedDigit().foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
+                                    Button { rows.removeAll { $0.id == r.id } } label: { Image(systemName: "minus.circle") }
+                                        .buttonStyle(.borderless)
+                                        .help("Remove this lot")
+                                }
+                                .id(r.id)
+                            }
                         }
+                        .padding(.trailing, 14)
+                    }
+                    .frame(height: lotsHeight)
+                    .onChange(of: rows.count) { old, new in
+                        // A lot added (not the sheet opening): show it.
+                        if old > 0, new > old, let last = rows.last { withAnimation { scroller.scrollTo(last.id, anchor: .bottom) } }
                     }
                 }
-                Button("Add a Lot") { rows.append(Row(acquired: Date(), shares: 0, cost: 0)) }.buttonStyle(.link)
+                HStack {
+                    Button("Add a Lot") { rows.append(Row(acquired: Date(), shares: 0, cost: 0)) }.buttonStyle(.link)
+                    Spacer()
+                    Text("\(rows.count) lot\(rows.count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
+                }
                 Divider()
                 HStack(spacing: 18) {
                     Text("\(shares.formatted(.number.precision(.fractionLength(0...4)))) shares").monospacedDigit()
