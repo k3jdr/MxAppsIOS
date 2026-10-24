@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to vanguard_plans.local.json (not in git). dropFolders: where you save the plan's downloads from Vanguard's Download center (OfxDownload.qfx / .csv); plans: the plan number (first column of the CSV) → the portfolio its tax lots are saved to.",
+  "dropFolders": ["~/MyCodeGIT/MxDataSRM/src-vanguard"],
+  "plans": {"12345": {"portfolio": "MY_PORTFOLIO"}}
+}

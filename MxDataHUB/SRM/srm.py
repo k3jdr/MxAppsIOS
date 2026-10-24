@@ -9,6 +9,7 @@
                                      add mutual funds from Nasdaq.com and load their prices
     ./srm.py load vanguard-funds [--symbols VFIAX ...] [--since DATE] [--history]
                                      every Vanguard mutual fund and its daily NAV (history from Nasdaq.com)
+    ./srm.py load vanguard-plan [--file F]  Vanguard 401(k) downloads (QFX / CSV) → trust NAVs, plan account lots
     ./srm.py load trust-navs [--file F] collective trusts: statement NAVs + proxy-fund pricing (trusts.local.json)
     ./srm.py load portfolio-snapshots [--as-of DATE] [--portfolios CODE ...]
                                      carry portfolios' latest holdings forward (weight history)
@@ -41,7 +42,8 @@ import traceback
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
 from srmlib.loaders import (blackrock, derivatives, earnings_symbols, fund_families, security_fixes, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
-                             nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard)
+                             nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard,
+                             vanguard_plan)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
 # per-security enrichment that works on the benchmark / portfolio securities.
@@ -69,6 +71,7 @@ LOADERS = {
     "vanguard-funds": vanguard.run,             # every Vanguard mutual fund (Vanguard's list), daily NAV; history from Nasdaq.com
     "blackrock-funds": blackrock.run,           # iShares ETFs, BlackRock mutual funds and CEFs: family profiles, NAVs
     "fund-families": fund_families.run,         # every other family's mutual funds and ETFs (FMP's fund screener), NAVs
+    "vanguard-plan": vanguard_plan.run,         # Vanguard 401(k) downloads: funds, transactions, positions, trust NAVs, lots
     "trust-navs": trust_navs.run,               # collective trusts: statement NAVs carried by a proxy fund's returns
     "mutual-funds": mutual_funds.run,           # add mutual funds from Nasdaq.com (--symbols / --search), with prices
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
@@ -160,7 +163,8 @@ def main():
     load.add_argument("--as-of", help="portfolio-snapshots: snapshot date (default: the latest price date)")
     load.add_argument("--portfolios", nargs="*", help="portfolio-snapshots: only these portfolio codes")
     load.add_argument("--search", help="mutual-funds: add the funds a Nasdaq.com name search finds")
-    load.add_argument("--file", help="trust-navs: the trusts file (default trusts.local.json)")
+    load.add_argument("--file", help="trust-navs: the trusts file (default trusts.local.json); "
+                                                 "vanguard-plan: one plan download (default: the drop folders)")
     args = parser.parse_args()
     common.set_verbosity(max(args.verbose + getattr(args, "load_verbose", 0), common.VERBOSITY))
     debug(f"srm.py {' '.join(sys.argv[1:])} (Python {sys.version.split()[0]}, verbosity {common.VERBOSITY})")

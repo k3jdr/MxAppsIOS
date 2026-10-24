@@ -88,7 +88,7 @@ CATEGORIES = [
      "loaders": ["openfigi", "fmp-profiles", "inherit-sectors", "sec-submissions", "gleif", "security-fixes"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
     {"id": "prices", "name": "Prices & index levels", "loaders": ["massive-prices", "fmp-prices", "fmp-otc-prices", "nasdaq-prices", "vanguard-funds", "blackrock-funds", "fund-families",
-                                                       "listed-derivatives", "trust-navs", "fmp-index-levels"],
+                                                       "listed-derivatives", "vanguard-plan", "trust-navs", "fmp-index-levels"],
      "description": "End-of-day prices (Massive's daily file for every U.S. exchange-listed security; FMP for "
                     "benchmark and portfolio members, with adjusted closes, and for every OTC listing — ADRs and "
                     "foreign ordinary lines, which Massive's file doesn't carry; Nasdaq.com, free and keyless, for the "
@@ -97,12 +97,13 @@ CATEGORIES = [
                     "funds — iShares ETFs, mutual funds and closed-end funds — in the BlackRock family with expense "
                     "ratios (BlackRock's and iShares' product lists; mutual fund NAV history from Nasdaq.com), units, "
                     "warrants and rights (what they hold, CUSIP / ISIN / sector from FMP, FMP then Nasdaq.com prices), "
-                    "collective trusts from statement NAVs and their proxy funds, and benchmark levels.",
+                    "collective trusts from statement NAVs — your Vanguard plan's downloads (QFX / CSV) in its drop folder, which "
+                    "also rebuild the plan account's tax lots — and their proxy funds, and benchmark levels.",
      "cadence": "daily",
      # FMP needs an API key; when it fails, nasdaq-prices still runs and fills the gaps.
      # The Vanguard list is one more source of NAVs: when it fails, the trusts and index levels still load.
      "continueAfterFailure": ["massive-prices", "fmp-prices", "fmp-otc-prices", "vanguard-funds", "blackrock-funds",
-                              "fund-families", "listed-derivatives"]},
+                              "fund-families", "listed-derivatives", "vanguard-plan"]},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
     {"id": "bonds", "name": "Bonds: U.S. Treasuries", "loaders": ["treasuries"],
@@ -133,7 +134,7 @@ RUN_NAMES = {
     "ssga": ["ssga_spy", "ssga_dia", "ssga_mdy", "ssga_spsm"], "nasdaq100": ["nasdaq100"],
     "openfigi": ["openfigi_mapping"], "fmp-profiles": ["fmp_profiles"], "sec-submissions": ["sec_submissions"],
     "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "fmp-otc-prices": ["fmp_otc_prices"], "nasdaq-prices": ["nasdaq_prices"],
-    "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "mutual-funds": ["mutual_funds"],
+    "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "vanguard-plan": ["vanguard_plan"], "mutual-funds": ["mutual_funds"],
     "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],
