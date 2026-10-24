@@ -101,6 +101,7 @@ master* below). Each holding row has a trash button to remove it.
    weighted fee, unrealised gain; asset mix; *Check before you go on* (unknown or unpriced holdings, a single name over
    20%, a sector more than twice the benchmark, asset classes the benchmark doesn't hold, idle cash, missing returns).
    The ticker and the name of each holding can carry a link (⌘K; see *Links on symbols and names*).
+   **Edit Holding…** (double-click a row, its pencil or context menu) edits a holding's tax lots — purchase date, shares and total cost of each; add or remove lots — or the cash; kept when the portfolio is saved.
 2. **My Benchmark** — choose the benchmark that matches your plan; sector and asset-mix comparison, overlap, active
    share, the names you hold in it and its 25 largest members.
 3. **Risk Today** — volatility, tracking error, beta, one-month 95% VaR and expected shortfall in dollars, rate
@@ -475,6 +476,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `Navigation.swift` | Back and Forward: the places visited, the toolbar's ‹ ›, the Go menu, ⌃← ⌃→ and a mouse's side buttons |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
 | `Universe.swift`, `Portfolio.swift`, `Samples.swift` | Security, benchmark and the lookups into the registry; accounts and checks; the samples' lessons |
+| `HoldingEditor.swift` | Edit Holding: a holding's tax lots (date, shares, cost) or the cash |
 | `PortfolioTransfer.swift` | Import Holdings (CSV), Export Portfolio (JSON / CSV), Duplicate and Rename |
 | `PortfolioFile.swift`, `PortfolioSheets.swift` | One portfolio open at a time: preferences, unsaved-change checks, New / Open / Recent / Close / Save / Revert, the quit check; the Open Portfolio, New Portfolio, Decisions, Duplicate, Rename, Import and Policy Benchmarks sheets |
 | `SRMData.swift` | Security-master securities and benchmarks registry (with the analytics service's risk numbers), the accounts-service client, analytics inputs |

@@ -157,7 +157,7 @@ struct PortfolioView: View {
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .help("Find and add stocks, individual bonds, funds or cash (⇧⌘N)")
-            Text(store.portfolio.isSRM ? "Edit shares in the table to resize a position (its lots scale); the trash button removes it. Changes are kept when you save (File ▸ Save, ⌘S)." : "Edit a value in the table to resize a holding; the trash button removes it.").font(.callout).foregroundStyle(.secondary)
+            Text(store.portfolio.isSRM ? "Double-click a holding (or its pencil) to edit its tax lots — purchase date, shares, cost — or the cash; edit shares in the table to resize a position (its lots scale); the trash button removes it. Changes are kept when you save (File ▸ Save, ⌘S)." : "Edit a value in the table to resize a holding; the trash button removes it.").font(.callout).foregroundStyle(.secondary)
             Spacer()
             if !store.portfolio.isSRM { Button("Reset My Portfolio") { store.resetMyPortfolio() } }
         }
@@ -179,6 +179,9 @@ struct SectorChart: View {
 
 struct HoldingsTable: View {
     @Bindable var store: PortStore
+    /// The holding whose lots are being edited (Edit Holding…).
+    @State private var editing: EditTarget?
+    struct EditTarget: Identifiable { let id: String }
 
     var body: some View {
         let p = store.portfolio
@@ -246,22 +249,34 @@ struct HoldingsTable: View {
                 }
                 TableColumn("") { h in
                     if p.id == "mine" {
-                        Button { store.removeFromMine(h.ticker) } label: { Image(systemName: "trash") }
-                            .buttonStyle(.borderless)
-                            .help("Remove \(h.ticker) from My Portfolio")
+                        HStack(spacing: 6) {
+                            Button { editing = EditTarget(id: h.ticker) } label: { Image(systemName: "pencil") }
+                                .buttonStyle(.borderless)
+                                .help("Edit \(h.ticker == "CASH" ? "the cash" : "\(h.ticker)'s tax lots: purchase date, shares and cost") (or double-click the row)")
+                            Button { store.removeFromMine(h.ticker) } label: { Image(systemName: "trash") }
+                                .buttonStyle(.borderless)
+                                .help("Remove \(h.ticker) from My Portfolio")
+                        }
                     }
                 }
-                .width(28)
+                .width(48)
             }
             .contextMenu(forSelectionType: Holding.ID.self) { tickers in
                 if let ticker = tickers.first, let h = p.holdings.first(where: { $0.ticker == ticker }) {
+                    if p.id == "mine" {
+                        Button("Edit Holding…") { editing = EditTarget(id: ticker) }
+                        Divider()
+                    }
                     if let t = LinkTarget.holding(h) {
                         linkMenu(t)
                         Divider()
                     }
                     Button("Copy Row") { copyRows([h], of: p) }
                 }
+            } primaryAction: { tickers in
+                if p.id == "mine", let ticker = tickers.first { editing = EditTarget(id: ticker) }
             }
+            .sheet(item: $editing) { EditHoldingSheet(store: store, ticker: $0.id) }
             // Rows are selected, not their words: Edit ▸ Copy (⌘C) copies the selected row, with the columns' titles.
             .textSelection(.disabled)
             .onCopyCommand {
