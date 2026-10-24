@@ -62,6 +62,7 @@ LOADERS = {
     "gleif": gleif.run,                         # LEIs and legal entity data
     "massive-prices": massive.run,              # every U.S. ticker's day bar from Massive Flat Files (one file a day)
     "fmp-prices": fmp.load_prices,              # end-of-day prices
+    "fmp-otc-prices": fmp.load_otc_prices,      # end-of-day prices of every OTC listing (fmp-prices --otc)
     "nasdaq-prices": nasdaq_prices.run,         # fund prices (ETFs, ETNs, closed-end and mutual funds) and gaps, no key
     "vanguard-funds": vanguard.run,             # every Vanguard mutual fund (Vanguard's list), daily NAV; history from Nasdaq.com
     "trust-navs": trust_navs.run,               # collective trusts: statement NAVs carried by a proxy fund's returns
@@ -146,6 +147,7 @@ def main():
                       help="nasdaq-prices: every active fund (ETF, ETN, closed-end fund; ~6,100 requests at 1/second)")
     load.add_argument("--benchmarks", nargs="*", help="ssga: only these benchmark codes (SP500 DJIA SP400 SP600)")
     load.add_argument("--include-otc", action="store_true", help="sec-tickers: also create OTC securities")
+    load.add_argument("--otc", action="store_true", help="fmp-prices: every current OTC listing (as fmp-otc-prices)")
     load.add_argument("--min-cap", type=float, help="fmp-symbols: screen FMP's OTC lines of companies worth at least this ($)")
     load.add_argument("--home", action="store_true", help="fmp-symbols: also each company's London / Toronto line")
     load.add_argument("--as-of", help="portfolio-snapshots: snapshot date (default: the latest price date)")

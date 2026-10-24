@@ -1,6 +1,7 @@
 """End-of-day prices for every U.S. security from Massive's Flat Files (formerly Polygon.io): one file a trading day,
-us_stocks_sip/day_aggs_v1/YYYY/MM/YYYY-MM-DD.csv.gz — every listed and OTC ticker that traded that day (about 12,600),
-with open, high, low, close and volume (not adjusted for splits or dividends).
+us_stocks_sip/day_aggs_v1/YYYY/MM/YYYY-MM-DD.csv.gz — every exchange-listed ticker that traded that day (about 12,600),
+with open, high, low, close and volume (not adjusted for splits or dividends). OTC tickers (ADRs such as TCEHY, foreign
+"F" lines) are not in these files: fmp-otc-prices prices them.
 
 Each run loads the days since the last Massive price (from --since, default 2 years, the first time; the plan's files
 reach back about two years). Tickers are matched to current U.S. listings in Massive's spelling first, then SRM's:
