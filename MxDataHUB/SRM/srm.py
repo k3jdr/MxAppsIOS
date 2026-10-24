@@ -40,7 +40,7 @@ import traceback
 
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
-from srmlib.loaders import (derivatives, earnings_symbols, fmp_symbols, massive, policy, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
+from srmlib.loaders import (derivatives, earnings_symbols, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
                              nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
@@ -56,6 +56,7 @@ LOADERS = {
     "earnings-symbols-cleanup": earnings_symbols_cleanup.run,   # one-off fix of 2026-10-23's loads (report only unless --force)
     "openfigi": openfigi.run,                   # composite / share-class / exchange FIGIs
     "fmp-profiles": fmp.load_profiles,          # ISIN, CUSIP, sector, industry, market cap
+    "inherit-sectors": sector_inherit.run,      # preferreds, warrants, units, rights: their company's sector
     "listed-derivatives": derivatives.run,      # units, warrants, rights: relations, CUSIP / ISIN / sector, prices
     "spelling-duplicates": spelling_duplicates.run,   # one-off: merge earnings-symbols' FMP-spelling duplicates (--force)
     "sec-submissions": sec.load_submissions,    # SIC, incorporation, EIN, former names
@@ -148,6 +149,8 @@ def main():
                       help="nasdaq-prices: every active fund (ETF, ETN, closed-end fund; ~6,100 requests at 1/second)")
     load.add_argument("--benchmarks", nargs="*", help="ssga: only these benchmark codes (SP500 DJIA SP400 SP600)")
     load.add_argument("--include-otc", action="store_true", help="sec-tickers: also create OTC securities")
+    load.add_argument("--missing-sector", action="store_true",
+                      help="fmp-profiles: active stocks, ADRs and REITs without a sector (never profiled)")
     load.add_argument("--otc", action="store_true", help="fmp-prices: every current OTC listing (as fmp-otc-prices)")
     load.add_argument("--min-cap", type=float, help="fmp-symbols: screen FMP's OTC lines of companies worth at least this ($)")
     load.add_argument("--home", action="store_true", help="fmp-symbols: also each company's London / Toronto line")

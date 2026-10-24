@@ -53,7 +53,8 @@ def _symbols(cur, args):
     """(security_id, fmp symbol) for the work set: given pairs (other loaders: no symbol lookup, so a symbol two
     securities answer to can't pick the wrong one), --symbols, --all-securities (every active security), --otc
     (every current OTC listing: (security_id, symbol, listing_id), so an OTC line of shares listed abroad gets its own
-    dollar prices, not the home listing), else benchmark and portfolio securities."""
+    dollar prices, not the home listing), --missing-sector (operating companies never profiled), else benchmark and
+    portfolio securities plus the operating companies still without a sector."""
     if getattr(args, "security_symbols", None):
         return list(args.security_symbols)
     if getattr(args, "otc", False):
@@ -76,6 +77,8 @@ def _symbols(cur, args):
             if row:
                 out.append((row[0], fmp_symbol(s.upper())))
         return out
+    if getattr(args, "missing_sector", False):
+        return _missing_sector(cur)
     if getattr(args, "all_securities", False):
         cur.execute("""SELECT si.security_id, si.id_value FROM srm.security_identifier si JOIN srm.security s USING (security_id)
                         WHERE si.id_type = 'FMP_SYMBOL' AND current_date < si.valid_to AND s.is_active
@@ -87,7 +90,19 @@ def _symbols(cur, args):
         symbol = cur.fetchone()[0] or fmp_symbol(ticker)
         if symbol:
             out.append((security_id, symbol))
-    return out
+    # And any operating company still without a sector (newly listed), so the daily refresh classifies it.
+    seen = {sid for sid, _ in out}
+    return out + [w for w in _missing_sector(cur) if w[0] not in seen]
+
+
+def _missing_sector(cur):
+    """Active operating companies (common stock, ADRs, REITs) with no FMP sector: never profiled."""
+    cur.execute("""SELECT v.security_id, srm.current_identifier(v.security_id, 'FMP_SYMBOL'), v.ticker
+                     FROM srm.v_security v
+                    WHERE v.is_active AND v.sector IS NULL AND v.ticker IS NOT NULL
+                      AND v.security_type IN ('Common Stock', 'ADR', 'REIT')
+                    ORDER BY v.security_id""")
+    return [(sid, sym or fmp_symbol(ticker)) for sid, sym, ticker in cur.fetchall()]
 
 
 def load_profiles(conn, cfg, args):
