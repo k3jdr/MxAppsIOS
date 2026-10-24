@@ -2,8 +2,8 @@
 //  MxPortMGRApp.swift
 //  MxPortMGR
 //
-//  A portfolio-management IDE that teaches: one window with a guide in the sidebar — Start Here, My Portfolio, Market
-//  Reports (walkthroughs and real earnings), Learn the Why and the Library — over your own account or the sample
+//  A portfolio-management IDE that teaches: one window with a guide in the sidebar — My Portfolio, Market Reports
+//  (walkthroughs, real earnings and the Why lessons) and the Library; Welcome in the Guide menu — over your own account or the sample
 //  accounts, all in the security master (real securities and prices). Risk inputs and attribution come from the shared
 //  Layer 3 services (MxAppsIOS/Services); the optimizer runs built-in or there. Educational only; never investment advice.
 //

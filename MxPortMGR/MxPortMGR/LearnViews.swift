@@ -24,13 +24,13 @@ struct WelcomeView: View {
             HStack(alignment: .top, spacing: 14) {
                 card("1. Choose a Path", "signpost.right.and.left", "Active: beat a benchmark within a risk budget. Passive: match an index cheaply and stay matched. Then work through My Portfolio.", .choosePath)
                 card("2. Read the News", "newspaper", "Eighteen reports portfolio managers watch — jobs, CPI, the Fed, earnings, the yield curve and more — a morning briefing, and real earnings by day and month. Simulate your reaction to each over twenty years.", .reportLibrary)
-                card("3. Learn the Why", "lightbulb", "Why a portfolio needs optimizing, why results need attributing, and what active and passive cost.", .whyOptimize)
+                card("3. Learn the Why", "lightbulb", "Why a portfolio needs optimizing, why results need attributing, and what active and passive cost — at the end of Market Reports.", .whyOptimize)
             }
             Box(title: "How to use it", symbol: "questionmark.circle", help: "How the window is laid out and how Quick Help works.") {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("The sidebar is the guide: My Portfolio has six steps; ⌥⌘↓ and ⌥⌘↑ move to the next and previous screen, and ⌘[ and ⌘] go back and forward, as in a browser.", systemImage: "sidebar.left")
                     Label("Quick Help, under the sidebar, explains whatever is under the pointer — a number, a column, a button. ⌥⌘/ shows or hides it; its ⧉ button floats it in its own window.", systemImage: "questionmark.bubble")
-                    Label("My Portfolio, in the sidebar after Start Here, walks your own account through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
+                    Label("My Portfolio, at the top of the sidebar, walks your own account through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
                     Label("Pick a sample account in the toolbar for the report walkthroughs and the Morning Briefing: each teaches an edge case. Library ▸ Sample Portfolios describes them all; copy one into My Portfolio to work through it.", systemImage: "briefcase")
                     Label("Engine in the toolbar: the built-in optimizers, or the shared Layer 3 services (portfolio-java, portfolio-cpp, analytics) that MxDataHUB and MxJobsWMS use.", systemImage: "cpu")
                 }

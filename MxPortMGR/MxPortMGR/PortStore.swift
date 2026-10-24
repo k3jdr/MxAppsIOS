@@ -11,7 +11,8 @@ import Foundation
 import Observation
 
 enum Screen: String, CaseIterable, Identifiable {
-    // In the sidebar's order (Back and Next follow it).
+    // In the sidebar's order (Back and Next follow it). Welcome and Choose Your Path aren't in the sidebar: the Guide
+    // menu opens them.
     case welcome, choosePath
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
@@ -21,15 +22,18 @@ enum Screen: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     enum Group: String, CaseIterable {
-        case start = "Start Here", mine = "My Portfolio", reports = "Market Reports", learn = "Learn the Why", library = "Library"
+        case start = "Start Here", mine = "My Portfolio", reports = "Market Reports", library = "Library"
+
+        /// The sidebar's sections (Start Here's screens are in the Guide menu only).
+        static let sidebar: [Group] = [.mine, .reports, .library]
     }
 
     var group: Group {
         switch self {
         case .welcome, .choosePath: .start
-        case .whyOptimize, .whyAttribution, .activeVsPassive: .learn
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
-        case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough: .reports
+        case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
+             .whyOptimize, .whyAttribution, .activeVsPassive: .reports
         case .securities, .samples, .services: .library
         }
     }
@@ -141,7 +145,7 @@ nonisolated struct TaxEstimate: Sendable {
 @MainActor
 @Observable
 final class PortStore {
-    var screen: Screen = .welcome {
+    var screen: Screen = .myPortfolio {
         didSet {
             UserDefaults.standard.set(screen.rawValue, forKey: "screen")
             // The My Portfolio path always works on the user's own account.

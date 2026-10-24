@@ -10,20 +10,28 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: PortStore
+    @AppStorage("sidebarReportsExpanded") private var reportsExpanded = true
+
+    private func sidebarRows(_ group: Screen.Group) -> some View {
+        ForEach(Screen.allCases.filter { $0.group == group }) { screen in
+            Label(sidebarTitle(screen),
+                  systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .quickHelpArea(PortHelp.about(screen))
+                .tag(screen)
+        }
+    }
 
     var body: some View {
         NavigationSplitView {
             List(selection: Binding(get: { Optional(store.screen) }, set: { if let s = $0 { store.screen = s } })) {
-                ForEach(Screen.Group.allCases, id: \.self) { group in
-                    Section(group.rawValue) {
-                        ForEach(Screen.allCases.filter { $0.group == group }) { screen in
-                            Label(sidebarTitle(screen),
-                                  systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                                .quickHelpArea(PortHelp.about(screen))
-                                .tag(screen)
-                        }
+                ForEach(Screen.Group.sidebar, id: \.self) { group in
+                    if group == .reports {
+                        // Market Reports expands and collapses (its disclosure arrow, shown on hover).
+                        Section(group.rawValue, isExpanded: $reportsExpanded) { sidebarRows(group) }
+                    } else {
+                        Section(group.rawValue) { sidebarRows(group) }
                     }
                 }
             }
