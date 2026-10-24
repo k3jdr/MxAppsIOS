@@ -85,7 +85,7 @@ CATEGORIES = [
      # day back (two overnight, before the next one appears): freshness allows that lag.
      "dataLagDays": 1},
     {"id": "identifiers", "name": "Identifiers & issuer data",
-     "loaders": ["openfigi", "fmp-profiles", "inherit-sectors", "sec-submissions", "gleif"],
+     "loaders": ["openfigi", "fmp-profiles", "inherit-sectors", "sec-submissions", "gleif", "security-fixes"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
     {"id": "prices", "name": "Prices & index levels", "loaders": ["massive-prices", "fmp-prices", "fmp-otc-prices", "nasdaq-prices", "vanguard-funds", "blackrock-funds", "fund-families",
                                                        "listed-derivatives", "trust-navs", "fmp-index-levels"],
@@ -138,7 +138,7 @@ RUN_NAMES = {
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],
     "treasuries": ["treasuries"], "massive-prices": ["massive_prices"], "listed-derivatives": ["listed_derivatives"],
-    "fmp-symbols": ["fmp_symbols"], "policy-benchmarks": ["policy_benchmarks"], "inherit-sectors": ["inherit_sectors"], "blackrock-funds": ["blackrock_funds"], "fund-families": ["fund_families"],
+    "fmp-symbols": ["fmp_symbols"], "policy-benchmarks": ["policy_benchmarks"], "inherit-sectors": ["inherit_sectors"], "blackrock-funds": ["blackrock_funds"], "fund-families": ["fund_families"], "security-fixes": ["security_fixes"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "..", "..", "MxDataHUB", "SRM"))

@@ -40,7 +40,7 @@ import traceback
 
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
-from srmlib.loaders import (blackrock, derivatives, earnings_symbols, fund_families, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
+from srmlib.loaders import (blackrock, derivatives, earnings_symbols, fund_families, security_fixes, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
                              nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
@@ -57,6 +57,7 @@ LOADERS = {
     "openfigi": openfigi.run,                   # composite / share-class / exchange FIGIs
     "fmp-profiles": fmp.load_profiles,          # ISIN, CUSIP, sector, industry, market cap
     "inherit-sectors": sector_inherit.run,      # preferreds, warrants, units, rights: their company's sector
+    "security-fixes": security_fixes.run,       # corrections the sources get wrong (security_fixes.json)
     "listed-derivatives": derivatives.run,      # units, warrants, rights: relations, CUSIP / ISIN / sector, prices
     "spelling-duplicates": spelling_duplicates.run,   # one-off: merge earnings-symbols' FMP-spelling duplicates (--force)
     "sec-submissions": sec.load_submissions,    # SIC, incorporation, EIN, former names

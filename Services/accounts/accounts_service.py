@@ -147,7 +147,9 @@ def fetch(conn, sql, params=()):
 
 
 def kind_of(row):
-    """stock, bond (fixed-income fund) or fund."""
+    """stock, bond (a fixed-income fund, or fixed income itself: Treasuries, listed notes) or fund."""
+    if row.get("asset_class") == "Fixed Income":
+        return "bond"
     if row.get("asset_class") == "Fund" or row.get("security_type") in ("ETF", "ETN", "Closed-End Fund"):
         return "bond" if row.get("is_bond") else "fund"
     return "stock"

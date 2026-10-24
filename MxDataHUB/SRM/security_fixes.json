@@ -1,0 +1,54 @@
+{
+  "about": "Corrections to securities that the sources get wrong, applied by srm.py load security-fixes after the other identifier loaders (so they stay corrected). 'rules' retype by pattern (PostgreSQL regular expressions on the name, ticker and FMP industry), in order; 'fixes' then set a named security's type and / or name.",
+  "fixes": [
+    {
+      "ticker": "FWONB",
+      "securityType": "Common Stock",
+      "name": "Liberty Media Corporation - Series B Common Stock",
+      "why": "Liberty Media's Formula One Group tracking stock ended; FWONA and FWONK are common stock in OpenFIGI and nasdaqtrader, and FWONB is the same company's Series B. FMP's name 'Formula One Group' and OpenFIGI's 'Tracking Stk' are stale (2026-10-24)."
+    },
+    {
+      "ticker": "VNORP",
+      "securityType": "Preferred Stock",
+      "why": "Vornado Realty Trust preferred (OTC); FMP gives only the company's name."
+    },
+    {
+      "ticker": "TWOD",
+      "securityType": "Listed Note",
+      "why": "Two Harbors Investment Corp. 9.375% Senior Notes due 2030; FMP gives only the company's name."
+    }
+  ],
+  "rules": [
+    {
+      "rule": "exchange-listed notes",
+      "from": [
+        "Common Stock",
+        "Preferred Stock"
+      ],
+      "to": "Listed Note",
+      "name": "(\\m(notes?|debentures?)\\M.*\\mdue\\M|\\m(senior|subordinated|junior subordinated|fixed[- ]rate|fixed-to-floating|fixed rate reset)\\M.*\\m(notes|debentures)\\M|\\mbaby bonds?\\M)",
+      "notName": "(preferred|preference|depositary|trust originated|capital securities)",
+      "why": "$25 notes and debentures that trade on NYSE / Nasdaq ('baby bonds'): debt, not equity. nasdaqtrader's files don't say what a line is."
+    },
+    {
+      "rule": "preferreds typed common",
+      "from": [
+        "Common Stock"
+      ],
+      "to": "Preferred Stock",
+      "name": "(\\m(preferred|preference)\\M|cumulative redeemable|non-?cumulative|perpetual|trust preferred|depositary shares?,? each representing a? ?1/)",
+      "ticker": "(-P[A-Z]{0,2}|\\.PR?[A-Z]?|\\$[A-Z]?)$",
+      "notName": "(common stock|ordinary shares|american depositary|\\mads\\M|\\madr\\M)",
+      "why": "Preferred and preference shares (named so, or with a -P ticker) that came in as common stock."
+    },
+    {
+      "rule": "REIT common shares",
+      "from": [
+        "Common Stock"
+      ],
+      "to": "REIT",
+      "industry": "^REIT",
+      "why": "Common shares of companies FMP classes as REITs (industry REIT - …)."
+    }
+  ]
+}

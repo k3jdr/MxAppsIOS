@@ -268,7 +268,7 @@ nonisolated final class SRMRegistry: @unchecked Sendable {
     /// A Security for the app's tools: what the security master says about it, and — once the analytics service's
     /// inputs have covered it — its estimated betas, volatility and alpha (kept when it is registered again).
     private static func make(_ s: SRMSecurity, key: String, keeping old: Security?) -> Security {
-        let bond = s.kind == "bond" || s.securityType == "Bond"
+        let bond = s.kind == "bond" || s.securityType == "Bond" || s.securityType == "Listed Note"
         let fund = s.kind == "fund"
         var sec = Security(ticker: key, name: s.name,
                            sector: bond ? Universe.fixedIncome : s.sector ?? (fund ? "Diversified Fund" : "Unclassified"),

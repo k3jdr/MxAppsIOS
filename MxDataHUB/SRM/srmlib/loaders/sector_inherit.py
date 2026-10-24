@@ -11,7 +11,7 @@ FMP classifies itself is left alone. Runs after fmp-profiles in Identifiers & is
 from ..common import LoadRun, log
 from ..model import set_classification, source_id
 
-TYPES = ("Preferred Stock", "Warrant", "Unit", "Right")
+TYPES = ("Preferred Stock", "Warrant", "Unit", "Right", "Listed Note")
 
 
 def run(conn, cfg, args):
