@@ -121,7 +121,17 @@ final class SecuritiesStore {
     private(set) var results: [SecurityRow] = []
     private(set) var total = 0
     private(set) var offset = 0
-    var selectedID: SecurityRow.ID?
+    /// The rows selected (⌘-click, ⇧-click, ⌘A): ⌘C and the context menu copy them all.
+    var selection = Set<SecurityRow.ID>() {
+        didSet {
+            // The details show one: the only one, else the row just added to the selection, else the one shown.
+            if selection.count <= 1 { selectedID = selection.first }
+            else if let added = selection.subtracting(oldValue).first { selectedID = added }
+            else if let id = selectedID, !selection.contains(id) { selectedID = selection.first }
+        }
+    }
+    /// The security whose details show.
+    private(set) var selectedID: SecurityRow.ID?
     private(set) var detail: SecurityDetail?
     private(set) var types: [String] = []
     private(set) var benchmarks: [String] = []
@@ -216,7 +226,9 @@ final class SecuritiesStore {
             total = page.total
             problem = nil
             if let first = results.first, results.count == 1 || selectedID == nil || !results.contains(where: { $0.id == selectedID }) {
-                selectedID = first.id
+                selection = [first.id]
+            } else {
+                selection = selection.filter { id in results.contains { $0.id == id } }
             }
         } catch {
             problem = error.localizedDescription
@@ -335,7 +347,7 @@ struct SecuritiesView: View {
             .onChange(of: master.benchmarkFilter) { Task { await master.search() } }
             .onChange(of: master.activeOnly) { Task { await master.search() } }
 
-            Table(master.results, selection: $master.selectedID) {
+            Table(master.results, selection: $master.selection) {
                 TableColumn("Ticker") { r in LinkedCell(target: .master(r)) }.width(min: 44, ideal: 58)
                 TableColumn("Name") { r in LinkedCell(target: .master(r, .name)) }.width(min: 110, ideal: 150)
                 TableColumn("Type", value: \.type).width(min: 50, ideal: 72)
@@ -358,9 +370,9 @@ struct SecuritiesView: View {
                 Divider()
                 CopyRowsButton(rows: master.results, ids: ids, text: Self.resultsText)
             }
-            .copiesSelectedRows(master.results, selected: master.selectedID, as: Self.resultsText)
+            .copiesSelectedRows(master.results, selected: master.selection, as: Self.resultsText)
             .task(id: master.results.map(\.id)) { await SecurityLinks.shared.load(securityIDs: master.results.map(\.id)) }
-            .quickHelpArea("Securities", "The securities found, a thousand at a time, with the latest price, its date and the market value. The identifiers (ISIN, CUSIP, FIGI …) are in the details on the right. Click a column's header to sort it or filter it by its values or a condition; select one for its details on the right. ⌘C copies the selected row; right-click for its link.", symbol: "tablecells")
+            .quickHelpArea("Securities", "The securities found, a thousand at a time, with the latest price, its date and the market value. Select several with ⌘-click or ⇧-click (⌘A for the page) and ⌘C — or right-click ▸ Copy N Rows — to copy them with the column titles, tab-separated for a spreadsheet; the details show the last one clicked. The identifiers (ISIN, CUSIP, FIGI …) are in the details on the right. Click a column's header to sort it or filter it by its values or a condition; select one for its details on the right. ⌘C copies the selected row; right-click for its link.", symbol: "tablecells")
             pageBar
             if !master.options.isEmpty { sortAndFilterLine }
             if let problem = master.problem {
@@ -386,12 +398,13 @@ struct SecuritiesView: View {
         }
     }
 
-    /// "1–1,000 of 13,263 securities"
+    /// "1–1,000 of 13,263 securities", and how many are selected when more than one.
     private var rowsText: String {
         let total = master.total
         guard !master.results.isEmpty else { return master.offset > 0 ? "No securities on this page" : (master.busy ? "Searching…" : "No securities") }
-        if master.offset == 0 && master.results.count == total { return "\(total.formatted()) \(total == 1 ? "security" : "securities")" }
-        return "\((master.offset + 1).formatted())–\((master.offset + master.results.count).formatted()) of \(total.formatted()) securities"
+        let selected = master.selection.count > 1 ? " · \(master.selection.count.formatted()) selected" : ""
+        if master.offset == 0 && master.results.count == total { return "\(total.formatted()) \(total == 1 ? "security" : "securities")" + selected }
+        return "\((master.offset + 1).formatted())–\((master.offset + master.results.count).formatted()) of \(total.formatted()) securities" + selected
     }
 
     private var sortAndFilterLine: some View {

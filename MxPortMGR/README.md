@@ -356,7 +356,7 @@ MxDataHUB's Securities page in MxPortMGR: the security master's securities, sear
 on its latest date) and **Active only**, and by any column from its header (sort, the column's values with their
 counts, or a condition — numbers and dates compared as such), a thousand at a time with Previous / Next. Like Add
 Securities, the table shows Ticker, Name, Type, Sector, MIC, **Price**, **As of** and **Market value**, priced
-securities first and the largest first; the identifiers are in the details. Selecting one shows its last year of closes, its
+securities first and the largest first; the identifiers are in the details. Select several rows with ⌘-click or ⇧-click (⌘A for the page): ⌘C, or the context menu's *Copy N Rows*, copies them under the column titles, tab-separated for a spreadsheet; the status line counts the selection and the details show the last row clicked. Selecting one shows its last year of closes, its
 identifiers with their dates and sources (a table that copies), then its issuer and security facts, listings,
 classification, benchmark membership and corporate actions as one selectable text. Links on tickers and names are the
 same rows as MxDataHUB's (`Shared/Links`): ⌘K, the row's context menu, or a hover card's Edit Link…. MxPortMGR reads

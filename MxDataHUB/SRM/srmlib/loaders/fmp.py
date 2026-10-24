@@ -247,12 +247,61 @@ def load_prices(conn, cfg, args):
                 conn.commit()
                 log(f"  {n}/{len(work)}")
         conn.commit()
+        if otc and run.status != "partial":
+            retire_stale_otc(conn, cur, api, run, fmp)
+
+
+STALE_DAYS = 730
+
+
+def retire_stale_otc(conn, cur, api, run, fmp):
+    """OTC securities with no trade in two years on any of their listings (Russian ADRs since the 2022 sanctions,
+    bankrupt companies): their whole FMP history is loaded, so the last price shows, and the ones FMP says are no
+    longer actively trading are marked inactive since their last trade — they then drop out of searches that show
+    active securities only, and out of this loader."""
+    cur.execute("""SELECT l.security_id, l.listing_id, l.currency_code, coalesce(si.id_value, l.ticker)
+                     FROM srm.listing l JOIN srm.security s USING (security_id)
+                     LEFT JOIN srm.security_identifier si ON si.listing_id = l.listing_id AND si.id_type = 'FMP_SYMBOL'
+                                                          AND current_date < si.valid_to
+                    WHERE l.mic = 'OTCM' AND current_date >= l.valid_from AND current_date < l.valid_to AND s.is_active
+                      AND NOT EXISTS (SELECT 1 FROM srm.listing l2 JOIN srm.price p ON p.listing_id = l2.listing_id
+                                       WHERE l2.security_id = l.security_id AND p.price_date >= current_date - %s)""",
+                (STALE_DAYS,))
+    stale = cur.fetchall()
+    if not stale:
+        return
+    log(f"  {len(stale)} OTC listings without a trade in {STALE_DAYS} days: whole history, and inactive if FMP agrees")
+    retired = []
+    for security_id, listing_id, currency, symbol in stale:
+        try:
+            profile = (api.get("profile", symbol=symbol) or [{}])[0]
+            data = api.get("historical-price-eod/full", symbol=symbol, **{"from": "1990-01-01"}) or []
+        except (PlanLimit, HTTPError) as e:
+            run.reject(symbol, str(e))
+            continue
+        run.read += len(data)
+        result = _upsert_prices(cur, listing_id, data, fmp, run.load_id, currency)
+        run.inserted += sum(1 for r in result if r[0])
+        last = max((r["date"] for r in data if r.get("close") is not None), default=None)
+        active = profile.get("isActivelyTrading")
+        recent = last and datetime.date.fromisoformat(last) >= datetime.date.today() - datetime.timedelta(days=STALE_DAYS)
+        if active or recent:
+            log(f"  {symbol}: kept active (FMP: actively trading {active}, last trade {last or 'none'})")
+            continue
+        cur.execute("""UPDATE srm.security SET is_active = false, inactive_date = %s, updated_at = now()
+                        WHERE security_id = %s AND is_active""", (last or datetime.date.today().isoformat(), security_id))
+        run.updated += cur.rowcount
+        retired.append(f"{symbol} (last trade {last or 'none in FMP'})")
+        conn.commit()
+    if retired:
+        run.message = f"{len(retired)} OTC securities marked inactive: " + ", ".join(retired)
+        log("  " + run.message)
 
 
 def load_otc_prices(conn, cfg, args):
     """fmp-prices --otc as a loader of its own, for the daily Prices step: every current OTC listing (ADRs and the
     ordinary "F" lines of foreign companies — Massive's day files have none), two years the first time, then the
-    days since its last FMP price."""
+    days since its last FMP price; then OTC securities with no trade in two years are retired (retire_stale_otc)."""
     args.otc = True
     load_prices(conn, cfg, args)
 
