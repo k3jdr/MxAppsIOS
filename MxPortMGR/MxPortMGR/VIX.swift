@@ -7,8 +7,10 @@
 //  indexes), and every spike above 35 with how long the VIX took to come back under 20 — the lesson being that fear
 //  peaks when selling feels most urgent, and passes.
 //
-//  Data: Cboe's daily history files (cdn.cboe.com, free, no key), the same series FRED republishes as VIXCLS. Kept in
-//  the app's Caches folder and read again after an hour; the copy kept is used when Cboe can't be reached.
+//  Data: Cboe's daily history files (cdn.cboe.com, free, no key), the same series FRED republishes as VIXCLS — from
+//  the security master when MxDataHUB keeps them current there (srm.py load cboe-vix, through the accounts service),
+//  else from Cboe. Kept in the app's Caches folder and read again after an hour; the copy kept is used when neither
+//  can be reached.
 //
 
 import Charts
@@ -176,6 +178,7 @@ private nonisolated struct VIXFetch: Sendable {
     var points: [VIXPoint]
     var fromCache: Bool
     var problem: String?
+    var fromSecurityMaster = false
 }
 
 @MainActor
@@ -189,6 +192,8 @@ final class VIXStore {
     /// When the data was read from Cboe (nil: from the copy kept on this Mac, or not yet).
     private(set) var fetchedAt: Date?
     private(set) var fromCache = false
+    /// Read from the security master's copy rather than from Cboe.
+    private(set) var fromSecurityMaster = false
     @ObservationIgnored private var lastLoad = Date.distantPast
 
     var vix: [VIXPoint] { series[.vix] ?? [] }
@@ -206,6 +211,7 @@ final class VIXStore {
         for r in results where !r.points.isEmpty { series[r.series] = r.points }
         let failed = results.filter { $0.problem != nil }
         fromCache = results.contains { $0.fromCache }
+        fromSecurityMaster = results.contains { $0.fromSecurityMaster }
         if (series[.vix] ?? []).isEmpty {
             problem = failed.first(where: { $0.series == .vix })?.problem ?? "No VIX data."
         } else if !failed.isEmpty {
@@ -221,6 +227,14 @@ final class VIXStore {
     }
 
     private nonisolated static func fetch(_ s: VIXSeries) async -> VIXFetch {
+        // The security master's copy first, when it has the last few trading days.
+        if let text = await SecurityMasterSeries.csv([s.rawValue], format: "ohlc") {
+            let points = VIXStats.parse(text)
+            if SecurityMasterSeries.isCurrent(points.last?.date, days: 5) {
+                if let url = cacheURL(s), let data = text.data(using: .utf8) { try? data.write(to: url, options: .atomic) }
+                return VIXFetch(series: s, points: points, fromCache: false, fromSecurityMaster: true)
+            }
+        }
         var request = URLRequest(url: s.url, timeoutInterval: 30)
         request.setValue("MxPortMGR (educational)", forHTTPHeaderField: "User-Agent")
         do {
@@ -467,7 +481,8 @@ struct VIXView: View {
         Box(title: "Data", symbol: "arrow.up.right.square", help: "Where the numbers come from.") {
             SelectableText(text: {
                 var l = RichLines()
-                l.paragraph(vixStore.fetchedAt.map { "Daily closes from Cboe Global Markets, read \(Self.day.string(from: $0)); the latest close is the last full trading day's." }
+                l.paragraph(vixStore.fetchedAt.map { "Daily closes from Cboe Global Markets" + (vixStore.fromSecurityMaster ? ", kept in the security master (MxDataHUB, srm.py load cboe-vix)" : "")
+                                + ", read \(Self.day.string(from: $0)); the latest close is the last full trading day's." }
                             ?? "Daily closes from Cboe Global Markets (the copy kept on this Mac).",
                             font: RichLines.calloutFont, color: .secondaryLabelColor, spacing: 8)
                 l.cells([
@@ -483,7 +498,7 @@ struct VIXView: View {
             HStack {
                 Button("Refresh", systemImage: "arrow.clockwise") { Task { await vixStore.load(force: true) } }
                     .disabled(vixStore.loading)
-                    .help("Read the latest closes from Cboe again")
+                    .help("Read the latest closes again: from the security master when it is current, else from Cboe")
                 if vixStore.loading { ProgressView().controlSize(.small) }
             }
         }

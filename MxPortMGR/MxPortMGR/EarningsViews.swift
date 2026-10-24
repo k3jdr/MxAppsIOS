@@ -115,6 +115,7 @@ struct EarningsDayView: View {
         }
         .task(id: e.date) {
             show(await e.load([e.date], weekends: true))
+            await e.loadSecurityNames(e.date)
             await SecurityLinks.shared.load(tickers: e.days[e.date]?.listed.map(\.symbol) ?? [])
         }
     }
@@ -336,7 +337,9 @@ private struct SymbolCell: View {
     var body: some View {
         HStack(spacing: 4) {
             LinkedCell(target: .earnings(entry), font: .body.monospaced(), bold: held,
-                       help: held ? "You hold \(entry.symbol)" : entry.onNasdaq ? entry.symbol : "Only FMP lists \(entry.symbol)")
+                       help: held ? "You hold \(entry.symbol)" : entry.onNasdaq ? entry.symbol
+                           : entry.nameFromSecurityMaster ? "Only FMP's calendar lists \(entry.symbol); its name is the security master's"
+                           : "Only FMP lists \(entry.symbol)")
             if held { Image(systemName: "briefcase.fill").font(.caption2).foregroundStyle(Color.accentColor).help("You hold \(entry.symbol)") }
         }
     }

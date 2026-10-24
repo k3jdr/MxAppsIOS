@@ -8,8 +8,9 @@
 //  revenue of the companies that money goes to (chips, memory, networking, power and cooling, data-centre space), and
 //  how much of My Portfolio sits in the theme.
 //
-//  Data: FMP's quarterly cash-flow and income statements through the accounts service (GET /fundamentals/quarters),
-//  which holds SRM's FMP key — real reported figures, kept 12 hours by the service.
+//  Data: FMP's quarterly cash-flow and income statements through the accounts service (GET /fundamentals/quarters):
+//  the security master's copy when MxDataHUB keeps it current (srm.fundamental_quarter, srm.py load fmp-fundamentals),
+//  else FMP itself with SRM's key — real reported figures, kept 12 hours by the service.
 //
 
 import Charts
@@ -87,6 +88,8 @@ nonisolated struct CalendarQuarter: Hashable, Comparable, Sendable {
 
 private nonisolated struct FundamentalsPage: Decodable, Sendable {
     var symbol: String
+    /// Where the service read them: the security master, or FMP.
+    var source: String?
     var rows: [ComputeQuarter]
 }
 
@@ -96,6 +99,7 @@ private nonisolated struct ComputeFetch: Sendable {
     var symbol: String
     var rows: [ComputeQuarter]
     var problem: String?
+    var source: String?
 }
 
 /// Figures over the last four reported quarters of one company.
@@ -132,6 +136,8 @@ final class ComputeStore {
     /// By symbol, newest quarter first.
     private(set) var quarters: [String: [ComputeQuarter]] = [:]
     private(set) var problems: [String: String] = [:]
+    /// By symbol: where its quarters came from (the service's `source`).
+    private(set) var sources: [String: String] = [:]
     private(set) var loading = false
     private(set) var loadedAt: Date?
 
@@ -150,6 +156,7 @@ final class ComputeStore {
         for r in results {
             if !r.rows.isEmpty { quarters[r.symbol] = r.rows }
             problems[r.symbol] = r.problem
+            sources[r.symbol] = r.source
         }
         loadedAt = Date()
         loading = false
@@ -174,7 +181,7 @@ final class ComputeStore {
         guard let page = try? JSONDecoder().decode(FundamentalsPage.self, from: data) else {
             return ComputeFetch(symbol: symbol, rows: [], problem: "The accounts service's answer couldn't be read.")
         }
-        return ComputeFetch(symbol: symbol, rows: page.rows.sorted { $0.date > $1.date })
+        return ComputeFetch(symbol: symbol, rows: page.rows.sorted { $0.date > $1.date }, source: page.source)
     }
 }
 
@@ -463,7 +470,12 @@ struct ComputeView: View {
     private var dataBox: some View {
         Box(title: "Data", symbol: "arrow.up.right.square", help: "Where the figures come from.") {
             let missing = compute.problems.filter { $0.value.isEmpty == false }
-            Text("Quarterly cash-flow and income statements as reported, from Financial Modeling Prep through the accounts service (port 8774), kept 12 hours. Capex is purchases of property, plant and equipment.")
+            let kept = compute.sources.filter { $0.value.hasPrefix("security master") }.keys.sorted()
+            Text("Quarterly cash-flow and income statements as reported, from Financial Modeling Prep through the accounts service (port 8774), kept 12 hours"
+                 + (kept.isEmpty ? "" : kept.count == compute.sources.count
+                    ? " — all read from the security master's copy (MxDataHUB, srm.py load fmp-fundamentals)"
+                    : " — from the security master's copy for " + kept.joined(separator: ", ") + ", from FMP for the rest")
+                 + ". Capex is purchases of property, plant and equipment.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if !missing.isEmpty {
                 Label("Not read: " + missing.keys.sorted().joined(separator: ", ") + " — " + (missing.values.first ?? ""), systemImage: "exclamationmark.triangle")

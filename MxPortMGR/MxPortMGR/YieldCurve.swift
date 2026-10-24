@@ -8,8 +8,9 @@
 //  inversion since 1981 with when the next recession began.
 //
 //  Data: the Treasury's daily constant-maturity yields as FRED publishes them (DGS1MO … DGS30, back to 1962) and the
-//  NBER recession months (USREC) — free CSV files, no key. Read at most hourly; the copies kept in the app's Caches
-//  folder are used when FRED can't be reached.
+//  NBER recession months (USREC) — free CSV files, no key — from the security master when MxDataHUB keeps them current
+//  there (srm.py load fred-yields, through the accounts service), else from FRED. Read at most hourly; the copies kept
+//  in the app's Caches folder are used when neither can be reached.
 //
 
 import Charts
@@ -91,6 +92,8 @@ nonisolated enum YieldData {
     static let yieldsURL = URL(string: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=" + Maturity.allCases.map(\.rawValue).joined(separator: ","))!
     static let recessionsURL = URL(string: "https://fred.stlouisfed.org/graph/fredgraph.csv?id=USREC")!
 
+    static func date(_ iso: String) -> Date? { isoDay.date(from: iso) }
+
     private static let isoDay: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -166,6 +169,7 @@ private nonisolated struct FREDFetch: Sendable {
     var text: String?
     var fromCache: Bool
     var problem: String?
+    var fromSecurityMaster = false
 }
 
 @MainActor
@@ -178,15 +182,19 @@ final class YieldStore {
     private(set) var loading = false
     private(set) var problem: String?
     private(set) var fetchedAt: Date?
+    /// The yields were read from the security master's copy rather than from FRED.
+    private(set) var fromSecurityMaster = false
     @ObservationIgnored private var lastLoad = Date.distantPast
 
     func load(force: Bool = false) async {
         guard !loading, force || days.isEmpty || Date().timeIntervalSince(lastLoad) > 3600 else { return }
         loading = true
         problem = nil
-        async let y = Self.fetch(YieldData.yieldsURL, cache: "treasury-yields.csv")
-        async let r = Self.fetch(YieldData.recessionsURL, cache: "usrec.csv")
+        // FRED posts a day's yields the next business day; USREC's months come a month or two late.
+        async let y = Self.fetch(YieldData.yieldsURL, series: Maturity.allCases.map(\.rawValue), currentDays: 6, cache: "treasury-yields.csv")
+        async let r = Self.fetch(YieldData.recessionsURL, series: ["USREC"], currentDays: 120, cache: "usrec.csv")
         let (yields, rec) = (await y, await r)
+        fromSecurityMaster = yields.fromSecurityMaster
         if let t = yields.text { days = YieldData.parseYields(t) }
         if let t = rec.text { recessions = YieldData.parseRecessions(t) }
         if days.isEmpty {
@@ -200,8 +208,20 @@ final class YieldStore {
         loading = false
     }
 
-    private nonisolated static func fetch(_ url: URL, cache name: String) async -> FREDFetch {
+    /// The newest observation_date in a FRED-layout CSV.
+    private nonisolated static func lastDate(_ csv: String) -> Date? {
+        guard let line = csv.split(whereSeparator: \.isNewline).last, let field = line.split(separator: ",").first else { return nil }
+        return YieldData.date(String(field))
+    }
+
+    private nonisolated static func fetch(_ url: URL, series: [String], currentDays: Int, cache name: String) async -> FREDFetch {
         let file = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
+        // The security master's copy first (the same layout as FRED's file), when it is current.
+        if let text = await SecurityMasterSeries.csv(series), text.hasPrefix("observation_date"),
+           SecurityMasterSeries.isCurrent(lastDate(text), days: currentDays) {
+            if let file, let data = text.data(using: .utf8) { try? data.write(to: file, options: .atomic) }
+            return FREDFetch(text: text, fromCache: false, fromSecurityMaster: true)
+        }
         do {
             var request = URLRequest(url: url, timeoutInterval: 60)
             request.setValue("MxPortMGR (educational)", forHTTPHeaderField: "User-Agent")
@@ -490,7 +510,8 @@ struct RealYieldCurve: View {
             .frame(minHeight: CGFloat(rows.count) * 24 + 34)
             SelectableText(text: {
                 var l = RichLines()
-                l.paragraph(yields.fetchedAt.map { "Data: daily Treasury constant-maturity yields and NBER recession months from FRED (Federal Reserve Bank of St. Louis), read \(Self.day.string(from: $0))." }
+                l.paragraph(yields.fetchedAt.map { "Data: daily Treasury constant-maturity yields and NBER recession months from FRED (Federal Reserve Bank of St. Louis)"
+                                + (yields.fromSecurityMaster ? ", kept in the security master (MxDataHUB, srm.py load fred-yields)" : "") + ", read \(Self.day.string(from: $0))." }
                             ?? "Data: daily Treasury constant-maturity yields and NBER recession months from FRED (the copy kept on this Mac).",
                             font: RichLines.captionFont, color: .secondaryLabelColor, spacing: 4)
                 l.cells([[RichLines.Cell(text: "FRED: Treasury constant maturity rates", font: RichLines.captionFont, color: .linkColor,

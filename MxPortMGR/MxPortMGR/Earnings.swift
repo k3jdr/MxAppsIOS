@@ -137,6 +137,8 @@ nonisolated struct EarningsEntry: Identifiable, Hashable, Sendable {
     var fmpEPSActual: Double?
     var onNasdaq = false
     var onFMP = false
+    /// Only FMP lists it, and its name (and market cap) came from the security master (srm.py load earnings-symbols).
+    var nameFromSecurityMaster = false
 
     var reported: Bool { epsActual != nil || revenueActual != nil }
 
@@ -621,7 +623,14 @@ final class EarningsStore {
     /// A day in the month or week the calendar shows.
     var anchor = EarningsDates.today()
 
-    var days: [String: EarningsDay] = [:]
+    var days: [String: EarningsDay] = [:] {
+        didSet { applySecurityNames() }
+    }
+    /// The security master's securities for symbols only FMP lists, by entry key (POST /securities/lookup); applied to
+    /// every day's entries as they load. Looked-up keys without a security aren't asked again.
+    @ObservationIgnored private var securityNames: [String: SecurityMasterTicker] = [:]
+    @ObservationIgnored private var lookedUp: Set<String> = []
+    @ObservationIgnored private var applyingNames = false
     var loading: Set<String> = []
     /// Nasdaq.com listings fetched so far in the current load, of how many.
     var progress: (done: Int, total: Int)?
@@ -743,6 +752,62 @@ final class EarningsStore {
         if case .success(let f) = await forecasts { c.forecasts = f }
         c.loading = false
         companies[symbol] = c
+    }
+}
+
+extension EarningsStore {
+    /// Names the day's companies only FMP lists from the security master, where it has them.
+    func loadSecurityNames(_ date: String) async {
+        let symbols = (days[date]?.entries ?? []).filter { $0.name.isEmpty && !lookedUp.contains($0.key) }.map(\.symbol)
+        guard !symbols.isEmpty, let found = try? await SecurityMasterTicker.lookup(symbols) else { return }
+        for symbol in symbols {
+            let key = EarningsParse.key(symbol)
+            lookedUp.insert(key)
+            if let s = found[symbol.uppercased()] { securityNames[key] = s }
+        }
+        applySecurityNames()
+    }
+
+    fileprivate func applySecurityNames() {
+        guard !securityNames.isEmpty, !applyingNames else { return }
+        applyingNames = true
+        defer { applyingNames = false }
+        for (date, day) in days where day.entries.contains(where: { $0.name.isEmpty && securityNames[$0.key] != nil }) {
+            var d = day
+            for i in d.entries.indices where d.entries[i].name.isEmpty {
+                guard let s = securityNames[d.entries[i].key] else { continue }
+                // A preferred share or warrant carries its issuer's name: say which it is.
+                let kind = ["Preferred Stock": "preferred", "Warrant": "warrant", "Right": "right", "Unit": "unit",
+                            "Bond": "note"][s.securityType ?? ""]
+                let issue = kind.map { !s.name.localizedCaseInsensitiveContains($0) } ?? false
+                d.entries[i].name = issue ? "\(s.name) — \(s.securityType!.lowercased())" : s.name
+                d.entries[i].nameFromSecurityMaster = true
+                if d.entries[i].marketCap == nil { d.entries[i].marketCap = s.marketCap }
+            }
+            days[date] = d
+        }
+    }
+}
+
+/// A security in the security master found by ticker (the accounts service's POST /securities/lookup).
+nonisolated struct SecurityMasterTicker: Decodable, Sendable {
+    var securityId: Int
+    var name: String
+    var securityType: String?
+    var mic: String?
+    var country: String?
+    var marketCap: Double?
+
+    private struct Page: Decodable { var securities: [String: SecurityMasterTicker] }
+
+    /// By ticker as asked (upper case); tickers the security master doesn't have are left out.
+    static func lookup(_ tickers: [String]) async throws -> [String: SecurityMasterTicker] {
+        var r = URLRequest(url: URL(string: AccountsClient.base + "/securities/lookup")!, timeoutInterval: 30)
+        r.httpMethod = "POST"
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.httpBody = try JSONSerialization.data(withJSONObject: ["tickers": tickers])
+        let (data, _) = try await URLSession.shared.data(for: r)
+        return try JSONDecoder().decode(Page.self, from: data).securities
     }
 }
 

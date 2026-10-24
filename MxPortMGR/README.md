@@ -196,7 +196,7 @@ markets within seconds, others shape positioning over weeks or months.
   before the open / after the close, market cap, number of estimates, consensus and actual EPS with the surprise,
   revenue estimate, actual and surprise. Tiles count the companies, the timing, EPS and revenue beats and misses
   (or, for an upcoming day, how many have a consensus and the revenue expected) and the ones in your account. Filter
-  by symbol or name, time of day, *Also FMP-only listings* (OTC, foreign and preferred-share symbols only FMP lists)
+  by symbol or name, time of day, *Also FMP-only listings* (OTC, foreign and preferred-share symbols only FMP lists — named, with market cap where it applies, from the security master once `srm.py load earnings-symbols` has added them)
   and *Only my holdings*; sort by any column. Selecting a company shows this report in detail (Nasdaq.com's range of
   estimates and four-week revisions, FMP's figures where they differ, a year earlier), an EPS chart of its last
   twelve reports and the next one against the estimate, its recent revenue surprises, and Nasdaq.com's last four
@@ -207,8 +207,10 @@ markets within seconds, others shape positioning over weeks or months.
   history (1M, 6M, 1Y, 5Y, since 1990) with the regimes shaded; the term structure (VIX9D, VIX, VIX3M, VIX6M) and what
   an upward or inverted curve means; and every spike above 35 since 1990 — when it began, its peak, and the trading days
   until the VIX closed under 20 again (a table that copies). The lesson: fear peaks near market lows and passes, so the
-  VIX explains swings rather than timing a plan. Data: Cboe's daily history files (cdn.cboe.com, no key), read at
-  most hourly and kept in the app's Caches folder for when Cboe can't be reached. The Morning Briefing's illustrative
+  VIX explains swings rather than timing a plan. Data: Cboe's daily history files (cdn.cboe.com, no key) — the
+  security master's copy (`srm.py load cboe-vix`, through the accounts service's `GET /market/series`) when it has the
+  last few trading days, else Cboe itself — read at most hourly and kept in the app's Caches folder for when neither
+  can be reached. The Morning Briefing's illustrative
   VIX panel and the Report Library's morning reading link to it.
 * **Compute** (⌥⌘U) — AI compute as an asset theme, followed through what the hyperscalers spend to build it, with
   real reported figures: Microsoft, Alphabet, Amazon, Meta and Oracle's quarterly capex — combined for the latest
@@ -219,7 +221,8 @@ markets within seconds, others shape positioning over weeks or months.
   Broadcom, AMD, Micron, Arista, Vertiv and Equinix; and **your exposure**, the share of My Portfolio (in the security
   master) held in these companies directly. The lesson: capex is the suppliers' revenue, building ahead of demand has
   happened before (fibre around 2000), and an index fund already holds the theme. Data: FMP's quarterly cash-flow and
-  income statements through the accounts service (`GET /fundamentals/quarters`), which keeps them 12 hours.
+  income statements through the accounts service (`GET /fundamentals/quarters`), which keeps them 12 hours: the
+  security master's copy (`srm.py load fmp-fundamentals`) when it was loaded in the last 14 days, else FMP itself.
 
 #### Earnings sources and their limits
 
@@ -250,7 +253,8 @@ the time of day the time from an earlier one is kept (marked ↺) — so times s
   1, 5, 10 or 25 years or since 1977, with NBER recessions shaded; and **every inversion since 1981** (10-year below
   the 3-month) with the recession that began within three years and how many months later — or "none yet", as after
   the longest, which began in 2022 (a table that copies). Data: the Treasury's daily constant-maturity yields and the
-  NBER recession months from FRED (free CSV, no key), read at most hourly and kept in the app's Caches folder.
+  NBER recession months from FRED (free CSV, no key) — the security master's copy (`srm.py load fred-yields`, through
+  the accounts service) when it is current, else FRED itself — read at most hourly and kept in the app's Caches folder.
 
 | Tier | Report | The illustrative release | Written for |
 | --- | --- | --- | --- |
