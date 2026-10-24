@@ -135,8 +135,8 @@ struct SRMAddSecurities: View {
             Divider()
             HStack(spacing: 0) {
                 Table(results, selection: $selection, sortOrder: $sortOrder) {
-                    TableColumn(title("Ticker", !tickerFilter.isEmpty), value: \.ticker) { s in Text(s.ticker).font(.body.monospaced()) }.width(70)
-                    TableColumn(title("Name", !nameFilter.isEmpty), value: \.name) { s in Text(s.name) }.width(min: 160, ideal: 220)
+                    TableColumn(title("Ticker", !tickerFilter.isEmpty), value: \.ticker) { s in LinkedCell(target: .srm(s), font: .body.monospaced()) }.width(70)
+                    TableColumn(title("Name", !nameFilter.isEmpty), value: \.name) { s in LinkedCell(target: .srm(s, .name)) }.width(min: 160, ideal: 220)
                     TableColumn(title("Type", !types.isEmpty), value: \.typeKey) { s in Text(s.securityType ?? "—").foregroundStyle(.secondary) }.width(100)
                     TableColumn(title("Sector", !sectors.isEmpty), value: \.sectorKey) { s in Text(s.sector ?? "—").foregroundStyle(.secondary) }.width(120)
                     TableColumn(title("Exchange", !exchanges.isEmpty), value: \.micKey) { s in Text(s.mic ?? "—").foregroundStyle(.secondary) }.width(64)
@@ -149,6 +149,12 @@ struct SRMAddSecurities: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay { if results.isEmpty && (searching || !steps.isEmpty) { progressPanel } }
+                // Links on tickers and names: the security master's (as on the Securities page and in MxDataHUB);
+                // right-click to add, edit or open one, ⌘K for the selected row, or a hover card's Edit Link….
+                .contextMenu(forSelectionType: SRMSecurity.ID.self) { ids in
+                    if let id = ids.first, let s = results.first(where: { $0.id == id }) { linkMenu(.srm(s)) }
+                }
+                .task(id: results.map(\.securityId)) { await SecurityLinks.shared.load(securityIDs: results.map { Int64($0.securityId) }) }
                 // A click picks a row (the screens' text is selectable, the rows' words aren't).
                 .textSelection(.disabled)
                 .quickHelpArea("Security Master", "Every match in srm, a page at a time. Click a column header to sort by it (again to reverse) — across all matches, in the database. The filter row above narrows each column like a spreadsheet's autofilter: text contains, pick values with their counts, a price range, priced or not. A column title with ⏷ is filtered.", symbol: "cylinder.split.1x2")
@@ -168,6 +174,23 @@ struct SRMAddSecurities: View {
             }
         }
         .frame(width: 1300, height: 740)
+        // The Link dialog over this one (the window's own can't show while this sheet is up). Edit ▸ Link… (⌘K) takes
+        // the selected row here (store.addSecuritiesLink) instead of My Holdings' selection.
+        .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
+        .onChange(of: selection, initial: true) { store.addSecuritiesLink = selected.map { .srm($0) } }
+        .onDisappear { store.addSecuritiesLink = nil }
+        #if DEBUG
+        // Self-test: -addLinkEdit TICKER|symbol (or |name) selects that row once the first page is in and opens the
+        // Link dialog for it, as ⌘K would.
+        .task(id: results.isEmpty) {
+            guard let arg = UserDefaults.standard.string(forKey: "addLinkEdit"), !results.isEmpty else { return }
+            let parts = arg.split(separator: "|").map(String.init)
+            guard let s = results.first(where: { $0.ticker == parts[0] }) else { return }
+            selection = s.id
+            try? await Task.sleep(for: .seconds(1))
+            SecurityLinks.shared.beginEdit(LinkTarget.srm(s, parts.count > 1 && parts[1] == "name" ? .name : .symbol))
+        }
+        #endif
         .task(id: request) {
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }

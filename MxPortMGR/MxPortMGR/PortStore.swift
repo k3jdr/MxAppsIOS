@@ -267,6 +267,8 @@ final class PortStore {
     var busy = false
     /// My Portfolio ▸ Add Securities… is open.
     var addingSecurities = false
+    /// The row selected in Add Securities, for Edit ▸ Link… while that dialog is open.
+    var addSecuritiesLink: LinkTarget?
     var message: String?
     var errorMessage: String?
 

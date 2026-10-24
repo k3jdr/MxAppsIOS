@@ -4,8 +4,8 @@
 //
 //  MxPortMGR's side of the links on tickers and names (Shared/Links): which security a row of Earnings by Day or My
 //  Holdings is, and where its link is kept — in the security master through the accounts service (Services/accounts,
-//  /links), so it shows in MxDataHUB too. A company in Earnings by Day is looked up by its ticker; a holding from the
-//  security master by its id.
+//  /links), so it shows in MxDataHUB too. A company in Earnings by Day is looked up by its ticker; a holding, or a
+//  security in Add Securities, by its security-master id.
 //
 
 import Foundation
@@ -14,6 +14,18 @@ extension LinkTarget {
     /// A company in Earnings by Day.
     static func earnings(_ e: EarningsEntry, _ field: Field = .symbol) -> LinkTarget {
         LinkTarget(security: e.key, symbol: e.symbol, name: e.name, field: field, columns: ["Symbol", "Company"], kind: .stock)
+    }
+
+    /// A security in Add Securities: the same link as on the Securities page and in MxDataHUB (by its id).
+    static func srm(_ s: SRMSecurity, _ field: Field = .symbol) -> LinkTarget {
+        let kind: Kind = switch s.securityType {
+        case "ETF", "ETN": .etf
+        case "Mutual Fund", "Closed-End Fund": .mutualFund
+        case "Collective Investment Trust": .other
+        default: .stock
+        }
+        return LinkTarget(security: LinkTarget.key(s.ticker), securityID: Int64(s.securityId), symbol: s.ticker, name: s.name,
+                          field: field, columns: ["Ticker", "Name"], kind: kind)
     }
 
     /// A holding in My Holdings (none for cash).

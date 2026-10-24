@@ -115,9 +115,13 @@ struct MxPortMGRApp: App {
                     .keyboardShortcut("c", modifiers: [.command, .option, .shift])
                 // As in MxNoteONE: add or edit the link of the selected company or holding (its symbol, or the name
                 // when the pointer rests there).
-                Button("Link…") { SecurityLinks.shared.beginEdit(SecurityLinks.shared.commandTarget(selected: store.linkSelection)) }
-                    .keyboardShortcut("k")
-                    .disabled(store.screen != .earningsDay && store.screen != .myPortfolio || SecurityLinks.shared.editing != nil)
+                Button("Link…") {
+                    SecurityLinks.shared.beginEdit(SecurityLinks.shared.commandTarget(
+                        selected: store.addingSecurities ? store.addSecuritiesLink : store.linkSelection))
+                }
+                .keyboardShortcut("k")
+                .disabled(store.screen != .earningsDay && store.screen != .myPortfolio || SecurityLinks.shared.editing != nil
+                          || store.addingSecurities && store.addSecuritiesLink == nil)
             }
             QuickHelpCommands()
         }

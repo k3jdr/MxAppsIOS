@@ -140,7 +140,9 @@ a Tax Lots view and *Open in MxPortMGR*) and the analytics service can analyse i
 across all 16,000-odd active securities, 200 at a time (*Show More*), largest companies first. While it reads, the
 toolbar and the empty table say which step is running and for how long — finding the securities with their latest
 price and market value, then counting the values for the filter menus (after the rows show) — and list the steps done
-with their times. Click any column header
+with their times. Tickers and names carry their links, the same rows as on the Securities page and in MxDataHUB:
+a click opens one, the hover card has *Edit Link…*, the row's context menu adds, edits or opens one, and Edit ▸
+Link… (⌘K) works on the selected row while the dialog is open (see *Links on symbols and names*). Click any column header
 (Ticker, Name, Type, Sector, Exchange, Price, As of, Market value) to sort by it — in the database, across every match —
 and use the **filter row** like a spreadsheet's autofilter: ticker / name contains, Type, Sector and Exchange menus of
 values with their counts (tick several), a price range, and with / without a price; a filtered column's title shows ⏷
@@ -426,7 +428,7 @@ code), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 
 hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding VTI` selects a holding in My Holdings. Debug builds only:
 `-linkEdit symbol` (or `name`) opens the Link dialog for the selected company or holding, and `-linkHoverTest ID`
 (e.g. `META|symbol`) shows a linked cell's hover card as if the pointer rested on it, and
-`-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard).
+`-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard), and `-addSecurities YES -addLinkEdit META|name` opens the Link dialog for that row of Add Securities.
 
 ## Files
 
