@@ -278,14 +278,10 @@ def find(conn, q):
                           v.security_type, v.asset_class, v.sector, v.industry, v.isin, v.cusip,
                           (v.name ~* '{BOND_NAME}') AS is_bond, px.close AS price, px.price_date, c.market_cap
                      FROM srm.v_security v
-                     -- The latest price on any of its listings, and the latest market value: index lookups per
-                     -- security (srm.price has millions of rows since the Massive daily files; scanning it took 10 s).
-                     LEFT JOIN LATERAL (
-                         SELECT p.close, p.price_date FROM srm.listing l
-                          CROSS JOIN LATERAL (SELECT p.close, p.price_date FROM srm.price p WHERE p.listing_id = l.listing_id
-                                               ORDER BY p.price_date DESC LIMIT 1) p
-                          WHERE l.security_id = v.security_id
-                          ORDER BY p.price_date DESC LIMIT 1) px ON true
+                     -- The latest price in dollars (srm.last_price, V021: a London line converted, not its pounds),
+                     -- and the latest market value: index lookups per security (srm.price has millions of rows since
+                     -- the Massive daily files; scanning it took 10 s).
+                     LEFT JOIN LATERAL srm.last_price(v.security_id) px ON true
                      LEFT JOIN LATERAL (
                          SELECT md.market_cap FROM srm.security_market_data md
                           WHERE md.security_id = v.security_id AND md.market_cap IS NOT NULL
@@ -519,15 +515,10 @@ def browse_source(body, params, except_column=None):
            AND (NOT %s OR v.is_active)""" + ("".join("\n           AND " + c for c in conditions))
 
 
-# The latest price on any listing and the latest market value, per security (index lookups: srm.price is too large
-# to scan for every search).
+# The latest price in dollars (srm.last_price, V021) and the latest market value, per security (index lookups:
+# srm.price is too large to scan for every search).
 BROWSE_PRICE_JOINS = """
-          LEFT JOIN LATERAL (
-              SELECT p.close, p.price_date FROM srm.listing l
-               CROSS JOIN LATERAL (SELECT p.close, p.price_date FROM srm.price p WHERE p.listing_id = l.listing_id
-                                    ORDER BY p.price_date DESC LIMIT 1) p
-               WHERE l.security_id = v.security_id
-               ORDER BY p.price_date DESC LIMIT 1) px ON true
+          LEFT JOIN LATERAL srm.last_price(v.security_id) px ON true
           LEFT JOIN LATERAL (
               SELECT md.market_cap FROM srm.security_market_data md
                WHERE md.security_id = v.security_id AND md.market_cap IS NOT NULL
@@ -650,10 +641,15 @@ def security_detail(conn, sid):
                ds.code AS source
           FROM srm.corporate_action ca JOIN srm.data_source ds USING (source_id)
          WHERE ca.security_id = %s ORDER BY ca.ex_date DESC LIMIT 40""", [sid])
+    # One listing's closes (the one srm.last_price prices it from), in dollars: listings in pounds and in dollars
+    # mixed in one chart would jump between the two.
     prices = fetch(conn, """
-        SELECT p.price_date::text AS date, p.close::float8 AS close
+        SELECT p.price_date::text AS date,
+               (p.close * CASE WHEN coalesce(p.currency_code, l.currency_code, 'USD') = 'USD' THEN 1
+                               ELSE srm.fx_to_usd(coalesce(p.currency_code, l.currency_code), p.price_date) END)::float8 AS close
           FROM srm.listing l JOIN srm.price p USING (listing_id)
-         WHERE l.security_id = %s AND p.price_date > current_date - 400
+         WHERE l.listing_id = (SELECT lp.listing_id FROM srm.last_price(%s) lp)
+           AND p.price_date > current_date - 400
          ORDER BY p.price_date""", [sid])
     return {
         "security": {"id": h["security_id"], "ticker": h["ticker"], "name": h["name"], "type": h["security_type"],
@@ -867,7 +863,8 @@ def lookup_tickers(conn, body):
 
 def monthly_prices(conn, body):
     """Month-end closes of these tickers over the last `months` months: {ticker: [{date, close}]}. One price source
-    per security (the one with the most days; FMP's adjusted closes preferred when they cover nearly as many)."""
+    per security (the one with the most days; FMP's adjusted closes preferred when they cover nearly as many), in
+    dollars (a London line converted at each day's rate, srm.fx_to_usd)."""
     tickers = sorted({str(t).strip().upper() for t in body.get("tickers") or [] if str(t).strip()})[:500]
     months = min(max(int(body.get("months") or 12), 1), 60)
     rows = fetch(conn, """
@@ -880,10 +877,13 @@ def monthly_prices(conn, body):
         best AS (SELECT DISTINCT ON (ticker) ticker, listing_id, source_id FROM counts
                   ORDER BY ticker, n * CASE WHEN adjusted THEN 1.05 ELSE 1 END DESC),
         daily AS (
-            SELECT b.ticker, p.price_date, coalesce(p.adj_close, p.close) AS close,
+            SELECT b.ticker, p.price_date,
+                   coalesce(p.adj_close, p.close) * CASE WHEN coalesce(p.currency_code, l.currency_code, 'USD') = 'USD' THEN 1
+                       ELSE srm.fx_to_usd(coalesce(p.currency_code, l.currency_code), p.price_date) END AS close,
                    row_number() OVER (PARTITION BY b.ticker, date_trunc('month', p.price_date)
                                       ORDER BY p.price_date DESC) AS rn
               FROM best b JOIN srm.price p ON p.listing_id = b.listing_id AND p.source_id = b.source_id
+              JOIN srm.listing l ON l.listing_id = b.listing_id
              WHERE p.price_date >= current_date - make_interval(months => %s + 1))
         SELECT ticker, price_date, close FROM daily WHERE rn = 1 ORDER BY ticker, price_date""", (tickers, months, months))
     out = {}

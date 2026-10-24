@@ -30,7 +30,8 @@ python3 analytics_service.py            # or: python3 Services/mxservices.py sta
   latest 3-month Treasury yield, DGS3MO), `lastPrices` and `unknown` (tickers not found).
 - Prices: one listing and one source per security over the whole window — the one with the most days, an adjusted
   source (FMP) preferred when it covers nearly as many — so the series never switches between adjusted and unadjusted
-  closes.
+  closes. A listing abroad (London, Toronto) is converted to dollars at each day's rate (`srm.fx_to_usd`, V021), and
+  `lastPrices` are `srm.last_price`'s dollars.
 - The full payload (assets, names, sectors, benchmark and current weights, expected returns, covariance) is cached in
   memory (the last 20) under `/inputs/<id>`; the summary lists the universe size, exclusions, shrinkage and the top
   and bottom alpha names.

@@ -133,6 +133,7 @@ RUN_NAMES = {
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],
     "treasuries": ["treasuries"], "massive-prices": ["massive_prices"], "listed-derivatives": ["listed_derivatives"],
+    "fmp-symbols": ["fmp_symbols"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "..", "..", "MxDataHUB", "SRM"))
@@ -629,11 +630,16 @@ def options(q):
             if not q[name].isdigit():
                 raise ValueError("%s must be a whole number" % name)
             out += ["--" + name, q[name]]
+    if q.get("minCap"):
+        if not q["minCap"].isdigit():
+            raise ValueError("minCap must be a whole number of dollars")
+        out += ["--min-cap", q["minCap"]]
     if q.get("since"):
         dt.date.fromisoformat(q["since"])   # raises ValueError when not YYYY-MM-DD
         out += ["--since", q["since"]]
     for flag, name in (("force", "--force"), ("history", "--history"),
-                       ("allSecurities", "--all-securities"), ("includeOtc", "--include-otc"), ("funds", "--funds")):
+                       ("allSecurities", "--all-securities"), ("includeOtc", "--include-otc"), ("funds", "--funds"),
+                       ("home", "--home")):
         if q.get(flag, "").lower() in ("1", "true", "yes"):
             out.append(name)
     for name in ("symbols", "benchmarks", "portfolios"):

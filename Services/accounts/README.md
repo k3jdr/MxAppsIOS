@@ -5,7 +5,7 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 
 | Endpoint | What it does |
 | --- | --- |
-| `GET /securities?q=&kind=&offset=&limit=&sort=&dir=&facets=` | Search by ticker, name, ISIN or CUSIP; `kind` = `all`, `stocks`, `funds`, `bonds` (bond and other fixed-income funds); a page at a time (`limit` ≤ 500) with the `total`; `sort` = `relevance` (default), `ticker`, `name`, `type`, `sector`, `exchange`, `price`, `asOf`, `marketCap` and `dir` = `asc` / `desc`; column filters `ticker`, `name` (contains), `type`, `sector`, `exchange` (comma-separated, `(none)` for blanks), `priceMin`, `priceMax`, `priced` (1 / 0); `facets=1` adds each filterable column's values with counts |
+| `GET /securities?q=&kind=&offset=&limit=&sort=&dir=&facets=` | Search by ticker, name, ISIN or CUSIP; `kind` = `all`, `stocks`, `funds`, `bonds` (bond and other fixed-income funds); a page at a time (`limit` ≤ 500) with the `total`; `sort` = `relevance` (default), `ticker`, `name`, `type`, `sector`, `exchange`, `price`, `asOf`, `marketCap` and `dir` = `asc` / `desc`; column filters `ticker`, `name` (contains), `type`, `sector`, `exchange` (comma-separated, `(none)` for blanks), `priceMin`, `priceMax`, `priced` (1 / 0); `facets=1` adds each filterable column's values with counts. Every price here, in browse, account lots and month-end prices is in dollars (`srm.last_price` / `srm.fx_to_usd`, V021): a London or Toronto line is converted, never shown in pence as dollars |
 | `GET /benchmarks` | Benchmarks with members and snapshot date |
 | `GET /benchmarks/<code>/weights` | The latest weights with ticker, name, sector and asset class |
 | `GET /accounts` | Personal accounts (`srm.v_personal_account`) |
@@ -23,7 +23,7 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 | `GET /market/series?ids=&from=&format=` | Their values as CSV in the sources' own layouts, so MxPortMGR parses them as it parses the files: `format=csv` (default) as FRED's `fredgraph.csv` (`observation_date`, one column per id, blank when missing); `format=ohlc` with one id as Cboe's history file (`DATE,OPEN,HIGH,LOW,CLOSE`, MM/DD/YYYY). MxPortMGR's VIX and Yield Curve screens use them when the last value is recent, else read Cboe and FRED |
 | `POST /securities/browse` | MxDataHUB's Securities search for MxPortMGR's Library ▸ Securities: `{q, type, benchmark, activeOnly, offset, limit ≤ 1000, sort {column, ascending}, filters {column: {values: […]} or {op, v1, v2}}}` → `securities` (with `price`, `priceDate`, `marketCap`; Price, As of and Market value sort and filter as numbers / dates), `total`; priced and largest first after the identifier matches |
 | `POST /securities/browse/values` | A column's distinct values with their counts under the search and the other filters (`{…, column}`), for its filter panel |
-| `GET /securities/<id>/detail` | A security's facts, identifiers, listings, classification, benchmark membership, corporate actions and last 400 days of closes |
+| `GET /securities/<id>/detail` | A security's facts, identifiers, listings, classification, benchmark membership, corporate actions and last 400 days of closes (of the listing `srm.last_price` prices it from, in dollars) |
 | `GET /security-types` | The security types, for the Type filter |
 
 ```bash

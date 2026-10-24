@@ -161,7 +161,8 @@ def price_panel(conn, ids, start, end):
     """Closes (dates × securities): for each security one listing and one source over the whole window — the one with
     the most days there, an adjusted source (FMP) preferred when it covers nearly as many. Mixing sources day by day
     (FMP's dividend-adjusted closes, Massive's or Nasdaq.com's unadjusted ones on the same listing) would put false
-    returns into the series wherever the source switches."""
+    returns into the series wherever the source switches. A listing abroad (London, Toronto) is converted to dollars at
+    each day's rate (srm.fx_to_usd, V021), so its returns are a dollar investor's."""
     rows = fetch(conn, """
         WITH counts AS (
             SELECT l.security_id, p.listing_id, p.source_id, count(*) AS n, bool_or(p.adj_close IS NOT NULL) AS adjusted
@@ -171,8 +172,12 @@ def price_panel(conn, ids, start, end):
         best AS (
             SELECT DISTINCT ON (security_id) security_id, listing_id, source_id FROM counts
              ORDER BY security_id, n * CASE WHEN adjusted THEN 1.05 ELSE 1 END DESC)
-        SELECT b.security_id, p.price_date, coalesce(p.adj_close, p.close) AS px
+        SELECT b.security_id, p.price_date,
+               coalesce(p.adj_close, p.close)
+                 * CASE WHEN coalesce(p.currency_code, l.currency_code, 'USD') = 'USD' THEN 1
+                        ELSE srm.fx_to_usd(coalesce(p.currency_code, l.currency_code), p.price_date) END AS px
           FROM best b JOIN srm.price p ON p.listing_id = b.listing_id AND p.source_id = b.source_id
+          JOIN srm.listing l ON l.listing_id = b.listing_id
          WHERE p.price_date BETWEEN %s AND %s
          ORDER BY p.price_date""", (list(ids), start, end, start, end))
     dates = sorted({r["price_date"] for r in rows})

@@ -40,7 +40,7 @@ import traceback
 
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
-from srmlib.loaders import (derivatives, earnings_symbols, massive, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
+from srmlib.loaders import (derivatives, earnings_symbols, fmp_symbols, massive, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
                              nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
@@ -52,6 +52,7 @@ LOADERS = {
     "ssga": ssga.run,                           # S&P 500 / 400 / 600 and Dow weights, CUSIP, SEDOL
     "nasdaq100": nasdaq100.run,                 # Nasdaq-100 members
     "earnings-symbols": earnings_symbols.run,   # companies in FMP's earnings calendar not yet here (OTC, ADRs, preferreds)
+    "fmp-symbols": fmp_symbols.run,             # securities by FMP symbol (--symbols JMAT.L JMPLY): abroad / OTC-only, with prices
     "earnings-symbols-cleanup": earnings_symbols_cleanup.run,   # one-off fix of 2026-10-23's loads (report only unless --force)
     "openfigi": openfigi.run,                   # composite / share-class / exchange FIGIs
     "fmp-profiles": fmp.load_profiles,          # ISIN, CUSIP, sector, industry, market cap
@@ -75,7 +76,8 @@ LOADERS = {
     "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
 }
 # Not run by `load all`: name them to run them.
-OPTIONAL = {"portfolio-snapshots", "mutual-funds", "earnings-symbols-cleanup", "spelling-duplicates", "sample-portfolios"}
+OPTIONAL = {"portfolio-snapshots", "mutual-funds", "earnings-symbols-cleanup", "spelling-duplicates", "sample-portfolios",
+            "fmp-symbols"}
 
 
 def status(conn):
@@ -144,6 +146,8 @@ def main():
                       help="nasdaq-prices: every active fund (ETF, ETN, closed-end fund; ~6,100 requests at 1/second)")
     load.add_argument("--benchmarks", nargs="*", help="ssga: only these benchmark codes (SP500 DJIA SP400 SP600)")
     load.add_argument("--include-otc", action="store_true", help="sec-tickers: also create OTC securities")
+    load.add_argument("--min-cap", type=float, help="fmp-symbols: screen FMP's OTC lines of companies worth at least this ($)")
+    load.add_argument("--home", action="store_true", help="fmp-symbols: also each company's London / Toronto line")
     load.add_argument("--as-of", help="portfolio-snapshots: snapshot date (default: the latest price date)")
     load.add_argument("--portfolios", nargs="*", help="portfolio-snapshots: only these portfolio codes")
     load.add_argument("--search", help="mutual-funds: add the funds a Nasdaq.com name search finds")

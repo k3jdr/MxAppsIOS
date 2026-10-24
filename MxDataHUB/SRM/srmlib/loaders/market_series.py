@@ -2,7 +2,8 @@
 
   * cboe-vix    Cboe's daily history files for the VIX family — VIX9D, VIX (30 days), VIX3M, VIX6M: open, high, low,
                 close back to 1990 (each file is the whole history, a few hundred KB).
-  * fred-yields FRED's Treasury constant-maturity yields DGS1MO … DGS30 (daily, back to 1962) and the NBER recession
+  * fred-yields FRED's Treasury constant-maturity yields DGS1MO … DGS30 (daily, back to 1962), the FX rates DEXUSUK and
+                DEXCAUS (V021: pounds and Canadian dollars to dollars, for srm.fx_to_usd) and the NBER recession
                 indicator USREC (monthly). After the first load only the last 60 days are asked for (FRED revises
                 recent days); --force reads the whole history again, --since from a date.
 
@@ -153,7 +154,7 @@ def load_fred(conn, cfg, args):
     """Treasury constant-maturity yields and the NBER recession indicator from FRED."""
     with LoadRun(conn, "FRED", "fred_yields", {"since": args.since, "force": args.force}) as run, conn.cursor() as cur:
         src = source_id(cur, "FRED")
-        for family in ("TREASURY_CMT", "RECESSION"):
+        for family in ("TREASURY_CMT", "RECESSION", "FX"):
             codes = _series(cur, family)
             if not codes:
                 continue
