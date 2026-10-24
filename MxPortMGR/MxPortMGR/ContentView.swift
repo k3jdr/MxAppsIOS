@@ -187,7 +187,7 @@ struct ContentView: View {
         if let d = defaults.string(forKey: "earningsDate"), d.count == 10 { store.earnings.date = d; store.earnings.anchor = d }
         if let m = defaults.string(forKey: "earningsMode").flatMap(EarningsStore.Mode.init(rawValue:)) { store.earnings.mode = m }
         if let symbol = defaults.string(forKey: "earningsSymbol") { store.earnings.selection = EarningsParse.key(symbol) }
-        if let ticker = defaults.string(forKey: "holding") { store.holdingSelection = ticker }
+        if let ticker = defaults.string(forKey: "holding") { store.holdingSelection = [ticker] }
         #if DEBUG
         // Self-tests of the links: open the Link dialog for the selected row (-linkEdit symbol|name), or show the hover
         // card of a linked cell (-linkHoverTest ID, e.g. META|symbol) once the table is up.

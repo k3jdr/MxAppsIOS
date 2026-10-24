@@ -182,11 +182,13 @@ struct HoldingsTable: View {
     /// The holding whose lots are being edited (Edit Holding…).
     @State private var editing: EditTarget?
     struct EditTarget: Identifiable { let id: String }
+    /// Column widths as the user drags them, kept for the window. Columns can be resized only: not hidden or moved.
+    @SceneStorage("HoldingsTable.columns") private var columns = TableColumnCustomization<Holding>()
 
     var body: some View {
         let p = store.portfolio
         Box(title: "Holdings", symbol: "tablecells", help: "Each position: what it is, its value and weight, and in a taxable account its cost basis, gain and tax lots. In My Portfolio the values can be edited. ⌘K (Edit ▸ Link…) or a row's context menu adds a link to the ticker or name, with its own hover text.") {
-            Table(p.holdings, selection: $store.holdingSelection) {
+            Table(p.holdings, selection: $store.holdingSelection, columnCustomization: $columns) {
                 TableColumn("Ticker") { h in
                     if let t = LinkTarget.holding(h) {
                         LinkedCell(target: t, font: .body.monospaced(), color: h.security == nil || h.unpriced ? .red : .primary,
@@ -195,7 +197,8 @@ struct HoldingsTable: View {
                         Text(h.ticker).font(.body.monospaced())
                     }
                 }
-                .width(70)
+                .width(min: 50, ideal: 70)
+                .customizationID("ticker").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("Name") { h in
                     if let t = LinkTarget.holding(h, .name) {
                         LinkedCell(target: t, color: h.security == nil ? .red : .primary)
@@ -203,8 +206,11 @@ struct HoldingsTable: View {
                         Text(h.security?.name ?? "Cash")
                     }
                 }
+                .width(min: 80)
+                .customizationID("name").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("Sector / class") { h in Text(h.security.map { $0.lookThrough != nil ? "Fund · \($0.assetClass.rawValue)" : $0.issuer.map { "Bond · \($0)" } ?? $0.sector } ?? "—") }
-                    .width(170)
+                    .width(min: 70, ideal: 170)
+                    .customizationID("sector").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("Shares") { h in
                     if p.isSRM, h.ticker != "CASH" {
                         TextField("", value: Binding(get: { h.quantity ?? 0 }, set: { v in
@@ -223,7 +229,8 @@ struct HoldingsTable: View {
                         Text(h.quantity.map { String(format: "%.4g", $0) } ?? "—").monospacedDigit().foregroundStyle(.secondary)
                     }
                 }
-                .width(80)
+                .width(min: 50, ideal: 80)
+                .customizationID("shares").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("Value") { h in
                     if p.id == "mine" && (!p.isSRM || h.ticker == "CASH") {
                         TextField("", value: Binding(get: { h.value }, set: { v in
@@ -236,17 +243,25 @@ struct HoldingsTable: View {
                         Text(money(h.value)).monospacedDigit()
                     }
                 }
-                .width(100)
-                TableColumn("Weight") { h in Text(pct(p.weight(h))).monospacedDigit() }.width(60)
-                TableColumn("Cost basis") { h in Text(h.lots.isEmpty ? "—" : money(h.costBasis)).monospacedDigit() }.width(100)
+                .width(min: 60, ideal: 100)
+                .customizationID("value").disabledCustomizationBehavior(Self.fixed)
+                TableColumn("Weight") { h in Text(pct(p.weight(h))).monospacedDigit() }
+                    .width(min: 40, ideal: 60)
+                    .customizationID("weight").disabledCustomizationBehavior(Self.fixed)
+                TableColumn("Cost basis") { h in Text(h.lots.isEmpty ? "—" : money(h.costBasis)).monospacedDigit() }
+                    .width(min: 60, ideal: 100)
+                    .customizationID("cost").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("Gain") { h in
                     Text(h.lots.isEmpty ? "—" : money(h.unrealizedGain)).monospacedDigit().foregroundStyle(h.lots.isEmpty ? .secondary : Color.signed(h.unrealizedGain))
                 }
-                .width(100)
+                .width(min: 60, ideal: 100)
+                .customizationID("gain").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("Lots") { h in
                     Text(h.lots.map { "\($0.acquired) (\(pct($0.share, 0)))" }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
                         .help(h.lots.map { "\($0.acquired): \(pct($0.share, 0)) of the position, cost \(money($0.costBasis))" }.joined(separator: "\n"))
                 }
+                .width(min: 80)
+                .customizationID("lots").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("") { h in
                     if p.id == "mine" {
                         HStack(spacing: 6) {
@@ -260,28 +275,38 @@ struct HoldingsTable: View {
                     }
                 }
                 .width(48)
+                .customizationID("actions").disabledCustomizationBehavior(.all)
             }
             .contextMenu(forSelectionType: Holding.ID.self) { tickers in
-                if let ticker = tickers.first, let h = p.holdings.first(where: { $0.ticker == ticker }) {
+                let chosen = p.holdings.filter { tickers.contains($0.ticker) }
+                if chosen.count == 1, let h = chosen.first {
                     if p.id == "mine" {
-                        Button("Edit Holding…") { editing = EditTarget(id: ticker) }
+                        Button("Edit Holding…") { editing = EditTarget(id: h.ticker) }
                         Divider()
                     }
                     if let t = LinkTarget.holding(h) {
                         linkMenu(t)
                         Divider()
                     }
-                    Button("Copy Row") { copyRows([h], of: p) }
+                }
+                if !chosen.isEmpty {
+                    Button(chosen.count == 1 ? "Copy Row" : "Copy \(chosen.count) Rows") { copy(Self.rows(chosen, of: p)) }
+                    Menu(chosen.count == 1 ? "Copy Column" : "Copy Column of \(chosen.count) Rows") {
+                        ForEach(Self.titles.indices, id: \.self) { c in
+                            Button(Self.titles[c]) { copy(Self.rows(chosen, of: p, columns: [c])) }
+                        }
+                    }
                 }
             } primaryAction: { tickers in
-                if p.id == "mine", let ticker = tickers.first { editing = EditTarget(id: ticker) }
+                if p.id == "mine", tickers.count == 1, let ticker = tickers.first { editing = EditTarget(id: ticker) }
             }
             .sheet(item: $editing) { EditHoldingSheet(store: store, ticker: $0.id) }
-            // Rows are selected, not their words: Edit ▸ Copy (⌘C) copies the selected row, with the columns' titles.
+            // Rows are selected, not their words: ⌘-click and ⇧-click select several, ⌘A all; Edit ▸ Copy (⌘C) copies
+            // the selected rows with the columns' titles, and a row's context menu copies one column of them.
             .textSelection(.disabled)
             .onCopyCommand {
-                guard let h = p.holdings.first(where: { $0.ticker == store.holdingSelection }) else { return [] }
-                return [NSItemProvider(object: Self.rows([h], of: p) as NSString)]
+                let chosen = p.holdings.filter { store.holdingSelection.contains($0.ticker) }
+                return chosen.isEmpty ? [] : [NSItemProvider(object: Self.rows(chosen, of: p) as NSString)]
             }
             // Every row visible, up to 40.
             .frame(minHeight: CGFloat(max(min(p.holdings.count, 40), 6)) * 26 + 34)
@@ -294,22 +319,32 @@ struct HoldingsTable: View {
 }
 
 extension HoldingsTable {
-    /// Holdings as lines of tab-separated columns under the columns' titles (they paste into a spreadsheet as a table).
-    static func rows(_ holdings: [Holding], of p: Portfolio) -> String {
-        let titles = ["Ticker", "Name", "Sector / class", "Shares", "Value", "Weight", "Cost basis", "Gain", "Lots"]
+    /// The columns that can only be resized.
+    static let fixed: TableColumnCustomizationBehavior = [.visibility, .reorder]
+    static let titles = ["Ticker", "Name", "Sector / class", "Shares", "Value", "Weight", "Cost basis", "Gain", "Lots"]
+
+    /// Holdings as lines of tab-separated columns under the columns' titles (they paste into a spreadsheet as a table);
+    /// `columns` picks some of them (indexes into `titles`).
+    static func rows(_ holdings: [Holding], of p: Portfolio, columns: [Int]? = nil) -> String {
+        let pick = columns ?? Array(titles.indices)
         let lines = holdings.map { h in
-            [h.ticker, h.security?.name ?? "Cash",
-             h.security.map { $0.lookThrough != nil ? "Fund · \($0.assetClass.rawValue)" : $0.issuer.map { "Bond · \($0)" } ?? $0.sector } ?? "—",
-             h.quantity.map { String(format: "%.4g", $0) } ?? "—", money(h.value), pct(p.weight(h)),
-             h.lots.isEmpty ? "—" : money(h.costBasis), h.lots.isEmpty ? "—" : money(h.unrealizedGain),
-             h.lots.map { "\($0.acquired) (\(pct($0.share, 0)))" }.joined(separator: ", ")].joined(separator: "\t")
+            let sector: String = h.security.map { s -> String in
+                s.lookThrough != nil ? "Fund · \(s.assetClass.rawValue)" : (s.issuer.map { "Bond · \($0)" } ?? s.sector)
+            } ?? "—"
+            let shares: String = h.quantity.map { $0.formatted(.number.precision(.fractionLength(0...6)).grouping(.never)) } ?? "—"
+            let cost: String = h.lots.isEmpty ? "—" : money(h.costBasis)
+            let gain: String = h.lots.isEmpty ? "—" : money(h.unrealizedGain)
+            let lots: String = h.lots.map { "\($0.acquired) (\(pct($0.share, 0)))" }.joined(separator: ", ")
+            let cells: [String] = [h.ticker, h.security?.name ?? "Cash", sector, shares, money(h.value), pct(p.weight(h)),
+                                   cost, gain, lots]
+            return pick.map { cells[$0] }.joined(separator: "\t")
         }
-        return ([titles.joined(separator: "\t")] + lines).joined(separator: "\n")
+        return ([pick.map { titles[$0] }.joined(separator: "\t")] + lines).joined(separator: "\n")
     }
 
-    func copyRows(_ holdings: [Holding], of p: Portfolio) {
+    func copy(_ text: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(Self.rows(holdings, of: p), forType: .string)
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
 

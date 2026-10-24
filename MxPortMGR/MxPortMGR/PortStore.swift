@@ -237,8 +237,10 @@ final class PortStore {
         historyVersion += 1
     }
 
-    /// The holding selected in My Holdings.
-    var holdingSelection: Holding.ID?
+    /// The holdings selected in My Holdings (⌘-click, ⇧-click, ⌘A).
+    var holdingSelection: Set<Holding.ID> = []
+    /// The selected holding when exactly one is.
+    var selectedHolding: Holding.ID? { holdingSelection.count == 1 ? holdingSelection.first : nil }
 
     /// What Edit ▸ Link… (⌘K) links on this screen: the company selected in Earnings by Day, or the holding selected in
     /// My Holdings.
@@ -247,7 +249,7 @@ final class PortStore {
         case .earningsDay:
             earnings.selection.flatMap { key in earnings.days[earnings.date]?.entries.first { $0.key == key } }.map { LinkTarget.earnings($0) }
         case .myPortfolio:
-            holdingSelection.flatMap { t in portfolio.holdings.first { $0.ticker == t } }.flatMap { LinkTarget.holding($0) }
+            selectedHolding.flatMap { t in portfolio.holdings.first { $0.ticker == t } }.flatMap { LinkTarget.holding($0) }
         default:
             nil
         }
