@@ -1,5 +1,5 @@
 {
-  "about": "Corrections to securities that the sources get wrong, applied by srm.py load security-fixes after the other identifier loaders (so they stay corrected). 'rules' retype by pattern (PostgreSQL regular expressions on the name, ticker and FMP industry), in order; 'fixes' then set a named security's type and / or name.",
+  "about": "Corrections to securities that the sources get wrong, applied by srm.py load security-fixes after the other identifier loaders (so they stay corrected). 'rules' retype by pattern (PostgreSQL regular expressions on the name, ticker and FMP industry), in order; 'fixes' then set a named security's type and / or name. 'remove' deletes securities that shouldn't be there (refused while an account holds them or a benchmark uses them), with their holdings-snapshot rows.",
   "fixes": [
     {
       "ticker": "FWONB",
@@ -59,6 +59,20 @@
       "name": "(\\metns?\\M|exchange[- ]traded notes?|\\mipath\\M|\\metracs\\M|microsectors|velocityshares)",
       "notName": "\\metf\\M",
       "why": "Exchange-traded notes — unsecured debt of the issuing bank, not funds — that nasdaqtrader's files flag as ETFs (MicroSectors, iPath, ETRACS …)."
+    }
+  ],
+  "remove": [
+    {
+      "ticker": "VTSM-CIT",
+      "why": "401(k) collective investment trust added by hand (trust-navs) and never priced; taken out of MY_PORTFOLIO (version 3) and trusts.local.json on request (2026-10-24)."
+    },
+    {
+      "ticker": "VTISM-CIT",
+      "why": "401(k) collective investment trust added by hand (trust-navs) and never priced; taken out of MY_PORTFOLIO (version 3) and trusts.local.json on request (2026-10-24)."
+    },
+    {
+      "ticker": "VTIBM-CIT",
+      "why": "401(k) collective investment trust added by hand (trust-navs) and never priced; taken out of MY_PORTFOLIO (version 3) and trusts.local.json on request (2026-10-24)."
     }
   ]
 }

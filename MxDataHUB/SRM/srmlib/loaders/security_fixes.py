@@ -5,7 +5,10 @@ load's log. Runs last in Identifiers & issuer data, after the loaders that set t
     regular expressions, either one) and whose FMP industry matches `industry` (when given), unless the name matches
     `notName`, get the type `to` — exchange-listed notes ("baby bonds") typed as stock, preferreds typed common, REIT
     common shares;
-  * fixes: a security named by ticker (its current U.S. or OTC listing) gets the type and / or name given.
+  * fixes: a security named by ticker (its current U.S. or OTC listing) gets the type and / or name given;
+  * remove: a security named by ticker (any current listing) is deleted, with its listings, identifiers, prices and
+    holdings-snapshot rows — refused while an account's tax lots hold it or a benchmark uses it. Done once: the next
+    run finds nothing to delete.
 """
 
 import json
@@ -77,6 +80,32 @@ def run(conn, cfg, args):
             run.updated += 1
             log(f"  {ticker} (security {security_id}): " + "; ".join(f"{c} {before[c]!r} → {v!r}" for c, v in changed.items())
                 + f" — {fix.get('why', '')}")
+        removed = []
+        for item in spec.get("remove") or []:
+            ticker = (item.get("ticker") or "").strip().upper()
+            cur.execute("""SELECT l.security_id FROM srm.listing l WHERE l.ticker = %s
+                              AND current_date >= l.valid_from AND current_date < l.valid_to
+                            ORDER BY l.is_primary DESC LIMIT 1""", (ticker,))
+            row = cur.fetchone()
+            if not row:
+                continue                        # already gone
+            sid = row[0]
+            cur.execute("""SELECT (SELECT count(*) FROM srm.portfolio_tax_lot WHERE security_id = %s),
+                                  (SELECT count(*) FROM srm.benchmark_weight WHERE security_id = %s)
+                                + (SELECT count(*) FROM srm.benchmark_policy WHERE security_id = %s)
+                                + (SELECT count(*) FROM srm.benchmark_constituent WHERE security_id = %s)""", (sid, sid, sid, sid))
+            lots, bench = cur.fetchone()
+            if lots or bench:
+                run.reject(ticker, f"not removed: {lots} tax lots and {bench} benchmark rows still use it")
+                continue
+            cur.execute("DELETE FROM srm.portfolio_holding WHERE security_id = %s", (sid,))
+            snapshots = cur.rowcount
+            cur.execute("DELETE FROM srm.portfolio_transaction WHERE security_id = %s", (sid,))
+            cur.execute("DELETE FROM srm.price_proxy WHERE proxy_security_id = %s", (sid,))
+            cur.execute("DELETE FROM srm.security WHERE security_id = %s RETURNING name", (sid,))
+            name = cur.fetchone()[0]
+            removed.append(ticker)
+            log(f"  removed {ticker} (security {sid}, {name}) and {snapshots} holdings-snapshot rows — {item.get('why', '')}")
         conn.commit()
-        run.message = (f"rules — {'; '.join(by_rule)}; " if by_rule else "") + f"{len(fixes)} named corrections"
+        run.message = (f"rules — {'; '.join(by_rule)}; " if by_rule else "") + f"{len(fixes)} named corrections" + (f"; removed {', '.join(removed)}" if removed else "")
         log("  " + run.message)
