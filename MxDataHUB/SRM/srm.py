@@ -40,7 +40,7 @@ import traceback
 
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
-from srmlib.loaders import (derivatives, earnings_symbols, fmp_symbols, massive, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
+from srmlib.loaders import (derivatives, earnings_symbols, fmp_symbols, massive, policy, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
                              nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
@@ -73,6 +73,7 @@ LOADERS = {
     "cboe-vix": market_series.load_cboe,        # VIX, VIX9D, VIX3M, VIX6M daily OHLC (Cboe, no key)
     "fred-yields": market_series.load_fred,     # Treasury constant-maturity yields, NBER recessions (FRED, no key)
     "fmp-fundamentals": fundamentals.run,       # quarterly revenue, cash flow, capex, D&A (srm.fundamental_watch)
+    "policy-benchmarks": policy.run,            # policy benchmarks' month-end snapshots from their dated mixes (V023)
     "sample-portfolios": samples.run,           # MxPortMGR's sample accounts from real securities and prices
     "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
 }

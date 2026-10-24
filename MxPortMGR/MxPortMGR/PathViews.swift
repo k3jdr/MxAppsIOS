@@ -111,6 +111,10 @@ struct PortfolioView: View {
             }
             .frame(maxWidth: 480)
             .help(p.isSRM ? "Benchmarks loaded in the security master" : "The benchmark the account is compared with")
+            if p.id == "mine" {
+                Button("Policy Benchmarks…") { store.showPolicyEditor = true }
+                    .help("Define your own benchmark: index funds standing in for asset classes, with the mix you aim for and when it took effect (Portfolio ▸ Policy Benchmarks…)")
+            }
             Text(p.benchmarkInfo.code == p.benchmark ? p.benchmarkInfo.summary : "Loading \(p.benchmark) from the security master…")
                 .font(.callout).foregroundStyle(.secondary)
             if part == .benchmark {

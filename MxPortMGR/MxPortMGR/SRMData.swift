@@ -100,6 +100,38 @@ nonisolated struct SRMAccount: Codable, Sendable {
     var closedDate: String?
 }
 
+/// A decision recorded for a portfolio (srm.portfolio_decision, V023).
+nonisolated struct SRMDecision: Codable, Sendable, Identifiable, Hashable {
+    var id: Int
+    var decidedOn: String
+    var category: String
+    var title: String
+    var rationale: String?
+    var portfolioVersion: Int?
+    var createdAt: String?
+    var createdBy: String?
+}
+
+/// A policy benchmark: dated mixes of securities (srm.benchmark_policy, V023).
+nonisolated struct SRMPolicyBenchmark: Codable, Sendable, Identifiable, Hashable {
+    var id: String { code }
+    var code: String
+    var name: String
+    var description: String?
+    var mixes: [Mix]
+
+    struct Mix: Codable, Sendable, Hashable {
+        var effectiveFrom: String
+        var components: [Component]
+    }
+    struct Component: Codable, Sendable, Hashable {
+        var securityId: Int?
+        var ticker: String
+        var name: String?
+        var weight: Double
+    }
+}
+
 /// A personal account as the Open Portfolio list shows it (srm.v_personal_account).
 nonisolated struct SRMAccountSummary: Decodable, Sendable, Identifiable, Hashable {
     var id: String { code }
@@ -187,6 +219,12 @@ nonisolated final class SRMRegistry: @unchecked Sendable {
     func key(ticker: String) -> String? {
         lock.lock(); defer { lock.unlock() }
         return keyByTicker[ticker.uppercased()]
+    }
+
+    /// Drops a benchmark's weights (a policy benchmark just redefined): the next use reads them again.
+    func forgetBenchmark(_ code: String) {
+        lock.lock(); defer { lock.unlock() }
+        benchmarks[code.uppercased()] = nil
     }
 
     func benchmark(_ code: String) -> Benchmark? {
@@ -331,6 +369,45 @@ nonisolated enum AccountsClient {
     /// Every personal account with its value, version and who saved it last (File ▸ Open Portfolio…).
     static func accountList() async throws -> [SRMAccountSummary] {
         try await request("GET", "/accounts", as: Accounts.self).accounts
+    }
+
+    private struct Decisions: Decodable { var decisions: [SRMDecision] }
+    private struct Policies: Decodable { var benchmarks: [SRMPolicyBenchmark] }
+    private struct Resolved: Decodable { var securities: [String: SRMSecurity]; var unknown: [String] }
+
+    /// A portfolio's decisions, newest first.
+    static func decisions(_ code: String) async throws -> [SRMDecision] {
+        try await request("GET", "/accounts/\(code)/decisions", as: Decisions.self).decisions
+    }
+
+    /// Records a decision; returns them all.
+    static func addDecision(_ code: String, title: String, rationale: String, category: String, decidedOn: String) async throws -> [SRMDecision] {
+        try await request("POST", "/accounts/\(code)/decisions",
+                          body: ["title": title, "rationale": rationale, "category": category, "decidedOn": decidedOn, "by": "MxPortMGR"],
+                          as: Decisions.self).decisions
+    }
+
+    /// A new portfolio from the saved version of `code`.
+    static func duplicate(_ code: String, to newCode: String, name: String) async throws -> SRMAccount {
+        try await request("POST", "/accounts/\(code)/duplicate", body: ["code": newCode, "name": name, "by": "MxPortMGR"], as: SRMAccount.self)
+    }
+
+    static func policyBenchmarks() async throws -> [SRMPolicyBenchmark] {
+        try await request("GET", "/benchmarks/policy", as: Policies.self).benchmarks
+    }
+
+    /// Defines a policy benchmark's mixes; the service then has the srm-loader write its snapshots.
+    static func savePolicy(_ p: SRMPolicyBenchmark) async throws -> SRMPolicyBenchmark {
+        let body: [String: Any] = ["name": p.name, "by": "MxPortMGR",
+                                   "mixes": p.mixes.map { m in ["effectiveFrom": m.effectiveFrom,
+                                                                "components": m.components.map { ["ticker": $0.ticker, "weight": $0.weight] }] }]
+        return try await request("PUT", "/benchmarks/policy/\(p.code)", body: body, timeout: 300, as: SRMPolicyBenchmark.self)
+    }
+
+    /// Each ticker's security with its latest price (Import Holdings), and the tickers the security master lacks.
+    static func resolve(_ tickers: [String]) async throws -> (found: [String: SRMSecurity], unknown: [String]) {
+        let r = try await request("POST", "/securities/resolve", body: ["tickers": tickers], as: Resolved.self)
+        return (r.securities, r.unknown)
     }
 
     static func account(_ code: String) async throws -> SRMAccount {

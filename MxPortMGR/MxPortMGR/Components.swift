@@ -355,6 +355,8 @@ struct MyPortfolioBar: View {
                     .help("Open another portfolio (File ▸ Open Portfolio…, ⌘O)")
                 Button("New…") { store.showNewPortfolio = true }
                     .help("Create a portfolio in the security master (File ▸ New Portfolio…, ⌘N)")
+                Button("Decisions…") { store.showDecisions = true }
+                    .help("What was decided for this portfolio and why (Portfolio ▸ Decisions…, ⌥⌘D)")
                 if p.holdings.contains(where: \.unpriced) {
                     Button { Task { await store.loadSRMPrices() } } label: { Label("Load Prices", systemImage: "arrow.down.circle") }
                         .help("Ask the srm-loader service to load prices for holdings without them (srm.py load nasdaq-prices: Nasdaq.com, free, no API key)")

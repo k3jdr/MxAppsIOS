@@ -145,6 +145,22 @@ the analytics service can analyse it.
 | **Close Portfolio** | My Portfolio's steps then ask to open or create one |
 | **Save** ⌘S | holdings, lots, cash, benchmark, approach and **preferences** as the portfolio's next version |
 | **Revert to Saved** | drop the unsaved changes and read the saved version again |
+| **Duplicate Portfolio…** | a new portfolio (new code and name) from the saved version — lots, cash, benchmark, preferences — then opened |
+| **Rename Portfolio…** | the name; the code stays (MxDataHUB and `mxportmgr://` links use it) |
+| **Import Holdings…** ⇧⌘I | a CSV with a header line — Ticker (or Symbol), Shares (or Quantity), optionally Cost and Acquired (yyyy-mm-dd or m/d/yyyy), e.g. a custodian's export — resolved against the security master (`POST /securities/resolve`), previewed, then added to the holdings or replacing them |
+| **Export Portfolio** | the saved version as JSON (account, lots, preferences, decisions) or CSV (tax lots) |
+
+**Portfolio ▸ Decisions…** (⌥⌘D, or *Decisions…* in the bar): what was decided for the portfolio and why — date,
+category (allocation, benchmark, approach, limits, taxes, trade, cash, other), the reasoning and the portfolio's
+version at the time — kept in `srm.portfolio_decision` (V023). Append-only: a change of mind is a new decision. Each
+saved version also records what changed (*Holdings: 2 added, 1 changed; Benchmark: SP500 → POLICY_GROWTH*).
+
+**Portfolio ▸ Policy Benchmarks…** (or *Policy Benchmarks…* under the benchmark in step 2): a benchmark that is your
+plan — index funds or ETFs standing in for asset classes (VTI, VXUS, BND …), the weights you aim for, and the date each
+mix took effect. Saving it writes the mixes to `srm.benchmark_policy` and has the srm-loader service write its
+month-end snapshots for two years (`policy-benchmarks`, in the activity log), each from the mix in force that month,
+so attribution measures a 2025 change of plan correctly; *Use for This Portfolio* makes it the open portfolio's
+benchmark.
 
 Edits wait for Save (the bar shows *Edited*, with what changed in its tooltip). Each save names the version it was
 made from and is refused when the portfolio was saved elsewhere since it was opened (*Not saved: … changed
@@ -459,7 +475,8 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `Navigation.swift` | Back and Forward: the places visited, the toolbar's ‹ ›, the Go menu, ⌃← ⌃→ and a mouse's side buttons |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
 | `Universe.swift`, `Portfolio.swift`, `Samples.swift` | Security, benchmark and the lookups into the registry; accounts and checks; the samples' lessons |
-| `PortfolioFile.swift`, `PortfolioSheets.swift` | One portfolio open at a time: preferences, unsaved-change checks, New / Open / Recent / Close / Save / Revert, the quit check; the Open Portfolio and New Portfolio sheets |
+| `PortfolioTransfer.swift` | Import Holdings (CSV), Export Portfolio (JSON / CSV), Duplicate and Rename |
+| `PortfolioFile.swift`, `PortfolioSheets.swift` | One portfolio open at a time: preferences, unsaved-change checks, New / Open / Recent / Close / Save / Revert, the quit check; the Open Portfolio, New Portfolio, Decisions, Duplicate, Rename, Import and Policy Benchmarks sheets |
 | `SRMData.swift` | Security-master securities and benchmarks registry (with the analytics service's risk numbers), the accounts-service client, analytics inputs |
 | `AddSecuritiesSheet.swift` | Add Securities: search the security master |
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | The built-in optimizers, the attribution result, and the Layer 3 service client |

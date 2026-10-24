@@ -132,7 +132,8 @@ nonisolated struct Portfolio: Codable, Hashable, Sendable, Identifiable {
             out.append(Issue(level: .error, title: "No current price for \(h.ticker)",
                              detail: "The last price is stale (a halted or delisted security). Its value — and so every weight — may be wrong. Attribution marks the months without a return as a data gap."))
         }
-        for h in holdings where h.security?.lookThrough == nil && h.security != nil && weight(h) > 0.20 && h.security?.assetClass == .equity {
+        for h in holdings where h.security?.lookThrough == nil && h.security != nil && weight(h) > 0.20 && h.security?.assetClass == .equity
+            && !(h.security?.isFund ?? false) {
             out.append(Issue(level: .warning, title: "\(h.ticker) is \(pct(weight(h))) of the account",
                              detail: "A single company over 20%: one earnings report, lawsuit or product failure can move the whole account. Its own risk is not diversified away."))
         }

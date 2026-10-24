@@ -78,8 +78,9 @@ CATEGORIES = [
      "cadence": "daily",
      # Needs an FMP key; without it the rest of the refresh still runs.
      "continueAfterFailure": ["earnings-symbols"]},
-    {"id": "constituents", "name": "Benchmark constituents", "loaders": ["ssga", "nasdaq100"],
-     "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members.", "cadence": "daily",
+    {"id": "constituents", "name": "Benchmark constituents", "loaders": ["ssga", "nasdaq100", "policy-benchmarks"],
+     "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members; policy benchmarks' month-end "
+                    "snapshots from their dated mixes (MxPortMGR).", "cadence": "daily",
      # State Street publishes a day's holdings the next business morning, so the newest SPDR file is dated a business
      # day back (two overnight, before the next one appears): freshness allows that lag.
      "dataLagDays": 1},
@@ -134,7 +135,7 @@ RUN_NAMES = {
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],
     "treasuries": ["treasuries"], "massive-prices": ["massive_prices"], "listed-derivatives": ["listed_derivatives"],
-    "fmp-symbols": ["fmp_symbols"],
+    "fmp-symbols": ["fmp_symbols"], "policy-benchmarks": ["policy_benchmarks"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "..", "..", "MxDataHUB", "SRM"))
@@ -257,7 +258,8 @@ class SRM:
                 price_date = cur.fetchone()[0]
                 # Only the benchmarks the loaders refresh: custom ones built in MxDataHUB keep their build date.
                 cur.execute("""SELECT min(as_of_date), max(as_of_date) FROM srm.v_benchmark_summary
-                                WHERE provider IS DISTINCT FROM 'MxDataHUB' AND provider IS DISTINCT FROM 'MxPortMGR'""")
+                                WHERE provider IS DISTINCT FROM 'MxDataHUB' AND provider IS DISTINCT FROM 'MxPortMGR'
+                                  AND provider IS DISTINCT FROM 'Policy'""")
                 bench_min, bench_max = cur.fetchone()
                 portfolio_min = None
                 if table_exists(cur, "srm.v_snapshot_coverage"):
@@ -403,7 +405,7 @@ def quality_checks(status, stale_days):
 
     for code, b in status["benchmarks"].items():
         age = business_days_between(b["as_of_date"], today) if b["as_of_date"] else None
-        if b.get("provider") not in ("MxDataHUB", "MxPortMGR"):    # custom and blended benchmarks aren't refreshed
+        if b.get("provider") not in ("MxDataHUB", "MxPortMGR", "Policy"):    # custom, blended and policy benchmarks aren't refreshed
             add("benchmark %s fresh" % code, age is not None and age <= stale_days,
                 "as of %s (%s business days old)" % (b["as_of_date"], age))
         weight = float(b["weight_sum"] or 0)

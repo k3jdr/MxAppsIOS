@@ -368,6 +368,12 @@ final class PortStore {
     var saveConflict: String?
     var showOpenPortfolio = false
     var showNewPortfolio = false
+    var showDecisions = false
+    var showDuplicate = false
+    var showRename = false
+    var showPolicyEditor = false
+    /// Holdings read from a CSV file, waiting for Add or Replace (File ▸ Import Holdings…).
+    var importPreview: ImportPreview?
 
     /// Loads (or starts) the account `code` from the security master as My Portfolio.
     func openSRMAccount(_ code: String) async {
@@ -465,7 +471,8 @@ final class PortStore {
         let settingsJSON = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(currentSettings))) ?? [:]
         let body: [String: Any] = ["name": mine.name, "accountType": mine.account == .retirement ? "retirement" : mine.account == .roth ? "roth" : "taxable",
                                    "approach": myApproach == .active ? "active" : "passive", "benchmark": mine.benchmark,
-                                   "cash": cash, "lots": lots, "version": openVersion, "settings": settingsJSON, "by": "MxPortMGR"]
+                                   "cash": cash, "lots": lots, "version": openVersion, "settings": settingsJSON, "by": "MxPortMGR",
+                                   "note": looseEnds.joined(separator: "; ")]
         srmBusy = true
         defer { srmBusy = false }
         do {

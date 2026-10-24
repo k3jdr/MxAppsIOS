@@ -98,6 +98,10 @@ DESCRIBE = {
         {"method": "GET", "path": "/accounts/{code}", "summary": "An account with its open tax lots, valued"},
         {"method": "PUT", "path": "/accounts/{code}", "summary": "Save an account as a new version (version-checked: 409 when it changed since it was opened); rewrites today's holdings"},
         {"method": "GET", "path": "/accounts/{code}/versions", "summary": "Every saved version of an account, newest first"},
+        {"method": "GET", "path": "/accounts/{code}/decisions", "summary": "A portfolio's decisions, newest first; POST records one"},
+        {"method": "POST", "path": "/accounts/{code}/duplicate", "summary": "A new portfolio from this one's saved version ({code, name})"},
+        {"method": "GET", "path": "/benchmarks/policy", "summary": "Policy benchmarks with their dated mixes; /benchmarks/policy/{code} one"},
+        {"method": "PUT", "path": "/benchmarks/policy/{code}", "summary": "Define a policy benchmark's dated mixes, then write its snapshots (srm-loader)"},
         {"method": "POST", "path": "/accounts/{code}/close", "summary": "Close an account (kept, not deleted); /reopen opens it again"},
         {"method": "POST", "path": "/accounts/{code}/load-prices", "summary": "Load prices for unpriced holdings (via srm-loader)"},
         {"method": "GET", "path": "/earnings/calendar", "summary": "FMP earnings calendar: EPS and revenue, estimated and actual (12 months back)"},
@@ -528,6 +532,162 @@ def load_prices(conn, code):
             "message": message, "loader": result, "account": account(conn, code)}
 
 
+# --- Decisions, duplicates and policy benchmarks (V023) -------------------------------------------------------------
+
+DECISION_CATEGORIES = ("allocation", "benchmark", "approach", "limits", "taxes", "trade", "cash", "other")
+
+
+def portfolio_id(conn, code):
+    rows = fetch(conn, "SELECT portfolio_id, version FROM srm.portfolio WHERE upper(code) = upper(%s)", (code,))
+    if not rows:
+        raise LookupError("no account %r" % code)
+    return rows[0]["portfolio_id"], rows[0]["version"]
+
+
+def decisions(conn, code):
+    """A portfolio's decisions, newest first (append-only)."""
+    pid, _ = portfolio_id(conn, code)
+    rows = fetch(conn, """SELECT decision_id, decided_on, category, title, rationale, portfolio_version, created_at, created_by
+                            FROM srm.portfolio_decision WHERE portfolio_id = %s
+                           ORDER BY decided_on DESC, decision_id DESC""", (pid,))
+    return {"code": code.upper(), "decisions": [
+        {"id": r["decision_id"], "decidedOn": r["decided_on"], "category": r["category"], "title": r["title"],
+         "rationale": r["rationale"], "portfolioVersion": r["portfolio_version"], "createdAt": r["created_at"],
+         "createdBy": r["created_by"]} for r in rows]}
+
+
+def add_decision(conn, code, body):
+    """Records a decision: {title, rationale, category, decidedOn (yyyy-mm-dd, default today), by}."""
+    pid, version = portfolio_id(conn, code)
+    title = str(body.get("title") or "").strip()
+    if not title:
+        raise ValueError("a decision needs a title (what was decided)")
+    category = body.get("category") or "other"
+    if category not in DECISION_CATEGORIES:
+        raise ValueError("category must be one of " + ", ".join(DECISION_CATEGORIES))
+    decided = dt.date.fromisoformat(str(body.get("decidedOn") or dt.date.today().isoformat())[:10])
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO srm.portfolio_decision (portfolio_id, decided_on, category, title, rationale,
+                                                          portfolio_version, created_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (pid, min(decided, dt.date.today()), category, title[:300], body.get("rationale"), version,
+                     str(body.get("by") or "MxPortMGR")[:80]))
+    conn.commit()
+    return decisions(conn, code)
+
+
+def duplicate_account(conn, code, body):
+    """A new portfolio from the saved version of `code`: {code, name, by} — lots, cash, benchmark, preferences;
+    version 1, with a decision saying where it came from."""
+    new = str(body.get("code") or "").strip().upper()
+    if not CODE.match(new):
+        raise ValueError("the new code must be 1–40 letters, digits, _ or -")
+    src = account(conn, code)
+    if fetch(conn, "SELECT 1 FROM srm.portfolio WHERE upper(code) = %s", (new,)):
+        raise Conflict("an account %s already exists" % new, version=None)
+    lots = [{"securityId": l["securityId"], "acquired": l["acquired"], "quantity": l["quantity"],
+             "costBasis": l["costBasis"], "note": l.get("note")} for l in src["lots"]]
+    out = save_account(conn, new, {
+        "version": 0, "name": body.get("name") or "%s (copy)" % src["name"], "accountType": src["accountType"] or "taxable",
+        "approach": src["approach"], "benchmark": src["benchmark"], "cash": src["cash"], "lots": lots,
+        "settings": src["settings"], "by": body.get("by") or "MxPortMGR",
+        "note": "Duplicated from %s version %s" % (src["code"], src["version"])})
+    add_decision(conn, new, {"title": "Duplicated from %s (version %s)" % (src["code"], src["version"]),
+                             "category": "other", "by": body.get("by")})
+    return account(conn, new)
+
+
+def policy_benchmarks(conn, code=None):
+    """Policy benchmarks with their dated mixes: [{code, name, description, mixes: [{effectiveFrom, components:
+    [{securityId, ticker, name, weight}]}]}] — newest mix first."""
+    rows = fetch(conn, """SELECT b.code, b.name, b.description, p.effective_from, p.security_id, v.ticker, v.name AS security_name,
+                                 p.weight
+                            FROM srm.benchmark b JOIN srm.benchmark_policy p USING (benchmark_id)
+                            JOIN srm.v_security v ON v.security_id = p.security_id
+                           WHERE b.provider = 'Policy' AND (%s::text IS NULL OR b.code = upper(%s))
+                           ORDER BY b.code, p.effective_from DESC, p.weight DESC""", (code, code))
+    out = {}
+    for r in rows:
+        b = out.setdefault(r["code"], {"code": r["code"], "name": r["name"], "description": r["description"], "mixes": []})
+        if not b["mixes"] or b["mixes"][-1]["effectiveFrom"] != r["effective_from"]:
+            b["mixes"].append({"effectiveFrom": r["effective_from"], "components": []})
+        b["mixes"][-1]["components"].append({"securityId": r["security_id"], "ticker": r["ticker"],
+                                             "name": r["security_name"], "weight": float(r["weight"])})
+    if code:
+        if code.upper() not in out:
+            raise LookupError("no policy benchmark %r" % code)
+        return out[code.upper()]
+    return {"benchmarks": list(out.values())}
+
+
+def save_policy_benchmark(conn, code, body):
+    """Defines (or redefines) a policy benchmark: {name, description, mixes: [{effectiveFrom, components: [{ticker or
+    securityId, weight}]}], by}. Each mix's weights add up to 1 (100%). The mixes replace the earlier ones, then the
+    srm-loader service writes its snapshots (policy-benchmarks, in the activity log)."""
+    code = code.upper()
+    if not CODE.match(code):
+        raise ValueError("benchmark code must be 1–40 letters, digits, _ or -")
+    mixes = body.get("mixes") or []
+    if not mixes:
+        raise ValueError("a policy benchmark needs at least one mix")
+    by = str(body.get("by") or "MxPortMGR")[:80]
+    with conn.cursor() as cur:
+        cur.execute("SELECT benchmark_id, provider FROM srm.benchmark WHERE code = %s", (code,))
+        row = cur.fetchone()
+        if row and row[1] != "Policy":
+            raise Conflict("%s is a %s benchmark, not a policy one: choose another code" % (code, row[1] or "market"),
+                           version=None)
+        parsed, names = [], {}
+        for m in mixes:
+            eff = dt.date.fromisoformat(str(m.get("effectiveFrom"))[:10])
+            parts = []
+            for c in m.get("components") or []:
+                sid = c.get("securityId")
+                if not sid and c.get("ticker"):
+                    cur.execute("SELECT srm.us_security(%s)", (c["ticker"],))
+                    sid = cur.fetchone()[0]
+                if not sid:
+                    raise ValueError("%s: not a security in the security master" % (c.get("ticker") or c))
+                parts.append((int(sid), float(c.get("weight") or 0)))
+                names[int(sid)] = c.get("ticker") or str(sid)
+            total = sum(w for _, w in parts)
+            if not parts or abs(total - 1) > 0.001:
+                raise ValueError("the mix from %s adds up to %.1f%%, not 100%%" % (eff, total * 100))
+            if len({sid for sid, _ in parts}) != len(parts):
+                raise ValueError("the mix from %s names a security twice" % eff)
+            parsed.append((eff, parts))
+        if len({e for e, _ in parsed}) != len(parsed):
+            raise ValueError("two mixes take effect on the same date")
+        description = body.get("description") or "; ".join(
+            "from %s: %s" % (e, " + ".join("%.0f%% %s" % (w * 100, names[sid]) for sid, w in parts)) for e, parts in sorted(parsed))
+        if row:
+            benchmark_id = row[0]
+            cur.execute("UPDATE srm.benchmark SET name = %s, description = %s, updated_at = now() WHERE benchmark_id = %s",
+                        (body.get("name") or code, description, benchmark_id))
+        else:
+            cur.execute("""INSERT INTO srm.benchmark (code, name, provider, weighting_method, currency_code, constituent_source,
+                                                      description)
+                           VALUES (%s, %s, 'Policy', 'custom', 'USD', 'Policy mix, rebalanced monthly (MxPortMGR)', %s)
+                           RETURNING benchmark_id""", (code, body.get("name") or code, description))
+            benchmark_id = cur.fetchone()[0]
+        cur.execute("DELETE FROM srm.benchmark_policy WHERE benchmark_id = %s", (benchmark_id,))
+        for eff, parts in parsed:
+            for sid, w in parts:
+                cur.execute("""INSERT INTO srm.benchmark_policy (benchmark_id, effective_from, security_id, weight, created_by)
+                               VALUES (%s, %s, %s, %s, %s)""", (benchmark_id, eff, sid, w, by))
+    conn.commit()
+    req = urllib.request.Request("%s/load/policy-benchmarks?benchmarks=%s" % (LOADER, code), method="POST", data=b"")
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            result = json.loads(r.read() or b"{}")
+    except Exception as e:
+        raise RuntimeError("the mixes are saved, but the srm-loader service (port 8770) could not write the snapshots: %s" % e)
+    conn.rollback()
+    out = policy_benchmarks(conn, code)
+    out["load"] = {"status": result.get("status"), "runs": [r.get("load_id") for r in result.get("runs", [])]}
+    return out
+
+
 # --- Security browser (MxDataHUB's Securities, for MxPortMGR) ---------------------------------------------------
 
 # The list's columns that sort and filter: column title -> v_security column (as MxDataHUB's SRMStore).
@@ -950,6 +1110,27 @@ def lookup_tickers(conn, body):
                                          "country": r["country_code"], "marketCap": r["market_cap"]} for r in rows}}
 
 
+def resolve_tickers(conn, body):
+    """Each ticker's security as /securities returns one (with its latest price in dollars), for importing holdings:
+    {securities: {TICKER: security}, unknown: [tickers not in the security master]}."""
+    tickers = sorted({str(t).strip().upper() for t in body.get("tickers") or [] if str(t).strip()})[:1000]
+    if not tickers:
+        return {"securities": {}, "unknown": []}
+    rows = fetch(conn, f"""
+        SELECT t.ticker AS asked, {SECURITY_COLUMNS}
+          FROM (SELECT t AS ticker,
+                       -- The current U.S. listing, else any current listing with that ticker (mutual funds: MIC XXXX).
+                       coalesce(srm.us_security(t),
+                                (SELECT l.security_id FROM srm.listing l
+                                  WHERE l.ticker = t AND current_date >= l.valid_from AND current_date < l.valid_to
+                                  ORDER BY l.is_primary DESC LIMIT 1)) AS security_id
+                  FROM unnest(%s::text[]) t) t
+          JOIN srm.v_security v USING (security_id)
+          LEFT JOIN LATERAL srm.last_price(v.security_id) lp ON true""", (tickers,))
+    found = {r["asked"]: security_out(r) for r in rows}
+    return {"securities": found, "unknown": [t for t in tickers if t not in found]}
+
+
 # --- Month-end prices (MxPortMGR's Rebalance Bands: how the mix drifted over the past year) ---------------------
 
 def monthly_prices(conn, body):
@@ -1164,6 +1345,18 @@ class Handler(BaseHTTPRequestHandler):
                     out = account(conn, parts[1])
                 elif len(parts) == 2 and parts[0] == "accounts" and method == "PUT":
                     out = save_account(conn, parts[1], body)
+                elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "decisions" and method == "GET":
+                    out = decisions(conn, parts[1])
+                elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "decisions" and method == "POST":
+                    out = add_decision(conn, parts[1], body)
+                elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "duplicate" and method == "POST":
+                    out = duplicate_account(conn, parts[1], body)
+                elif parts == ["benchmarks", "policy"] and method == "GET":
+                    out = policy_benchmarks(conn)
+                elif len(parts) == 3 and parts[:2] == ["benchmarks", "policy"] and method == "GET":
+                    out = policy_benchmarks(conn, parts[2])
+                elif len(parts) == 3 and parts[:2] == ["benchmarks", "policy"] and method == "PUT":
+                    out = save_policy_benchmark(conn, parts[2], body)
                 elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "versions" and method == "GET":
                     out = account_versions(conn, parts[1])
                 elif len(parts) == 3 and parts[0] == "accounts" and parts[2] in ("close", "reopen") and method == "POST":
@@ -1174,6 +1367,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send_text(200, out, "text/csv; charset=utf-8")
                 elif parts == ["prices", "monthly"] and method == "POST":
                     out = monthly_prices(conn, body)
+                elif parts == ["securities", "resolve"] and method == "POST":
+                    out = resolve_tickers(conn, body)
                 elif parts == ["securities", "lookup"] and method == "POST":
                     out = lookup_tickers(conn, body)
                 elif parts == ["links", "query"] and method == "POST":

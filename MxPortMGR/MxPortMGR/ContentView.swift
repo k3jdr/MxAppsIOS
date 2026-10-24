@@ -75,6 +75,11 @@ struct ContentView: View {
         .sheet(item: Binding(get: { ReportNotes.shared.editing }, set: { ReportNotes.shared.editing = $0 })) { ReportNotesSheet(report: $0) }
         .sheet(isPresented: $store.showOpenPortfolio) { OpenPortfolioSheet(store: store) }
         .sheet(isPresented: $store.showNewPortfolio) { NewPortfolioSheet(store: store) }
+        .sheet(isPresented: $store.showDecisions) { DecisionsSheet(store: store) }
+        .sheet(isPresented: $store.showDuplicate) { DuplicatePortfolioSheet(store: store) }
+        .sheet(isPresented: $store.showRename) { RenamePortfolioSheet(store: store) }
+        .sheet(isPresented: $store.showPolicyEditor) { PolicyBenchmarkSheet(store: store) }
+        .sheet(item: $store.importPreview) { ImportHoldingsSheet(store: store, preview: $0) }
         // Leaving a portfolio with unsaved changes (PortfolioFile.swift).
         .alert("Save changes to \(store.srmCode)?", isPresented: Binding(get: { store.leavePrompt != nil }, set: { if !$0 { store.leavePrompt = nil } }),
                presenting: store.leavePrompt) { prompt in
@@ -190,6 +195,13 @@ struct ContentView: View {
             Task {
                 try? await Task.sleep(for: .seconds(4))
                 SecurityLinks.shared.beginEdit(store.linkSelection?.with(field))
+            }
+        }
+        // Import Holdings from a file without the open panel (-importHoldingsFile /path/to/file.csv), once a portfolio is open.
+        if let path = defaults.string(forKey: "importHoldingsFile") {
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                store.importHoldings(from: URL(fileURLWithPath: path))
             }
         }
         if let id = defaults.string(forKey: "linkHoverTest") {

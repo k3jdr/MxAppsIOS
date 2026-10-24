@@ -46,6 +46,20 @@ struct MxPortMGRApp: App {
                     .disabled(store.openPortfolio == nil || !store.isDirty)
                 Button("Revert to Saved") { store.resetMyPortfolio() }
                     .disabled(store.openPortfolio == nil || !store.isDirty)
+                Divider()
+                Button("Duplicate Portfolio…") { store.showDuplicate = true }
+                    .disabled(store.openPortfolio == nil || store.openVersion == 0)
+                Button("Rename Portfolio…") { store.showRename = true }
+                    .disabled(store.openPortfolio == nil)
+                Divider()
+                Button("Import Holdings…") { store.importHoldings() }
+                    .keyboardShortcut("i", modifiers: [.command, .shift])
+                    .disabled(store.openPortfolio == nil)
+                Menu("Export Portfolio") {
+                    Button("As JSON (account, lots, preferences, decisions)…") { store.exportPortfolio(csv: false) }
+                    Button("As CSV (tax lots)…") { store.exportPortfolio(csv: true) }
+                }
+                .disabled(store.openPortfolio == nil || store.openVersion == 0)
             }
             CommandMenu("Guide") {
                 Button("Welcome") { store.go(.welcome) }
@@ -84,6 +98,11 @@ struct MxPortMGRApp: App {
                     Task { await store.attribute() }
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
+                Divider()
+                Button("Decisions…") { store.showDecisions = true }
+                    .keyboardShortcut("d", modifiers: [.command, .option])
+                    .disabled(store.openPortfolio == nil)
+                Button("Policy Benchmarks…") { store.showPolicyEditor = true }
                 Divider()
                 Picker("Engine", selection: $store.engine) {
                     ForEach(EngineChoice.allCases) { Text($0.rawValue).tag($0) }

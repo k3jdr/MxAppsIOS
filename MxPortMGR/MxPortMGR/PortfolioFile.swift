@@ -97,6 +97,7 @@ extension PortStore {
             out.append("Holdings: " + [added > 0 ? "\(added) added" : nil, removed > 0 ? "\(removed) removed" : nil,
                                        changed > 0 ? "\(changed) changed" : nil].compactMap { $0 }.joined(separator: ", "))
         }
+        if p.name != savedName { out.append("Name: \(savedName) → \(p.name)") }
         if p.benchmark != savedBenchmark { out.append("Benchmark: \(savedBenchmark) → \(p.benchmark)") }
         if p.account != savedAccountType { out.append("Account type: \(savedAccountType.rawValue) → \(p.account.rawValue)") }
         if myApproach != savedApproach { out.append("Approach: \(savedApproach.rawValue) → \(myApproach.rawValue)") }
