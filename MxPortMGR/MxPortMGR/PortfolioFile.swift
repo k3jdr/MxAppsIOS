@@ -140,7 +140,9 @@ extension PortStore {
                 if h.ticker == "CASH" { cash += h.value; continue }
                 guard let s = h.security, let id = s.srmID, id > 0, let q = h.quantity, q > 0 else { continue }
                 for l in h.lots where l.share > 0 {
-                    lots.append(["securityId": id, "acquired": l.acquired, "quantity": q * l.share, "costBasis": l.costBasis])
+                    var lot: [String: Any] = ["securityId": id, "acquired": l.acquired, "quantity": q * l.share, "costBasis": l.costBasis]
+                    if let note = l.note, !note.isEmpty { lot["note"] = note }
+                    lots.append(lot)
                 }
             }
         }

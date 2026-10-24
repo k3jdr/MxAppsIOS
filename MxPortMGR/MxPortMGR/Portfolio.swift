@@ -29,6 +29,8 @@ nonisolated struct TaxLot: Codable, Hashable, Sendable, Identifiable {
     var share: Double
     /// What this lot cost, in dollars.
     var costBasis: Double
+    /// Where the lot came from, as the security master keeps it (e.g. "Vanguard plan: contributions"); kept on save.
+    var note: String? = nil
 }
 
 nonisolated struct Holding: Codable, Hashable, Sendable, Identifiable {

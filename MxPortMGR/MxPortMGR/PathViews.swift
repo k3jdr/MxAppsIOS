@@ -258,7 +258,7 @@ struct HoldingsTable: View {
                 .customizationID("gain").disabledCustomizationBehavior(Self.fixed)
                 TableColumn("Lots") { h in
                     Text(h.lots.map { "\($0.acquired) (\(pct($0.share, 0)))" }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
-                        .help(h.lots.map { "\($0.acquired): \(pct($0.share, 0)) of the position, cost \(money($0.costBasis))" }.joined(separator: "\n"))
+                        .help(h.lots.map { "\($0.acquired): \(pct($0.share, 0)) of the position, cost \(money($0.costBasis))" + ($0.note.map { " — \($0)" } ?? "") }.joined(separator: "\n"))
                 }
                 .width(min: 80)
                 .customizationID("lots").disabledCustomizationBehavior(Self.fixed)

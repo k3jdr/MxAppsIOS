@@ -12,7 +12,7 @@ import SwiftUI
 
 extension PortStore {
     /// Replaces a holding's lots (shares and total cost each); no lots left removes the holding.
-    func updateHolding(_ ticker: String, lots: [(acquired: String, shares: Double, cost: Double)]) {
+    func updateHolding(_ ticker: String, lots: [(acquired: String, shares: Double, cost: Double, note: String?)]) {
         guard var mine = openPortfolio, let i = mine.holdings.firstIndex(where: { $0.ticker == ticker }) else { return }
         let kept = lots.filter { $0.shares > 0 }
         let quantity = kept.reduce(0) { $0 + $1.shares }
@@ -23,7 +23,7 @@ extension PortStore {
         }
         var h = mine.holdings[i]
         let price = h.security.flatMap { $0.price > 0 && !h.unpriced ? $0.price : nil }
-        h.lots = kept.map { TaxLot(acquired: $0.acquired, share: $0.shares / quantity, costBasis: max(0, $0.cost)) }
+        h.lots = kept.map { TaxLot(acquired: $0.acquired, share: $0.shares / quantity, costBasis: max(0, $0.cost), note: $0.note) }
         h.quantity = quantity
         h.value = price.map { $0 * quantity } ?? kept.reduce(0) { $0 + max(0, $1.cost) }
         mine.holdings[i] = h
@@ -44,7 +44,7 @@ struct EditHoldingSheet: View {
     let ticker: String
     @Environment(\.dismiss) private var dismiss
 
-    struct Row: Identifiable { let id = UUID(); var acquired = Date(); var shares = 0.0; var cost = 0.0 }
+    struct Row: Identifiable { let id = UUID(); var acquired = Date(); var shares = 0.0; var cost = 0.0; var note: String? }
     @State private var rows: [Row] = []
     @State private var cash = 0.0
 
@@ -94,6 +94,7 @@ struct EditHoldingSheet: View {
                             ForEach($rows) { $r in
                                 GridRow {
                                     DatePicker("", selection: $r.acquired, in: ...Date(), displayedComponents: .date).labelsHidden().fixedSize()
+                                        .help(r.note ?? "")
                                     TextField("", value: Binding(get: { r.shares }, set: { v in
                                         // Scale the lot's cost with its shares, as a partial sale or a split would.
                                         if r.shares > 0, v >= 0 { r.cost *= v / r.shares }
@@ -150,14 +151,14 @@ struct EditHoldingSheet: View {
         let q = h.quantity ?? 0
         rows = h.lots.isEmpty
             ? [Row(acquired: Date(), shares: q, cost: h.value)]
-            : h.lots.map { Row(acquired: Self.day.date(from: $0.acquired) ?? Date(), shares: q * $0.share, cost: $0.costBasis) }
+            : h.lots.map { Row(acquired: Self.day.date(from: $0.acquired) ?? Date(), shares: q * $0.share, cost: $0.costBasis, note: $0.note) }
     }
 
     private func apply() {
         if ticker == "CASH" {
             store.updateCash(cash)
         } else {
-            store.updateHolding(ticker, lots: rows.map { (Self.day.string(from: $0.acquired), $0.shares, $0.cost) })
+            store.updateHolding(ticker, lots: rows.map { (Self.day.string(from: $0.acquired), $0.shares, $0.cost, $0.note) })
         }
     }
 }

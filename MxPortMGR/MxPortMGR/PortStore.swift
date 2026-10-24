@@ -448,7 +448,7 @@ final class PortStore {
             let price = lots.first?.price
             let value = price.map { quantity * $0 } ?? lots.reduce(0) { $0 + $1.costBasis }
             return Holding(ticker: key, value: value,
-                           lots: lots.map { TaxLot(acquired: $0.acquired, share: $0.quantity / max(quantity, 1e-9), costBasis: $0.costBasis) },
+                           lots: lots.map { TaxLot(acquired: $0.acquired, share: $0.quantity / max(quantity, 1e-9), costBasis: $0.costBasis, note: $0.note) },
                            unpriced: price == nil, quantity: quantity)
         }
         if a.cash > 0 { p.holdings.append(Holding(ticker: "CASH", value: a.cash)) }
@@ -478,8 +478,10 @@ final class PortStore {
             guard quantity > 0 else { continue }
             let parts = h.lots.isEmpty ? [TaxLot(acquired: today, share: 1, costBasis: h.value)] : h.lots
             for l in parts where l.share > 0 {
-                lots.append(["securityId": id, "acquired": l.acquired.count == 10 ? l.acquired : today,
-                             "quantity": quantity * l.share, "costBasis": l.costBasis])
+                var lot: [String: Any] = ["securityId": id, "acquired": l.acquired.count == 10 ? l.acquired : today,
+                                          "quantity": quantity * l.share, "costBasis": l.costBasis]
+                if let note = l.note, !note.isEmpty { lot["note"] = note }
+                lots.append(lot)
             }
         }
         let cash = mine.holdings.filter { $0.ticker == "CASH" }.reduce(0) { $0 + $1.value }
