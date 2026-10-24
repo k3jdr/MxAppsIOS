@@ -329,7 +329,7 @@ struct SRMAddSecurities: View {
                 finish("Filter menus ready")
             }
         } catch {
-            self.error = error.localizedDescription
+            if !(error is CancellationError) { self.error = error.localizedDescription }
         }
     }
 

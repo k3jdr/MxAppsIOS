@@ -240,7 +240,7 @@ nonisolated enum AccountsClient {
         do {
             (data, _) = try await URLSession.shared.data(for: r)
         } catch {
-            throw ServiceClient.Failure.notRunning(service)
+            throw ServiceClient.Failure.from(error, service)
         }
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let error = json["error"] as? String {
             throw ServiceClient.Failure.rejected("Security master: \(error)")
@@ -339,7 +339,12 @@ extension ServiceClient {
         guard let url = (summary["inputsUrl"] as? String).flatMap(URL.init(string:)) else {
             throw Failure.rejected("analytics: no inputsUrl in the answer")
         }
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let data: Data
+        do {
+            (data, _) = try await URLSession.shared.data(from: url)
+        } catch {
+            throw ServiceClient.Failure.from(error, "analytics (Python, port 8772)")
+        }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let assets = json["assets"] as? [String], let cov = json["covariance"] as? [[Double]] else {
             throw Failure.rejected("analytics: the inputs could not be read")

@@ -161,7 +161,7 @@ struct WhyOptimizeView: View {
             }
             problem = nil
         } catch {
-            problem = error.localizedDescription
+            if !(error is CancellationError) { problem = error.localizedDescription }
         }
     }
 

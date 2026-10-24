@@ -14,6 +14,19 @@ import Foundation
 nonisolated enum ServiceClient {
     enum Failure: LocalizedError {
         case notRunning(String), rejected(String)
+
+        /// What a failed request to a service means: a request cancelled because its screen went away (moving on from
+        /// Holdings to Benchmark cancels Holdings' request) is a CancellationError, which no alert shows; a timeout
+        /// says the service is slow; only a refused or lost connection says it isn't running.
+        static func from(_ error: Error, _ service: String) -> Error {
+            if error is CancellationError || Task.isCancelled { return CancellationError() }
+            guard let e = error as? URLError else { return Failure.notRunning(service) }
+            switch e.code {
+            case .cancelled: return CancellationError()
+            case .timedOut: return Failure.rejected("\(service) is running but didn't answer in time — it may still be computing; try again.")
+            default: return Failure.notRunning(service)
+            }
+        }
         var errorDescription: String? {
             switch self {
             case .notRunning(let s): "\(s) isn't running. Start the Layer 3 services with python3 Services/mxservices.py start (see Layer 3 Services)."
@@ -31,7 +44,7 @@ nonisolated enum ServiceClient {
         do {
             (data, _) = try await URLSession.shared.data(for: request)
         } catch {
-            throw Failure.notRunning(service)
+            throw Failure.from(error, service)
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw Failure.rejected("\(service) answered with something that isn't JSON.")

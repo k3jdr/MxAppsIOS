@@ -154,7 +154,7 @@ final class SecuritiesStore {
         do {
             (data, _) = try await URLSession.shared.data(for: r)
         } catch {
-            throw ServiceClient.Failure.notRunning(AccountsClient.service)
+            throw ServiceClient.Failure.from(error, AccountsClient.service)
         }
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let error = json["error"] as? String {
             throw ServiceClient.Failure.rejected(error.contains("no such endpoint")
@@ -231,7 +231,7 @@ final class SecuritiesStore {
                 selection = selection.filter { id in results.contains { $0.id == id } }
             }
         } catch {
-            problem = error.localizedDescription
+            if !(error is CancellationError) { problem = error.localizedDescription }
         }
     }
 
@@ -272,7 +272,7 @@ final class SecuritiesStore {
                                     classifications: p.classifications, memberships: p.memberships, actions: p.actions,
                                     prices: p.prices.compactMap { pr in Self.day.date(from: pr.date).map { PricePoint(date: $0, close: pr.close) } })
         } catch {
-            problem = error.localizedDescription
+            if !(error is CancellationError) { problem = error.localizedDescription }
         }
     }
 }

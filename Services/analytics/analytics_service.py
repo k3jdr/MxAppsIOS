@@ -260,7 +260,12 @@ def ledoit_wolf(returns):
     """Ledoit-Wolf (2004) shrinkage of the sample covariance toward a scaled identity. Returns (Σ daily, δ)."""
     t, n = returns.shape
     x = returns - returns.mean(axis=0)
-    s = x.T @ x / t
+    # NumPy 2.0 on Apple's Accelerate BLAS raises spurious divide-by-zero / overflow warnings from matmul on finite
+    # data (they filled the log); the result is checked instead.
+    with np.errstate(all="ignore"):
+        s = x.T @ x / t
+    if not np.isfinite(s).all():
+        raise ValueError("the sample covariance is not finite (a price series with a zero or missing close?)")
     mu = np.trace(s) / n
     f = mu * np.eye(n)
     d2 = np.sum((s - f) ** 2)

@@ -271,7 +271,7 @@ struct BandsView: View {
             historyNote = history.isEmpty ? "The security master has no month-end prices for these holdings." : nil
         } catch {
             history = []
-            historyNote = error.localizedDescription
+            if !(error is CancellationError) { historyNote = error.localizedDescription }
         }
     }
 

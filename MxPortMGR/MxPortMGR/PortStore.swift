@@ -346,6 +346,10 @@ final class PortStore {
     var srmInputs: OptimizationInputs?
     var srmInputsNote: String?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    /// The security-master account My Portfolio was read from this session. Nothing is saved before it is read: the
+    /// placeholder My Portfolio (no holdings) saved over the real account would delete its lots — a screen that saves
+    /// before computing (Risk Today's inputs) did that when it opened before the account had loaded.
+    @ObservationIgnored private var mineLoadedCode: String?
 
     /// Loads (or starts) the account `code` from the security master as My Portfolio.
     func openSRMAccount(_ code: String) async {
@@ -365,6 +369,7 @@ final class PortStore {
                 srmStatus = "New account \(code): add securities and it is saved to the security master."
             }
             srmCode = code
+            mineLoadedCode = code
             await useSRMBenchmark(mine.benchmark)
             if let i = portfolios.firstIndex(where: { $0.id == "mine" }) { portfolios[i] = mine }
             if let data = try? JSONEncoder().encode(mine) { UserDefaults.standard.set(data, forKey: "myPortfolioSRM") }
@@ -410,7 +415,7 @@ final class PortStore {
         do {
             _ = SRMRegistry.shared.register(benchmark: try await AccountsClient.benchmarkWeights(code))
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -426,6 +431,7 @@ final class PortStore {
 
     func saveSRMAccount() async {
         guard let mine = portfolios.first(where: { $0.id == "mine" }), mine.isSRM, let code = mine.srmCode else { return }
+        guard mineLoadedCode?.caseInsensitiveCompare(code) == .orderedSame else { return }
         var lots: [[String: Any]] = []
         let today = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
         for h in mine.holdings {
@@ -471,7 +477,7 @@ final class PortStore {
                 await openSRMAccount(code)
             }
         } catch {
-            srmStatus = error.localizedDescription
+            if !(error is CancellationError) { srmStatus = error.localizedDescription }
         }
     }
 
@@ -515,6 +521,7 @@ final class PortStore {
             srmInputs = inputs
             srmInputsNote = note
         } catch {
+            guard !(error is CancellationError) else { return }
             srmInputsNote = error.localizedDescription
             errorMessage = error.localizedDescription
         }
@@ -529,7 +536,7 @@ final class PortStore {
             _ = try await ServiceClient.riskInputs(securities: missing.map(\.displayTicker))
             riskStamp += 1
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -583,7 +590,7 @@ final class PortStore {
             }
             message = "Optimized with \(activeResult!.engine) in \(String(format: "%.0f", activeResult!.milliseconds)) ms"
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -603,7 +610,7 @@ final class PortStore {
             trackCurve = await Task.detached { Engine.trackingCurve(inputs, selection: selection) }.value
             message = "Tracker built with \(trackResult!.engine) in \(String(format: "%.0f", trackResult!.milliseconds)) ms"
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -618,7 +625,7 @@ final class PortStore {
             attribution = try await ServiceClient.attribution(portfolio: code, method: method)
             message = "Attribution: \(attribution!.engine)"
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
