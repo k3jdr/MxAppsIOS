@@ -49,6 +49,16 @@
       "to": "REIT",
       "industry": "^REIT",
       "why": "Common shares of companies FMP classes as REITs (industry REIT - …)."
+    },
+    {
+      "rule": "ETNs typed ETF",
+      "from": [
+        "ETF"
+      ],
+      "to": "ETN",
+      "name": "(\\metns?\\M|exchange[- ]traded notes?|\\mipath\\M|\\metracs\\M|microsectors|velocityshares)",
+      "notName": "\\metf\\M",
+      "why": "Exchange-traded notes — unsecured debt of the issuing bank, not funds — that nasdaqtrader's files flag as ETFs (MicroSectors, iPath, ETRACS …)."
     }
   ]
 }
