@@ -14,6 +14,8 @@ import Foundation
 nonisolated enum ServiceClient {
     enum Failure: LocalizedError {
         case notRunning(String), rejected(String)
+        /// The account changed in the security master since it was opened (HTTP 409): the save was refused.
+        case conflict(String)
 
         /// What a failed request to a service means: a request cancelled because its screen went away (moving on from
         /// Holdings to Benchmark cancels Holdings' request) is a CancellationError, which no alert shows; a timeout
@@ -31,6 +33,7 @@ nonisolated enum ServiceClient {
             switch self {
             case .notRunning(let s): "\(s) isn't running. Start the Layer 3 services with python3 Services/mxservices.py start (see Layer 3 Services)."
             case .rejected(let s): s
+            case .conflict(let s): s
             }
         }
     }

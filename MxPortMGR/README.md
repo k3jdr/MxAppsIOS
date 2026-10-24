@@ -131,10 +131,30 @@ My Portfolio lives in the security master — real securities, prices and benchm
 database (`srm` on 192.168.0.223) — through the **accounts** Layer 3 service (`Services/accounts`, port 8774; start it
 with `python3 Services/mxservices.py start`). If the service or the database can't be reached, a banner says so, with
 *Try Again* and a link to Library ▸ Layer 3 Services; nothing is made up in its place. The account is an `srm.portfolio` with an account type, approach, cash
-  balance and open **tax lots** (`srm.portfolio_tax_lot`, migration V011); every change is saved a moment later (or
-  with **Save**), and the day's holdings snapshot is rewritten from the lots, so MxDataHUB ▸ Portfolios shows it (with
-a Tax Lots view and *Open in MxPortMGR*) and the analytics service can analyse it. **Account** names the code
-(default `MY_PORTFOLIO`); **Open** lists the personal accounts already there.
+balance and open **tax lots** (`srm.portfolio_tax_lot`, migration V011), and the day's holdings snapshot is rewritten
+from the lots when it is saved, so MxDataHUB ▸ Portfolios shows it (with a Tax Lots view and *Open in MxPortMGR*) and
+the analytics service can analyse it.
+
+**One portfolio open at a time, like a document** (`PortfolioFile.swift`, `PortfolioSheets.swift`, migration V022):
+
+| File menu | |
+| --- | --- |
+| **New Portfolio…** ⌘N | a code, name, account type, approach and benchmark; no holdings or a copy of a sample's; created in the security master and opened |
+| **Open Portfolio…** ⌘O | the personal accounts in the security master — value, version, when and by whom last saved (samples and closed portfolios on request) |
+| **Open Recent** | the last eight opened |
+| **Close Portfolio** | My Portfolio's steps then ask to open or create one |
+| **Save** ⌘S | holdings, lots, cash, benchmark, approach and **preferences** as the portfolio's next version |
+| **Revert to Saved** | drop the unsaved changes and read the saved version again |
+
+Edits wait for Save (the bar shows *Edited*, with what changed in its tooltip). Each save names the version it was
+made from and is refused when the portfolio was saved elsewhere since it was opened (*Not saved: … changed
+elsewhere* — keep editing or revert). Every saved version is kept whole in `srm.portfolio_version`. The preferences —
+the optimizer's limits, the tracker's names and budget, tax rates, lot order, rebalance band, attribution method —
+are saved with the portfolio (`srm.portfolio.settings`) and come back when it is opened, on any Mac. Leaving a
+portfolio with unsaved changes — opening or creating another, closing it, quitting — first asks to **Save**,
+**Discard Changes** or **Cancel**, listing what is unsaved. While there are unsaved holdings, Risk Today and Optimize
+send the analytics service the holdings on screen (its securities and the benchmark, the weights from the app) rather
+than the saved portfolio.
 
 **Add Securities…** searches srm by ticker, name, ISIN or CUSIP (stocks, funds, bond funds)
 across all 16,000-odd active securities, 200 at a time (*Show More*), largest companies first. While it reads, the
@@ -439,6 +459,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `Navigation.swift` | Back and Forward: the places visited, the toolbar's ‹ ›, the Go menu, ⌃← ⌃→ and a mouse's side buttons |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |
 | `Universe.swift`, `Portfolio.swift`, `Samples.swift` | Security, benchmark and the lookups into the registry; accounts and checks; the samples' lessons |
+| `PortfolioFile.swift`, `PortfolioSheets.swift` | One portfolio open at a time: preferences, unsaved-change checks, New / Open / Recent / Close / Save / Revert, the quit check; the Open Portfolio and New Portfolio sheets |
 | `SRMData.swift` | Security-master securities and benchmarks registry (with the analytics service's risk numbers), the accounts-service client, analytics inputs |
 | `AddSecuritiesSheet.swift` | Add Securities: search the security master |
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | The built-in optimizers, the attribution result, and the Layer 3 service client |

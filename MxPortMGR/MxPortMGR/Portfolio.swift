@@ -124,7 +124,7 @@ nonisolated struct Portfolio: Codable, Hashable, Sendable, Identifiable {
     /// What to fix or understand before optimizing.
     var issues: [Issue] {
         var out: [Issue] = []
-        for h in holdings where h.security == nil {
+        for h in holdings where h.security == nil && h.ticker != "CASH" {
             out.append(Issue(level: .error, title: "Unknown security \(h.ticker)",
                              detail: "\(h.ticker) isn't in the security master, so it has no sector, risk or returns. It is left out of every calculation — \(pct(weight(h))) of the account is invisible to the optimizer."))
         }
@@ -148,7 +148,7 @@ nonisolated struct Portfolio: Codable, Hashable, Sendable, Identifiable {
         let outsideBenchmark = AssetClass.allCases.filter { (benchClasses[$0] ?? 0) == 0 }.reduce(0) { $0 + (classes[$1] ?? 0) }
         if outsideBenchmark > 0.05 {
             out.append(Issue(level: .warning, title: "\(pct(outsideBenchmark)) is in asset classes \(benchmark) doesn't hold",
-                             detail: "The benchmark has no \(AssetClass.allCases.filter { (benchClasses[$0] ?? 0) == 0 }.map { $0.rawValue.lowercased() }.joined(separator: " or ")). Measured against it, those holdings are pure active risk and an optimizer will sell them. If they are part of your plan, choose a benchmark that includes them (MX6040 or MX3070)."))
+                             detail: "The benchmark has no \(AssetClass.allCases.filter { (benchClasses[$0] ?? 0) == 0 }.map { $0.rawValue.lowercased() }.joined(separator: " or ")). Measured against it, those holdings are pure active risk and an optimizer will sell them. If they are part of your plan, choose a benchmark that includes them (BAL6040 or BAL3070)."))
         }
         let cash = classes[.cash] ?? 0
         if cash > 0.10 {

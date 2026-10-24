@@ -284,15 +284,46 @@ struct HBars: View {
 /// At the top of every My Portfolio step: whose account this is, how it is run, and where to start it from.
 struct MyPortfolioBar: View {
     @Bindable var store: PortStore
-    @State private var code = ""
 
     var body: some View {
+        Group {
+            if store.openPortfolio != nil { openBar } else { noneOpen }
+        }
+        .padding(10)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .quickHelpArea("My Portfolio", "The open portfolio, kept in the security master (MxDataHUB's srm database) through the accounts service: holdings, tax lots, preferences and every saved version. One is open at a time — File ▸ New Portfolio…, Open Portfolio…, Save (⌘S), Revert to Saved, Close Portfolio. Edits wait for Save; leaving a portfolio with unsaved changes asks to Save or Discard. Choose how you run it — active or passive index — and steps 4 and 5 follow.", symbol: "person.crop.circle")
+    }
+
+    private var noneOpen: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.questionmark").font(.title2).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("No portfolio open").font(.headline)
+                Text("Open one from the security master or create a new one; the steps then work on it.").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("New Portfolio…") { store.showNewPortfolio = true }
+            Button("Open Portfolio…") { store.showOpenPortfolio = true }.keyboardShortcut(.defaultAction)
+        }
+    }
+
+    private var openBar: some View {
         let p = store.portfolio
-        VStack(alignment: .leading, spacing: 8) {
+        let dirty = store.isDirty
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("My Portfolio · \(p.srmCode ?? "")").font(.headline)
+                    HStack(spacing: 6) {
+                        Text("\(p.name) · \(p.srmCode ?? "")").font(.headline)
+                        Text(store.openVersion == 0 ? "not saved yet" : "version \(store.openVersion)")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if dirty {
+                            Text("Edited").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.2), in: Capsule())
+                                .help("Not saved: " + store.looseEnds.joined(separator: "; "))
+                        }
+                    }
                     Text("\(p.account.rawValue) · \(money(p.total)) · \(p.holdings.count) holdings · vs \(p.benchmark)")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -314,44 +345,31 @@ struct MyPortfolioBar: View {
                 .help("Taxable accounts pay tax on realised gains; retirement accounts don't when you trade")
             }
             HStack(spacing: 10) {
-                    Image(systemName: "cylinder.split.1x2").foregroundStyle(.secondary)
-                    Text("Account").font(.callout)
-                    TextField("Code", text: $code, onCommit: { open() }).frame(width: 150)
-                        .help("The account's code in the security master (srm.portfolio.code)")
-                    Menu("Open") {
-                        ForEach(store.srmAccountCodes, id: \.self) { c in Button(c) { code = c; open() } }
-                        if !store.srmAccountCodes.isEmpty { Divider() }
-                        Button("Open \(code.isEmpty ? "…" : code)") { open() }.disabled(code.isEmpty)
-                    }
-                    .fixedSize()
-                    Button { Task { await store.saveSRMAccount() } } label: { Label("Save", systemImage: "square.and.arrow.down") }
-                        .help("Save the account and its tax lots to the security master now (it also saves a moment after every change)")
-                    if p.holdings.contains(where: \.unpriced) {
-                        Button { Task { await store.loadSRMPrices() } } label: { Label("Load Prices", systemImage: "arrow.down.circle") }
-                            .help("Ask the srm-loader service to load prices for holdings without them (srm.py load nasdaq-prices: Nasdaq.com, free, no API key)")
-                    }
-                    if store.srmBusy { ProgressView().controlSize(.small) }
-                    Text(store.srmStatus ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    Spacer(minLength: 0)
-                    Menu("Start From a Sample") {
-                        ForEach(store.portfolios.filter { $0.id != "mine" }) { s in Button(s.name) { store.copyToMine(s) } }
-                    }
-                    .fixedSize()
-                    .disabled(!store.accountsLoaded)
-                    .help("Replace My Portfolio's holdings with a copy of a sample account's holdings, lots and benchmark (saved to the security master)")
+                Button { Task { await store.saveSRMAccount() } } label: { Label("Save", systemImage: "square.and.arrow.down") }
+                    .disabled(!dirty)
+                    .help("Save the portfolio — holdings, lots, benchmark, approach and preferences — as its next version (⌘S)")
+                Button("Revert") { store.resetMyPortfolio() }
+                    .disabled(!dirty)
+                    .help("Drop the unsaved changes and read the saved version again (File ▸ Revert to Saved)")
+                Button("Open…") { store.showOpenPortfolio = true }
+                    .help("Open another portfolio (File ▸ Open Portfolio…, ⌘O)")
+                Button("New…") { store.showNewPortfolio = true }
+                    .help("Create a portfolio in the security master (File ▸ New Portfolio…, ⌘N)")
+                if p.holdings.contains(where: \.unpriced) {
+                    Button { Task { await store.loadSRMPrices() } } label: { Label("Load Prices", systemImage: "arrow.down.circle") }
+                        .help("Ask the srm-loader service to load prices for holdings without them (srm.py load nasdaq-prices: Nasdaq.com, free, no API key)")
+                }
+                if store.srmBusy { ProgressView().controlSize(.small) }
+                Text(store.srmStatus ?? "").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Spacer(minLength: 0)
+                Menu("Start From a Sample") {
+                    ForEach(store.portfolios.filter { $0.id != "mine" }) { s in Button(s.name) { store.copyToMine(s) } }
+                }
+                .fixedSize()
+                .disabled(!store.accountsLoaded)
+                .help("Replace the open portfolio's holdings with a copy of a sample account's holdings, lots and benchmark (saved when you save)")
             }
         }
-        .padding(10)
-        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        .onAppear { code = store.srmCode }
-        .onChange(of: store.srmCode) { code = store.srmCode }
-        .quickHelpArea("My Portfolio", "Your own account in the security master — real securities and prices in MxDataHUB's srm database, saved there as a personal account with tax lots through the accounts service (port 8774). Choose how you run it — active or passive index — and steps 4 and 5 follow.", symbol: "person.crop.circle")
-    }
-
-    private func open() {
-        let c = code.trimmingCharacters(in: .whitespaces)
-        guard !c.isEmpty else { return }
-        Task { await store.openSRMAccount(c) }
     }
 }
 

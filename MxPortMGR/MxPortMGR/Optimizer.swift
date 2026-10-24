@@ -112,7 +112,7 @@ nonisolated struct OptimizationResult: Sendable {
     var milliseconds: Double
 }
 
-nonisolated struct ActiveSettings: Sendable, Equatable {
+nonisolated struct ActiveSettings: Sendable, Equatable, Codable {
     var maxWeight = 0.10
     var maxActiveWeight = 0.03
     var sectorBand: Double? = 0.05
@@ -121,8 +121,8 @@ nonisolated struct ActiveSettings: Sendable, Equatable {
     var maxTurnover: Double? = 0.25
 }
 
-nonisolated struct TrackingSettings: Sendable, Equatable {
-    enum Selection: String, CaseIterable, Sendable { case stratified, largest }
+nonisolated struct TrackingSettings: Sendable, Equatable, Codable {
+    enum Selection: String, CaseIterable, Sendable, Codable { case stratified, largest }
     var maxNames = 20
     var selection: Selection = .stratified
     var maxWeight = 1.0

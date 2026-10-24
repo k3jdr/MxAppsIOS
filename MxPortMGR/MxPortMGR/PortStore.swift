@@ -280,7 +280,13 @@ final class PortStore {
                       holdings: [], lesson: l.lesson, lookFor: l.lookFor, trading: l.trading, symbol: l.symbol,
                       source: "srm", srmCode: l.code)
         }
-        if let data = UserDefaults.standard.data(forKey: "myPortfolioSRM"), let mine = try? JSONDecoder().decode(Portfolio.self, from: data),
+        if UserDefaults.standard.string(forKey: "srmAccount") == "" {
+            // Closed (File ▸ Close Portfolio) when the app last quit.
+            var none = Samples.myPortfolio
+            none.srmCode = nil
+            none.name = "No portfolio open"
+            list.append(none)
+        } else if let data = UserDefaults.standard.data(forKey: "myPortfolioSRM"), let mine = try? JSONDecoder().decode(Portfolio.self, from: data),
            mine.isSRM {
             list.append(mine)
         } else {
@@ -323,10 +329,7 @@ final class PortStore {
         set {
             guard let i = portfolios.firstIndex(where: { $0.id == newValue.id }) else { return }
             portfolios[i] = newValue
-            if newValue.id == "mine", let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: "myPortfolioSRM")
-                scheduleSRMSave()
-            }
+            // My Portfolio's edits wait for File ▸ Save (or the Save / Discard check before switching or quitting).
             clearResults()
             srmInputs = nil
         }
@@ -334,7 +337,7 @@ final class PortStore {
 
     // MARK: Security master (srm) account
 
-    /// The code of My Portfolio's account in the security master.
+    /// The code of the open portfolio in the security master ("" when none is open).
     var srmCode = UserDefaults.standard.string(forKey: "srmAccount") ?? "MY_PORTFOLIO" {
         didSet { UserDefaults.standard.set(srmCode, forKey: "srmAccount") }
     }
@@ -345,14 +348,30 @@ final class PortStore {
     /// Optimization inputs of the srm account from the analytics service, and what they cover.
     var srmInputs: OptimizationInputs?
     var srmInputsNote: String?
-    @ObservationIgnored private var saveTask: Task<Void, Never>?
     /// The security-master account My Portfolio was read from this session. Nothing is saved before it is read: the
     /// placeholder My Portfolio (no holdings) saved over the real account would delete its lots — a screen that saves
     /// before computing (Risk Today's inputs) did that when it opened before the account had loaded.
-    @ObservationIgnored private var mineLoadedCode: String?
+    var mineLoadedCode: String?
+
+    // The open portfolio as last read or saved (PortfolioFile.swift: File ▸ New, Open, Save, Revert, Close).
+    /// Its version in the security master (0: new, not saved yet); a save names it and is refused when it moved on.
+    var openVersion = 0
+    var savedHoldings: [Holding] = []
+    var savedBenchmark = ""
+    var savedAccountType: AccountType = .taxable
+    var savedApproach: PortfolioStyle = .active
+    var savedName = ""
+    var savedSettings = PortfolioSettings()
+    /// Save / Discard / Cancel before leaving a portfolio with unsaved changes.
+    var leavePrompt: LeavePrompt?
+    /// A save refused because the portfolio changed in the security master since it was opened.
+    var saveConflict: String?
+    var showOpenPortfolio = false
+    var showNewPortfolio = false
 
     /// Loads (or starts) the account `code` from the security master as My Portfolio.
     func openSRMAccount(_ code: String) async {
+        guard !code.isEmpty else { return }
         srmBusy = true
         defer { srmBusy = false }
         do {
@@ -361,15 +380,20 @@ final class PortStore {
             var mine = Samples.myPortfolio
             mine.srmCode = code
             mine.benchmark = srmBenchmarks.first { $0.code == "SP500" }?.code ?? srmBenchmarks.first?.code ?? "SP500"
+            var version = 0
             if srmAccountCodes.contains(where: { $0.caseInsensitiveCompare(code) == .orderedSame }) {
                 let account = try await AccountsClient.account(code)
                 apply(account, to: &mine)
-                srmStatus = "Loaded \(account.code) from the security master: \(account.lots.count) lots, \(money(account.totalValue))."
+                version = account.version ?? 1
+                if let settings = account.settings, settings != PortfolioSettings() { apply(settings) }
+                srmStatus = "Opened \(account.code) (version \(version)): \(account.lots.count) lots, \(money(account.totalValue))."
             } else {
-                srmStatus = "New account \(code): add securities and it is saved to the security master."
+                srmStatus = "New portfolio \(code): add securities, then File ▸ Save."
             }
             srmCode = code
             mineLoadedCode = code
+            markSaved(mine, version: version)
+            noteRecent(code)
             await useSRMBenchmark(mine.benchmark)
             if let i = portfolios.firstIndex(where: { $0.id == "mine" }) { portfolios[i] = mine }
             if let data = try? JSONEncoder().encode(mine) { UserDefaults.standard.set(data, forKey: "myPortfolioSRM") }
@@ -387,7 +411,7 @@ final class PortStore {
         p.account = a.accountType == "retirement" ? .retirement : a.accountType == "roth" ? .roth : .taxable
         if let b = a.benchmark { p.benchmark = b }
         if p.id == "mine" {
-            p.name = "My Portfolio"
+            p.name = a.name
             if a.approach == "active" { myApproach = .active } else if a.approach == "passive" { myApproach = .passive }
         }
         var byKey: [String: [SRMLot]] = [:]
@@ -419,19 +443,12 @@ final class PortStore {
         }
     }
 
-    /// Saves My Portfolio to the security master a moment after the last edit.
-    private func scheduleSRMSave() {
-        saveTask?.cancel()
-        saveTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(700))
-            guard !Task.isCancelled else { return }
-            await self?.saveSRMAccount()
-        }
-    }
-
-    func saveSRMAccount() async {
-        guard let mine = portfolios.first(where: { $0.id == "mine" }), mine.isSRM, let code = mine.srmCode else { return }
-        guard mineLoadedCode?.caseInsensitiveCompare(code) == .orderedSame else { return }
+    /// Saves the open portfolio as its next version (File ▸ Save). False when nothing was saved: none open, or the
+    /// service refused it — a conflict (saved elsewhere since it was opened) shows in saveConflict.
+    @discardableResult
+    func saveSRMAccount() async -> Bool {
+        guard let mine = portfolios.first(where: { $0.id == "mine" }), mine.isSRM, let code = mine.srmCode else { return false }
+        guard mineLoadedCode?.caseInsensitiveCompare(code) == .orderedSame else { return false }
         var lots: [[String: Any]] = []
         let today = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
         for h in mine.holdings {
@@ -445,20 +462,29 @@ final class PortStore {
             }
         }
         let cash = mine.holdings.filter { $0.ticker == "CASH" }.reduce(0) { $0 + $1.value }
-        let body: [String: Any] = ["name": "My Portfolio", "accountType": mine.account == .retirement ? "retirement" : mine.account == .roth ? "roth" : "taxable",
+        let settingsJSON = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(currentSettings))) ?? [:]
+        let body: [String: Any] = ["name": mine.name, "accountType": mine.account == .retirement ? "retirement" : mine.account == .roth ? "roth" : "taxable",
                                    "approach": myApproach == .active ? "active" : "passive", "benchmark": mine.benchmark,
-                                   "cash": cash, "lots": lots]
+                                   "cash": cash, "lots": lots, "version": openVersion, "settings": settingsJSON, "by": "MxPortMGR"]
         srmBusy = true
         defer { srmBusy = false }
         do {
             let saved = try await AccountsClient.save(code, body)
             let f = DateFormatter(); f.timeStyle = .short
-            srmStatus = "Saved \(saved.code) to the security master at \(f.string(from: Date())): \(saved.lots.count) lots, \(money(saved.totalValue))"
+            srmStatus = "Saved \(saved.code) version \(saved.version ?? 0) at \(f.string(from: Date())): \(saved.lots.count) lots, \(money(saved.totalValue))"
                 + (saved.unpriced.isEmpty ? "." : ". No prices yet for \(saved.unpriced.joined(separator: ", ")).")
             if !srmAccountCodes.contains(saved.code) { srmAccountCodes.append(saved.code) }
+            markSaved(mine, version: saved.version ?? openVersion + 1)
             srmInputs = nil
+            return true
+        } catch ServiceClient.Failure.conflict(let message) {
+            saveConflict = message
+            srmStatus = "Not saved: changed in the security master since it was opened."
+            return false
         } catch {
             srmStatus = "Not saved: \(error.localizedDescription)"
+            errorMessage = "\(code) was not saved: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -510,16 +536,27 @@ final class PortStore {
     func loadSRMInputs() async {
         let p = portfolio
         guard let code = p.srmCode else { return }
-        if p.id == "mine" {
-            saveTask?.cancel()
-            await saveSRMAccount()
-        }
         do {
             let active = p.id == "mine" ? myApproach == .active : p.style != .passive
             let mode = active ? "active" : "tracking"
-            let (inputs, note) = try await ServiceClient.srmInputs(portfolio: code, benchmark: p.benchmark, mode: mode)
-            srmInputs = inputs
-            srmInputsNote = note
+            if p.id == "mine" && isDirty {
+                // Unsaved edits: the service reads saved holdings, so it gets the securities and the benchmark, and the
+                // weights come from the holdings on screen.
+                let tickers = p.holdings.compactMap { h in h.ticker == "CASH" ? nil : h.security?.displayTicker }
+                var body: [String: Any] = ["securities": tickers, "benchmark": p.benchmark, "mode": mode]
+                if !active { body["alpha"] = "none" }
+                var (inputs, note) = try await ServiceClient.riskInputs(body)
+                let invested = p.holdings.filter { $0.ticker != "CASH" }.reduce(0) { $0 + $1.value }
+                inputs.current = inputs.assets.map { key in
+                    invested > 0 ? (p.holdings.first { $0.ticker == key }?.value ?? 0) / invested : 0
+                }
+                srmInputs = inputs
+                srmInputsNote = note + " (unsaved holdings)"
+            } else {
+                let (inputs, note) = try await ServiceClient.srmInputs(portfolio: code, benchmark: p.benchmark, mode: mode)
+                srmInputs = inputs
+                srmInputsNote = note
+            }
         } catch {
             guard !(error is CancellationError) else { return }
             srmInputsNote = error.localizedDescription
@@ -546,14 +583,18 @@ final class PortStore {
         portfolio = mine
     }
 
-    /// Reads My Portfolio again from the security master (dropping unsaved edits).
+    /// Reads the open portfolio again from the security master, dropping unsaved edits (File ▸ Revert to Saved).
     func resetMyPortfolio() {
+        guard !srmCode.isEmpty else { return }
         Task { await openSRMAccount(srmCode) }
     }
 
-    /// Copies a sample's holdings and lots into My Portfolio to edit; saved to the security master.
+    /// Copies a sample's holdings and lots into the open portfolio to edit (saved with File ▸ Save).
     func copyToMine(_ p: Portfolio) {
-        guard var mine = portfolios.first(where: { $0.id == "mine" }) else { return }
+        guard openPortfolio != nil, var mine = portfolios.first(where: { $0.id == "mine" }) else {
+            errorMessage = "No portfolio is open: File ▸ New Portfolio… (it can start from a sample) or Open Portfolio…"
+            return
+        }
         mine.holdings = p.holdings
         mine.benchmark = p.benchmark
         mine.account = p.account

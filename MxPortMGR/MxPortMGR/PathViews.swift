@@ -153,7 +153,7 @@ struct PortfolioView: View {
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .help("Find and add stocks, individual bonds, funds or cash (⇧⌘N)")
-            Text(store.portfolio.isSRM ? "Edit shares in the table to resize a position (its lots scale); the trash button removes it. Changes are saved to the security master." : "Edit a value in the table to resize a holding; the trash button removes it.").font(.callout).foregroundStyle(.secondary)
+            Text(store.portfolio.isSRM ? "Edit shares in the table to resize a position (its lots scale); the trash button removes it. Changes are kept when you save (File ▸ Save, ⌘S)." : "Edit a value in the table to resize a holding; the trash button removes it.").font(.callout).foregroundStyle(.secondary)
             Spacer()
             if !store.portfolio.isSRM { Button("Reset My Portfolio") { store.resetMyPortfolio() } }
         }

@@ -92,6 +92,39 @@ nonisolated struct SRMAccount: Codable, Sendable {
     var investedValue: Double
     var totalValue: Double
     var unpriced: [String]
+    /// Saves so far (V022): a save names the version it was made from.
+    var version: Int?
+    /// The portfolio's preferences as MxPortMGR saved them (empty for an account saved before V022).
+    var settings: PortfolioSettings?
+    var updatedBy: String?
+    var closedDate: String?
+}
+
+/// A personal account as the Open Portfolio list shows it (srm.v_personal_account).
+nonisolated struct SRMAccountSummary: Decodable, Sendable, Identifiable, Hashable {
+    var id: String { code }
+    var code: String
+    var name: String
+    var accountType: String?
+    var approach: String?
+    var managedBy: String?
+    var benchmark: String?
+    var lots: Int?
+    var investedValue: Double?
+    var costBasis: Double?
+    var cashBalance: Double?
+    var updatedAt: String?
+    var version: Int?
+    var updatedBy: String?
+    var closedDate: String?
+    var isSample: Bool { managedBy == "MxPortMGR samples" }
+
+    enum CodingKeys: String, CodingKey {
+        case code, name, approach, benchmark, lots, version
+        case accountType = "account_type", managedBy = "managed_by", investedValue = "invested_value",
+             costBasis = "cost_basis", cashBalance = "cash_balance", updatedAt = "updated_at",
+             updatedBy = "updated_by", closedDate = "closed_date"
+    }
 }
 
 nonisolated struct SRMBenchmarkInfo: Codable, Hashable, Sendable, Identifiable {
@@ -237,12 +270,14 @@ nonisolated enum AccountsClient {
             r.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
         let data: Data
+        let response: URLResponse
         do {
-            (data, _) = try await URLSession.shared.data(for: r)
+            (data, response) = try await URLSession.shared.data(for: r)
         } catch {
             throw ServiceClient.Failure.from(error, service)
         }
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let error = json["error"] as? String {
+            if (response as? HTTPURLResponse)?.statusCode == 409 { throw ServiceClient.Failure.conflict(error) }
             throw ServiceClient.Failure.rejected("Security master: \(error)")
         }
         do {
@@ -264,7 +299,7 @@ nonisolated enum AccountsClient {
         var descending = false
     }
     private struct Benchmarks: Decodable { var benchmarks: [SRMBenchmarkInfo] }
-    private struct Accounts: Decodable { var accounts: [Row]; struct Row: Decodable { var code: String; var name: String } }
+    private struct Accounts: Decodable { var accounts: [SRMAccountSummary] }
     struct PriceLoad: Decodable { var loaded: [String]; var status: String?; var message: String?; var account: SRMAccount }
 
     /// One page of matching securities, how many match in all, and (with `facets`) each filterable column's values.
@@ -290,7 +325,12 @@ nonisolated enum AccountsClient {
     }
 
     static func accounts() async throws -> [String] {
-        try await request("GET", "/accounts", as: Accounts.self).accounts.map(\.code)
+        try await accountList().map(\.code)
+    }
+
+    /// Every personal account with its value, version and who saved it last (File ▸ Open Portfolio…).
+    static func accountList() async throws -> [SRMAccountSummary] {
+        try await request("GET", "/accounts", as: Accounts.self).accounts
     }
 
     static func account(_ code: String) async throws -> SRMAccount {

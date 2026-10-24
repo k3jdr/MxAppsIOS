@@ -13,16 +13,40 @@ import SwiftUI
 @main
 struct MxPortMGRApp: App {
     @State private var store = PortStore()
+    // Quitting with unsaved portfolio changes asks to Save, Don't Save or Cancel (PortfolioFile.swift).
+    @NSApplicationDelegateAdaptor(PortAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         Window("MxPortMGR", id: "main") {
             ContentView(store: store)
+                .onAppear { PortAppDelegate.store = store }
         }
         .defaultSize(width: 1440, height: 900)
         .windowResizability(.contentMinSize)
         .commands {
             // Back, Forward and History (⌘[ ⌘]), and the guide's Previous and Next Step (⌥⌘↑ ⌥⌘↓) — Navigation.swift.
             GoCommands(store: store)
+            // File: one portfolio open at a time, kept in the security master (PortfolioFile.swift).
+            CommandGroup(replacing: .newItem) {
+                Button("New Portfolio…") { store.showNewPortfolio = true }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button("Open Portfolio…") { store.showOpenPortfolio = true }
+                    .keyboardShortcut("o", modifiers: .command)
+                Menu("Open Recent") {
+                    ForEach(store.recentPortfolios, id: \.self) { code in Button(code) { store.requestOpen(code) } }
+                    if !store.recentPortfolios.isEmpty { Divider() }
+                    Button("Clear Menu") { store.clearRecent() }.disabled(store.recentPortfolios.isEmpty)
+                }
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Close Portfolio") { store.closePortfolio() }
+                    .disabled(store.openPortfolio == nil)
+                Button("Save") { Task { await store.saveSRMAccount() } }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(store.openPortfolio == nil || !store.isDirty)
+                Button("Revert to Saved") { store.resetMyPortfolio() }
+                    .disabled(store.openPortfolio == nil || !store.isDirty)
+            }
             CommandMenu("Guide") {
                 Button("Welcome") { store.go(.welcome) }
                     .keyboardShortcut("0", modifiers: .command)
@@ -65,12 +89,11 @@ struct MxPortMGRApp: App {
                     ForEach(EngineChoice.allCases) { Text($0.rawValue).tag($0) }
                 }
                 Divider()
-                Button("Copy Account to My Portfolio") {
+                Button("Copy Account into the Open Portfolio") {
                     store.copyToMine(store.portfolio)
                     store.go(.myPortfolio)
                 }
-                    .disabled(store.selectedID == "mine")
-                Button("Reset My Portfolio") { store.resetMyPortfolio() }
+                    .disabled(store.selectedID == "mine" || store.openPortfolio == nil)
             }
             CommandMenu("Reports") {
                 Button("Report Library") { store.go(.reportLibrary) }

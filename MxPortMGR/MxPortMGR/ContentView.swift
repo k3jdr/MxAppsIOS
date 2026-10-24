@@ -68,15 +68,35 @@ struct ContentView: View {
         .onOpenURL { url in
             // mxportmgr://my-portfolio/CODE from MxDataHUB or MxJobsWMS (Shared/AppLinks.swift).
             if case let .myPortfolio(code)? = AppLink(url: url) {
-                store.go(.myPortfolio)
-                if let code {
-                    store.srmCode = code
-                    Task { await store.openSRMAccount(code) }
-                }
+                if let code { store.requestOpen(code) } else { store.go(.myPortfolio) }
             }
         }
         .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
         .sheet(item: Binding(get: { ReportNotes.shared.editing }, set: { ReportNotes.shared.editing = $0 })) { ReportNotesSheet(report: $0) }
+        .sheet(isPresented: $store.showOpenPortfolio) { OpenPortfolioSheet(store: store) }
+        .sheet(isPresented: $store.showNewPortfolio) { NewPortfolioSheet(store: store) }
+        // Leaving a portfolio with unsaved changes (PortfolioFile.swift).
+        .alert("Save changes to \(store.srmCode)?", isPresented: Binding(get: { store.leavePrompt != nil }, set: { if !$0 { store.leavePrompt = nil } }),
+               presenting: store.leavePrompt) { prompt in
+            Button("Save") {
+                Task { if await store.saveSRMAccount() { await prompt.proceed() } }
+            }
+            Button("Discard Changes", role: .destructive) {
+                Task {
+                    if let mine = store.openPortfolio { store.markSaved(mine, version: store.openVersion) }
+                    await prompt.proceed()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { prompt in
+            Text("Before you \(prompt.action), these changes are not saved:\n" + prompt.looseEnds.map { "• " + $0 }.joined(separator: "\n"))
+        }
+        .alert("Not saved: \(store.srmCode) changed elsewhere", isPresented: Binding(get: { store.saveConflict != nil }, set: { if !$0 { store.saveConflict = nil } })) {
+            Button("Keep Editing", role: .cancel) { store.saveConflict = nil }
+            Button("Revert to the Saved Version", role: .destructive) { store.saveConflict = nil; store.resetMyPortfolio() }
+        } message: {
+            Text((store.saveConflict ?? "") + "\n\nYour edits are still here. Revert reads the saved version (yours are lost); or keep editing and copy what you need first.")
+        }
         .alert("MxPortMGR", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
             if store.engine == .services || store.attributeMaster {

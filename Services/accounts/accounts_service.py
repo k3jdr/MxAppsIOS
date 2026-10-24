@@ -96,7 +96,9 @@ DESCRIBE = {
         {"method": "GET", "path": "/benchmarks/{code}/weights", "summary": "A benchmark's latest weights with sectors"},
         {"method": "GET", "path": "/accounts", "summary": "Personal accounts with value and cost"},
         {"method": "GET", "path": "/accounts/{code}", "summary": "An account with its open tax lots, valued"},
-        {"method": "PUT", "path": "/accounts/{code}", "summary": "Create or replace an account and its lots; rewrites today's holdings"},
+        {"method": "PUT", "path": "/accounts/{code}", "summary": "Save an account as a new version (version-checked: 409 when it changed since it was opened); rewrites today's holdings"},
+        {"method": "GET", "path": "/accounts/{code}/versions", "summary": "Every saved version of an account, newest first"},
+        {"method": "POST", "path": "/accounts/{code}/close", "summary": "Close an account (kept, not deleted); /reopen opens it again"},
         {"method": "POST", "path": "/accounts/{code}/load-prices", "summary": "Load prices for unpriced holdings (via srm-loader)"},
         {"method": "GET", "path": "/earnings/calendar", "summary": "FMP earnings calendar: EPS and revenue, estimated and actual (12 months back)"},
         {"method": "GET", "path": "/earnings/history", "summary": "One company's earnings reports from FMP, newest first"},
@@ -331,13 +333,21 @@ def benchmark_weights(conn, code):
             "weights": [dict(security_out(r), weight=float(r["weight"]) / total) for r in rows]}
 
 
+class Conflict(Exception):
+    """A save made from a version the account has moved on from (HTTP 409): {error, version, updatedAt, updatedBy}."""
+    def __init__(self, message, **payload):
+        super().__init__(message)
+        self.payload = payload
+
+
 def accounts(conn):
     return fetch(conn, "SELECT * FROM srm.v_personal_account ORDER BY code")
 
 
 def account(conn, code):
     rows = fetch(conn, """SELECT p.portfolio_id, p.code, p.name, p.account_type, p.approach, p.managed_by, p.cash_balance,
-                                 p.base_currency, b.code AS benchmark, p.updated_at
+                                 p.base_currency, b.code AS benchmark, p.updated_at, p.version, p.settings, p.updated_by,
+                                 p.closed_date
                             FROM srm.portfolio p LEFT JOIN srm.benchmark b USING (benchmark_id)
                            WHERE upper(p.code) = upper(%s)""", (code,))
     if not rows:
@@ -360,13 +370,24 @@ def account(conn, code):
     return {"code": a["code"], "name": a["name"], "accountType": a["account_type"], "approach": a["approach"],
             "managedBy": a["managed_by"], "benchmark": a["benchmark"], "cash": float(a["cash_balance"]),
             "currency": a["base_currency"], "updatedAt": a["updated_at"], "lots": out_lots,
+            "version": a["version"], "settings": a["settings"] or {}, "updatedBy": a["updated_by"],
+            "closedDate": a["closed_date"],
             "investedValue": invested, "totalValue": invested + float(a["cash_balance"]),
             "unpriced": sorted({l["ticker"] for l in out_lots if l["price"] is None})}
 
 
 def save_account(conn, code, body):
+    """Saves an account as a new version. `version` is the version the edit was made from (0 for a new account): when
+    the account has moved on since — saved elsewhere, or a different account under that code — the save is refused
+    (Conflict, 409) and nothing changes. Every saved version is kept whole in srm.portfolio_version (V022)."""
     if not CODE.match(code):
         raise ValueError("account code must be 1–40 letters, digits, _ or -")
+    if "version" not in body:
+        raise ValueError("version is required: the version the edit was made from (0 for a new account)")
+    try:
+        expected = int(body["version"])
+    except (TypeError, ValueError):
+        raise ValueError("version must be a whole number")
     account_type = body.get("accountType", "taxable")
     if account_type not in ("taxable", "retirement", "roth"):
         raise ValueError("accountType must be taxable, retirement or roth")
@@ -379,6 +400,10 @@ def save_account(conn, code, body):
     lots = body.get("lots", [])
     if not isinstance(lots, list):
         raise ValueError("lots must be a list")
+    settings = body.get("settings")
+    if settings is not None and not isinstance(settings, dict):
+        raise ValueError("settings must be an object")
+    by = str(body.get("by") or "MxPortMGR")[:80]
     benchmark = body.get("benchmark") or None
     with conn.cursor() as cur:
         bench_id = None
@@ -388,16 +413,34 @@ def save_account(conn, code, body):
             if not row:
                 raise ValueError("no benchmark %r in the security master" % benchmark)
             bench_id = row[0]
+        cur.execute("""SELECT portfolio_id, version, updated_at, updated_by, settings FROM srm.portfolio
+                        WHERE upper(code) = upper(%s) FOR UPDATE""", (code,))
+        row = cur.fetchone()
+        current = row[1] if row else 0
+        if expected != current:
+            conn.rollback()
+            if row and expected == 0:
+                raise Conflict("an account %s already exists (version %d): open it instead" % (code, current),
+                               version=current, updatedAt=row[2], updatedBy=row[3])
+            if not row:
+                raise Conflict("there is no account %s any more (it was saved from version %d)" % (code, expected),
+                               version=0)
+            raise Conflict("%s was saved by %s on %s (version %d) since this copy was opened (version %d)"
+                           % (code, row[3] or "another app", row[2].strftime("%Y-%m-%d at %H:%M"), current, expected),
+                           version=current, updatedAt=row[2], updatedBy=row[3])
+        merged = settings if settings is not None else (row[4] if row else {})
         cur.execute("""
             INSERT INTO srm.portfolio (code, name, benchmark_id, inception_date, description, account_type, approach,
-                                       managed_by, cash_balance)
-            VALUES (%s, %s, %s, current_date, 'Personal account maintained in MxPortMGR (My Portfolio)', %s, %s, 'MxPortMGR', %s)
+                                       managed_by, cash_balance, settings, updated_by, version)
+            VALUES (%s, %s, %s, current_date, 'Personal account maintained in MxPortMGR (My Portfolio)', %s, %s, 'MxPortMGR',
+                    %s, %s, %s, 1)
             ON CONFLICT (code) DO UPDATE SET name = excluded.name, benchmark_id = excluded.benchmark_id,
                 account_type = excluded.account_type, approach = excluded.approach, managed_by = 'MxPortMGR',
-                cash_balance = excluded.cash_balance
-            RETURNING portfolio_id""",
-                    (code, body.get("name") or code, bench_id, account_type, approach, cash))
-        pid = cur.fetchone()[0]
+                cash_balance = excluded.cash_balance, settings = excluded.settings, updated_by = excluded.updated_by,
+                version = srm.portfolio.version + 1, updated_at = now()
+            RETURNING portfolio_id, version""",
+                    (code, body.get("name") or code, bench_id, account_type, approach, cash, json.dumps(merged), by))
+        pid, version = cur.fetchone()
         cur.execute("DELETE FROM srm.portfolio_tax_lot WHERE portfolio_id = %s", (pid,))
         for i, lot in enumerate(lots):
             try:
@@ -412,6 +455,54 @@ def save_account(conn, code, body):
             cur.execute("""INSERT INTO srm.portfolio_tax_lot (portfolio_id, security_id, acquired_date, quantity, cost_basis, note)
                            VALUES (%s, %s, %s, %s, %s, %s)""", (pid, sid, min(acquired, dt.date.today()), qty, cost, lot.get("note")))
         cur.execute("SELECT srm.sync_holdings_from_lots(%s, current_date)", (pid,))
+        # This version, whole, next to every earlier one.
+        cur.execute("""
+            INSERT INTO srm.portfolio_version (portfolio_id, version, saved_by, name, account_type, approach, benchmark_code,
+                                               cash_balance, settings, lots, note)
+            SELECT p.portfolio_id, p.version, p.updated_by, p.name, p.account_type, p.approach, b.code, p.cash_balance,
+                   p.settings,
+                   coalesce((SELECT jsonb_agg(jsonb_build_object('securityId', l.security_id, 'ticker', v.ticker,
+                                                                 'acquired', l.acquired_date, 'quantity', l.quantity,
+                                                                 'costBasis', l.cost_basis, 'note', l.note) ORDER BY l.lot_id)
+                               FROM srm.portfolio_tax_lot l JOIN srm.v_security v USING (security_id)
+                              WHERE l.portfolio_id = p.portfolio_id), '[]'::jsonb),
+                   %s
+              FROM srm.portfolio p LEFT JOIN srm.benchmark b USING (benchmark_id)
+             WHERE p.portfolio_id = %s""", (body.get("note"), pid))
+    conn.commit()
+    return account(conn, code)
+
+
+def account_versions(conn, code):
+    """The saved versions of an account, newest first: when, by whom, lots, cash and value at cost."""
+    rows = fetch(conn, """
+        SELECT v.version, v.saved_at, v.saved_by, v.name, v.account_type, v.approach, v.benchmark_code, v.cash_balance,
+               jsonb_array_length(v.lots) AS lots,
+               (SELECT coalesce(sum((x->>'costBasis')::numeric), 0) FROM jsonb_array_elements(v.lots) x) AS cost_basis, v.note
+          FROM srm.portfolio_version v JOIN srm.portfolio p USING (portfolio_id)
+         WHERE upper(p.code) = upper(%s) ORDER BY v.version DESC""", (code,))
+    if not rows and not fetch(conn, "SELECT 1 FROM srm.portfolio WHERE upper(code) = upper(%s)", (code,)):
+        raise LookupError("no account %r" % code)
+    return {"code": code.upper(), "versions": [
+        {"version": r["version"], "savedAt": r["saved_at"], "savedBy": r["saved_by"], "name": r["name"],
+         "accountType": r["account_type"], "approach": r["approach"], "benchmark": r["benchmark_code"],
+         "cash": float(r["cash_balance"]), "lots": r["lots"], "costBasis": float(r["cost_basis"]), "note": r["note"]}
+        for r in rows]}
+
+
+def set_closed(conn, code, body, closed):
+    """Closes (kept, not deleted) or reopens an account; version-checked like a save."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT version FROM srm.portfolio WHERE upper(code) = upper(%s) FOR UPDATE", (code,))
+        row = cur.fetchone()
+        if not row:
+            raise LookupError("no account %r" % code)
+        if int(body.get("version", -1)) != row[0]:
+            conn.rollback()
+            raise Conflict("%s has changed since it was opened (version %d)" % (code, row[0]), version=row[0])
+        cur.execute("""UPDATE srm.portfolio SET closed_date = CASE WHEN %s THEN current_date END,
+                              version = version + 1, updated_by = %s, updated_at = now()
+                        WHERE upper(code) = upper(%s)""", (closed, str(body.get("by") or "MxPortMGR")[:80], code))
     conn.commit()
     return account(conn, code)
 
@@ -1073,6 +1164,10 @@ class Handler(BaseHTTPRequestHandler):
                     out = account(conn, parts[1])
                 elif len(parts) == 2 and parts[0] == "accounts" and method == "PUT":
                     out = save_account(conn, parts[1], body)
+                elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "versions" and method == "GET":
+                    out = account_versions(conn, parts[1])
+                elif len(parts) == 3 and parts[0] == "accounts" and parts[2] in ("close", "reopen") and method == "POST":
+                    out = set_closed(conn, parts[1], body, parts[2] == "close")
                 elif parts == ["market", "series"] and method == "GET":
                     out = market_series(conn, q)
                     if isinstance(out, str):
@@ -1099,6 +1194,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise
             finally:
                 conn.close()
+        except Conflict as e:
+            return self.send_json(409, dict(e.payload, error=str(e)))
         except LookupError as e:
             return self.send_json(404, {"error": str(e).strip("'\"")})
         except ValueError as e:
