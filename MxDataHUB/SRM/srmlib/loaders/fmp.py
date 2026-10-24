@@ -4,6 +4,7 @@ levels. Works per symbol on the benchmark / portfolio securities (bulk and const
 are not on the plan). Stops cleanly when the plan's limit is reached."""
 
 import datetime
+import urllib.parse
 
 import psycopg2.extras
 
@@ -18,20 +19,28 @@ class PlanLimit(Exception):
     pass
 
 
+# One budget for every FMP client in the process: loaders that run FMP steps back to back (listed-derivatives:
+# profiles, then prices) would otherwise each allow a full minute's calls in the same minute and trip FMP's limit.
+# The plan allows 750 a minute (2026-10-24); 600 leaves room for the accounts service, which uses the same key.
+LIMITER = RateLimiter(600, 60)
+
+
 class FMP:
     def __init__(self, cfg, run):
         self.key = cfg.api_key("fmp")
         if not self.key:
             raise SystemExit("No FMP API key: set FMP_API_KEY, or add it to the Keychain (service SRM-api, account fmp)")
         self.run = run
-        self.limiter = RateLimiter(250, 60)
+        self.limiter = LIMITER
 
     def get(self, endpoint, **params):
         params["apikey"] = self.key
-        query = "&".join(f"{k}={v}" for k, v in params.items())
+        query = urllib.parse.urlencode(params)   # encoded: a space or & in a value can't break (or expose) the URL
         self.run.api_calls += 1
         try:
-            return http(f"{BASE}{endpoint}?{query}", limiter=self.limiter, retries=2)
+            # A 429 is usually the per-minute limit ("Limit Reach … upgrade your plan" is FMP's wording for any
+            # limit): back off 5, 10, 20 and 40 seconds, past a full minute, before treating it as the plan's.
+            return http(f"{BASE}{endpoint}?{query}", limiter=self.limiter, retries=4)
         except HTTPError as e:
             if e.status == 402:
                 raise PlanLimit(f"{endpoint} is not on the FMP plan")
@@ -41,8 +50,11 @@ class FMP:
 
 
 def _symbols(cur, args):
-    """(security_id, fmp symbol) for the work set: --symbols, --all-securities (every active security),
-    else benchmark and portfolio securities."""
+    """(security_id, fmp symbol) for the work set: given pairs (other loaders: no symbol lookup, so a symbol two
+    securities answer to can't pick the wrong one), --symbols, --all-securities (every active security), else
+    benchmark and portfolio securities."""
+    if getattr(args, "security_symbols", None):
+        return list(args.security_symbols)
     if args.symbols:
         out = []
         for s in args.symbols:

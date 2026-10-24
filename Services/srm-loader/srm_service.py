@@ -83,19 +83,28 @@ CATEGORIES = [
      # State Street publishes a day's holdings the next business morning, so the newest SPDR file is dated a business
      # day back (two overnight, before the next one appears): freshness allows that lag.
      "dataLagDays": 1},
-    {"id": "identifiers", "name": "Identifiers & issuer data", "loaders": ["openfigi", "fmp-profiles", "sec-submissions", "gleif"],
+    {"id": "identifiers", "name": "Identifiers & issuer data",
+     "loaders": ["openfigi", "fmp-profiles", "sec-submissions", "gleif"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
-    {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "nasdaq-prices", "vanguard-funds", "trust-navs", "fmp-index-levels"],
-     "description": "End-of-day prices (FMP for benchmark and portfolio members; Nasdaq.com, free and keyless, for the "
+    {"id": "prices", "name": "Prices & index levels", "loaders": ["massive-prices", "fmp-prices", "nasdaq-prices", "vanguard-funds",
+                                                       "listed-derivatives", "trust-navs", "fmp-index-levels"],
+     "description": "End-of-day prices (Massive's daily file for every U.S. listed and OTC security; FMP for "
+                    "benchmark and portfolio members, with adjusted closes; Nasdaq.com, free and keyless, for the "
                     "stock, bond and mutual funds held and any security FMP left without a recent price), every "
-                    "Vanguard mutual fund with its daily NAV (Vanguard's product list; history from Nasdaq.com), "
+                    "Vanguard mutual fund with its daily NAV (Vanguard's product list; history from Nasdaq.com), units, "
+                    "warrants and rights (what they hold, CUSIP / ISIN / sector from FMP, FMP then Nasdaq.com prices), "
                     "collective trusts from statement NAVs and their proxy funds, and benchmark levels.",
      "cadence": "daily",
      # FMP needs an API key; when it fails, nasdaq-prices still runs and fills the gaps.
      # The Vanguard list is one more source of NAVs: when it fails, the trusts and index levels still load.
-     "continueAfterFailure": ["fmp-prices", "vanguard-funds"]},
+     "continueAfterFailure": ["massive-prices", "fmp-prices", "vanguard-funds", "listed-derivatives"]},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
+    {"id": "bonds", "name": "Bonds: U.S. Treasuries", "loaders": ["treasuries"],
+     "description": "Every outstanding Treasury bill, note, bond, TIPS and FRN with its terms (TreasuryDirect) and "
+                    "end-of-day price (the Treasury's FedInvest prices) — free, no key. Corporate and agency bonds "
+                    "(FINRA TRACE) need a FINRA API account.",
+     "cadence": "daily", "dataLagDays": 1},
     {"id": "market-series", "name": "Market series: VIX & Treasury yields", "loaders": ["cboe-vix", "fred-yields"],
      "description": "The VIX family (VIX9D, VIX, VIX3M, VIX6M daily OHLC from Cboe) and Treasury constant-maturity "
                     "yields 1 month to 30 years with NBER recession months (FRED) — free, no key. MxPortMGR's VIX "
@@ -123,6 +132,7 @@ RUN_NAMES = {
     "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],
+    "treasuries": ["treasuries"], "massive-prices": ["massive_prices"], "listed-derivatives": ["listed_derivatives"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "..", "..", "MxDataHUB", "SRM"))
@@ -257,6 +267,11 @@ class SRM:
                     cur.execute("""SELECT CASE WHEN bool_and(last_date IS NOT NULL) THEN min(last_date) END
                                      FROM srm.v_market_series_summary WHERE frequency = 'daily'""")
                     series_min = cur.fetchone()[0]
+                bonds_date = None
+                if table_exists(cur, "srm.bond_terms"):
+                    cur.execute("""SELECT max(p.price_date) FROM srm.price p JOIN srm.data_source ds USING (source_id)
+                                    WHERE ds.code = 'FEDINVEST'""")
+                    bonds_date = cur.fetchone()[0]
         finally:
             conn.close()
         limits = {"daily": (1, 3), "weekly": (7, 14), "monthly": (31, 62)}
@@ -272,7 +287,8 @@ class SRM:
             ran = [l["lastRun"] for l in loaders if l["lastRun"]]
             last_run = min(ran) if len(ran) == len(loaders) else None     # the oldest loader decides
             data_date = {"prices": price_date, "constituents": bench_min,
-                         "portfolio-snapshots": portfolio_min, "market-series": series_min}.get(cat["id"])
+                         "portfolio-snapshots": portfolio_min, "market-series": series_min,
+                         "bonds": bonds_date}.get(cat["id"])
             basis = data_date or (last_run.date() if last_run else None)
             ok, due = limits[cat["cadence"]]
             age = business_days_between(basis, today) if cat["cadence"] == "daily" and basis else ((today - basis).days if basis else None)

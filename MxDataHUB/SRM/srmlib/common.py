@@ -2,9 +2,10 @@
 rate-limited HTTP, and the load_run audit record.
 
 Secrets are never stored in the repository. They are looked up, in order, from:
-  1. environment variables (PGPASSWORD, OPENFIGI_API_KEY, FMP_API_KEY),
+  1. environment variables (PGPASSWORD, OPENFIGI_API_KEY, FMP_API_KEY, MASSIVE_API_KEY, MASSIVE_S3_ACCESS_KEY,
+     MASSIVE_S3_SECRET_KEY),
   2. the login Keychain (service "SRM-postgres", account "user@host/db";
-     service "SRM-api", accounts "openfigi" and "fmp"),
+     service "SRM-api", accounts "openfigi", "fmp", "massive", "massive-s3-access", "massive-s3-secret"),
   3. SRM/config.local.json (untracked, see config.local.json.example),
 and for the database also libpq's own ~/.pgpass.
 
@@ -82,8 +83,10 @@ class Config:
         return (found, "config.local.json") if found else (None, "~/.pgpass or none")
 
     def api_key(self, name):
-        env = {"openfigi": "OPENFIGI_API_KEY", "fmp": "FMP_API_KEY"}[name]
-        return os.environ.get(env) or keychain("SRM-api", name) or self.local.get("api_keys", {}).get(name)
+        env = {"openfigi": "OPENFIGI_API_KEY", "fmp": "FMP_API_KEY", "massive": "MASSIVE_API_KEY",
+               "massive-s3-access": "MASSIVE_S3_ACCESS_KEY", "massive-s3-secret": "MASSIVE_S3_SECRET_KEY"}[name]
+        return (os.environ.get(env) or keychain("SRM-api", name)
+                or self.local.get("api_keys", {}).get(name.replace("-", "_")))
 
     def connect(self):
         kwargs = dict(host=self.host, port=self.port, user=self.user, dbname=self.dbname,

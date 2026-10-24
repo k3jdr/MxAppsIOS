@@ -14,6 +14,12 @@
                                      carry portfolios' latest holdings forward (weight history)
     ./srm.py load earnings-symbols [--since DATE] [--symbols TLSNF ...]
                                      securities for FMP earnings-calendar symbols the master lacks (FMP profile, OpenFIGI)
+    ./srm.py load listed-derivatives [--symbols GSRFU ...] [--force] [--since DATE]
+                                     units, warrants, rights, tracking stocks: what they hold, identifiers, prices
+    ./srm.py load massive-prices [--since DATE] [--force]
+                                     every U.S. listed and OTC security's daily bar from Massive's Flat Files
+    ./srm.py load treasuries [--since DATE]
+                                     outstanding Treasury bills, notes, bonds, TIPS, FRNs and their FedInvest prices
     ./srm.py load cboe-vix | fred-yields [--since DATE] [--force]
                                      market series: the VIX family (Cboe), Treasury yields and recessions (FRED)
     ./srm.py load fmp-fundamentals [--symbols MSFT ...] [--force]
@@ -34,8 +40,8 @@ import traceback
 
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
-from srmlib.loaders import (earnings_symbols, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
-                             nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, sec, ssga, trust_navs, vanguard)
+from srmlib.loaders import (derivatives, earnings_symbols, massive, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
+                             nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
 # per-security enrichment that works on the benchmark / portfolio securities.
@@ -49,8 +55,11 @@ LOADERS = {
     "earnings-symbols-cleanup": earnings_symbols_cleanup.run,   # one-off fix of 2026-10-23's loads (report only unless --force)
     "openfigi": openfigi.run,                   # composite / share-class / exchange FIGIs
     "fmp-profiles": fmp.load_profiles,          # ISIN, CUSIP, sector, industry, market cap
+    "listed-derivatives": derivatives.run,      # units, warrants, rights: relations, CUSIP / ISIN / sector, prices
+    "spelling-duplicates": spelling_duplicates.run,   # one-off: merge earnings-symbols' FMP-spelling duplicates (--force)
     "sec-submissions": sec.load_submissions,    # SIC, incorporation, EIN, former names
     "gleif": gleif.run,                         # LEIs and legal entity data
+    "massive-prices": massive.run,              # every U.S. ticker's day bar from Massive Flat Files (one file a day)
     "fmp-prices": fmp.load_prices,              # end-of-day prices
     "nasdaq-prices": nasdaq_prices.run,         # fund prices (ETFs, ETNs, closed-end and mutual funds) and gaps, no key
     "vanguard-funds": vanguard.run,             # every Vanguard mutual fund (Vanguard's list), daily NAV; history from Nasdaq.com
@@ -58,13 +67,14 @@ LOADERS = {
     "mutual-funds": mutual_funds.run,           # add mutual funds from Nasdaq.com (--symbols / --search), with prices
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
     "fmp-corporate-actions": fmp.load_corporate_actions,
+    "treasuries": treasuries.run,               # every outstanding Treasury (TreasuryDirect), daily prices (FedInvest)
     "cboe-vix": market_series.load_cboe,        # VIX, VIX9D, VIX3M, VIX6M daily OHLC (Cboe, no key)
     "fred-yields": market_series.load_fred,     # Treasury constant-maturity yields, NBER recessions (FRED, no key)
     "fmp-fundamentals": fundamentals.run,       # quarterly revenue, cash flow, capex, D&A (srm.fundamental_watch)
     "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
 }
 # Not run by `load all`: name them to run them.
-OPTIONAL = {"portfolio-snapshots", "mutual-funds", "earnings-symbols-cleanup"}
+OPTIONAL = {"portfolio-snapshots", "mutual-funds", "earnings-symbols-cleanup", "spelling-duplicates"}
 
 
 def status(conn):

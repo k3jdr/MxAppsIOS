@@ -39,6 +39,10 @@ def _number(text):
 
 def _work(cur, args):
     """(security_id, ticker, security_type) to load."""
+    if getattr(args, "security_ids", None):         # other loaders: these securities, no symbol lookup
+        cur.execute("""SELECT security_id, ticker, security_type FROM srm.v_security
+                        WHERE security_id = ANY(%s) AND ticker IS NOT NULL ORDER BY ticker""", (list(args.security_ids),))
+        return cur.fetchall()
     if args.symbols:
         out = []
         for s in args.symbols:

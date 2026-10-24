@@ -24,12 +24,14 @@ def guess_security_type(name, is_etf=False):
     n = (name or "").lower()
     if is_etf:
         return "ETF"
+    # A unit's name lists what it holds ("Units, each consisting of one share and one-half of one warrant"): it is
+    # a unit, not the warrant or right it mentions.
+    if re.search(r"\bunits?\b", n):
+        return "Unit"
     if "warrant" in n:
         return "Warrant"
     if re.search(r"\brights?\b", n):
         return "Right"
-    if re.search(r"\bunits?\b", n):
-        return "Unit"
     if "american depositary" in n or " ads" in n or "adr" in n.split():
         return "ADR"
     if "preferred" in n or "depositary shares" in n or "pfd" in n:
