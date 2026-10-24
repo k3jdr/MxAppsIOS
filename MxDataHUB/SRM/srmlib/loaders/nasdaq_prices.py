@@ -100,6 +100,8 @@ def run(conn, cfg, args):
         # Up to date = priced on the last weekday before today (Friday's close on a weekend or Monday morning).
         last_weekday = today - datetime.timedelta(days={0: 3, 6: 2}.get(today.weekday(), 1))
         empty = 0
+        # Backfill (vanguard-funds): from --since even when recent prices exist, to fill history that starts late.
+        backfill = getattr(args, "backfill", False)
         for n, (security_id, ticker, security_type) in enumerate(work, 1):
             if security_type == NO_FEED:
                 run.reject(ticker, "a collective investment trust has no public prices: srm.py load trust-navs")
@@ -113,9 +115,9 @@ def run(conn, cfg, args):
                 run.reject(ticker, "no current listing to attach prices to")
                 continue
             listing_id, currency, last = row
-            if last and last >= last_weekday and not args.force:
+            if last and last >= last_weekday and not args.force and not backfill:
                 continue
-            start = max(since, (last - datetime.timedelta(days=5)).isoformat()) if last else since
+            start = max(since, (last - datetime.timedelta(days=5)).isoformat()) if last and not backfill else since
             symbol = ticker.replace(".", "^")             # Nasdaq writes class shares as BRK^B
             asset = "etf" if security_type in ("ETF", "ETN") else "mutualfunds" if security_type == "Mutual Fund" else "stocks"
             url = URL.format(symbol=symbol, asset=asset, start=start, end=today.isoformat())

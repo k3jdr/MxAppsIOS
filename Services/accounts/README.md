@@ -17,7 +17,10 @@ Python Layer 3 service (port **8774**) that keeps **MxPortMGR's My Portfolio** i
 | `PUT /links/<securityId>/<ticker\|name>` | Add or change a link: `{address, text, hoverText, hoverRtf, title, by}` |
 | `DELETE /links/<securityId>/<ticker\|name>` | Take it off |
 | `GET /earnings/history?symbol=&limit=` | One company's reports from FMP (`earnings`), newest first, back decades; `limit` ≤ 200 (default 40) |
-| `GET /fundamentals/quarters?symbol=&limit=` | A company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow (FMP), newest first — MxPortMGR's Compute screen |
+| `GET /fundamentals/quarters?symbol=&limit=&source=` | A company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow, newest first — MxPortMGR's Compute screen. From the security master (`srm.fundamental_quarter`, V015) when `srm.py load fmp-fundamentals` loaded the company in the last 14 days, else from FMP (`source=fmp` asks FMP); `source` in the answer says which. When the database can't be reached it goes to FMP for 5 minutes without trying again |
+| `POST /securities/lookup` | `{tickers: [...]}` → `securities` by ticker: the security master's security (current U.S. listing, OTC included) with `securityId`, `name`, `securityType`, `mic`, `country`, `marketCap` — Earnings by Day names the companies only FMP's calendar lists with it |
+| `GET /market/series` | The market series in the security master (V015: VIX9D, VIX, VIX3M, VIX6M; DGS1MO … DGS30; USREC) with source, count, first and last date and last value |
+| `GET /market/series?ids=&from=&format=` | Their values as CSV in the sources' own layouts, so MxPortMGR parses them as it parses the files: `format=csv` (default) as FRED's `fredgraph.csv` (`observation_date`, one column per id, blank when missing); `format=ohlc` with one id as Cboe's history file (`DATE,OPEN,HIGH,LOW,CLOSE`, MM/DD/YYYY). MxPortMGR's VIX and Yield Curve screens use them when the last value is recent, else read Cboe and FRED |
 | `POST /securities/browse` | MxDataHUB's Securities search for MxPortMGR's Library ▸ Securities: `{q, type, benchmark, activeOnly, offset, limit ≤ 1000, sort {column, ascending}, filters {column: {values: […]} or {op, v1, v2}}}` → `securities`, `total` |
 | `POST /securities/browse/values` | A column's distinct values with their counts under the search and the other filters (`{…, column}`), for its filter panel |
 | `GET /securities/<id>/detail` | A security's facts, identifiers, listings, classification, benchmark membership, corporate actions and last 400 days of closes |
@@ -29,7 +32,7 @@ curl -s 'http://127.0.0.1:8774/securities?q=AGG&kind=bonds'
 ```
 
 Needs `psycopg2`; the connection comes from SRM's own configuration (`MxDataHUB/SRM/README.md`). The earnings
-endpoints don't touch the database: they use SRM's FMP key (`FMP_API_KEY`, Keychain `SRM-api` / `fmp`, or
+endpoints don't touch the database (the fundamentals endpoint reads it when it can): they use SRM's FMP key (`FMP_API_KEY`, Keychain `SRM-api` / `fmp`, or
 `config.local.json`), so the sandboxed MxPortMGR needs no key of its own. Answers are cached in the process (15
 minutes for recent weeks, 12 hours for older ones). Listens on
 127.0.0.1 only; `--token` (or `MXJOBS_SERVICE_TOKEN`) requires `Authorization: Bearer <token>`.

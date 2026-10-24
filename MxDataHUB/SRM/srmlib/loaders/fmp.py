@@ -95,7 +95,8 @@ def load_profiles(conn, cfg, args):
             ids = [(security_id, "FMP_SYMBOL", symbol, None, None)]
             if p.get("isin"):
                 ids.append((security_id, "ISIN", p["isin"], None, None))
-            if p.get("cusip"):
+            if p.get("cusip") and (not p.get("isin") or p["isin"][2:11] == p["cusip"]):
+                # A CUSIP that isn't inside the ISIN is another security's (FMP mixes them up for OTC foreign shares).
                 ids.append((security_id, "CUSIP", p["cusip"], None, None))
             set_identifiers(cur, run, ids, "FMP")
             sec_type = ("ETF" if p.get("isEtf") else "Closed-End Fund" if p.get("isFund")

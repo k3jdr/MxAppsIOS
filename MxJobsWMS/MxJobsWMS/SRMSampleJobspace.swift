@@ -5,10 +5,10 @@
 //  File ▸ New SRM Daily Refresh Sample: MxDataHUB's daily securities-master (SRM) automation
 //  (MxDataHUB/SRM/srm.py load all) as a three-layer jobspace.
 //
-//  Layer 3  the 13 SRM loaders and a read-only status / data-quality read, called through the SRM loader
+//  Layer 3  the 16 SRM loaders and a read-only status / data-quality read, called through the SRM loader
 //           service (Services/srm-loader/srm_service.py, 127.0.0.1:8770), which runs srm.py
 //  Layer 2  one agent per loader stage, in srm.py's dependency order — universe, benchmark constituents,
-//           identifier enrichment, market data — and a data-quality analyst
+//           identifier enrichment, market data, market series & fundamentals — and a data-quality analyst
 //  Layer 1  the weekday evening refresh, the daily report and follow-up list, the data steward's approval,
 //           the approved backfills (dry run), and the outcome report
 //
@@ -23,7 +23,8 @@ nonisolated extension Jobspace {
         var space = Jobspace()
         space.name = "SRM Daily Securities Master Refresh"
         space.description = "MxDataHUB's daily automation: refresh the reference data and the listed universe, "
-            + "benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions "
+            + "benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions, "
+            + "the VIX family and Treasury yields, and the compute companies' quarterly fundamentals "
             + "(srm.py load all); check data quality, and ask the data steward to approve the report and any backfills."
         space.run.data = .mock
         space.run.stepDelay = 0.3
@@ -118,7 +119,23 @@ nonisolated extension Jobspace {
                              arguments: [Argument("months", "", type: .number)],
                              note: "Dividends, splits, symbol changes and delistings from the FMP calendars.")
 
-        var status = JobNode(kind: .apiRead, title: "SRM status & data quality", x: 3410, y: y3)
+        let vix = loader("cboe-vix", "VIX family (Cboe)", x: 3380, output: "vix",
+                         timeout: 300, onFailure: .retry, retries: 2,
+                         note: "VIX9D, VIX, VIX3M and VIX6M daily open / high / low / close from Cboe's history files "
+                             + "(free, no key) — MxPortMGR's VIX screen.")
+        let yields = loader("fred-yields", "Treasury yields & recessions (FRED)", x: 3610, output: "treasuryYields",
+                            timeout: 600, onFailure: .retry, retries: 2,
+                            note: "Treasury constant-maturity yields 1 month to 30 years and NBER recession months from "
+                                + "FRED (free, no key); the last 60 days after the first load — MxPortMGR's yield curve.")
+        let fundamentals = loader("fmp-fundamentals", "Quarterly fundamentals (FMP)", x: 3840, output: "fundamentals",
+                                  timeout: 900, onFailure: .skip, retries: 1,
+                                  query: [KeyValue("symbols", "{{fundamentalSymbols}}")],
+                                  arguments: [Argument("fundamentalSymbols", "")],
+                                  note: "Revenue, operating cash flow, capex, D&A and free cash flow for the companies in "
+                                      + "srm.fundamental_watch (empty symbols) — the hyperscalers and compute suppliers on "
+                                      + "MxPortMGR's Compute screen. 2 FMP calls a company; the last 8 quarters after the first load.")
+
+        var status = JobNode(kind: .apiRead, title: "SRM status & data quality", x: 4100, y: y3)
         status.api?.subscriptionID = srm.id
         status.api?.path = "/status"
         status.outcome.successStatus = "200"
@@ -150,7 +167,10 @@ nonisolated extension Jobspace {
         let marketAgent = agent(.agentTask, "Market data agent", x: 2805, output: "marketStage",
             instructions: "Load end-of-day prices (FMP, then Nasdaq.com for funds and gaps), index levels and corporate actions. Note symbols without a price "
                 + "for the last trading day and corporate actions that need attention (splits, delistings).")
-        var analyst = agent(.aggregate, "Data quality analyst", x: 3410, output: "srmDaily",
+        let seriesAgent = agent(.agentTask, "Market series & fundamentals agent", x: 3610, output: "seriesStage",
+            instructions: "Load the VIX family, Treasury yields and recession months, and the compute companies' quarterly "
+                + "statements. Note any series not updated to the last trading day, and companies that reported a new quarter.")
+        var analyst = agent(.aggregate, "Data quality analyst", x: 4100, output: "srmDaily",
             instructions: "Combine every stage's load results with the status checks. Produce the daily SRM report "
                 + "and a follow-up list: loaders to re-run, and backfills worth their API budget "
                 + "(e.g. fmp-corporate-actions --history, fmp-profiles --all-securities).")
@@ -190,16 +210,16 @@ nonisolated extension Jobspace {
         report.outcome.description = "Loads, counts, rejects, data-quality checks and the follow-ups run"
 
         let loaders = [reference, nasdaqTrader, secTickers, ssga, nasdaq100, openFIGI, profiles, submissions,
-                       gleif, prices, fundPrices, levels, actions]
+                       gleif, prices, fundPrices, levels, actions, vix, yields, fundamentals]
         space.nodes = [trigger, assemble, approve, backfill, report,
-                       universeAgent, constituentsAgent, enrichmentAgent, marketAgent, analyst]
+                       universeAgent, constituentsAgent, enrichmentAgent, marketAgent, seriesAgent, analyst]
             + loaders + [status]
 
         var pairs: [(JobNode, JobNode)] = [
             (trigger, universeAgent),
             // Stages wait for each other along Layer 2, as srm.py load all orders them.
             (universeAgent, constituentsAgent), (constituentsAgent, enrichmentAgent), (enrichmentAgent, marketAgent),
-            (marketAgent, analyst), (analyst, status), (status, analyst),
+            (marketAgent, seriesAgent), (seriesAgent, analyst), (analyst, status), (status, analyst),
             (analyst, assemble), (assemble, approve), (approve, backfill), (backfill, report),
         ]
         let stages: [(JobNode, [JobNode])] = [
@@ -207,6 +227,7 @@ nonisolated extension Jobspace {
             (constituentsAgent, [ssga, nasdaq100]),
             (enrichmentAgent, [openFIGI, profiles, submissions, gleif]),
             (marketAgent, [prices, fundPrices, levels, actions]),
+            (seriesAgent, [vix, yields, fundamentals]),
         ]
         for (stage, steps) in stages {
             for step in steps { pairs += [(stage, step), (step, stage)] }   // call down, results back up

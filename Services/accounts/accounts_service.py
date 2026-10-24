@@ -34,11 +34,21 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
     GET  /securities/<id>/detail         a security's facts, identifiers, listings, classification, benchmark
                                          membership, corporate actions and a year of prices
     GET  /security-types                 the security types, for the Type filter
-    GET  /fundamentals/quarters?symbol=MSFT&limit=40   a company's quarterly revenue, operating cash flow, capital
-                                         expenditure, depreciation and free cash flow (FMP), newest first
+    GET  /fundamentals/quarters?symbol=MSFT&limit=40&source=   a company's quarterly revenue, operating cash flow, capital
+                                         expenditure, depreciation and free cash flow, newest first: from the security
+                                         master (srm.fundamental_quarter, V015) when srm.py load fmp-fundamentals has
+                                         loaded the company in the last 14 days, else from FMP; source=fmp asks FMP
+    POST /securities/lookup              {tickers: [...]} → the security master's security for each (current U.S.
+                                         listing, OTC included): name, type, MIC, country, market cap
+    GET  /market/series                  the market series in the security master (V015: VIX family, Treasury yields,
+                                         USREC) with their first and last dates
+    GET  /market/series?ids=DGS1MO,DGS10&from=&format=csv   their values as CSV laid out as FRED's fredgraph.csv
+                                         (observation_date, one column per series); format=ohlc with one id: as Cboe's
+                                         history file (DATE,OPEN,HIGH,LOW,CLOSE with MM/DD/YYYY dates)
 
-The earnings and fundamentals endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
-config.local.json), so MxPortMGR's earnings screens get revenue figures with no API key in the sandboxed app.
+The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
+config.local.json), so MxPortMGR's earnings screens get revenue figures with no API key in the sandboxed app; the
+fundamentals endpoint uses the database when it can reach it and falls back to FMP when it can't.
 
     python3 accounts_service.py                  # http://127.0.0.1:8774
     python3 accounts_service.py --srm-dir ../../MxDataHUB/SRM --port 8774
@@ -93,7 +103,9 @@ DESCRIBE = {
         {"method": "POST", "path": "/securities/browse/values", "summary": "A column's distinct values with their counts, for its filter panel"},
         {"method": "GET", "path": "/securities/{id}/detail", "summary": "A security's facts, identifiers, listings, classification, benchmark membership, corporate actions and prices"},
         {"method": "GET", "path": "/security-types", "summary": "The security types"},
-        {"method": "GET", "path": "/fundamentals/quarters", "summary": "One company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow from FMP, newest first"},
+        {"method": "GET", "path": "/fundamentals/quarters", "summary": "One company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow, newest first (security master, else FMP)"},
+        {"method": "POST", "path": "/securities/lookup", "summary": "Securities by ticker: name, type, listing, market cap (Earnings by Day's FMP-only rows)"},
+        {"method": "GET", "path": "/market/series", "summary": "VIX family, Treasury yields and recessions from the security master (CSV as FRED / Cboe lay them out)"},
         {"method": "POST", "path": "/links/query", "summary": "Links on securities' tickers and names, by security id or ticker"},
         {"method": "PUT", "path": "/links/{securityId}/{field}", "summary": "Add or change the link on a ticker or name"},
         {"method": "DELETE", "path": "/links/{securityId}/{field}", "summary": "Take a link off"},
@@ -723,12 +735,61 @@ def earnings_history(q):
                                             "lastUpdated")} for r in rows]}
 
 
+# Kept fundamentals count as current when fmp-fundamentals loaded them this recently (it runs weekly or daily).
+FUNDAMENTALS_FRESH_DAYS = 14
+# After the database can't be reached, the fundamentals endpoint goes straight to FMP for this long.
+_DB_DOWN = {"until": 0.0}
+
+
+def srm_fundamentals(symbol, limit):
+    """The company's kept quarters, newest first, when fmp-fundamentals loaded it recently; else None."""
+    if time.time() < _DB_DOWN["until"]:
+        return None
+    try:
+        conn = Handler.srm.connect()
+    except Exception:
+        _DB_DOWN["until"] = time.time() + 300
+        return None
+    try:
+        if not fetch(conn, "SELECT to_regclass('srm.fundamental_quarter') IS NOT NULL AS ok")[0]["ok"]:
+            return None
+        rows = fetch(conn, """
+            SELECT q.period_end, q.fiscal_year, q.fiscal_period, q.filing_date, q.revenue, q.operating_income,
+                   q.operating_cash_flow, q.capex, q.depreciation, q.free_cash_flow
+              FROM srm.fundamental_quarter q
+             WHERE q.symbol = %s ORDER BY q.period_end DESC LIMIT %s""", (symbol, limit))
+        last = fetch(conn, """
+            SELECT max(r.finished_at) AS at FROM srm.load_run r
+             WHERE r.loader = 'fmp_fundamentals' AND r.status IN ('succeeded', 'partial')
+               AND r.finished_at > now() - make_interval(days => %s)
+               AND EXISTS (SELECT 1 FROM srm.fundamental_quarter q WHERE q.symbol = %s)""",
+                     (FUNDAMENTALS_FRESH_DAYS, symbol))[0]["at"]
+        if not rows or not last:
+            return None
+        return {"source": "security master (FMP statements, srm.py load fmp-fundamentals, %s)" % last.date().isoformat(),
+                "symbol": symbol, "loadedAt": last,
+                "rows": [{"date": r["period_end"], "fiscalYear": r["fiscal_year"], "period": r["fiscal_period"],
+                          "filingDate": r["filing_date"], "revenue": r["revenue"], "operatingIncome": r["operating_income"],
+                          "operatingCashFlow": r["operating_cash_flow"], "capex": r["capex"],
+                          "depreciation": r["depreciation"], "freeCashFlow": r["free_cash_flow"]} for r in rows]}
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
 def fundamentals_quarters(q):
-    """A company's quarterly cash-flow statement and income statement, joined by quarter (capex as a positive amount)."""
+    """A company's quarterly cash-flow statement and income statement, joined by quarter (capex as a positive amount):
+    the security master's copy when it is current, else FMP's."""
     symbol = (q.get("symbol") or "").strip().upper()
     if not SYMBOL.match(symbol):
         raise ValueError("symbol must be a ticker")
     limit = min(max(int(q.get("limit") or 40), 1), 80)
+    if (q.get("source") or "").lower() != "fmp":
+        kept = srm_fundamentals(symbol, limit)
+        if kept:
+            return kept
     fmp_symbol = symbol.replace(".", "-").replace("/", "-")
     # Statements change only when a company reports: a long cache keeps the calls well within the plan's limits.
     cash = fmp("cash-flow-statement", 12 * 3600, symbol=fmp_symbol, period="quarter", limit=limit)
@@ -745,6 +806,63 @@ def fundamentals_quarters(q):
                      "capex": -capex if isinstance(capex, (int, float)) else None,
                      "depreciation": r.get("depreciationAndAmortization"), "freeCashFlow": r.get("freeCashFlow")})
     return {"source": "FMP cash-flow and income statements", "symbol": symbol, "rows": rows}
+
+
+# --- Securities by ticker (Earnings by Day's FMP-only rows) ------------------------------------------------------
+
+def lookup_tickers(conn, body):
+    """The security master's security for each ticker (its current U.S. listing, OTC included): name, type, listing
+    and latest market cap — for the companies Nasdaq.com's earnings calendar doesn't list."""
+    tickers = sorted({str(t).strip().upper() for t in body.get("tickers") or [] if str(t).strip()})[:3000]
+    if not tickers:
+        return {"securities": {}}
+    rows = fetch(conn, """
+        SELECT t.ticker, v.security_id, v.name, v.security_type, v.mic, v.country_code,
+               (SELECT md.market_cap FROM srm.security_market_data md WHERE md.security_id = v.security_id
+                  AND md.market_cap IS NOT NULL ORDER BY md.as_of_date DESC LIMIT 1) AS market_cap
+          FROM (SELECT t AS ticker, srm.us_security(t) AS security_id FROM unnest(%s::text[]) t) t
+          JOIN srm.v_security v USING (security_id)""", (tickers,))
+    return {"securities": {r["ticker"]: {"securityId": r["security_id"], "name": r["name"],
+                                         "securityType": r["security_type"], "mic": r["mic"],
+                                         "country": r["country_code"], "marketCap": r["market_cap"]} for r in rows}}
+
+
+# --- Market series (srm.market_series, V015) -------------------------------------------------------------------------
+
+def market_series(conn, q):
+    """The series list (no ids), or their values as CSV: FRED's layout (format=csv) or Cboe's (format=ohlc, one id)."""
+    if not fetch(conn, "SELECT to_regclass('srm.market_series_value') IS NOT NULL AS ok")[0]["ok"]:
+        raise LookupError("the security master has no market series yet: run srm.py migrate (V015)")
+    ids = [i for i in re.split(r"[,\s]+", (q.get("ids") or "").upper()) if i]
+    if not ids:
+        return {"series": fetch(conn, """SELECT series_code AS code, name, family, frequency, unit, source, observations,
+                                                first_date AS "firstDate", last_date AS "lastDate", last_value AS "lastValue"
+                                           FROM srm.v_market_series_summary ORDER BY sort_order""")}
+    known = {r["series_code"] for r in fetch(conn, "SELECT series_code FROM srm.market_series WHERE series_code = ANY(%s)", (ids,))}
+    unknown = [i for i in ids if i not in known]
+    if unknown:
+        raise LookupError("no such series: " + ", ".join(unknown))
+    start = parse_day(q["from"], "from") if q.get("from") else dt.date(1800, 1, 1)
+    fmt = (q.get("format") or "csv").lower()
+    if fmt == "ohlc":
+        if len(ids) != 1:
+            raise ValueError("format=ohlc takes one series")
+        out = ["DATE,OPEN,HIGH,LOW,CLOSE"]
+        for r in fetch(conn, """SELECT obs_date, open, high, low, value FROM srm.market_series_value
+                                 WHERE series_code = %s AND obs_date >= %s ORDER BY obs_date""", (ids[0], start)):
+            c = r["value"]
+            out.append("%s,%s,%s,%s,%s" % (r["obs_date"].strftime("%m/%d/%Y"), r["open"] or c, r["high"] or c, r["low"] or c, c))
+        return "\n".join(out) + "\n"
+    if fmt != "csv":
+        raise ValueError("format must be csv or ohlc")
+    values = {}
+    for r in fetch(conn, """SELECT series_code, obs_date, value FROM srm.market_series_value
+                             WHERE series_code = ANY(%s) AND obs_date >= %s""", (ids, start)):
+        values.setdefault(r["obs_date"], {})[r["series_code"]] = r["value"]
+    out = ["observation_date," + ",".join(ids)]
+    for day in sorted(values):
+        out.append(day.isoformat() + "," + ",".join("%g" % values[day][i] if i in values[day] else "" for i in ids))
+    return "\n".join(out) + "\n"
 
 
 # --- Links on tickers and names (srm.security_link, V014) ---------------------------------------------------------
@@ -890,6 +1008,12 @@ class Handler(BaseHTTPRequestHandler):
                     out = account(conn, parts[1])
                 elif len(parts) == 2 and parts[0] == "accounts" and method == "PUT":
                     out = save_account(conn, parts[1], body)
+                elif parts == ["market", "series"] and method == "GET":
+                    out = market_series(conn, q)
+                    if isinstance(out, str):
+                        return self.send_text(200, out, "text/csv; charset=utf-8")
+                elif parts == ["securities", "lookup"] and method == "POST":
+                    out = lookup_tickers(conn, body)
                 elif parts == ["links", "query"] and method == "POST":
                     out = query_links(conn, body)
                 elif len(parts) == 3 and parts[0] == "links" and method == "PUT":
@@ -931,6 +1055,14 @@ class Handler(BaseHTTPRequestHandler):
         data = json.dumps(payload, indent=indent, default=json_default).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_text(self, status, text, content_type):
+        data = text.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)

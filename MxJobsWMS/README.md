@@ -178,7 +178,7 @@ portfolio in MxDataHUB.
 
 | Sample | File | Layer 3 chain | Decision |
 | ------ | ---- | ------------- | -------- |
-| **SRM Daily Refresh** (data) | `Samples/SRMDailyRefresh.jobspace` | srm-loader: 13 loaders (FMP and Nasdaq.com prices), status / quality | data steward approves report and backfills |
+| **SRM Daily Refresh** (data) | `Samples/SRMDailyRefresh.jobspace` | srm-loader: 16 loaders (FMP and Nasdaq.com prices; VIX, Treasury yields, quarterly fundamentals), status / quality | data steward approves report and backfills |
 | **Active Portfolio Optimization** | `Samples/ActivePortfolioOptimization.jobspace` | analytics inputs + momentum alpha (Python) → active optimizer at 3% tracking error, ±3% per name, ±5% per sector (Java) → risk check (C++) | rebalance / rebalance partially / hold → PM approval → orders (dry run) |
 | **Passive Index Tracking** | `Samples/PassiveIndexTracking.jobspace` | analytics covariance (Python) → 100-name stratified tracker and full replication (C++) | rebalance when drift exceeds the 1% budget → index PM approval → trades |
 | **Performance & Risk Attribution** | `Samples/PerformanceAttribution.jobspace` | Brinson-Fachler by sector, monthly, Carino-linked (Python); ex-ante active risk by sector (C++) | commentary → review → publish (dry run) |
@@ -191,12 +191,13 @@ Each step's notes say why it runs on its layer and in its language. Portfolio sa
 
 MxDataHUB's daily automation (`MxDataHUB/SRM/srm.py load all`, then `srm.py status`) as a jobspace:
 
-- **Layer 3**: the 13 SRM loaders as API Data Read steps (`POST /load/<loader>` on the **SRM loader service**,
+- **Layer 3**: the 16 SRM loaders as API Data Read steps (`POST /load/<loader>` on the **SRM loader service**,
   127.0.0.1:8770), left to right in srm.py's dependency order, and **SRM status & data quality** (`GET /status`).
   Each loader expects `status != failed`; its exception handling follows the source (retries for the free reference
   files, skip for optional enrichment, ask the user for constituents and prices). The status step expects
   `summary.failed == 0` and asks the data steward otherwise.
-- **Layer 2**: Universe → Benchmark constituents → Identifier enrichment → Market data agents, chained so each stage
+- **Layer 2**: Universe → Benchmark constituents → Identifier enrichment → Market data → Market series &
+  fundamentals agents (the last runs `cboe-vix`, `fred-yields` and `fmp-fundamentals`), chained so each stage
   waits for the one before, each calling its loaders; the **Data quality analyst** combines their results with the
   status checks into the daily report and follow-up list.
 - **Layer 1**: weekday 18:30 New York trigger, the report and follow-ups, **Data steward approval**, **Run approved

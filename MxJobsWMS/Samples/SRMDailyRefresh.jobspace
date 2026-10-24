@@ -1,5 +1,5 @@
 {
-  "description" : "MxDataHUB's daily automation: refresh the reference data and the listed universe, benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions (srm.py load all); check data quality, and ask the data steward to approve the report and any backfills.",
+  "description" : "MxDataHUB's daily automation: refresh the reference data and the listed universe, benchmark constituents, identifiers and issuer data, then prices, index levels and corporate actions, the VIX family and Treasury yields, and the compute companies' quarterly fundamentals (srm.py load all); check data quality, and ask the data steward to approve the report and any backfills.",
   "format" : "mxjobspace",
   "formatVersion" : 1,
   "links" : [
@@ -26,12 +26,6 @@
       "id" : "747E4F09-AC21-4662-93D8-FEE70DAD29E8",
       "label" : "",
       "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
-    },
-    {
-      "from" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
-      "id" : "DD28B4A8-8347-4148-9FAA-D68DB8734E87",
-      "label" : "",
-      "to" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511"
     },
     {
       "from" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511",
@@ -224,6 +218,54 @@
       "id" : "C39BC0B2-4169-435F-B904-9A2FFAFABA80",
       "label" : "",
       "to" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94"
+    },
+    {
+      "from" : "E0BDD355-624B-4D78-9CDA-E1B7D22A1F94",
+      "id" : "7ADAE58C-2B14-467C-9BC9-624D8D37AE69",
+      "label" : "",
+      "to" : "EBF81965-7869-43EC-8941-D9572C4FB726"
+    },
+    {
+      "from" : "EBF81965-7869-43EC-8941-D9572C4FB726",
+      "id" : "56408CFE-79F5-4BE6-A979-0D787DA82992",
+      "label" : "",
+      "to" : "134BE6D4-AA01-48A6-B9D8-671BFA1BD511"
+    },
+    {
+      "from" : "EBF81965-7869-43EC-8941-D9572C4FB726",
+      "id" : "E23F25FC-EF99-4FC0-A7DE-89E6FA90BD92",
+      "label" : "",
+      "to" : "626AB093-17DF-4E3C-B63E-CDBABD849FA0"
+    },
+    {
+      "from" : "626AB093-17DF-4E3C-B63E-CDBABD849FA0",
+      "id" : "91AD33FA-BD49-4BC4-96E2-DA7EC3F2A7AF",
+      "label" : "",
+      "to" : "EBF81965-7869-43EC-8941-D9572C4FB726"
+    },
+    {
+      "from" : "EBF81965-7869-43EC-8941-D9572C4FB726",
+      "id" : "A4E7F293-2678-4A6A-9E5C-40CBA4B96EB0",
+      "label" : "",
+      "to" : "A0BE00F0-795C-405F-B56A-A7412AF5615B"
+    },
+    {
+      "from" : "A0BE00F0-795C-405F-B56A-A7412AF5615B",
+      "id" : "875DB680-2462-4A1E-9965-5967A7D19EA1",
+      "label" : "",
+      "to" : "EBF81965-7869-43EC-8941-D9572C4FB726"
+    },
+    {
+      "from" : "EBF81965-7869-43EC-8941-D9572C4FB726",
+      "id" : "5B640E35-CDC7-400A-A690-4D4C3084519C",
+      "label" : "",
+      "to" : "D8A9F956-660C-47EC-A09A-DEC8628625D0"
+    },
+    {
+      "from" : "D8A9F956-660C-47EC-A09A-DEC8628625D0",
+      "id" : "75D4A071-7D7A-45CE-A228-7D0375037228",
+      "label" : "",
+      "to" : "EBF81965-7869-43EC-8941-D9572C4FB726"
     }
   ],
   "name" : "SRM Daily Securities Master Refresh",
@@ -593,6 +635,47 @@
         "inputs" : [
 
         ],
+        "instructions" : "Load the VIX family, Treasury yields and recession months, and the compute companies' quarterly statements. Note any series not updated to the last trading day, and companies that reported a new quarter.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "EBF81965-7869-43EC-8941-D9572C4FB726",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "seriesStage",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Market series & fundamentals agent",
+      "x" : 3610,
+      "y" : 360
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
         "instructions" : "Combine every stage's load results with the status checks. Produce the daily SRM report and a follow-up list: loaders to re-run, and backfills worth their API budget (e.g. fmp-corporate-actions --history, fmp-profiles --all-securities).",
         "model" : "",
         "outputFormat" : "{report, failedLoads, warnings, followUps: [{loader, options, reason, apiCalls}]}"
@@ -626,7 +709,7 @@
         "successStatus" : "200-299"
       },
       "title" : "Data quality analyst",
-      "x" : 3410,
+      "x" : 4100,
       "y" : 360
     },
     {
@@ -1338,6 +1421,169 @@
         "headers" : [
 
         ],
+        "method" : "POST",
+        "path" : "/load/cboe-vix",
+        "query" : [
+
+        ],
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 300
+      },
+      "id" : "626AB093-17DF-4E3C-B63E-CDBABD849FA0",
+      "kind" : "apiRead",
+      "notes" : "VIX9D, VIX, VIX3M and VIX6M daily open / high / low / close from Cboe's history files (free, no key) — MxPortMGR's VIX screen.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "99F5CBE7-A225-4AB5-B858-E5C64716A8FD",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "vix",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "VIX family (Cboe)",
+      "x" : 3380,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/fred-yields",
+        "query" : [
+
+        ],
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 600
+      },
+      "id" : "A0BE00F0-795C-405F-B56A-A7412AF5615B",
+      "kind" : "apiRead",
+      "notes" : "Treasury constant-maturity yields 1 month to 30 years and NBER recession months from FRED (free, no key); the last 60 days after the first load — MxPortMGR's yield curve.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "96AB7D55-3608-4499-8C66-77647E876E77",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "treasuryYields",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Treasury yields & recessions (FRED)",
+      "x" : 3610,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/load/fmp-fundamentals",
+        "query" : [
+          {
+            "id" : "C9C83D08-5AB9-42DA-9BE7-926697205895",
+            "key" : "symbols",
+            "value" : "{{fundamentalSymbols}}"
+          }
+        ],
+        "subscriptionID" : "EBE303AA-8970-4104-BC9E-3F1B49130E52"
+      },
+      "arguments" : [
+        {
+          "id" : "7C270FD2-CBAF-4439-8AE9-CFCC878A2978",
+          "name" : "fundamentalSymbols",
+          "required" : false,
+          "type" : "text",
+          "value" : ""
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 1,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 60,
+        "timeoutSeconds" : 900
+      },
+      "id" : "D8A9F956-660C-47EC-A09A-DEC8628625D0",
+      "kind" : "apiRead",
+      "notes" : "Revenue, operating cash flow, capex, D&A and free cash flow for the companies in srm.fundamental_watch (empty symbols) — the hyperscalers and compute suppliers on MxPortMGR's Compute screen. 2 FMP calls a company; the last 8 quarters after the first load.",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "4974E291-3F50-4742-879B-9B2F36B1898B",
+            "op" : "!=",
+            "path" : "status",
+            "value" : "failed"
+          }
+        ],
+        "description" : "srm.load_run rows of this load: succeeded or partial (dry-run when dry running)",
+        "outputName" : "fundamentals",
+        "requiredFields" : [
+          "status",
+          "loader"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Quarterly fundamentals (FMP)",
+      "x" : 3840,
+      "y" : 600
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
         "method" : "GET",
         "path" : "/status",
         "query" : [
@@ -1382,7 +1628,7 @@
         "successStatus" : "200"
       },
       "title" : "SRM status & data quality",
-      "x" : 3410,
+      "x" : 4100,
       "y" : 600
     }
   ],
@@ -1396,29 +1642,34 @@
   },
   "subscriptions" : [
     {
-      "auth" : "localService",
-      "baseURL" : "http://127.0.0.1:8770",
+      "auth" : "queryParameter",
+      "baseURL" : "https://api.openfigi.com",
       "defaultHeaders" : [
         {
           "id" : "05F6018A-606F-4776-94B5-3C31498C384B",
           "key" : "X-SRM-Dry-Run",
           "value" : "1"
+        },
+        {
+          "id" : "D980AB11-E7FE-4C4A-9529-6996179CFAAE",
+          "key" : "",
+          "value" : ""
         }
       ],
       "docsURL" : "",
       "id" : "EBE303AA-8970-4104-BC9E-3F1B49130E52",
       "ide" : "vscode",
-      "keyName" : "",
-      "name" : "SRM loader service",
+      "keyName" : "X-OPENFIGI-APIKEY",
+      "name" : "Open FIGI",
       "notes" : "Start it with: python3 Services/mxservices.py start (needs psycopg2, like srm.py). X-SRM-Dry-Run: 1 makes every load report its srm.py command without running it — remove the header to load for real. Database and API keys come from srm.py's own configuration.",
-      "plan" : "",
+      "plan" : "Free",
       "projectFolder" : "~/MyCodeGIT/MxAppsIOS/MxDataHUB/SRM",
-      "provider" : "MxDataHUB/SRM (srm.py) on this Mac",
-      "rateLimitPerMinute" : 0
+      "provider" : "https://api.openfigi.com/v3",
+      "rateLimitPerMinute" : 9
     },
     {
       "auth" : "header",
-      "baseURL" : "https://financialmodelingprep.com/stable/search-name?query=",
+      "baseURL" : "https://financialmodelingprep.com/stable",
       "defaultHeaders" : [
 
       ],

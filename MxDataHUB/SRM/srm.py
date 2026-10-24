@@ -7,9 +7,17 @@
     ./srm.py load <name> [options]   one loader (see LOADERS)
     ./srm.py load mutual-funds --symbols VTIFX ... | --search "fund name"
                                      add mutual funds from Nasdaq.com and load their prices
+    ./srm.py load vanguard-funds [--symbols VFIAX ...] [--since DATE] [--history]
+                                     every Vanguard mutual fund and its daily NAV (history from Nasdaq.com)
     ./srm.py load trust-navs [--file F] collective trusts: statement NAVs + proxy-fund pricing (trusts.local.json)
     ./srm.py load portfolio-snapshots [--as-of DATE] [--portfolios CODE ...]
                                      carry portfolios' latest holdings forward (weight history)
+    ./srm.py load earnings-symbols [--since DATE] [--symbols TLSNF ...]
+                                     securities for FMP earnings-calendar symbols the master lacks (FMP profile, OpenFIGI)
+    ./srm.py load cboe-vix | fred-yields [--since DATE] [--force]
+                                     market series: the VIX family (Cboe), Treasury yields and recessions (FRED)
+    ./srm.py load fmp-fundamentals [--symbols MSFT ...] [--force]
+                                     quarterly statements for srm.fundamental_watch (MxPortMGR's Compute screen)
 
 Connection: --host/--port/--user/--dbname, or SRM_PG* environment variables, or
 config.local.json; defaults postgres@192.168.0.223:5432/srm. Secrets: see srmlib/common.py.
@@ -26,8 +34,8 @@ import traceback
 
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
-from srmlib.loaders import (fmp, gleif, mutual_funds, nasdaq100, nasdaq_prices, nasdaqtrader, openfigi, portfolios,
-                             reference, sec, ssga, trust_navs)
+from srmlib.loaders import (earnings_symbols, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
+                             nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, sec, ssga, trust_navs, vanguard)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
 # per-security enrichment that works on the benchmark / portfolio securities.
@@ -37,20 +45,26 @@ LOADERS = {
     "sec-tickers": sec.load_tickers,            # CIKs -> issuers
     "ssga": ssga.run,                           # S&P 500 / 400 / 600 and Dow weights, CUSIP, SEDOL
     "nasdaq100": nasdaq100.run,                 # Nasdaq-100 members
+    "earnings-symbols": earnings_symbols.run,   # companies in FMP's earnings calendar not yet here (OTC, ADRs, preferreds)
+    "earnings-symbols-cleanup": earnings_symbols_cleanup.run,   # one-off fix of 2026-10-23's loads (report only unless --force)
     "openfigi": openfigi.run,                   # composite / share-class / exchange FIGIs
     "fmp-profiles": fmp.load_profiles,          # ISIN, CUSIP, sector, industry, market cap
     "sec-submissions": sec.load_submissions,    # SIC, incorporation, EIN, former names
     "gleif": gleif.run,                         # LEIs and legal entity data
     "fmp-prices": fmp.load_prices,              # end-of-day prices
     "nasdaq-prices": nasdaq_prices.run,         # fund prices (ETFs, ETNs, closed-end and mutual funds) and gaps, no key
+    "vanguard-funds": vanguard.run,             # every Vanguard mutual fund (Vanguard's list), daily NAV; history from Nasdaq.com
     "trust-navs": trust_navs.run,               # collective trusts: statement NAVs carried by a proxy fund's returns
     "mutual-funds": mutual_funds.run,           # add mutual funds from Nasdaq.com (--symbols / --search), with prices
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
     "fmp-corporate-actions": fmp.load_corporate_actions,
+    "cboe-vix": market_series.load_cboe,        # VIX, VIX9D, VIX3M, VIX6M daily OHLC (Cboe, no key)
+    "fred-yields": market_series.load_fred,     # Treasury constant-maturity yields, NBER recessions (FRED, no key)
+    "fmp-fundamentals": fundamentals.run,       # quarterly revenue, cash flow, capex, D&A (srm.fundamental_watch)
     "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
 }
 # Not run by `load all`: name them to run them.
-OPTIONAL = {"portfolio-snapshots", "mutual-funds"}
+OPTIONAL = {"portfolio-snapshots", "mutual-funds", "earnings-symbols-cleanup"}
 
 
 def status(conn):
@@ -73,6 +87,17 @@ def status(conn):
         cur.execute("SELECT code, as_of_date, members, round(weight_sum, 6), last_level_date, constituent_source FROM srm.v_benchmark_summary ORDER BY code")
         for r in cur.fetchall():
             print(f"  {r[0]:8s} {r[1]}  {r[2]:>4} members  weight {r[3]}  levels to {r[4]}  ({r[5]})")
+        cur.execute("SELECT to_regclass('srm.v_market_series_summary') IS NOT NULL")
+        if cur.fetchone()[0]:
+            print("\nMarket series:")
+            cur.execute("""SELECT series_code, source, observations, first_date, last_date, last_value
+                             FROM srm.v_market_series_summary ORDER BY sort_order""")
+            for r in cur.fetchall():
+                print(f"  {r[0]:7s} {r[1]:5s} {r[2]:>7,} values  {str(r[3] or ''):10} to {str(r[4] or ''):10}  last {r[5] if r[5] is not None else '—'}")
+            cur.execute("""SELECT count(DISTINCT symbol), count(*), max(period_end), max(updated_at)::date
+                             FROM srm.fundamental_quarter""")
+            r = cur.fetchone()
+            print(f"\nCompany fundamentals: {r[0]} companies, {r[1]:,} quarters, latest quarter {r[2]}, updated {r[3]}")
         print("\nRecent loads:")
         cur.execute("""SELECT load_id, source, loader, status, rows_read, rows_inserted, rows_updated, rows_rejected,
                               api_calls, to_char(started_at, 'MM-DD HH24:MI'), duration
@@ -96,10 +121,11 @@ def main():
     load.add_argument("-v", "--verbose", dest="load_verbose", action="count", default=0, help=verbose_help)
     load.add_argument("--max", type=int, help="at most this many API calls / securities (per-symbol loaders)")
     load.add_argument("--force", action="store_true", help="refresh even recently loaded rows")
-    load.add_argument("--since", help="prices / index levels from this date (default: 2 years)")
+    load.add_argument("--since", help="prices / index levels / market series from this date (default: 2 years; series: incremental)")
     load.add_argument("--months", type=int, help="corporate actions: months of history (default 24)")
     load.add_argument("--history", action="store_true",
-                      help="fmp-corporate-actions: also each security's full dividend / split history (2 calls per symbol)")
+                      help="fmp-corporate-actions: also each security's full dividend / split history (2 calls per symbol); "
+                           "vanguard-funds: ask Nasdaq.com for every fund's NAV history, not only new funds and gaps")
     load.add_argument("--symbols", nargs="*", help="FMP loaders: only these symbols / identifiers")
     load.add_argument("--all-securities", action="store_true",
                       help="FMP loaders: every active security instead of benchmark / portfolio members (~13k calls)")

@@ -96,7 +96,7 @@ nonisolated enum ServiceCatalog {
     static let all: [ServiceInfo] = [
         ServiceInfo(
             id: "srm-loader", name: "Security master loaders", language: "Python", port: 8770,
-            purpose: "Refreshes the security master (MxDataHUB/SRM) by category — reference data, the listed universe and issuers, benchmark constituents, identifiers, prices and index levels, corporate actions — by running srm.py's loaders one at a time, and reports data freshness and quality.",
+            purpose: "Refreshes the security master (MxDataHUB/SRM) by category — reference data, the listed universe and issuers, benchmark constituents, identifiers, prices and index levels, corporate actions, market series (VIX, Treasury yields) and company fundamentals — by running srm.py's loaders one at a time, and reports data freshness and quality.",
             whyThisLanguage: "Loading is I/O: downloading files and API pages, parsing CSV / XML / JSON, upserting into PostgreSQL. Python does that with the least code, and the loaders are the same scripts you run from the command line.",
             useCases: ["data-refresh", "data-quality"],
             endpoints: [

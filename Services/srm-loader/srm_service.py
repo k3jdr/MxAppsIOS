@@ -49,7 +49,8 @@ DESCRIBE = {
     "language": "Python",
     "port": 8770,
     "purpose": "Refreshes the security master (MxDataHUB/SRM) by category — reference data, the listed universe and "
-               "issuers, benchmark constituents, identifiers, prices and index levels, corporate actions — by running "
+               "issuers, benchmark constituents, identifiers, prices and index levels, corporate actions, market "
+               "series (VIX, Treasury yields) and company fundamentals — by running "
                "srm.py's loaders one at a time, and reports data freshness and quality.",
     "whyThisLanguage": "Loading is I/O: downloading files and API pages, parsing CSV / XML / JSON, upserting into "
                        "PostgreSQL. Python does that with the least code, and the loaders are the same scripts you run "
@@ -70,8 +71,13 @@ DESCRIBE = {
 CATEGORIES = [
     {"id": "reference", "name": "Reference data", "loaders": ["reference"],
      "description": "Market identifier codes (ISO 10383) and currencies (ISO 4217).", "cadence": "monthly"},
-    {"id": "universe", "name": "Listed universe & issuers", "loaders": ["nasdaqtrader", "sec-tickers"],
-     "description": "US listed securities, listings and tickers; issuers with CIKs.", "cadence": "daily"},
+    {"id": "universe", "name": "Listed universe & issuers", "loaders": ["nasdaqtrader", "sec-tickers", "earnings-symbols"],
+     "description": "US listed securities, listings and tickers; issuers with CIKs; and the companies in FMP's earnings "
+                    "calendar not listed there — OTC shares of foreign companies, ADRs, preferreds — from their FMP "
+                    "profiles, with FIGIs from OpenFIGI.",
+     "cadence": "daily",
+     # Needs an FMP key; without it the rest of the refresh still runs.
+     "continueAfterFailure": ["earnings-symbols"]},
     {"id": "constituents", "name": "Benchmark constituents", "loaders": ["ssga", "nasdaq100"],
      "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members.", "cadence": "daily",
      # State Street publishes a day's holdings the next business morning, so the newest SPDR file is dated a business
@@ -79,15 +85,29 @@ CATEGORIES = [
      "dataLagDays": 1},
     {"id": "identifiers", "name": "Identifiers & issuer data", "loaders": ["openfigi", "fmp-profiles", "sec-submissions", "gleif"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
-    {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "nasdaq-prices", "trust-navs", "fmp-index-levels"],
+    {"id": "prices", "name": "Prices & index levels", "loaders": ["fmp-prices", "nasdaq-prices", "vanguard-funds", "trust-navs", "fmp-index-levels"],
      "description": "End-of-day prices (FMP for benchmark and portfolio members; Nasdaq.com, free and keyless, for the "
-                    "stock, bond and mutual funds held and any security FMP left without a recent price), collective "
-                    "trusts from statement NAVs and their proxy funds, and benchmark levels.",
+                    "stock, bond and mutual funds held and any security FMP left without a recent price), every "
+                    "Vanguard mutual fund with its daily NAV (Vanguard's product list; history from Nasdaq.com), "
+                    "collective trusts from statement NAVs and their proxy funds, and benchmark levels.",
      "cadence": "daily",
      # FMP needs an API key; when it fails, nasdaq-prices still runs and fills the gaps.
-     "continueAfterFailure": ["fmp-prices"]},
+     # The Vanguard list is one more source of NAVs: when it fails, the trusts and index levels still load.
+     "continueAfterFailure": ["fmp-prices", "vanguard-funds"]},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
+    {"id": "market-series", "name": "Market series: VIX & Treasury yields", "loaders": ["cboe-vix", "fred-yields"],
+     "description": "The VIX family (VIX9D, VIX, VIX3M, VIX6M daily OHLC from Cboe) and Treasury constant-maturity "
+                    "yields 1 month to 30 years with NBER recession months (FRED) — free, no key. MxPortMGR's VIX "
+                    "and Yield Curve screens read them.",
+     "cadence": "daily",
+     # FRED posts a day's Treasury yields the next business day.
+     "dataLagDays": 1},
+    {"id": "fundamentals", "name": "Company fundamentals", "loaders": ["fmp-fundamentals"],
+     "description": "Quarterly revenue, operating cash flow, capex, depreciation and free cash flow (FMP statements) "
+                    "for the companies in srm.fundamental_watch — the hyperscalers and compute suppliers on MxPortMGR's "
+                    "Compute screen.",
+     "cadence": "weekly"},
     {"id": "portfolio-snapshots", "name": "Portfolio snapshots", "loaders": ["portfolio-snapshots"], "optional": True,
      "description": "Optional: carries each portfolio's latest holdings forward to the latest price date (weights "
                     "drifted by returns), so attribution has weight history. Not part of Refresh All.",
@@ -101,6 +121,8 @@ RUN_NAMES = {
     "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "nasdaq-prices": ["nasdaq_prices"],
     "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "mutual-funds": ["mutual_funds"],
     "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
+    "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
+    "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],
 }
 DEFAULT_SRM_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 "..", "..", "MxDataHUB", "SRM"))
@@ -229,6 +251,12 @@ class SRM:
                 if table_exists(cur, "srm.v_snapshot_coverage"):
                     cur.execute("SELECT min(last_date) FROM srm.v_snapshot_coverage WHERE kind = 'portfolio'")
                     portfolio_min = cur.fetchone()[0]
+                series_min = None
+                if table_exists(cur, "srm.v_market_series_summary"):
+                    # The series furthest behind decides (every active daily series has a value that day).
+                    cur.execute("""SELECT CASE WHEN bool_and(last_date IS NOT NULL) THEN min(last_date) END
+                                     FROM srm.v_market_series_summary WHERE frequency = 'daily'""")
+                    series_min = cur.fetchone()[0]
         finally:
             conn.close()
         limits = {"daily": (1, 3), "weekly": (7, 14), "monthly": (31, 62)}
@@ -244,7 +272,7 @@ class SRM:
             ran = [l["lastRun"] for l in loaders if l["lastRun"]]
             last_run = min(ran) if len(ran) == len(loaders) else None     # the oldest loader decides
             data_date = {"prices": price_date, "constituents": bench_min,
-                         "portfolio-snapshots": portfolio_min}.get(cat["id"])
+                         "portfolio-snapshots": portfolio_min, "market-series": series_min}.get(cat["id"])
             basis = data_date or (last_run.date() if last_run else None)
             ok, due = limits[cat["cadence"]]
             age = business_days_between(basis, today) if cat["cadence"] == "daily" and basis else ((today - basis).days if basis else None)
@@ -300,6 +328,20 @@ class SRM:
                 last_price = cur.fetchone()[0]
                 cur.execute("SELECT count(DISTINCT listing_id) FROM srm.price WHERE price_date = %s", (last_price,))
                 out["prices"] = {"lastDate": last_price, "listingsOnLastDate": cur.fetchone()[0]}
+                # Market series and company fundamentals (V015).
+                out["marketSeries"] = out["fundamentals"] = None
+                if table_exists(cur, "srm.v_market_series_summary"):
+                    cur.execute("""SELECT series_code, family, frequency, source, observations, first_date, last_date,
+                                          last_value FROM srm.v_market_series_summary ORDER BY sort_order""")
+                    out["marketSeries"] = rows(cur)
+                    cur.execute("""SELECT count(DISTINCT q.symbol) AS companies, count(*) AS quarters,
+                                          max(q.period_end) AS latest_quarter, max(q.updated_at) AS updated_at,
+                                          (SELECT count(*) FROM srm.fundamental_watch w WHERE w.is_active) AS watched,
+                                          (SELECT array_agg(w.symbol ORDER BY w.sort_order) FROM srm.fundamental_watch w
+                                            WHERE w.is_active AND NOT EXISTS (SELECT 1 FROM srm.fundamental_quarter f
+                                                                              WHERE f.symbol = w.symbol)) AS missing
+                                     FROM srm.fundamental_quarter q""")
+                    out["fundamentals"] = rows(cur)[0]
                 cur.execute("""SELECT load_id, loader, status, rows_read, rows_rejected, api_calls, started_at
                                  FROM srm.v_load_history ORDER BY load_id DESC LIMIT 15""")
                 out["recentLoads"] = rows(cur)
@@ -369,6 +411,18 @@ def quality_checks(status, stale_days):
                             for h in history if h["snapshots"] >= 2)
         add("snapshot history", not thin and not gaps,
             "; ".join(thin + gaps + ([covered] if covered else [])) or "no benchmarks or portfolios", warn_only=True)
+    series = status.get("marketSeries")
+    if series is not None:
+        # Daily series only; warn-only, so a missing first load doesn't fail the refresh's approval.
+        late = ["%s %s" % (s["series_code"], s["last_date"] or "never loaded") for s in series
+                if s["frequency"] == "daily" and (not s["last_date"] or business_days_between(s["last_date"], today) > stale_days + 1)]
+        add("market series fresh (VIX, Treasury yields)", not late,
+            "behind: " + ", ".join(late) if late else "%d daily series up to date" % sum(1 for s in series if s["frequency"] == "daily"),
+            warn_only=True)
+        f = status.get("fundamentals") or {}
+        add("company fundamentals loaded", not f.get("missing"),
+            "no quarters for %s" % ", ".join(f["missing"]) if f.get("missing")
+            else "%s companies, latest quarter %s" % (f.get("companies"), f.get("latest_quarter")), warn_only=True)
     failed = [r for r in status["recentLoads"][:12] if r["status"] == "failed"]
     add("no failed loads among the last 12", not failed,
         ", ".join("%s #%s" % (r["loader"], r["load_id"]) for r in failed) or "none")
