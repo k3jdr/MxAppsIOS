@@ -270,9 +270,11 @@ class SRM:
                     portfolio_min = cur.fetchone()[0]
                 series_min = None
                 if table_exists(cur, "srm.v_market_series_summary"):
-                    # The series furthest behind decides (every active daily series has a value that day).
+                    # The series furthest behind decides (every active daily series has a value that day). The FX rates
+                    # (DEXUSUK, DEXCAUS) are left out: FRED posts them weekly, about a week behind, so they would mark
+                    # the VIX and yields stale every week while they are current.
                     cur.execute("""SELECT CASE WHEN bool_and(last_date IS NOT NULL) THEN min(last_date) END
-                                     FROM srm.v_market_series_summary WHERE frequency = 'daily'""")
+                                     FROM srm.v_market_series_summary WHERE frequency = 'daily' AND family <> 'FX'""")
                     series_min = cur.fetchone()[0]
                 bonds_date = None
                 if table_exists(cur, "srm.bond_terms"):
