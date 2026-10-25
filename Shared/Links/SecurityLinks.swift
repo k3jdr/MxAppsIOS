@@ -1,8 +1,8 @@
 //
 //  SecurityLinks.swift
-//  Shared by MxPortMGR and MxDataHUB (MxAppsIOS/Shared/Links)
+//  Shared by MxAcctMGR and MxDataHUB (MxAppsIOS/Shared/Links)
 //
-//  Links on a security's ticker and name in the apps' tables (MxDataHUB: Securities, Portfolios ▸ Holdings; MxPortMGR:
+//  Links on a security's ticker and name in the apps' tables (MxDataHUB: Securities, Portfolios ▸ Holdings; MxAcctMGR:
 //  My Holdings, Earnings by Day), made and shown as MxNoteONE makes and shows links: ⌘K (Edit ▸ Link…, or a row's
 //  context menu) opens the Link dialog — text to display, address, and formatted hover text that can hold links of its
 //  own, with a preview of the hover card — and resting the pointer on a linked ticker or name shows the hover card
@@ -11,7 +11,7 @@
 //  (Nasdaq.com, SEC EDGAR, Yahoo Finance) and a link copied in MxNoteONE.
 //
 //  A link belongs to the security and the column, not to a table or an app: it is kept in the security master
-//  (srm.security_link, migration V014), through the app's backend — MxDataHUB's own database connection, MxPortMGR's
+//  (srm.security_link, migration V014), through the app's backend — MxDataHUB's own database connection, MxAcctMGR's
 //  accounts service — so it shows wherever the security is listed. Securities the security master doesn't have (the
 //  illustrative market's made-up ones, a ticker it doesn't list) keep their links on this Mac; so does a link saved
 //  while the security master can't be reached, until it can.
@@ -47,7 +47,7 @@ struct LinkTarget: Hashable, Identifiable {
     var id: String { security + "|" + field.rawValue }
     var cellText: String { field == .symbol ? symbol : name }
     var column: String { columns[field == .symbol ? 0 : 1] }
-    /// A made-up security of MxPortMGR's illustrative market: its links stay on this Mac.
+    /// A made-up security of MxAcctMGR's illustrative market: its links stay on this Mac.
     var isMadeUp: Bool { security.hasPrefix("mx:") }
 
     func with(_ field: Field) -> LinkTarget {
@@ -77,7 +77,7 @@ nonisolated struct SecurityLink: Codable, Equatable, Sendable {
     var tipPlain: String? { tipText.map(\.string).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } }
 }
 
-/// Where an app keeps links in the security master: its own database connection (MxDataHUB) or a service (MxPortMGR).
+/// Where an app keeps links in the security master: its own database connection (MxDataHUB) or a service (MxAcctMGR).
 protocol SecurityLinkBackend: Sendable {
     /// What it is, for messages ("the security master", "the accounts service").
     var name: String { get }
@@ -148,7 +148,7 @@ final class SecurityLinks {
     func whereKept(_ t: LinkTarget) -> String {
         if t.isMadeUp { return "Kept on this Mac: the security is a made-up one of the illustrative market." }
         guard let backend else { return "Kept on this Mac." }
-        if securityID(t) != nil { return "Kept in the security master (through \(backend.name)): it shows in MxDataHUB and MxPortMGR." }
+        if securityID(t) != nil { return "Kept in the security master (through \(backend.name)): it shows in MxDataHUB and MxAcctMGR." }
         if unknown.contains(t.security) { return "Kept on this Mac: the security master doesn't list \(t.symbol)." }
         return "Kept on this Mac until the security master can be reached (\(backend.name))."
     }

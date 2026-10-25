@@ -1,6 +1,6 @@
 //
 //  CardViews.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Banking ▸ Credit Card Accounts: each card kept as a register in the security master (accounts service /cards,
 //  V029) — its charges, credits, payments, fees and interest with the balance owed, the credit left, and its

@@ -20,7 +20,7 @@ When the plan is mapped to a portfolio, its tax lots are rebuilt from the latest
 lot per fund and trade day (contributions, reinvested dividends, transfers in), fund-to-fund transfers out taken
 first-in first-out, and what the fund held before the first transaction as one lot valued at that day's unit value
 (the downloads don't carry its cost). Lots of the portfolio's other securities are kept. When the lots change, they
-are saved as a new version of the portfolio (as a save in MxPortMGR is), so every earlier version stays.
+are saved as a new version of the portfolio (as a save in MxAcctMGR is), so every earlier version stays.
 
 The QFX file repeats each transaction several times and splits it by money source (pre-tax, match, after-tax); it
 is the better file: it has transaction ids and CUSIPs. A CSV file is used for a plan only while no QFX file was read.
@@ -291,7 +291,7 @@ def _save_portfolio(cur, run, plan, code, as_of, lots):
     if row is None:
         cur.execute("""INSERT INTO srm.portfolio (code, name, inception_date, description, account_type, managed_by,
                                                   cash_balance, updated_by, version)
-                       VALUES (%s, %s, current_date, %s, 'retirement', 'MxPortMGR', 0, 'vanguard-plan', 0)
+                       VALUES (%s, %s, current_date, %s, 'retirement', 'MxAcctMGR', 0, 'vanguard-plan', 0)
                        RETURNING portfolio_id""",
                     (code, f"Vanguard plan {plan}", f"Vanguard retirement plan {plan}, from its downloads"))
         row = cur.fetchone()

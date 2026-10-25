@@ -1,6 +1,6 @@
 //
 //  ReportNotes.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Your own notes on a report, in Knowledge Library ▸ Report Library ("Which drivers each report moves"): right-click a
 //  report's name to add or edit them — formatted text that can hold links of its own (web pages, email, pages in
@@ -142,7 +142,7 @@ final class ReportAnchorView: NSView {
     override func mouseExited(with event: NSEvent) { LinkHover.shared.pointer(over: nil, rect: .zero, in: self, card: { _ in AnyView(EmptyView()) }) }
 
     func hover() {
-        guard let report, let key = URL(string: "mxportmgr://report/" + report.id) else { return }
+        guard let report, let key = URL(string: "mxacctmgr://report/" + report.id) else { return }
         let note = note, open = open
         LinkHover.shared.pointer(over: key, rect: bounds, in: self, card: { close in
             AnyView(ReportCard(report: report, note: note?.attributed, changed: note?.changed,

@@ -2,7 +2,7 @@
 //  Navigation.swift
 //  MxDataHUB
 //
-//  Back and Forward through the places you've visited, as in a browser and in MxPortMGR and MxNoteONE: the toolbar's
+//  Back and Forward through the places you've visited, as in a browser and in MxAcctMGR and MxNoteONE: the toolbar's
 //  ‹ and › (hold either for the places before or after), Go ▸ Back / Forward / History, ⌘[ and ⌘] as in Safari and
 //  Finder, ⌃← and ⌃→ (unless Mission Control keeps them for moving between Spaces), and a mouse's back and forward
 //  buttons. A place is a screen with what it shows: the security, portfolio or benchmark selected there.
@@ -113,7 +113,7 @@ extension SRMStore {
 
 // MARK: - The toolbar's ‹ and ›
 
-/// ‹ and ›: click to go back or forward a place; hold for the places before or after (as in Safari and MxPortMGR).
+/// ‹ and ›: click to go back or forward a place; hold for the places before or after (as in Safari and MxAcctMGR).
 struct BackForwardButtons: ToolbarContent {
     @Bindable var store: SRMStore
 

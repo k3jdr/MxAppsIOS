@@ -1,6 +1,6 @@
-# MxPortMGR — Logical Data Model
+# MxAcctMGR — Logical Data Model
 
-**Scope.** What MxPortMGR, the teaching portfolio IDE, works with: an **illustrative market** (36 fictional companies,
+**Scope.** What MxAcctMGR, the teaching portfolio IDE, works with: an **illustrative market** (36 fictional companies,
 bond funds, individual bonds, cash and look-through index funds, three benchmarks, a year of monthly history), the
 **accounts** it teaches on (ten samples and My Portfolio) with their holdings and tax lots, the **market reports**
 and the **reactions** the Behaviour Lab simulates, and the **results** of its engines — active optimization, index

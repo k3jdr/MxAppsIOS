@@ -1,6 +1,6 @@
 //
 //  ServiceCatalog.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxPortMGR (MxAppsIOS/Shared)
+//  Shared by MxDataHUB, MxJobsWMS and MxAcctMGR (MxAppsIOS/Shared)
 //
 //  The Layer 3 services both apps rely on (MxAppsIOS/Services): what each is for, why it is written in its
 //  language, which use cases and samples it serves, and whether it is running now. The built-in entries mirror
@@ -119,8 +119,8 @@ nonisolated enum ServiceCatalog {
             samples: ["active-optimization", "passive-tracking", "attribution"], folder: "analytics", developIn: "VS Code or PyCharm"),
         ServiceInfo(
             id: "accounts", name: "Personal accounts", language: "Python", port: 8774,
-            purpose: "Keeps MxPortMGR's My Portfolio in the security master: searches securities to add, serves benchmark weights, and stores each personal account — type, approach, benchmark, cash and open tax lots — writing the day's holdings snapshot from the lots, so MxDataHUB ▸ Portfolios and the analytics service see it like any other portfolio.",
-            whyThisLanguage: "Python and psycopg2 are the shortest path from an HTTP request to a PostgreSQL transaction, with srm.py's own connection settings — so MxPortMGR, a sandboxed app, needs no database credentials.",
+            purpose: "Keeps MxAcctMGR's My Portfolio in the security master: searches securities to add, serves benchmark weights, and stores each personal account — type, approach, benchmark, cash and open tax lots — writing the day's holdings snapshot from the lots, so MxDataHUB ▸ Portfolios and the analytics service see it like any other portfolio.",
+            whyThisLanguage: "Python and psycopg2 are the shortest path from an HTTP request to a PostgreSQL transaction, with srm.py's own connection settings — so MxAcctMGR, a sandboxed app, needs no database credentials.",
             useCases: ["data-quality", "active", "passive"],
             endpoints: [
                 ServiceEndpoint(method: "GET", path: "/securities?q=&kind=", summary: "Search securities (ticker, name, ISIN, CUSIP) with the latest price"),

@@ -1,6 +1,6 @@
 -- MxDataHUB · srm DDL package · 07 portfolios, holdings snapshots, transactions, tax lots
 --
--- A portfolio is a model portfolio, or (account_type set) a personal account kept by MxPortMGR
+-- A portfolio is a model portfolio, or (account_type set) a personal account kept by MxAcctMGR
 -- through the accounts service. Holdings are dated snapshots; personal accounts write theirs
 -- from their open tax lots with srm.sync_holdings_from_lots.
 
@@ -22,7 +22,7 @@ CREATE TABLE srm.portfolio (
 CREATE TRIGGER portfolio_touch BEFORE UPDATE ON srm.portfolio FOR EACH ROW EXECUTE FUNCTION srm.touch_updated_at();
 COMMENT ON COLUMN srm.portfolio.account_type IS 'Personal account type: taxable, retirement (tax-deferred) or roth; NULL for model portfolios';
 COMMENT ON COLUMN srm.portfolio.approach     IS 'How the account is run: active (vs a benchmark) or passive (tracks an index)';
-COMMENT ON COLUMN srm.portfolio.managed_by   IS 'App that maintains the portfolio''s lots and holdings, e.g. MxPortMGR; NULL when edited in MxDataHUB';
+COMMENT ON COLUMN srm.portfolio.managed_by   IS 'App that maintains the portfolio''s lots and holdings, e.g. MxAcctMGR; NULL when edited in MxDataHUB';
 COMMENT ON COLUMN srm.portfolio.cash_balance IS 'Uninvested cash in the base currency (not in the holdings snapshot)';
 
 -- Holdings snapshot on a date: shares, a target weight (fraction), or both.

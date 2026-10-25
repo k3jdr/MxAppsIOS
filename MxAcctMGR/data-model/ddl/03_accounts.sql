@@ -1,4 +1,4 @@
--- MxPortMGR · pmg DDL package · 03 accounts, holdings and tax lots
+-- MxAcctMGR · pmg DDL package · 03 accounts, holdings and tax lots
 --
 -- An account is a sample (Library ▸ Sample Portfolios) or My Portfolio. Holdings are a value
 -- per ticker (and shares when known); a taxable account's holding splits into tax lots, each a

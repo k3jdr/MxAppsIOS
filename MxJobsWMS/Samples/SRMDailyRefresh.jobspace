@@ -1444,7 +1444,7 @@
       },
       "id" : "626AB093-17DF-4E3C-B63E-CDBABD849FA0",
       "kind" : "apiRead",
-      "notes" : "VIX9D, VIX, VIX3M and VIX6M daily open / high / low / close from Cboe's history files (free, no key) — MxPortMGR's VIX screen.",
+      "notes" : "VIX9D, VIX, VIX3M and VIX6M daily open / high / low / close from Cboe's history files (free, no key) — MxAcctMGR's VIX screen.",
       "outcome" : {
         "assertions" : [
           {
@@ -1495,7 +1495,7 @@
       },
       "id" : "A0BE00F0-795C-405F-B56A-A7412AF5615B",
       "kind" : "apiRead",
-      "notes" : "Treasury constant-maturity yields 1 month to 30 years and NBER recession months from FRED (free, no key); the last 60 days after the first load — MxPortMGR's yield curve.",
+      "notes" : "Treasury constant-maturity yields 1 month to 30 years and NBER recession months from FRED (free, no key); the last 60 days after the first load — MxAcctMGR's yield curve.",
       "outcome" : {
         "assertions" : [
           {
@@ -1556,7 +1556,7 @@
       },
       "id" : "D8A9F956-660C-47EC-A09A-DEC8628625D0",
       "kind" : "apiRead",
-      "notes" : "Revenue, operating cash flow, capex, D&A and free cash flow for the companies in srm.fundamental_watch (empty symbols) — the hyperscalers and compute suppliers on MxPortMGR's Compute screen. 2 FMP calls a company; the last 8 quarters after the first load.",
+      "notes" : "Revenue, operating cash flow, capex, D&A and free cash flow for the companies in srm.fundamental_watch (empty symbols) — the hyperscalers and compute suppliers on MxAcctMGR's Compute screen. 2 FMP calls a company; the last 8 quarters after the first load.",
       "outcome" : {
         "assertions" : [
           {

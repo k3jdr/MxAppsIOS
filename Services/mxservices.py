@@ -35,7 +35,7 @@ SERVICES = [
      "summary": "Optimization inputs (covariance, alpha) and performance attribution from the security master",
      "start": [PY, "analytics_service.py"]},
     {"id": "accounts", "dir": "accounts", "port": 8774, "language": "Python",
-     "summary": "Personal accounts (MxPortMGR My Portfolio) in the security master: security search, tax lots, holdings",
+     "summary": "Personal accounts (MxAcctMGR My Portfolio) in the security master: security search, tax lots, holdings",
      "start": [PY, "accounts_service.py"]},
     {"id": "portfolio-java", "dir": "portfolio-java", "port": 8766, "language": "Java",
      "summary": "Active (benchmark-relative) portfolio construction; absolute max-Sharpe",

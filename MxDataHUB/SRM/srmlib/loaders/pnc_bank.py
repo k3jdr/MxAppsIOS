@@ -1,4 +1,4 @@
-"""PNC checking account downloads: the bank's side of MxPortMGR's check register (V027).
+"""PNC checking account downloads: the bank's side of MxAcctMGR's check register (V027).
 
 PNC Online Banking downloads an account's activity as Quicken (.qfx), Money / OFX (.ofx) or a spreadsheet (.csv).
 Drop them in a folder named in bank_accounts.local.json (not in git; copy bank_accounts.example.json):
@@ -7,7 +7,7 @@ Drop them in a folder named in bank_accounts.local.json (not in git; copy bank_a
      "accounts": {"1234": "PNC_CHECKING"}}
 
 `accounts` maps the account number's last four digits (as the downloads name it) to the checking account's code in
-MxPortMGR (Accounts ▸ Checking Accounts). A QFX / OFX file names its account; a CSV file doesn't, so CSV files go in
+MxAcctMGR (Accounts ▸ Checking Accounts). A QFX / OFX file names its account; a CSV file doesn't, so CSV files go in
 a sub-folder named by the account's code (src-bank/PNC_CHECKING/…).
 
 Each run reads every download there (oldest first) and keeps each bank line once (srm.bank_line, by the file's
@@ -152,7 +152,7 @@ def run(conn, cfg, args):
                 statements = [(by_last4.get(l4), lines, bal) for l4, lines, bal in read_ofx(text)]
             for code, lines, balance in statements:
                 if code not in accounts:
-                    run.reject(name, "account not mapped: add its last four digits to the account in MxPortMGR "
+                    run.reject(name, "account not mapped: add its last four digits to the account in MxAcctMGR "
                                      "(Accounts ▸ Checking Accounts) or to bank_accounts.local.json")
                     continue
                 aid = accounts[code][0]

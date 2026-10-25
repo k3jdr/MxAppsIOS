@@ -1,6 +1,6 @@
 //
 //  Components.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Pieces every screen uses: the "Why this step" lesson card, metric tiles, boxed sections, the step footer that
 //  walks a path, and the educational-use banner.
@@ -149,7 +149,7 @@ struct EducationalBanner: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10).padding(.vertical, 5)
         .background(.quaternary.opacity(0.4), in: Capsule())
-        .help("MxPortMGR teaches how portfolio tools work. Talk to a licensed adviser about your own situation.")
+        .help("MxAcctMGR teaches how portfolio tools work. Talk to a licensed adviser about your own situation.")
         .quickHelpArea(PortHelp.disclaimer)
     }
 }

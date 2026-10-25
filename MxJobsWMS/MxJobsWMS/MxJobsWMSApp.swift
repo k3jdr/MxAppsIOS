@@ -83,9 +83,9 @@ struct JobspaceCommands: Commands {
                     NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MxAppsIOS/tree/main/MxDataHUB")!)
                 }
             }
-            Button("Open MxPortMGR") {
+            Button("Open MxAcctMGR") {
                 if !AppLink.myPortfolio(nil).open() {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MxAppsIOS/tree/main/MxPortMGR")!)
+                    NSWorkspace.shared.open(URL(string: "https://github.com/k3jdr/MxAppsIOS/tree/main/MxAcctMGR")!)
                 }
             }
         }

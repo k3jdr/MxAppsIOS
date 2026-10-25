@@ -1,6 +1,6 @@
 //
 //  ReportView.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  A market-report walkthrough in seven steps: the report, how to read it, the market's move, what it did to the
 //  account, your reaction, its long-run consequences against staying with the plan, and the takeaways.
@@ -494,7 +494,7 @@ struct LongRunView: View {
 }
 
 /// The real report behind the illustrative one: the publisher's latest release, its schedule and its history — and,
-/// for the earnings reports, MxPortMGR's own screens with real companies.
+/// for the earnings reports, MxAcctMGR's own screens with real companies.
 struct RealReportBox: View {
     @Bindable var store: PortStore
     var report: MarketReport
@@ -523,7 +523,7 @@ struct RealReportBox: View {
                         .help("Every company reporting today, with estimates and results (Nasdaq.com and FMP)")
                     Button { store.go(.earningsCalendar) } label: { Label("Earnings Calendar", systemImage: "calendar") }
                         .help("Real earnings reports by month or week")
-                    Text("Real companies' reports, in MxPortMGR.").font(.caption).foregroundStyle(.secondary)
+                    Text("Real companies' reports, in MxAcctMGR.").font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

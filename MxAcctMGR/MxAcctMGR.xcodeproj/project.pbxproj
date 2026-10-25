@@ -8,13 +8,13 @@
 
 /* Begin PBXFileReference section */
 		7C5E2B083068647C006E309B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		7C5E2B143068647C006E309B /* MxPortMGR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MxPortMGR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C5E2B143068647C006E309B /* MxAcctMGR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MxAcctMGR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		7C5E2B163068647C006E309B /* MxPortMGR */ = {
+		7C5E2B163068647C006E309B /* MxAcctMGR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = MxPortMGR;
+			path = MxAcctMGR;
 			sourceTree = "<group>";
 		};
 		7C5E2B2A3068647D006E309B /* Shared */ = {
@@ -38,7 +38,7 @@
 			isa = PBXGroup;
 			children = (
 				7C5E2B083068647C006E309B /* README.md */,
-				7C5E2B163068647C006E309B /* MxPortMGR */,
+				7C5E2B163068647C006E309B /* MxAcctMGR */,
 				7C5E2B2A3068647D006E309B /* Shared */,
 				7C5E2B153068647C006E309B /* Products */,
 			);
@@ -47,7 +47,7 @@
 		7C5E2B153068647C006E309B /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7C5E2B143068647C006E309B /* MxPortMGR.app */,
+				7C5E2B143068647C006E309B /* MxAcctMGR.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,9 +55,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		7C5E2B133068647C006E309B /* MxPortMGR */ = {
+		7C5E2B133068647C006E309B /* MxAcctMGR */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 7C5E2B1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxPortMGR" */;
+			buildConfigurationList = 7C5E2B1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxAcctMGR" */;
 			buildPhases = (
 				7C5E2B103068647C006E309B /* Sources */,
 				7C5E2B113068647C006E309B /* Frameworks */,
@@ -66,12 +66,12 @@
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
-				7C5E2B163068647C006E309B /* MxPortMGR */,
+				7C5E2B163068647C006E309B /* MxAcctMGR */,
 				7C5E2B2A3068647D006E309B /* Shared */,
 			);
-			name = MxPortMGR;
-			productName = MxPortMGR;
-			productReference = 7C5E2B143068647C006E309B /* MxPortMGR.app */;
+			name = MxAcctMGR;
+			productName = MxAcctMGR;
+			productReference = 7C5E2B143068647C006E309B /* MxAcctMGR.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -89,7 +89,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 7C5E2B0F3068647C006E309B /* Build configuration list for PBXProject "MxPortMGR" */;
+			buildConfigurationList = 7C5E2B0F3068647C006E309B /* Build configuration list for PBXProject "MxAcctMGR" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -103,7 +103,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				7C5E2B133068647C006E309B /* MxPortMGR */,
+				7C5E2B133068647C006E309B /* MxAcctMGR */,
 			);
 		};
 /* End PBXProject section */
@@ -125,7 +125,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		7C5E2B1D3068647D006E309B /* Debug configuration for PBXProject "MxPortMGR" */ = {
+		7C5E2B1D3068647D006E309B /* Debug configuration for PBXProject "MxAcctMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -189,7 +189,7 @@
 			};
 			name = Debug;
 		};
-		7C5E2B1E3068647D006E309B /* Release configuration for PBXProject "MxPortMGR" */ = {
+		7C5E2B1E3068647D006E309B /* Release configuration for PBXProject "MxAcctMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -245,7 +245,7 @@
 			};
 			name = Release;
 		};
-		7C5E2B203068647D006E309B /* Debug configuration for PBXNativeTarget "MxPortMGR" */ = {
+		7C5E2B203068647D006E309B /* Debug configuration for PBXNativeTarget "MxAcctMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -261,7 +261,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = MxPortMGR;
+				INFOPLIST_KEY_CFBundleDisplayName = MxAcctMGR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Educational software — not investment advice.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -269,7 +269,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxPortMGR;
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxAcctMGR;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -282,7 +282,7 @@
 			};
 			name = Debug;
 		};
-		7C5E2B213068647D006E309B /* Release configuration for PBXNativeTarget "MxPortMGR" */ = {
+		7C5E2B213068647D006E309B /* Release configuration for PBXNativeTarget "MxAcctMGR" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -298,7 +298,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = MxPortMGR;
+				INFOPLIST_KEY_CFBundleDisplayName = MxAcctMGR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Educational software — not investment advice.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -306,7 +306,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxPortMGR;
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxAcctMGR;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -321,19 +321,19 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		7C5E2B0F3068647C006E309B /* Build configuration list for PBXProject "MxPortMGR" */ = {
+		7C5E2B0F3068647C006E309B /* Build configuration list for PBXProject "MxAcctMGR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7C5E2B1D3068647D006E309B /* Debug configuration for PBXProject "MxPortMGR" */,
-				7C5E2B1E3068647D006E309B /* Release configuration for PBXProject "MxPortMGR" */,
+				7C5E2B1D3068647D006E309B /* Debug configuration for PBXProject "MxAcctMGR" */,
+				7C5E2B1E3068647D006E309B /* Release configuration for PBXProject "MxAcctMGR" */,
 			);
 			defaultConfigurationName = Release;
 		};
-		7C5E2B1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxPortMGR" */ = {
+		7C5E2B1F3068647D006E309B /* Build configuration list for PBXNativeTarget "MxAcctMGR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				7C5E2B203068647D006E309B /* Debug configuration for PBXNativeTarget "MxPortMGR" */,
-				7C5E2B213068647D006E309B /* Release configuration for PBXNativeTarget "MxPortMGR" */,
+				7C5E2B203068647D006E309B /* Debug configuration for PBXNativeTarget "MxAcctMGR" */,
+				7C5E2B213068647D006E309B /* Release configuration for PBXNativeTarget "MxAcctMGR" */,
 			);
 			defaultConfigurationName = Release;
 		};

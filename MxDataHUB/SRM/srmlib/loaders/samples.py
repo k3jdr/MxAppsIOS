@@ -1,15 +1,15 @@
-"""MxPortMGR's sample accounts as security-master portfolios, built only from real securities and their prices.
+"""MxAcctMGR's sample accounts as security-master portfolios, built only from real securities and their prices.
 
 Each sample teaches one edge case a personal investor meets (a concentrated employer stock, a sector bet, income,
 idle cash, frequent trading, a drifted index tracker, tax lots at gains and losses, a 60/40 outside its band,
 missing data, core and satellite). It is stored like My Portfolio — an srm.portfolio with account type, approach,
-benchmark, cash and open tax lots (managed_by 'MxPortMGR samples'), its holdings snapshot written from the lots —
+benchmark, cash and open tax lots (managed_by 'MxAcctMGR samples'), its holdings snapshot written from the lots —
 so the accounts service, the analytics service (inputs, attribution) and MxDataHUB see it like any other account.
 
 How the numbers are made: each holding has a target share of the account's value today; its quantity is that value
 at the latest price, split across its lots; a lot's cost is its quantity at the security's close on the purchase date
 (FMP's split-adjusted closes, or a mutual fund's NAV; history before the security master's is loaded from FMP first).
-So gains, losses, holding periods and drift are what the market really did. The lessons' words live in MxPortMGR.
+So gains, losses, holding periods and drift are what the market really did. The lessons' words live in MxAcctMGR.
 
 Also two blended benchmarks for the balanced samples, BAL6040 (VTI 60%, BND 40%) and BAL3070 (30/70), with a month-end
 snapshot for the last two years so attribution can use them.
@@ -26,7 +26,7 @@ from ..common import LoadRun, log
 from ..model import source_id
 from . import fmp as fmp_loader
 
-MANAGED_BY = "MxPortMGR samples"
+MANAGED_BY = "MxAcctMGR samples"
 TODAY = datetime.date.today()
 
 BLENDS = [("BAL6040", "Balanced 60/40 (VTI / BND)", {"VTI": 0.6, "BND": 0.4}),
@@ -129,7 +129,7 @@ def write_blends(cur, run, src):
     for code, name, parts in BLENDS:
         cur.execute("""INSERT INTO srm.benchmark (code, name, provider, weighting_method, currency_code, constituent_source,
                                                   description)
-                       VALUES (%s, %s, 'MxPortMGR', 'custom', 'USD', 'Fixed blend of index ETFs, rebalanced monthly', %s)
+                       VALUES (%s, %s, 'MxAcctMGR', 'custom', 'USD', 'Fixed blend of index ETFs, rebalanced monthly', %s)
                        ON CONFLICT (code) DO UPDATE SET name = excluded.name, description = excluded.description
                        RETURNING benchmark_id""",
                     (code, name, " + ".join(f"{w:.0%} {t}" for t, w in parts.items())))
@@ -187,7 +187,7 @@ def run(conn, cfg, args):
             cur.execute("""INSERT INTO srm.portfolio (code, name, account_type, approach, managed_by, benchmark_id, cash_balance,
                                                       description)
                            VALUES (%s, %s, %s, %s, %s, (SELECT benchmark_id FROM srm.benchmark WHERE code = %s), %s,
-                                   'MxPortMGR sample account (srm.py load sample-portfolios)')
+                                   'MxAcctMGR sample account (srm.py load sample-portfolios)')
                            ON CONFLICT (code) DO UPDATE SET name = excluded.name, account_type = excluded.account_type,
                                approach = excluded.approach, managed_by = excluded.managed_by,
                                benchmark_id = excluded.benchmark_id, cash_balance = excluded.cash_balance,

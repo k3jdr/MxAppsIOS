@@ -1,6 +1,6 @@
-# MxPortMGR — Entity Relationship Diagram (schema `pmg`)
+# MxAcctMGR — Entity Relationship Diagram (schema `pmg`)
 
-MxPortMGR keeps its illustrative market, samples and reports in Swift and My Portfolio in UserDefaults; in
+MxAcctMGR keeps its illustrative market, samples and reports in Swift and My Portfolio in UserDefaults; in
 security-master mode My Portfolio lives in MxDataHUB's `srm.portfolio` / `srm.portfolio_tax_lot` (see
 [MxDataHUB's ERD](../../MxDataHUB/data-model/erd.md)). Schema `pmg` ([`ddl/install.sql`](ddl/install.sql)) is the
 relational form of what the app holds, seeded from the app's own model, plus the engines' results. 50 tables.

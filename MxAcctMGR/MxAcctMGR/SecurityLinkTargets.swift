@@ -1,8 +1,8 @@
 //
 //  SecurityLinkTargets.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
-//  MxPortMGR's side of the links on tickers and names (Shared/Links): which security a row of Earnings by Day or My
+//  MxAcctMGR's side of the links on tickers and names (Shared/Links): which security a row of Earnings by Day or My
 //  Holdings is, and where its link is kept — in the security master through the accounts service (Services/accounts,
 //  /links), so it shows in MxDataHUB too. A company in Earnings by Day is looked up by its ticker; a holding, or a
 //  security in Add Securities, by its security-master id.
@@ -86,7 +86,7 @@ nonisolated struct AccountsLinkBackend: SecurityLinkBackend {
     }
 
     func save(_ link: SecurityLink, securityID: Int64, field: LinkTarget.Field) async throws {
-        var body: [String: Any] = ["address": link.address, "by": "MxPortMGR"]
+        var body: [String: Any] = ["address": link.address, "by": "MxAcctMGR"]
         if let text = link.text { body["text"] = text }
         if let tip = link.tip, let rtf = String(data: tip, encoding: .utf8) { body["hoverRtf"] = rtf }
         if let plain = link.tipPlain { body["hoverText"] = plain }

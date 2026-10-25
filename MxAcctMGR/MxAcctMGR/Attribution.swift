@@ -1,6 +1,6 @@
 //
 //  Attribution.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Performance attribution as the analytics service computes it (Services/analytics, POST /attribution): monthly
 //  sector Brinson-Fachler (or Brinson-Hood-Beebower) effects — allocation, selection, interaction — over the account's

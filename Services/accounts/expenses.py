@@ -35,7 +35,7 @@ LINE_KINDS = ("equipment", "software", "facilities", "training", "travel", "subs
 
 
 def _by(body):
-    return str(body.get("by") or "MxPortMGR")[:80]
+    return str(body.get("by") or "MxAcctMGR")[:80]
 
 
 def _ledger(conn, code):

@@ -39,12 +39,12 @@ struct MxDataHUBApp: App {
             CommandGroup(after: .pasteboard) {
                 Divider()
                 // As in MxNoteONE: add or edit the link on the selected security's ticker (or its name, when the
-                // pointer rests there). Kept in the security master, so MxPortMGR shows it too.
+                // pointer rests there). Kept in the security master, so MxAcctMGR shows it too.
                 Button("Link…") { SecurityLinks.shared.beginEdit(SecurityLinks.shared.commandTarget(selected: store.linkSelection)) }
                     .keyboardShortcut("k")
                     .disabled(!store.isConnected || (store.section != .securities && store.section != .portfolios) || SecurityLinks.shared.editing != nil)
             }
-            // Back, Forward and History (⌘[ ⌘]), as in MxPortMGR — Navigation.swift.
+            // Back, Forward and History (⌘[ ⌘]), as in MxAcctMGR — Navigation.swift.
             GoCommands(store: store)
             QuickHelpCommands()
         }

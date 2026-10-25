@@ -1,6 +1,6 @@
 //
 //  YieldCurve.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The real Treasury yield curve, in the Yield Curve Report walkthrough (its first step, after The real report): the
 //  curve today against 1 month, 1 year, 5 and 10 years before; the slope (10-year minus 2-year and minus 3-month)
@@ -224,7 +224,7 @@ final class YieldStore {
         }
         do {
             var request = URLRequest(url: url, timeoutInterval: 60)
-            request.setValue("MxPortMGR (educational)", forHTTPHeaderField: "User-Agent")
+            request.setValue("MxAcctMGR (educational)", forHTTPHeaderField: "User-Agent")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200, let text = String(data: data, encoding: .utf8),
                   text.hasPrefix("observation_date") else { throw URLError(.badServerResponse) }

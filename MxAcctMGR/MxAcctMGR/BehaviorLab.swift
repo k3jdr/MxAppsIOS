@@ -1,6 +1,6 @@
 //
 //  BehaviorLab.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The long-horizon simulator behind the market-report walkthroughs: what happens over the following years if you
 //  act on a report — sell, buy, rotate — compared with staying with the plan, on the same simulated futures (common

@@ -1,6 +1,6 @@
 //
 //  BankViews.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Banking ▸ Checking Accounts: the paper check book register, kept in the security master so everyone who writes
 //  checks on the account enters them in one register (accounts service /bank, V027). The bank's side comes from its
@@ -11,7 +11,7 @@
 //  Banking ▸ Target Accounts: where the money goes to or comes from — a utility, a card, a brokerage, a person —
 //  each with its bank or company, last four digits, category (an expense account: Utilities, Insurance …), usual
 //  amount and a note, and the details kept for it (TargetAccounts.swift: nickname, status, identifier, next payment,
-//  logon, address, and which registers pay it). They are the registers' targets, not books MxPortMGR keeps: a new
+//  logon, address, and which registers pay it). They are the registers' targets, not books MxAcctMGR keeps: a new
 //  entry's target is picked from the accounts that register pays (its funding sources), with their last four digits
 //  showing, and the register shows the target's note on hover and edits it in place. A target account can carry a
 //  link — a web page, an email address, a page in MxNoteONE — with words and hover text of its own
@@ -1220,7 +1220,7 @@ struct TargetAccountsView: View {
     @State private var selected: Payee.ID?
 
     var body: some View {
-        StepPage(store: store, subtitle: "Where the registers' money goes to or comes from — a utility, a card, a brokerage, a person: their targets, not books MxPortMGR keeps.", lesson: [
+        StepPage(store: store, subtitle: "Where the registers' money goes to or comes from — a utility, a card, a brokerage, a person: their targets, not books MxAcctMGR keeps.", lesson: [
             "Each target account has its bank or company and its last four digits, so picking a register entry's target shows which account the money went to — and a note, shown on hover in the register and edited there. Its funding sources say which registers offer it: recipients of checking account payments, of credit card payments, or both.",
             "Each is in a category (Utilities, Insurance, Housing …): the registers file every entry under its target's category, so a year's spending adds up by category. Its usual amount fills in the register; its next payment, nickname, identifier, logon and address are kept with it (New Target Account…). Its password and user keys stay in this Mac's Keychain, never in the security master.",
             "PNC's downloads name them their own way (\"DUKE ENERGY PAYMENT\"): accepting a bank line under a target account remembers that name, so the next one is filed to it.",
@@ -1318,7 +1318,7 @@ struct TargetAccountsView: View {
                 // The registers' own sums.
                 TableColumn("This year") { p in
                     Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary)
-                        .help("Calculated by MxPortMGR from this year's check, card and expense entries with this target")
+                        .help("Calculated by MxAcctMGR from this year's check, card and expense entries with this target")
                 }.width(min: 60, ideal: 84)
                 TableColumn("Total paid") { p in
                     let total = p.totalPaid ?? 0

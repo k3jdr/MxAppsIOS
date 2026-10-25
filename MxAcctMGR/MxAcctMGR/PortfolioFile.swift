@@ -1,6 +1,6 @@
 //
 //  PortfolioFile.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  One portfolio open at a time, kept in the security master like a document (File ▸ New Portfolio…, Open Portfolio…,
 //  Open Recent, Close Portfolio, Save, Revert to Saved). The portfolio carries its preferences — the optimizer's limits,
@@ -149,7 +149,7 @@ extension PortStore {
         let body: [String: Any] = ["version": 0, "name": name.isEmpty ? c : name,
                                    "accountType": account == .retirement ? "retirement" : account == .roth ? "roth" : "taxable",
                                    "approach": approach == .active ? "active" : "passive", "benchmark": benchmark,
-                                   "cash": cash, "lots": lots, "by": "MxPortMGR",
+                                   "cash": cash, "lots": lots, "by": "MxAcctMGR",
                                    "note": sample.map { "New, from the sample \($0.name)" } ?? "New"]
         do {
             _ = try await AccountsClient.save(c, body)

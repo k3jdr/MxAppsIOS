@@ -1,4 +1,4 @@
-"""Credit card downloads: the card company's side of MxPortMGR's credit card registers (V029).
+"""Credit card downloads: the card company's side of MxAcctMGR's credit card registers (V029).
 
 Chase downloads a card's activity as a spreadsheet (.csv) or Quicken / Money (.qfx / .ofx); Discover and Capital One
 as .csv. Drop them in a folder named in card_accounts.local.json (not in git; copy card_accounts.example.json):
@@ -6,10 +6,10 @@ as .csv. Drop them in a folder named in card_accounts.local.json (not in git; co
     {"dropFolders": ["~/MyCodeGIT/MxDataSRM/src-cards"],
      "accounts": {"1234": "CHASE_VISA"}}
 
-`accounts` maps a card number's last four digits to the card's code in MxPortMGR (Banking ▸ Credit Card Accounts);
+`accounts` maps a card number's last four digits to the card's code in MxAcctMGR (Banking ▸ Credit Card Accounts);
 a card's own last four digits, set there, map it too. A QFX / OFX file names its card, and so do Chase's CSV file
 names (Chase1234_Activity…) and Capital One's Card No. column; other CSV files (Discover's) go in a sub-folder named
-by the card's code (src-cards/DISCOVER/…). MxPortMGR's Import File… puts a file there.
+by the card's code (src-cards/DISCOVER/…). MxAcctMGR's Import File… puts a file there.
 
 Each run reads every download there (oldest first) and keeps each line once (srm.card_line, by the file's
 transaction id, or a hash of the CSV row and how many times the same row came before it in that file). Downloads of
@@ -229,7 +229,7 @@ def run(conn, cfg, args):
             fmt = "CSV" if path.lower().endswith(".csv") else "OFX"
             for code, lines, balance in statements(path, text, cards, by_last4):
                 if code not in cards:
-                    run.reject(name, "card not mapped: set its last four digits on the card in MxPortMGR (Banking ▸ "
+                    run.reject(name, "card not mapped: set its last four digits on the card in MxAcctMGR (Banking ▸ "
                                      "Credit Card Accounts), put the file in a sub-folder named by the card's code, or "
                                      "map it in card_accounts.local.json")
                     continue

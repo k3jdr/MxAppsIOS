@@ -1,6 +1,6 @@
 //
 //  SplitPanes.swift
-//  Shared by MxDataHUB and MxPortMGR (MxAppsIOS/Shared)
+//  Shared by MxDataHUB and MxAcctMGR (MxAppsIOS/Shared)
 //
 //  Two panes side by side with a divider to drag, in place of HSplitView. The AppKit split view behind HSplitView
 //  laid panes out at about their ideal widths and kept them there when the window narrowed or the sidebar came

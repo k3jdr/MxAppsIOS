@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Personal accounts service (Layer 3, Python): MxPortMGR's My Portfolio, kept in the security master.
+"""Personal accounts service (Layer 3, Python): MxAcctMGR's My Portfolio, kept in the security master.
 
 Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V011) and serves:
 
@@ -27,7 +27,7 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          {address, text, hoverText, hoverRtf, title, by}
     DELETE /links/<securityId>/<field>   take the link off
 
-    POST /securities/browse              MxDataHUB's Securities search, for MxPortMGR's Library ▸ Securities: {q, type,
+    POST /securities/browse              MxDataHUB's Securities search, for MxAcctMGR's Library ▸ Securities: {q, type,
                                          benchmark, activeOnly, offset, limit, sort {column, ascending}, filters
                                          {column: {values: [...]} | {op, v1, v2}}} → securities, total
     POST /securities/browse/values       a column's values with their counts under the other filters: {…, column}
@@ -48,7 +48,7 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          history file (DATE,OPEN,HIGH,LOW,CLOSE with MM/DD/YYYY dates)
 
 The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
-config.local.json), so MxPortMGR's earnings screens get revenue figures with no API key in the sandboxed app; the
+config.local.json), so MxAcctMGR's earnings screens get revenue figures with no API key in the sandboxed app; the
 fundamentals endpoint uses the database when it can reach it and falls back to FMP when it can't.
 
     python3 accounts_service.py                  # http://127.0.0.1:8774
@@ -88,12 +88,12 @@ DESCRIBE = {
     "name": "Personal accounts",
     "language": "Python",
     "port": PORT,
-    "purpose": "Keeps MxPortMGR's My Portfolio in the security master: searches securities to add, serves benchmark "
+    "purpose": "Keeps MxAcctMGR's My Portfolio in the security master: searches securities to add, serves benchmark "
                "weights, and stores each personal account — type, approach, benchmark, cash and open tax lots — with "
                "the day's holdings snapshot written from the lots, so MxDataHUB and the analytics service see it too. "
-               "Also serves FMP's earnings calendar and company earnings history to MxPortMGR's earnings screens.",
+               "Also serves FMP's earnings calendar and company earnings history to MxAcctMGR's earnings screens.",
     "whyThisLanguage": "Python and psycopg2 are the shortest path from an HTTP request to a transaction in PostgreSQL; "
-                       "the same connection settings as srm.py, no app sandbox or credentials in MxPortMGR.",
+                       "the same connection settings as srm.py, no app sandbox or credentials in MxAcctMGR.",
     "useCases": ["data-quality", "active", "passive"],
     "endpoints": [
         {"method": "GET", "path": "/securities", "summary": "Search securities (ticker, name, ISIN, CUSIP) with the latest price"},
@@ -333,7 +333,7 @@ def benchmarks(conn):
 
 
 def benchmark_weights(conn, code):
-    """The latest weights with what MxPortMGR needs to place each member (no prices: hundreds of members)."""
+    """The latest weights with what MxAcctMGR needs to place each member (no prices: hundreds of members)."""
     rows = fetch(conn, f"""
         SELECT w.weight, w.as_of_date, v.security_id, coalesce(v.ticker, v.fmp_symbol, v.security_id::text) AS ticker,
                v.mic, v.name, v.security_type, v.asset_class, v.sector, v.industry, v.isin, v.cusip,
@@ -420,7 +420,7 @@ def save_account(conn, code, body):
     settings = body.get("settings")
     if settings is not None and not isinstance(settings, dict):
         raise ValueError("settings must be an object")
-    by = str(body.get("by") or "MxPortMGR")[:80]
+    by = str(body.get("by") or "MxAcctMGR")[:80]
     benchmark = body.get("benchmark") or None
     with conn.cursor() as cur:
         bench_id = None
@@ -449,10 +449,10 @@ def save_account(conn, code, body):
         cur.execute("""
             INSERT INTO srm.portfolio (code, name, benchmark_id, inception_date, description, account_type, approach,
                                        managed_by, cash_balance, settings, updated_by, version)
-            VALUES (%s, %s, %s, current_date, 'Personal account maintained in MxPortMGR (My Portfolio)', %s, %s, 'MxPortMGR',
+            VALUES (%s, %s, %s, current_date, 'Personal account maintained in MxAcctMGR (My Portfolio)', %s, %s, 'MxAcctMGR',
                     %s, %s, %s, 1)
             ON CONFLICT (code) DO UPDATE SET name = excluded.name, benchmark_id = excluded.benchmark_id,
-                account_type = excluded.account_type, approach = excluded.approach, managed_by = 'MxPortMGR',
+                account_type = excluded.account_type, approach = excluded.approach, managed_by = 'MxAcctMGR',
                 cash_balance = excluded.cash_balance, settings = excluded.settings, updated_by = excluded.updated_by,
                 version = srm.portfolio.version + 1, updated_at = now()
             RETURNING portfolio_id, version""",
@@ -519,7 +519,7 @@ def set_closed(conn, code, body, closed):
             raise Conflict("%s has changed since it was opened (version %d)" % (code, row[0]), version=row[0])
         cur.execute("""UPDATE srm.portfolio SET closed_date = CASE WHEN %s THEN current_date END,
                               version = version + 1, updated_by = %s, updated_at = now()
-                        WHERE upper(code) = upper(%s)""", (closed, str(body.get("by") or "MxPortMGR")[:80], code))
+                        WHERE upper(code) = upper(%s)""", (closed, str(body.get("by") or "MxAcctMGR")[:80], code))
     conn.commit()
     return account(conn, code)
 
@@ -584,7 +584,7 @@ def add_decision(conn, code, body):
                                                           portfolio_version, created_by)
                        VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                     (pid, min(decided, dt.date.today()), category, title[:300], body.get("rationale"), version,
-                     str(body.get("by") or "MxPortMGR")[:80]))
+                     str(body.get("by") or "MxAcctMGR")[:80]))
     conn.commit()
     return decisions(conn, code)
 
@@ -603,7 +603,7 @@ def duplicate_account(conn, code, body):
     out = save_account(conn, new, {
         "version": 0, "name": body.get("name") or "%s (copy)" % src["name"], "accountType": src["accountType"] or "taxable",
         "approach": src["approach"], "benchmark": src["benchmark"], "cash": src["cash"], "lots": lots,
-        "settings": src["settings"], "by": body.get("by") or "MxPortMGR",
+        "settings": src["settings"], "by": body.get("by") or "MxAcctMGR",
         "note": "Duplicated from %s version %s" % (src["code"], src["version"])})
     add_decision(conn, new, {"title": "Duplicated from %s (version %s)" % (src["code"], src["version"]),
                              "category": "other", "by": body.get("by")})
@@ -643,7 +643,7 @@ def save_policy_benchmark(conn, code, body):
     mixes = body.get("mixes") or []
     if not mixes:
         raise ValueError("a policy benchmark needs at least one mix")
-    by = str(body.get("by") or "MxPortMGR")[:80]
+    by = str(body.get("by") or "MxAcctMGR")[:80]
     with conn.cursor() as cur:
         cur.execute("SELECT benchmark_id, provider FROM srm.benchmark WHERE code = %s", (code,))
         row = cur.fetchone()
@@ -680,7 +680,7 @@ def save_policy_benchmark(conn, code, body):
         else:
             cur.execute("""INSERT INTO srm.benchmark (code, name, provider, weighting_method, currency_code, constituent_source,
                                                       description)
-                           VALUES (%s, %s, 'Policy', 'custom', 'USD', 'Policy mix, rebalanced monthly (MxPortMGR)', %s)
+                           VALUES (%s, %s, 'Policy', 'custom', 'USD', 'Policy mix, rebalanced monthly (MxAcctMGR)', %s)
                            RETURNING benchmark_id""", (code, body.get("name") or code, description))
             benchmark_id = cur.fetchone()[0]
         cur.execute("DELETE FROM srm.benchmark_policy WHERE benchmark_id = %s", (benchmark_id,))
@@ -701,7 +701,7 @@ def save_policy_benchmark(conn, code, body):
     return out
 
 
-# --- Security browser (MxDataHUB's Securities, for MxPortMGR) ---------------------------------------------------
+# --- Security browser (MxDataHUB's Securities, for MxAcctMGR) ---------------------------------------------------
 
 # The list's columns that sort and filter: column title -> v_security column (as MxDataHUB's SRMStore).
 BROWSE_COLUMNS = {"Ticker": "v.ticker", "Name": "v.name", "Type": "v.security_type", "ISIN": "v.isin",
@@ -1144,7 +1144,7 @@ def resolve_tickers(conn, body):
     return {"securities": found, "unknown": [t for t in tickers if t not in found]}
 
 
-# --- Month-end prices (MxPortMGR's Rebalance Bands: how the mix drifted over the past year) ---------------------
+# --- Month-end prices (MxAcctMGR's Rebalance Bands: how the mix drifted over the past year) ---------------------
 
 def monthly_prices(conn, body):
     """Month-end closes of these tickers over the last `months` months: {ticker: [{date, close}]}. One price source
@@ -1272,7 +1272,7 @@ def save_link(conn, security_id, field, body):
             hover_text = excluded.hover_text, hover_rtf = excluded.hover_rtf, link_title = excluded.link_title,
             updated_at = now(), updated_by = excluded.updated_by
         RETURNING *""", (security_id, field, address, blank("text"), blank("hoverText"), body.get("hoverRtf") or None,
-                         blank("title"), blank("by") or "MxPortMGR"))
+                         blank("title"), blank("by") or "MxAcctMGR"))
     conn.commit()
     return link_out(rows[0])
 
@@ -1456,7 +1456,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MxPortMGR personal accounts service")
+    parser = argparse.ArgumentParser(description="MxAcctMGR personal accounts service")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--srm-dir", default=os.environ.get("SRM_DIR", DEFAULT_SRM_DIR))
     parser.add_argument("--token", default=os.environ.get("MXJOBS_SERVICE_TOKEN"))

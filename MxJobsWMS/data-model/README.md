@@ -10,4 +10,4 @@ and the place to keep run history, with import / export functions that round-tri
 | [logical-data-model.md](logical-data-model.md) | Entities, attributes, keys, relationships, the Problems rules, and the JSON ↔ table mapping |
 | [ddl/](ddl/README.md) | PostgreSQL DDL package for schema `wms` |
 
-Related models: [MxDataHUB](../../MxDataHUB/data-model/README.md) (`srm`) and [MxPortMGR](../../MxPortMGR/data-model/README.md) (`pmg`).
+Related models: [MxDataHUB](../../MxDataHUB/data-model/README.md) (`srm`) and [MxAcctMGR](../../MxAcctMGR/data-model/README.md) (`pmg`).

@@ -1,6 +1,6 @@
 //
 //  ExpenseViews.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Banking ▸ Expense Accounts: funded ledgers of purpose spending kept in the security master (accounts service
 //  /expense-ledgers, V030) — a Mac and its software, a home office build-out, subscriptions, training, travel. Each

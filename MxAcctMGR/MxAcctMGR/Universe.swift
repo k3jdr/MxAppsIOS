@@ -1,6 +1,6 @@
 //
 //  Universe.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The securities and benchmarks the app works with — all from the security master (MxDataHUB's PostgreSQL schema
 //  srm, through the accounts service), registered in SRMRegistry as they are read. Their risk numbers — market beta,

@@ -1,6 +1,6 @@
 # Layer 3 services
 
-The compute and data services that **MxDataHUB**, **MxJobsWMS** and **MxPortMGR** use. Each is a small HTTP service on this
+The compute and data services that **MxDataHUB**, **MxJobsWMS** and **MxAcctMGR** use. Each is a small HTTP service on this
 Mac (127.0.0.1 only), outside the apps' sandboxes, so it can use any libraries, solver licences, databases and
 credentials you give it.
 
@@ -10,7 +10,7 @@ credentials you give it.
 | --- | --- | --- |
 | **MxDataHUB** | **The data.** Securities, benchmarks, portfolios in the security master (PostgreSQL schema `srm`), and keeping each category of market data fresh. | Data Refresh, Portfolios, Benchmarks, Load History |
 | **MxJobsWMS** | **The processes.** Repeatable, scheduled, approved workflows over that data, in three layers: business operations, agents, Layer 3 data reads and computations. | Jobspaces built from the samples |
-| **MxPortMGR** | **Learning portfolio management.** Illustrative accounts worked through the active and passive paths, with built-in Swift engines that mirror these services; Engine ▸ Layer 3 services sends the same inputs here inline to compare. | Samples, Active / Passive paths, Attribution |
+| **MxAcctMGR** | **Learning portfolio management.** Illustrative accounts worked through the active and passive paths, with built-in Swift engines that mirror these services; Engine ▸ Layer 3 services sends the same inputs here inline to compare. | Samples, Active / Passive paths, Attribution |
 | **Services/** (here) | **The Layer 3 tools** the apps call: loaders, analytics, optimizers, risk. | Your IDE (IntelliJ IDEA, CLion, VS Code) |
 
 They link both ways: MxDataHUB's **Portfolios ▸ Workflows** (Optimize, Track, Attribution), **Benchmarks ▸ Track…**
@@ -44,7 +44,7 @@ the permission, every connection to a 192.168.x.x address fails with *No route t
 | --- | --- | --- | --- | --- |
 | [srm-loader](srm-loader/) | Python | 8770 | Refresh the security master **by data category** (runs `MxDataHUB/SRM/srm.py` loaders); freshness and data-quality checks | Data refresh, data quality |
 | [analytics](analytics/) | Python | 8772 | **Optimization inputs** from the security master (universe, sectors, benchmark and current weights, Ledoit-Wolf covariance, momentum alpha) and **performance attribution** (Brinson-Fachler, monthly, Carino-linked) of a security-master portfolio or of returns and weights passed inline | Active, passive, attribution, risk |
-| [accounts](accounts/) | Python | 8774 | **Personal accounts** for MxPortMGR's My Portfolio: security search (ticker, name, ISIN, CUSIP) with latest prices, benchmark weights, and each account — type, approach, benchmark, cash, open **tax lots** — saved to the security master (schema V011), with the day's holdings snapshot written from the lots; asks srm-loader for prices of new holdings; FMP's **earnings calendar** and company earnings history for MxPortMGR's earnings screens (no database needed) | Personal accounts |
+| [accounts](accounts/) | Python | 8774 | **Personal accounts** for MxAcctMGR's My Portfolio: security search (ticker, name, ISIN, CUSIP) with latest prices, benchmark weights, and each account — type, approach, benchmark, cash, open **tax lots** — saved to the security master (schema V011), with the day's holdings snapshot written from the lots; asks srm-loader for prices of new holdings; FMP's **earnings calendar** and company earnings history for MxAcctMGR's earnings screens (no database needed) | Personal accounts |
 | [portfolio-java](portfolio-java/) | Java | 8766 | **Active portfolio construction**: alpha vs active risk at a tracking-error target, name / active-weight / sector limits, trade list; absolute max-Sharpe | Active management |
 | [portfolio-cpp](portfolio-cpp/) | C++ | 8767 | **Index tracking**: the ≤ N-name portfolio with the smallest tracking error (full, largest-weight or sector-stratified); **risk**: VaR, ES, tracking error, beta, active-risk contributions | Passive / index, risk |
 | [market-sample](market-sample/) | Python | 8765 | Synthetic quotes and indicators; the template for wrapping a new data source | Templates, testing |
@@ -93,7 +93,7 @@ holdings forward to the latest price date. Until a month has its own snapshot, i
 **Inline attribution:** instead of a `portfolio` code, `POST /attribution` also takes the inputs in the request —
 `assets`, `sectors` and `periods` (each month's security `returns` and start-of-month `portfolioWeights` and
 `benchmarkWeights`) — and attributes them with the same Brinson-Fachler / BHB + Carino maths and the same
-`mxjobs.attribution/1` outcome, without the database (see `contracts/README.md`). MxPortMGR uses it to attribute its
+`mxjobs.attribution/1` outcome, without the database (see `contracts/README.md`). MxAcctMGR uses it to attribute its
 illustrative samples (Engine ▸ Layer 3 services) and checks the answer against its built-in engine.
 
 ## Develop

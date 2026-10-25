@@ -1,6 +1,6 @@
 //
 //  TargetAccounts.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Banking ▸ Target Accounts: each target account's details (srm.payee, V033) and the editor for a new one — its name,
 //  nickname, description, status and identifier; its bank or company, last four digits, category and usual amount;
@@ -34,15 +34,28 @@ struct PayeeSaved {
 nonisolated enum TargetSecrets {
     enum Kind: String { case password, keys = "user keys" }
 
-    private static var service: String { (Bundle.main.bundleIdentifier ?? "com.k3jdr.MxPortMGR") + ".target-accounts" }
+    private static var service: String { (Bundle.main.bundleIdentifier ?? "com.k3jdr.MxAcctMGR") + ".target-accounts" }
+    /// Where the app kept them while it was MxPortMGR: moved here the first time one is read.
+    private static var legacyService: String { service.replacingOccurrences(of: "MxAcctMGR", with: "MxPortMGR") }
 
-    private static func match(_ kind: Kind, _ payee: Int) -> [String: Any] {
+    private static func match(_ kind: Kind, _ payee: Int, in service: String = service) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
          kSecAttrAccount as String: "\(payee) \(kind.rawValue)"]
     }
 
     static func get(_ kind: Kind, _ payee: Int) -> String? {
-        var query = match(kind, payee)
+        if let value = read(match(kind, payee)) { return value }
+        // Saved before the rename: move it under this app's service.
+        guard let value = read(match(kind, payee, in: legacyService)) else { return nil }
+        var add = match(kind, payee)
+        add[kSecValueData as String] = Data(value.utf8)
+        add[kSecAttrLabel as String] = "MxAcctMGR: \(payee) (\(kind.rawValue))"
+        if SecItemAdd(add as CFDictionary, nil) == errSecSuccess { SecItemDelete(match(kind, payee, in: legacyService) as CFDictionary) }
+        return value
+    }
+
+    private static func read(_ match: [String: Any]) -> String? {
+        var query = match
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
@@ -54,11 +67,12 @@ nonisolated enum TargetSecrets {
     @discardableResult
     static func set(_ value: String?, _ kind: Kind, _ payee: Int, account name: String) -> Bool {
         guard let value, !value.isEmpty else {
+            SecItemDelete(match(kind, payee, in: legacyService) as CFDictionary)
             let status = SecItemDelete(match(kind, payee) as CFDictionary)
             return status == errSecSuccess || status == errSecItemNotFound
         }
         let data = Data(value.utf8)
-        let update = [kSecValueData as String: data, kSecAttrLabel as String: "MxPortMGR: \(name) (\(kind.rawValue))"] as [String: Any]
+        let update = [kSecValueData as String: data, kSecAttrLabel as String: "MxAcctMGR: \(name) (\(kind.rawValue))"] as [String: Any]
         var status = SecItemUpdate(match(kind, payee) as CFDictionary, update as CFDictionary)
         if status == errSecItemNotFound {
             var add = match(kind, payee)

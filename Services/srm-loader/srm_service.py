@@ -80,7 +80,7 @@ CATEGORIES = [
      "continueAfterFailure": ["earnings-symbols"]},
     {"id": "constituents", "name": "Benchmark constituents", "loaders": ["ssga", "nasdaq100", "policy-benchmarks"],
      "description": "S&P 500 / 400 / 600 and Dow from SPDR holdings; Nasdaq-100 members; policy benchmarks' month-end "
-                    "snapshots from their dated mixes (MxPortMGR).", "cadence": "daily",
+                    "snapshots from their dated mixes (MxAcctMGR).", "cadence": "daily",
      # State Street publishes a day's holdings the next business morning, so the newest SPDR file is dated a business
      # day back (two overnight, before the next one appears): freshness allows that lag.
      "dataLagDays": 1},
@@ -105,12 +105,12 @@ CATEGORIES = [
      "continueAfterFailure": ["massive-prices", "fmp-prices", "fmp-otc-prices", "vanguard-funds", "blackrock-funds",
                               "fund-families", "listed-derivatives", "vanguard-plan"]},
     {"id": "bank-accounts", "name": "Checking accounts", "loaders": ["pnc-bank"],
-     "description": "Your bank's side of MxPortMGR's check register: PNC Online Banking downloads (QFX / OFX, CSV) in "
+     "description": "Your bank's side of MxAcctMGR's check register: PNC Online Banking downloads (QFX / OFX, CSV) in "
                     "the drop folders of bank_accounts.local.json, each line once, matched to the register's entries "
                     "(same amount and check number, or same amount within a week), which marks them cleared.",
      "cadence": "daily", "continueAfterFailure": ["pnc-bank"]},
     {"id": "card-accounts", "name": "Credit card accounts", "loaders": ["card-downloads"],
-     "description": "Your card companies' side of MxPortMGR's credit card registers: Chase (CSV, QFX / OFX), Discover "
+     "description": "Your card companies' side of MxAcctMGR's credit card registers: Chase (CSV, QFX / OFX), Discover "
                     "and Capital One (CSV) downloads in the drop folders of card_accounts.local.json, each line once "
                     "(also when a CSV and a QFX overlap), posted to the card's register, with its payments linked to "
                     "the checking entries that paid them.",
@@ -124,14 +124,14 @@ CATEGORIES = [
      "cadence": "daily", "dataLagDays": 1},
     {"id": "market-series", "name": "Market series: VIX & Treasury yields", "loaders": ["cboe-vix", "fred-yields"],
      "description": "The VIX family (VIX9D, VIX, VIX3M, VIX6M daily OHLC from Cboe) and Treasury constant-maturity "
-                    "yields 1 month to 30 years with NBER recession months (FRED) — free, no key. MxPortMGR's VIX "
+                    "yields 1 month to 30 years with NBER recession months (FRED) — free, no key. MxAcctMGR's VIX "
                     "and Yield Curve screens read them.",
      "cadence": "daily",
      # FRED posts a day's Treasury yields the next business day.
      "dataLagDays": 1},
     {"id": "fundamentals", "name": "Company fundamentals", "loaders": ["fmp-fundamentals"],
      "description": "Quarterly revenue, operating cash flow, capex, depreciation and free cash flow (FMP statements) "
-                    "for the companies in srm.fundamental_watch — the hyperscalers and compute suppliers on MxPortMGR's "
+                    "for the companies in srm.fundamental_watch — the hyperscalers and compute suppliers on MxAcctMGR's "
                     "Compute screen.",
      "cadence": "weekly"},
     {"id": "portfolio-snapshots", "name": "Portfolio snapshots", "loaders": ["portfolio-snapshots"], "optional": True,
@@ -273,7 +273,8 @@ class SRM:
                 price_date = cur.fetchone()[0]
                 # Only the benchmarks the loaders refresh: custom ones built in MxDataHUB keep their build date.
                 cur.execute("""SELECT min(as_of_date), max(as_of_date) FROM srm.v_benchmark_summary
-                                WHERE provider IS DISTINCT FROM 'MxDataHUB' AND provider IS DISTINCT FROM 'MxPortMGR'
+                                WHERE provider IS DISTINCT FROM 'MxDataHUB' AND provider IS DISTINCT FROM 'MxAcctMGR'
+                                  AND provider IS DISTINCT FROM 'MxPortMGR'
                                   AND provider IS DISTINCT FROM 'Policy'""")
                 bench_min, bench_max = cur.fetchone()
                 portfolio_min = None
@@ -422,7 +423,8 @@ def quality_checks(status, stale_days):
 
     for code, b in status["benchmarks"].items():
         age = business_days_between(b["as_of_date"], today) if b["as_of_date"] else None
-        if b.get("provider") not in ("MxDataHUB", "MxPortMGR", "Policy"):    # custom, blended and policy benchmarks aren't refreshed
+        # custom, blended and policy benchmarks aren't refreshed ('MxPortMGR': MxAcctMGR's before migration V034)
+        if b.get("provider") not in ("MxDataHUB", "MxAcctMGR", "MxPortMGR", "Policy"):
             add("benchmark %s fresh" % code, age is not None and age <= stale_days,
                 "as of %s (%s business days old)" % (b["as_of_date"], age))
         weight = float(b["weight_sum"] or 0)

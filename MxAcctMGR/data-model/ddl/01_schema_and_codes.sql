@@ -1,6 +1,6 @@
--- MxPortMGR · pmg DDL package · 01 schema and code lists
+-- MxAcctMGR · pmg DDL package · 01 schema and code lists
 --
--- Schema pmg holds what MxPortMGR keeps today in Swift (the illustrative universe, the sample
+-- Schema pmg holds what MxAcctMGR keeps today in Swift (the illustrative universe, the sample
 -- accounts, the market reports and reactions) and in UserDefaults (My Portfolio), plus the
 -- results of its engines (optimizations, risk, attribution, long-run simulations).
 -- A My Portfolio kept in the security master stays in srm.portfolio / srm.portfolio_tax_lot
@@ -8,7 +8,7 @@
 -- illustrative companies, prices or forecasts are real.
 
 CREATE SCHEMA IF NOT EXISTS pmg;
-COMMENT ON SCHEMA pmg IS 'MxPortMGR: illustrative market, accounts and tax lots, market reports, reactions and engine results';
+COMMENT ON SCHEMA pmg IS 'MxAcctMGR: illustrative market, accounts and tax lots, market reports, reactions and engine results';
 
 CREATE FUNCTION pmg.touch_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

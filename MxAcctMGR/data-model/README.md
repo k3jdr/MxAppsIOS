@@ -1,7 +1,7 @@
-# MxPortMGR data model
+# MxAcctMGR data model
 
 The illustrative market, the teaching accounts with their tax lots, the market reports and reactions, and the engines'
-results, as PostgreSQL schema `pmg`. MxPortMGR itself keeps these in Swift and UserDefaults; a My Portfolio in the
+results, as PostgreSQL schema `pmg`. MxAcctMGR itself keeps these in Swift and UserDefaults; a My Portfolio in the
 security master is already MxDataHUB's `srm.portfolio` / `srm.portfolio_tax_lot`.
 
 | Document | What it holds |

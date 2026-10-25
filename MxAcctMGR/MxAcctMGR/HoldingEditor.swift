@@ -1,6 +1,6 @@
 //
 //  HoldingEditor.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  My Holdings ▸ Edit Holding… (double-click a row, its context menu, or the pencil): a holding's tax lots — purchase
 //  date, shares and total cost of each — edited, added or removed; for cash, the amount. The holding's shares are the

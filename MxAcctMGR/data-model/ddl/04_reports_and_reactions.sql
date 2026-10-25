@@ -1,4 +1,4 @@
--- MxPortMGR · pmg DDL package · 04 market reports and reactions
+-- MxAcctMGR · pmg DDL package · 04 market reports and reactions
 --
 -- The eighteen illustrative releases (Report Library, Morning Briefing, Report Walkthrough):
 -- what was released, how to read it, how markets moved and which reactions the Behaviour Lab

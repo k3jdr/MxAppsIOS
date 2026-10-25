@@ -1,7 +1,7 @@
-// Writes ../ddl/10_seed.sql from MxPortMGR's own model. Run ./generate_seed.sh (compiles this with the app's model files).
+// Writes ../ddl/10_seed.sql from MxAcctMGR's own model. Run ./generate_seed.sh (compiles this with the app's model files).
 import Foundation
 
-// Writes pmg seed SQL from MxPortMGR's own model (Universe, Samples, MarketReport.all, MarketHistory).
+// Writes pmg seed SQL from MxAcctMGR's own model (Universe, Samples, MarketReport.all, MarketHistory).
 func q(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "''") + "'" }
 func q(_ s: String?) -> String { s.map { q($0) } ?? "NULL" }
 func n(_ x: Double) -> String { x.isFinite ? String(format: "%.17g", x) : "NULL" }
@@ -103,9 +103,9 @@ emit(rows("INSERT INTO pmg.reaction_move (report_id, reaction_id, ordinal, from_
           reports.flatMap { r in r.reactions.flatMap { x in x.moves.enumerated().map { "\(q(r.id)), \(q(x.id)), \($0 + 1), \(q(sleeveCode[$1.from]!)), \(q(sleeveCode[$1.to]!)), \(n($1.fraction))" } } }))
 
 let header = """
--- MxPortMGR · pmg DDL package · 10 seed data (generated)
+-- MxAcctMGR · pmg DDL package · 10 seed data (generated)
 --
--- Generated from MxPortMGR's own model (Universe.swift, Samples.swift, MarketHistory in
+-- Generated from MxAcctMGR's own model (Universe.swift, Samples.swift, MarketHistory in
 -- Attribution.swift, MarketReport.all in MarketReports.swift / ReportLibrary.swift, BehaviorLab.swift)
 -- by compiling those files with a small dumper, so the rows are exactly what the app holds —
 -- including the drifted-tracker sample and the monthly returns, which the app draws from seeded

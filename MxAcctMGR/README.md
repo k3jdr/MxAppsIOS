@@ -1,4 +1,4 @@
-# MxPortMGR
+# MxAcctMGR
 
 A portfolio-management IDE for macOS that **teaches**: it walks you through setting up an **actively managed** or a
 **passive index** portfolio for personal accounts, explaining *why* each step — optimization, risk, tracking,
@@ -10,16 +10,25 @@ news cost over the long run.
 > service; the earnings screens show real companies' reports as Nasdaq.com and FMP publish them. The report
 > walkthroughs and the Morning Briefing's market panels are scenarios — made-up numbers in the shape of real releases,
 > labelled as such — and a walkthrough about one company uses the account's own stock with invented numbers. Nothing in
-> MxPortMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
+> MxAcctMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
 > status bar says so on every screen.
 
 Sixth app in the MxAppsIOS family, next to MxJobsWMS, MxDataHUB, MxDataSQL, MxNoteONE and MxFileMGR. It re-implements
 MxDataHUB's portfolio optimization and attribution (which MxDataHUB hands to MxJobsWMS workflows and the Layer 3
 services) as interactive, explained steps, and can run them through the same **Layer 3 services** in `../Services`.
 
+**Renamed from MxPortMGR** (10/25/26): the personal accounts app — Banking as well as Investments — so it is named for
+accounts. Folder, Xcode project, target, product, bundle identifier (`com.k3jdr.MxAcctMGR`) and link scheme
+(`mxacctmgr://`; `mxportmgr://` links saved before still open it) all changed. Target accounts' passwords and user keys
+saved under the old name move to the new Keychain service the first time they are read. The security master's values
+naming the app (`managed_by`, a benchmark's `provider`) are renamed by migration V034, and the apps and services read
+both names until it runs. The app's window and display preferences start fresh (macOS keeps each app's own); everything
+else — portfolios, registers, target accounts, links, notes — is in the security master. Commits before the rename say
+"MxPortMGR:".
+
 ## The window
 
-One window (`MxPortMGR`, 1440 × 900 by default):
+One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
@@ -58,7 +67,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 
 | Menu | Items |
 | --- | --- |
-| **MxPortMGR** | **Settings…** ⌘, — **Text**: a font name, size and style for each kind of text that takes room — **Headings** (page titles, page introductions, headings, subheadings, names, figures) and **Numbers and Tables** (registers and tables, whose rows follow their text's height; the earnings calendar, whose day cells shrink or grow with it; IDs and codes; calculation results) — each section with **Step Down** / **Step Up** (every kind a point smaller or larger) and **Restore Defaults**; **Banking**: what the checking register's New entry starts with (kind — Debit at first —, check number, date); **Guidance**: the instruction level — **Full** (everything), **Brief** (no "Why this step" lessons) or **Minimal** (also no line under the titles, and the lesson-only pages — Welcome, Choose Your Path, Why Optimize?, Why Attribution?, Active vs Passive — leave the sidebar, the Guide menu and Previous / Next Step) |
+| **MxAcctMGR** | **Settings…** ⌘, — **Text**: a font name, size and style for each kind of text that takes room — **Headings** (page titles, page introductions, headings, subheadings, names, figures) and **Numbers and Tables** (registers and tables, whose rows follow their text's height; the earnings calendar, whose day cells shrink or grow with it; IDs and codes; calculation results) — each section with **Step Down** / **Step Up** (every kind a point smaller or larger) and **Restore Defaults**; **Banking**: what the checking register's New entry starts with (kind — Debit at first —, check number, date); **Guidance**: the instruction level — **Full** (everything), **Brief** (no "Why this step" lessons) or **Minimal** (also no line under the titles, and the lesson-only pages — Welcome, Choose Your Path, Why Optimize?, Why Attribution?, Active vs Passive — leave the sidebar, the Guide menu and Previous / Next Step) |
 | **Edit** | (the standard items) · **Copy Page Text** ⌥⇧⌘C — the whole page as text · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
@@ -134,7 +143,7 @@ database (`srm` on 192.168.0.223) — through the **accounts** Layer 3 service (
 with `python3 Services/mxservices.py start`). If the service or the database can't be reached, a banner says so, with
 *Try Again* and a link to Library ▸ Layer 3 Services; nothing is made up in its place. The account is an `srm.portfolio` with an account type, approach, cash
 balance and open **tax lots** (`srm.portfolio_tax_lot`, migration V011), and the day's holdings snapshot is rewritten
-from the lots when it is saved, so MxDataHUB ▸ Portfolios shows it (with a Tax Lots view and *Open in MxPortMGR*) and
+from the lots when it is saved, so MxDataHUB ▸ Portfolios shows it (with a Tax Lots view and *Open in MxAcctMGR*) and
 the analytics service can analyse it.
 
 **One portfolio open at a time, like a document** (`PortfolioFile.swift`, `PortfolioSheets.swift`, migration V022):
@@ -148,7 +157,7 @@ the analytics service can analyse it.
 | **Save** ⌘S | holdings, lots, cash, benchmark, approach and **preferences** as the portfolio's next version |
 | **Revert to Saved** | drop the unsaved changes and read the saved version again |
 | **Duplicate Portfolio…** | a new portfolio (new code and name) from the saved version — lots, cash, benchmark, preferences — then opened |
-| **Rename Portfolio…** | the name; the code stays (MxDataHUB and `mxportmgr://` links use it) |
+| **Rename Portfolio…** | the name; the code stays (MxDataHUB and `mxacctmgr://` links use it) |
 | **Import Holdings…** ⇧⌘I | a CSV with a header line — Ticker (or Symbol), Shares (or Quantity), optionally Cost and Acquired (yyyy-mm-dd or m/d/yyyy), e.g. a custodian's export — resolved against the security master (`POST /securities/resolve`), previewed, then added to the holdings or replacing them |
 | **Export Portfolio** | the saved version as JSON (account, lots, preferences, decisions) or CSV (tax lots) |
 
@@ -196,7 +205,7 @@ for a bond fund), volatility and momentum alpha come from the same `/inputs`, an
 expense ratio from the security master (Vanguard funds; other families' show none). A ticker two securities share
 shows as `TICKER:MIC` internally.
 
-`mxportmgr://my-portfolio/CODE` (from MxDataHUB or MxJobsWMS ▸ Window ▸ Open MxPortMGR) opens My Portfolio on that
+`mxacctmgr://my-portfolio/CODE` (from MxDataHUB or MxJobsWMS ▸ Window ▸ Open MxAcctMGR) opens My Portfolio on that
 security-master account.
 
 ### Knowledge Library
@@ -285,7 +294,7 @@ the time of day the time from an earlier one is kept (marked ↺) — so times s
   flows…), **Your Account**, **Your Reaction**, **The Long Run**, **Takeaways**. The walkthroughs teach with
   illustrative numbers; **The Report**'s *The real report* box links to the actual one: the publisher's latest
   release, its release schedule, and its history (FRED for the economic series) or live data (CME FedWatch, Treasury
-  yields, Freddie Mac mortgage rates), and for the earnings reports MxPortMGR's own Earnings by Day and Earnings
+  yields, Freddie Mac mortgage rates), and for the earnings reports MxAcctMGR's own Earnings by Day and Earnings
   Calendar. The addresses (`ReportSources.swift`) were checked in a browser on 2026-10-22; OPEC's monthly report is
   left out because its site puts up a bot check.
 
@@ -360,9 +369,9 @@ into `../Shared/Links` — shared with MxDataHUB's Securities and Portfolio Hold
 * **Links to your notes in MxNoteONE**: right-click a page, paragraph, section or notebook in MxNoteONE ▸ *Copy Link
   to …*, then in the Link dialog press **Use the Link Copied in MxNoteONE** (it shows when MxNoteONE's link is on the
   clipboard) — or paste the `mxnoteone://…` address. The title copied with it (the page's, section's or paragraph's) is
-  kept with the link, since MxPortMGR can't read MxNoteONE's notebooks: the hover card shows it, with a page, paragraph,
+  kept with the link, since MxAcctMGR can't read MxNoteONE's notebooks: the hover card shows it, with a page, paragraph,
   pin, section or notebook symbol, and "Click to open in MxNoteONE". Clicking opens MxNoteONE there; MxNoteONE opens
-  `mxnoteone://` links from other apps from the version released with this (older ones don't, and MxPortMGR then says
+  `mxnoteone://` links from other apps from the version released with this (older ones don't, and MxAcctMGR then says
   that no app opens the link). Hover text can hold MxNoteONE links too.
 * A linked symbol or name is shown as a link; **a click opens it** (in the default browser, or in MxNoteONE).
 * **Resting the pointer** on it for 0.6 s shows the **hover card** (in the key window): the hover text with its links
@@ -435,7 +444,7 @@ sources**.
   both, or neither (offered nowhere). Existing accounts started with the sources they had been paid from (V033), both
   when not paid yet. A name typed in a register that isn't a target account becomes one with that register's source;
   a target account a register names (typed, or a bank line accepted) gains that register's source.
-* **The password and user keys** are kept in this Mac's Keychain (service `com.k3jdr.MxPortMGR.target-accounts`, one
+* **The password and user keys** are kept in this Mac's Keychain (service `com.k3jdr.MxAcctMGR.target-accounts`, one
   item each per account), never in the security master: other Macs, and others using the registers, don't see them,
   and they don't move to another Mac (the app can't use iCloud Keychain without a provisioning profile). Everything
   else is in the security master with the account (V033), shared like the registers.
@@ -469,7 +478,7 @@ shows on the last four digits and the note mark, and the link's hover text on it
 
 ## Securities (Library ▸ Securities)
 
-MxDataHUB's Securities page in MxPortMGR: the security master's securities, searched by name or any identifier
+MxDataHUB's Securities page in MxAcctMGR: the security master's securities, searched by name or any identifier
 (ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI — current or past), filtered by **Type**, **In** (a benchmark's members
 on its latest date) and **Active only**, and by any column from its header (sort, the column's values with their
 counts, or a condition — numbers and dates compared as such), a thousand at a time with Previous / Next. Like Add
@@ -477,7 +486,7 @@ Securities, the table shows Ticker, Name, Type, Sector, MIC, **Price**, **As of*
 securities first and the largest first; the identifiers are in the details. Select several rows with ⌘-click or ⇧-click (⌘A for the page): ⌘C, or the context menu's *Copy N Rows*, copies them under the column titles, tab-separated for a spreadsheet; the status line counts the selection and the details show the last row clicked. Selecting one shows its last year of closes, its
 identifiers with their dates and sources (a table that copies), then its issuer and security facts, listings,
 classification, benchmark membership and corporate actions as one selectable text. Links on tickers and names are the
-same rows as MxDataHUB's (`Shared/Links`): ⌘K, the row's context menu, or a hover card's Edit Link…. MxPortMGR reads
+same rows as MxDataHUB's (`Shared/Links`): ⌘K, the row's context menu, or a hover card's Edit Link…. MxAcctMGR reads
 the database through the accounts service (`POST /securities/browse`, `/securities/browse/values`,
 `GET /securities/<id>/detail`, `GET /security-types`), which runs MxDataHUB's queries; the two panes use the shared
 `SplitPanes` (`Shared/SplitPanes.swift`).
@@ -486,7 +495,7 @@ the database through the accounts service (`POST /securities/browse`, `/securiti
 
 Each sample is an edge case, and an account in the security master: `srm.py load sample-portfolios` (MxDataHUB/SRM,
 run through the srm-loader service so it shows in Data Refresh ▸ Activity) writes them with real securities, tax lots
-costed at the real close on each purchase date, cash and a benchmark, managed by "MxPortMGR samples". The app reads
+costed at the real close on each purchase date, cash and a benchmark, managed by "MxAcctMGR samples". The app reads
 them through the accounts service like My Portfolio and keeps only each one's lesson (`Samples.swift`). *Use* makes
 it the account of the report walkthroughs and the Morning Briefing; *Copy to My Portfolio* (or My Portfolio's *Start
 From a Sample*) copies its holdings, lots and benchmark into My Portfolio to work through the six steps.
@@ -531,12 +540,12 @@ reachable) are shown as alerts with a link to that screen.
 ## Build and run
 
 ```bash
-cd MxPortMGR
-xcodebuild -project MxPortMGR.xcodeproj -scheme MxPortMGR -configuration Debug build
+cd MxAcctMGR
+xcodebuild -project MxAcctMGR.xcodeproj -scheme MxAcctMGR -configuration Debug build
 ```
 
-File-system-synchronized Xcode project (team QC4VX47BJ8, bundle id `com.k3jdr.MxPortMGR`, macOS 26.6,
-`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`), compiling `MxPortMGR/` and `../Shared` (Quick Help, the Layer 3
+File-system-synchronized Xcode project (team QC4VX47BJ8, bundle id `com.k3jdr.MxAcctMGR`, macOS 26.6,
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`), compiling `MxAcctMGR/` and `../Shared` (Quick Help, the Layer 3
 service catalog and view). Sandboxed with outgoing network connections (for the services on 127.0.0.1 and Nasdaq.com's earnings calendar). The Debug
 configuration is compiled with `-O`: the optimizers and the simulator are numeric loops that are ~75× slower
 unoptimised.
@@ -552,7 +561,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 
 | File | Contents |
 | --- | --- |
-| `MxPortMGRApp.swift` | The window and the Guide, Portfolio and Reports menus, and Edit ▸ Link… |
+| `MxAcctMGRApp.swift` | The window and the Guide, Portfolio and Reports menus, and Edit ▸ Link… |
 | `ContentView.swift` | Sidebar guide with Quick Help docked, toolbar pickers, status bar, launch arguments |
 | `Navigation.swift` | Back and Forward: the places visited, the toolbar's ‹ ›, the Go menu, ⌃← ⌃→ and a mouse's side buttons |
 | `PortStore.swift` | Screens, the selected account, settings, results, walkthrough state, tax-lot estimates |

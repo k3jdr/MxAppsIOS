@@ -269,7 +269,7 @@ def add_transaction(conn, code, body, commit=True):
                                   status, bank_txn_id, entered_by, updated_by)
         VALUES (%(cid)s, %(txn_date)s, %(kind)s, %(payee_id)s, %(payee_name)s, %(expense_account_id)s, %(memo)s, %(amount)s,
                 %(status)s, %(bank)s, %(by)s, %(by)s) RETURNING txn_id""",
-                 dict(f, cid=card["card_account_id"], bank=body.get("bankTxnId"), by=str(body.get("by") or "MxPortMGR")[:80]))
+                 dict(f, cid=card["card_account_id"], bank=body.get("bankTxnId"), by=str(body.get("by") or "MxAcctMGR")[:80]))
     if not commit:
         return rows[0]["txn_id"]
     # A charge entered from a receipt may already be among the card company's lines: post them now.
@@ -292,7 +292,7 @@ def update_transaction(conn, txn_id, body):
                           int(body["version"])), version=cur["version"])
     f = _fields(conn, body, cur)
     unmatch = f["status"] in ("pending", "void") and cur["cardLineId"] is not None
-    by = str(body.get("by") or "MxPortMGR")[:80]
+    by = str(body.get("by") or "MxAcctMGR")[:80]
     with conn.cursor() as c:
         c.execute("""UPDATE srm.card_txn SET txn_date = %(txn_date)s, kind = %(kind)s, payee_id = %(payee_id)s,
                             payee_name = %(payee_name)s, expense_account_id = %(expense_account_id)s, memo = %(memo)s,
@@ -331,7 +331,7 @@ def link_payment(conn, txn_id, body):
         if fetch(conn, "SELECT 1 FROM srm.card_txn WHERE bank_txn_id = %s AND txn_id <> %s", (int(bank_txn), txn_id)):
             raise Conflict("that checking entry already paid another card payment")
     fetch(conn, """UPDATE srm.card_txn SET bank_txn_id = %s, version = version + 1, updated_by = %s, updated_at = now()
-                    WHERE txn_id = %s""", (int(bank_txn) if bank_txn else None, body.get("by") or "MxPortMGR", txn_id))
+                    WHERE txn_id = %s""", (int(bank_txn) if bank_txn else None, body.get("by") or "MxAcctMGR", txn_id))
     conn.commit()
     return register(conn, t["code"])
 
@@ -345,7 +345,7 @@ def pay(conn, code, body):
     amount = abs(_num(body.get("amount"), "amount"))
     if amount == 0:
         raise ValueError("amount must not be zero")
-    by = str(body.get("by") or "MxPortMGR")[:80]
+    by = str(body.get("by") or "MxAcctMGR")[:80]
     date = body.get("date") or dt.date.today().isoformat()
     memo = body.get("memo") or "%s payment" % card["name"]
     out = bank.add_transaction(conn, body.get("fromAccount") or "", {
@@ -379,7 +379,7 @@ def save_statement(conn, code, closing, body):
                updated_by = excluded.updated_by, version = srm.card_statement.version + 1, updated_at = now()""",
           (card["card_account_id"], closing, opt("statementBalance"), opt("minimumDue"),
            _date(body["dueDate"], "dueDate") if body.get("dueDate") else None,
-           (body.get("notes") or "").strip()[:2000] or None, str(body.get("by") or "MxPortMGR")[:80]))
+           (body.get("notes") or "").strip()[:2000] or None, str(body.get("by") or "MxAcctMGR")[:80]))
     conn.commit()
     return register(conn, code)
 
@@ -446,7 +446,7 @@ def add_card_targets(conn, body):
     names = [n.strip() for n in body.get("names") or [] if isinstance(n, str) and n.strip()]
     if not names:
         raise ValueError("names lists the card targets to add")
-    by = str(body.get("by") or "MxPortMGR")[:80]
+    by = str(body.get("by") or "MxAcctMGR")[:80]
     added = linked = 0
     for name in names:
         found = fetch(conn, "SELECT payee_id FROM srm.payee WHERE lower(name) = lower(%s)", (name,))

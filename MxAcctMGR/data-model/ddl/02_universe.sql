@@ -1,4 +1,4 @@
--- MxPortMGR · pmg DDL package · 02 the illustrative market
+-- MxAcctMGR · pmg DDL package · 02 the illustrative market
 --
 -- Securities (36 companies, 6 bond funds, 10 individual bonds, cash, 3 index funds held by
 -- look-through), bond terms, fund look-through weights, benchmarks and their weights, and the

@@ -1,6 +1,6 @@
 //
 //  ReportSources.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The real reports behind the walkthroughs: for each one, the publisher's own pages — the latest release, its
 //  release schedule — and where its history is kept (FRED, the St. Louis Fed's database, for the economic series).

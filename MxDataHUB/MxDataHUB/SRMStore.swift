@@ -389,7 +389,7 @@ final class SRMStore {
             databases = list.contains(target.database) ? list : (list + [target.database]).sorted()
             let exists = try await scalar("SELECT (to_regclass('srm.security') IS NOT NULL)::text")
             available = exists == "true"
-            // Links on tickers and names: srm.security_link (V014), shared with MxPortMGR.
+            // Links on tickers and names: srm.security_link (V014), shared with MxAcctMGR.
             SecurityLinks.shared.use(available == true ? HubLinkBackend(service: service) : nil)
             if available == true {
                 securityTypes = try await column("SELECT security_type FROM srm.security_type ORDER BY 1")

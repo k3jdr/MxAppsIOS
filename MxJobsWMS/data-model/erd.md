@@ -340,4 +340,4 @@ erDiagram
 | ------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `wms.job_run.portfolio_code` / `benchmark_code` | MxDataHUB `srm.portfolio.code` / `srm.benchmark.code` | by code, as passed in `mxjobswms://sample/<id>?portfolio=&benchmark=`        |
 | `wms.api_subscription.keychain_account`         | login Keychain, service `com.k3jdr.MxJobsWMS`         | API keys are never stored in the database                                    |
-| `wms.layer3_service`                            | `MxAppsIOS/Services/<folder>`                         | the service code; MxPortMGR's `pmg.engine_run.service_id` names the same ids |
+| `wms.layer3_service`                            | `MxAppsIOS/Services/<folder>`                         | the service code; MxAcctMGR's `pmg.engine_run.service_id` names the same ids |

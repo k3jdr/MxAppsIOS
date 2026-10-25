@@ -1,6 +1,6 @@
 //
 //  ServiceClient.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The same optimizations through the Layer 3 services (MxAppsIOS/Services, started with
 //  `python3 Services/mxservices.py start`): the account's inputs from the analytics service go inline (assets,

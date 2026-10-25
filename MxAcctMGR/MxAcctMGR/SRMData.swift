@@ -1,6 +1,6 @@
 //
 //  SRMData.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  My Portfolio in the security master (MxDataHUB's PostgreSQL schema srm on 192.168.0.223), through the Layer 3
 //  accounts service (Services/accounts, port 8774): search securities, read benchmark weights, load and save the
@@ -94,7 +94,7 @@ nonisolated struct SRMAccount: Codable, Sendable {
     var unpriced: [String]
     /// Saves so far (V022): a save names the version it was made from.
     var version: Int?
-    /// The portfolio's preferences as MxPortMGR saved them (empty for an account saved before V022).
+    /// The portfolio's preferences as MxAcctMGR saved them (empty for an account saved before V022).
     var settings: PortfolioSettings?
     var updatedBy: String?
     var closedDate: String?
@@ -149,7 +149,8 @@ nonisolated struct SRMAccountSummary: Decodable, Sendable, Identifiable, Hashabl
     var version: Int?
     var updatedBy: String?
     var closedDate: String?
-    var isSample: Bool { managedBy == "MxPortMGR samples" }
+    /// (Still "MxPortMGR samples" until migration V034 renames the value.)
+    var isSample: Bool { managedBy == "MxAcctMGR samples" || managedBy == "MxPortMGR samples" }
 
     enum CodingKeys: String, CodingKey {
         case code, name, approach, benchmark, lots, version
@@ -383,13 +384,13 @@ nonisolated enum AccountsClient {
     /// Records a decision; returns them all.
     static func addDecision(_ code: String, title: String, rationale: String, category: String, decidedOn: String) async throws -> [SRMDecision] {
         try await request("POST", "/accounts/\(code)/decisions",
-                          body: ["title": title, "rationale": rationale, "category": category, "decidedOn": decidedOn, "by": "MxPortMGR"],
+                          body: ["title": title, "rationale": rationale, "category": category, "decidedOn": decidedOn, "by": "MxAcctMGR"],
                           as: Decisions.self).decisions
     }
 
     /// A new portfolio from the saved version of `code`.
     static func duplicate(_ code: String, to newCode: String, name: String) async throws -> SRMAccount {
-        try await request("POST", "/accounts/\(code)/duplicate", body: ["code": newCode, "name": name, "by": "MxPortMGR"], as: SRMAccount.self)
+        try await request("POST", "/accounts/\(code)/duplicate", body: ["code": newCode, "name": name, "by": "MxAcctMGR"], as: SRMAccount.self)
     }
 
     static func policyBenchmarks() async throws -> [SRMPolicyBenchmark] {
@@ -398,7 +399,7 @@ nonisolated enum AccountsClient {
 
     /// Defines a policy benchmark's mixes; the service then has the srm-loader write its snapshots.
     static func savePolicy(_ p: SRMPolicyBenchmark) async throws -> SRMPolicyBenchmark {
-        let body: [String: Any] = ["name": p.name, "by": "MxPortMGR",
+        let body: [String: Any] = ["name": p.name, "by": "MxAcctMGR",
                                    "mixes": p.mixes.map { m in ["effectiveFrom": m.effectiveFrom,
                                                                 "components": m.components.map { ["ticker": $0.ticker, "weight": $0.weight] }] }]
         return try await request("PUT", "/benchmarks/policy/\(p.code)", body: body, timeout: 300, as: SRMPolicyBenchmark.self)

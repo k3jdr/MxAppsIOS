@@ -1,6 +1,6 @@
 //
 //  SamplesView.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Library ▸ Sample Portfolios: every sample account, the edge case it teaches, what to look for, and where to go
 //  with it. Use makes it the account the report walkthroughs and the Morning Briefing work on; Copy to My Portfolio

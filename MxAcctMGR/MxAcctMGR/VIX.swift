@@ -1,6 +1,6 @@
 //
 //  VIX.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Knowledge Library ▸ VIX: the Cboe Volatility Index, real data. Today's close and where it stands against 1990 to now,
 //  its history with the calm-to-panic regimes shaded, the term structure (the 9-day, 30-day, 3-month and 6-month
@@ -236,7 +236,7 @@ final class VIXStore {
             }
         }
         var request = URLRequest(url: s.url, timeoutInterval: 30)
-        request.setValue("MxPortMGR (educational)", forHTTPHeaderField: "User-Agent")
+        request.setValue("MxAcctMGR (educational)", forHTTPHeaderField: "User-Agent")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200, let text = String(data: data, encoding: .utf8) else {

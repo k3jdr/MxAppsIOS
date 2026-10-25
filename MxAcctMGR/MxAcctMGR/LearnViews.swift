@@ -1,6 +1,6 @@
 //
 //  LearnViews.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Start Here and Learn the Why: the welcome, choosing a path, and three lessons with live demos — why optimize
 //  (diversification and the stock / bond trade-off), why attribution (allocation vs selection in two sectors), and
@@ -17,7 +17,7 @@ struct WelcomeView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: "A portfolio-management IDE that explains why before it shows how.", lessonTitle: "Before you start", lesson: [
-            "MxPortMGR teaches how professional portfolio tools — optimization, risk, index tracking and attribution — apply to personal accounts, and what everyday decisions cost over the long run.",
+            "MxAcctMGR teaches how professional portfolio tools — optimization, risk, index tracking and attribution — apply to personal accounts, and what everyday decisions cost over the long run.",
             "Everything runs on real data from the security master: real securities, prices and benchmarks, sample accounts built from real purchases, and risk estimated from real daily prices. The market-report walkthroughs are scenarios in the shape of real releases, and the futures are simulations.",
             "It is educational. It never tells you what to buy or sell for your own accounts; talk to a licensed adviser about your situation.",
         ]) {

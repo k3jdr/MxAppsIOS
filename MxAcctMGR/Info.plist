@@ -2,17 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- mxportmgr://my-portfolio/CODE opens My Portfolio from the security-master account CODE
-	     (MxDataHUB ▸ Portfolios ▸ Open in MxPortMGR, MxJobsWMS ▸ Window ▸ Open MxPortMGR; see Shared/AppLinks.swift) -->
+	<!-- mxacctmgr://my-portfolio/CODE opens My Portfolio from the security-master account CODE
+	     (MxDataHUB ▸ Portfolios ▸ Open in MxAcctMGR, MxJobsWMS ▸ Window ▸ Open MxAcctMGR; see Shared/AppLinks.swift).
+	     mxportmgr:// is the same link from before the app was renamed (MxPortMGR), kept for links saved elsewhere. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.k3jdr.MxPortMGR</string>
+			<string>com.k3jdr.MxAcctMGR</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>mxacctmgr</string>
 				<string>mxportmgr</string>
 			</array>
 		</dict>

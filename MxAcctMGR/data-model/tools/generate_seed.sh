@@ -1,8 +1,8 @@
 #!/bin/sh
-# Regenerates ../ddl/10_seed.sql from MxPortMGR's model files (no Xcode project build needed).
+# Regenerates ../ddl/10_seed.sql from MxAcctMGR's model files (no Xcode project build needed).
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
-app="$here/../../MxPortMGR"
+app="$here/../../MxAcctMGR"
 out=$(mktemp -d)
 cd "$app"
 swiftc -O -o "$out/seeddump" Universe.swift Portfolio.swift Samples.swift SRMData.swift Attribution.swift \

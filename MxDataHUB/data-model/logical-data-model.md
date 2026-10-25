@@ -128,7 +128,7 @@ hold it until the next snapshot without it). No overlapping ranges per (benchmar
 **Portfolio** — a model portfolio, or a **personal account** when `account_type` is set. Identifier: `portfolio_id`;
 unique code (`^[A-Za-z0-9_\-]{1,40}$`). Attributes: name, base currency (default USD), benchmark (optional, set null
 if the benchmark is deleted), inception date, description; personal accounts add account type (`taxable`,
-`retirement`, `roth`), approach (`active`, `passive`), managing app (`MxPortMGR`), cash balance (≥ 0).
+`retirement`, `roth`), approach (`active`, `passive`), managing app (`MxAcctMGR`), cash balance (≥ 0).
 
 **Portfolio Holding** — a dated holdings snapshot row. Identifier: (portfolio, date, security). Attributes: quantity
 and / or target weight (at least one; weight −1…1 allows shorts), cost price, what the user typed and how it resolved,
@@ -189,5 +189,5 @@ for buys, sells and transfers; price required for buys and sells; settle ≥ tra
 2. A ticker names one security on one venue at a time; a security has at most one current primary listing.
 3. Benchmark membership is derived from weight snapshots and rebuilt whenever a snapshot is written.
 4. Target weights of a holdings snapshot should add up to 100 % (checked, not enforced, so drafts can be saved).
-5. A personal account's holdings are derived from its tax lots; edit the lots (MxPortMGR), not the holdings.
+5. A personal account's holdings are derived from its tax lots; edit the lots (MxAcctMGR), not the holdings.
 6. Every change made from the app is one SQL statement, committed on its own (ADR 0003).

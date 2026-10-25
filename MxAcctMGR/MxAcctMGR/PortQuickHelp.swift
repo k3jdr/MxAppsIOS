@@ -1,8 +1,8 @@
 //
 //  PortQuickHelp.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
-//  What Quick Help (Shared/QuickHelp) says in MxPortMGR: each screen in the sidebar, the account selected, and the
+//  What Quick Help (Shared/QuickHelp) says in MxAcctMGR: each screen in the sidebar, the account selected, and the
 //  terms and controls the pointer can rest on.
 //
 
@@ -15,8 +15,8 @@ enum PortHelp {
         case .checking: detail = "The check book register, shared: everyone who writes checks on the account enters them here, kept in the security master. The bank's own lines (PNC downloads) are matched to the entries and mark them cleared; the ones left over are the bank's entries to accept."
         case .cards: detail = "Each credit card kept as a register in the security master: charges, credits, payments, fees and interest with the balance owed and the credit left, and its statements — balance, minimum due, due date, paid or not. The card company's downloads (Chase CSV / QFX, Discover and Capital One CSV) post to it, each line once; its payments link to the checking entries that paid them."
         case .expenseLedgers: detail = "Funded ledgers of purpose spending — equipment and software, a home office, subscriptions, training, travel — kept in the security master: each item on a budget line with its budget, the transfers that fund it and the balance not funded yet. Equipment is tracked as assets (depreciation, warranty), training as records (hours, certificates), trips against their per-diem allowances, and subscriptions by what they cost a year and when they renew. Entries can wait for approval."
-        case .expenses: detail = "The target accounts your registers pay or are paid by — a utility, a card, a brokerage, a person — with the bank or company, the last four digits, a category, a note, a nickname, status, identifier, next payment, logon and address, and the registers that pay them (funding sources: checking account payments, credit card payments), which decide where each is offered as a target. The password and user keys stay in this Mac's Keychain. They are the registers' targets: not books MxPortMGR keeps."
-        case .welcome: detail = "What MxPortMGR teaches, how the guide is laid out, and how Quick Help works. Everything runs on real data from the security master (accounts, securities, prices, benchmarks) and the analytics service (risk); the report walkthroughs are scenarios in the shape of real releases."
+        case .expenses: detail = "The target accounts your registers pay or are paid by — a utility, a card, a brokerage, a person — with the bank or company, the last four digits, a category, a note, a nickname, status, identifier, next payment, logon and address, and the registers that pay them (funding sources: checking account payments, credit card payments), which decide where each is offered as a target. The password and user keys stay in this Mac's Keychain. They are the registers' targets: not books MxAcctMGR keeps."
+        case .welcome: detail = "What MxAcctMGR teaches, how the guide is laid out, and how Quick Help works. Everything runs on real data from the security master (accounts, securities, prices, benchmarks) and the analytics service (risk); the report walkthroughs are scenarios in the shape of real releases."
         case .choosePath: detail = "The questions that separate an actively managed portfolio from a passive index one, and a start button for My Portfolio. It doesn't choose for you."
         case .whyOptimize: detail = "Why a portfolio needs more than good picks: diversification, the risk–return trade-off, and what an optimizer does with forecasts, a risk model and limits. Two live demos."
         case .whyAttribution: detail = "Why results need explaining: was it being in the right sectors (allocation) or picking the right companies (selection)? A two-sector demo you can change."
@@ -50,7 +50,7 @@ enum PortHelp {
 
     static let disclaimer = QuickHelpItem(
         title: "Educational Use Only",
-        detail: "The accounts, securities and prices in MxPortMGR are real, from the security master; the report walkthroughs are scenarios in the shape of real releases and the futures are simulations, to show how the tools work and what choices cost. Nothing here is a recommendation for your own accounts.",
+        detail: "The accounts, securities and prices in MxAcctMGR are real, from the security master; the report walkthroughs are scenarios in the shape of real releases and the futures are simulations, to show how the tools work and what choices cost. Nothing here is a recommendation for your own accounts.",
         symbol: "graduationcap")
 
     static let samplePicker = QuickHelpItem(
@@ -60,7 +60,7 @@ enum PortHelp {
 
     static let engine = QuickHelpItem(
         title: "Engine",
-        detail: "Built-in runs the optimizers inside MxPortMGR. Layer 3 services sends the same inputs to portfolio-java (active, port 8766) and portfolio-cpp (tracking, port 8767), the engines MxJobsWMS and MxDataHUB use, so you can compare. Start them with python3 Services/mxservices.py start.",
+        detail: "Built-in runs the optimizers inside MxAcctMGR. Layer 3 services sends the same inputs to portfolio-java (active, port 8766) and portfolio-cpp (tracking, port 8767), the engines MxJobsWMS and MxDataHUB use, so you can compare. Start them with python3 Services/mxservices.py start.",
         symbol: "cpu")
 
     // MARK: Terms

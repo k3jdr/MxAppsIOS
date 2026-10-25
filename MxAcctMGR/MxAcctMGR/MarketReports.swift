@@ -1,6 +1,6 @@
 //
 //  MarketReports.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Three walkthroughs of the reports that move markets day to day — the monthly jobs report, a company's earnings
 //  report, and a yield-curve / bond-market report. Each is an illustrative report (made-up numbers in the shape of

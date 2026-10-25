@@ -1,6 +1,6 @@
 //
 //  SelectableText.swift
-//  Shared by MxDataHUB and MxPortMGR (MxAppsIOS/Shared/Copy)
+//  Shared by MxDataHUB and MxAcctMGR (MxAppsIOS/Shared/Copy)
 //
 //  A block of read-only text that can be selected across all its lines. SwiftUI selects within one Text at a time,
 //  so a panel built of many (labels, values, a heading per section) could only be copied a word or a line at once.
@@ -98,7 +98,7 @@ struct RichLines {
     static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
     static let boldFont = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
     static let digitFont = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-    /// SwiftUI's .callout: the size of the lessons and boxes' text in MxPortMGR.
+    /// SwiftUI's .callout: the size of the lessons and boxes' text in MxAcctMGR.
     static let calloutFont = NSFont.preferredFont(forTextStyle: .callout)
     static let calloutBoldFont = NSFont.systemFont(ofSize: calloutFont.pointSize, weight: .semibold)
     static let captionFont = NSFont.preferredFont(forTextStyle: .caption1)

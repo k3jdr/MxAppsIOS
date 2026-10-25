@@ -1,6 +1,6 @@
 //
 //  MarketSeries.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The market series MxDataHUB keeps in the security master (srm.market_series, V015: the VIX family from Cboe,
 //  Treasury yields and NBER recessions from FRED — srm.py load cboe-vix / fred-yields, scheduled in MxJobsWMS's SRM

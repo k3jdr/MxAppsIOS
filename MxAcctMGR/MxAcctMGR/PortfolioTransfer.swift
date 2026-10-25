@@ -1,6 +1,6 @@
 //
 //  PortfolioTransfer.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The open portfolio in and out of files, and copies of it: File ▸ Import Holdings… (a CSV of tickers, shares and
 //  optionally cost and purchase date — a custodian's export — resolved against the security master, then added to the
@@ -163,7 +163,7 @@ extension PortStore {
                     data = Data((lines.joined(separator: "\n") + "\n").utf8)
                 } else {
                     struct Export: Encodable {
-                        var format = "MxPortMGR portfolio export, version 1"
+                        var format = "MxAcctMGR portfolio export, version 1"
                         var exportedAt: String
                         var account: SRMAccount
                         var decisions: [SRMDecision]

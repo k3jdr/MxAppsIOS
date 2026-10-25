@@ -1,6 +1,6 @@
 //
 //  PathViews.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The Investments screens, active and passive alike, and the active approach's own: the holdings and the benchmark,
 //  today's risk, the active optimizer, the trades and their taxes, and attribution.

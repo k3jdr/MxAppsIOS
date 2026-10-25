@@ -328,7 +328,7 @@ erDiagram
         date inception_date
         text account_type "taxable | retirement | roth; NULL = model portfolio"
         text approach "active | passive"
-        text managed_by "MxPortMGR"
+        text managed_by "MxAcctMGR"
         numeric cash_balance
     }
     PORTFOLIO_HOLDING {
@@ -392,7 +392,7 @@ portfolios.
 
 | From                                                      | To                                          | How                                                           |
 | ----------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------- |
-| MxPortMGR `pmg.account.srm_code`                          | `srm.portfolio.code`                        | by code (no FK; `pmg` installs without `srm`)                 |
-| MxPortMGR `pmg.security.srm_security_id`                  | `srm.security.security_id`                  | cached copy of a security-master security                     |
+| MxAcctMGR `pmg.account.srm_code`                          | `srm.portfolio.code`                        | by code (no FK; `pmg` installs without `srm`)                 |
+| MxAcctMGR `pmg.security.srm_security_id`                  | `srm.security.security_id`                  | cached copy of a security-master security                     |
 | MxJobsWMS `wms.job_run.portfolio_code` / `benchmark_code` | `srm.portfolio.code` / `srm.benchmark.code` | by code, from `mxjobswms://sample/<id>?portfolio=&benchmark=` |
-| accounts service (8774)                                   | `srm.portfolio`, `srm.portfolio_tax_lot`    | writes MxPortMGR's My Portfolio                               |
+| accounts service (8774)                                   | `srm.portfolio`, `srm.portfolio_tax_lot`    | writes MxAcctMGR's My Portfolio                               |

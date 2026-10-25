@@ -1,7 +1,7 @@
 """Securities for the companies in FMP's earnings calendar that the security master doesn't have yet.
 
 Nasdaq.com's earnings calendar lists U.S.-listed companies; FMP's also lists OTC shares of foreign companies (TLSNF),
-ADRs (ATLCY), small OTC banks (DIMC), preferred shares and warrants. MxPortMGR's Earnings by Day showed those as
+ADRs (ATLCY), small OTC banks (DIMC), preferred shares and warrants. MxAcctMGR's Earnings by Day showed those as
 "only FMP lists it": no name, no market cap. This loader reads FMP's calendar from --since (default a week back) to
 three weeks ahead, finds each symbol srm.us_security doesn't know, and creates it from its FMP profile — unless its
 CUSIP or ISIN already belongs to a security (the same preferred under another spelling, or an OTC ordinary share FMP

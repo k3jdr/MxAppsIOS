@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The main window: the guide in the sidebar (with Quick Help docked under it), the screen, and a status bar.
 //  The toolbar picks the account every screen works on and the engine the optimizers use.
@@ -84,7 +84,7 @@ struct ContentView: View {
             if !PortSettings.shared.shows(store.screen) { store.go(.myPortfolio) }
         }
         .onOpenURL { url in
-            // mxportmgr://my-portfolio/CODE from MxDataHUB or MxJobsWMS (Shared/AppLinks.swift).
+            // mxacctmgr://my-portfolio/CODE from MxDataHUB or MxJobsWMS (Shared/AppLinks.swift).
             if case let .myPortfolio(code)? = AppLink(url: url) {
                 if let code { store.requestOpen(code) } else { store.go(.myPortfolio) }
             }
@@ -121,7 +121,7 @@ struct ContentView: View {
         } message: {
             Text((store.saveConflict ?? "") + "\n\nYour edits are still here. Revert reads the saved version (yours are lost); or keep editing and copy what you need first.")
         }
-        .alert("MxPortMGR", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
+        .alert("MxAcctMGR", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK") { store.errorMessage = nil }
             if store.engine == .services || store.attributeMaster {
                 Button("Layer 3 Services…") { store.errorMessage = nil; store.go(.services) }

@@ -122,18 +122,18 @@ nonisolated extension Jobspace {
         let vix = loader("cboe-vix", "VIX family (Cboe)", x: 3380, output: "vix",
                          timeout: 300, onFailure: .retry, retries: 2,
                          note: "VIX9D, VIX, VIX3M and VIX6M daily open / high / low / close from Cboe's history files "
-                             + "(free, no key) — MxPortMGR's VIX screen.")
+                             + "(free, no key) — MxAcctMGR's VIX screen.")
         let yields = loader("fred-yields", "Treasury yields & recessions (FRED)", x: 3610, output: "treasuryYields",
                             timeout: 600, onFailure: .retry, retries: 2,
                             note: "Treasury constant-maturity yields 1 month to 30 years and NBER recession months from "
-                                + "FRED (free, no key); the last 60 days after the first load — MxPortMGR's yield curve.")
+                                + "FRED (free, no key); the last 60 days after the first load — MxAcctMGR's yield curve.")
         let fundamentals = loader("fmp-fundamentals", "Quarterly fundamentals (FMP)", x: 3840, output: "fundamentals",
                                   timeout: 900, onFailure: .skip, retries: 1,
                                   query: [KeyValue("symbols", "{{fundamentalSymbols}}")],
                                   arguments: [Argument("fundamentalSymbols", "")],
                                   note: "Revenue, operating cash flow, capex, D&A and free cash flow for the companies in "
                                       + "srm.fundamental_watch (empty symbols) — the hyperscalers and compute suppliers on "
-                                      + "MxPortMGR's Compute screen. 2 FMP calls a company; the last 8 quarters after the first load.")
+                                      + "MxAcctMGR's Compute screen. 2 FMP calls a company; the last 8 quarters after the first load.")
 
         var status = JobNode(kind: .apiRead, title: "SRM status & data quality", x: 4100, y: y3)
         status.api?.subscriptionID = srm.id

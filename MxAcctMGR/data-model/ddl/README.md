@@ -3,7 +3,7 @@
 Creates schema `pmg` with its seed data in one transaction (PostgreSQL 13+):
 
 ```bash
-cd MxPortMGR/data-model/ddl
+cd MxAcctMGR/data-model/ddl
 psql -v ON_ERROR_STOP=1 -h <host> -U postgres -d srm -1 -f install.sql
 ```
 

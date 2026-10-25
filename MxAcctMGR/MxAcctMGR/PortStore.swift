@@ -1,6 +1,6 @@
 //
 //  PortStore.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The window's state: the screen shown, the account selected, the settings and results of each step, and the
 //  walkthroughs' progress. Optimizations and simulations run off the main thread; the built-in engine is always
@@ -494,7 +494,7 @@ final class PortStore {
         let settingsJSON = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(currentSettings))) ?? [:]
         let body: [String: Any] = ["name": mine.name, "accountType": mine.account == .retirement ? "retirement" : mine.account == .roth ? "roth" : "taxable",
                                    "approach": myApproach == .active ? "active" : "passive", "benchmark": mine.benchmark,
-                                   "cash": cash, "lots": lots, "version": openVersion, "settings": settingsJSON, "by": "MxPortMGR",
+                                   "cash": cash, "lots": lots, "version": openVersion, "settings": settingsJSON, "by": "MxAcctMGR",
                                    "note": looseEnds.joined(separator: "; ")]
         srmBusy = true
         defer { srmBusy = false }

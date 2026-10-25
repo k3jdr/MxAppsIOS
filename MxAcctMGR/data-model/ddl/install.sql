@@ -1,4 +1,4 @@
--- MxPortMGR · pmg DDL package · installer
+-- MxAcctMGR · pmg DDL package · installer
 --
 -- Creates schema pmg with the illustrative market, the sample accounts and the market reports,
 -- in one transaction (PostgreSQL 13 or later):

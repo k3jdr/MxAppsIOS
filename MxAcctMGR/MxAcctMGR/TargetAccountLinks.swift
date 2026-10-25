@@ -1,6 +1,6 @@
 //
 //  TargetAccountLinks.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Links on target accounts (Banking): a web page, an email address or a page in MxNoteONE on a target account,
 //  with words of its own and formatted hover text — made and shown as links on securities are (Shared/Links): the

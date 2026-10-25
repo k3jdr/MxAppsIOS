@@ -26,7 +26,7 @@
     ./srm.py load cboe-vix | fred-yields [--since DATE] [--force]
                                      market series: the VIX family (Cboe), Treasury yields and recessions (FRED)
     ./srm.py load fmp-fundamentals [--symbols MSFT ...] [--force]
-                                     quarterly statements for srm.fundamental_watch (MxPortMGR's Compute screen)
+                                     quarterly statements for srm.fundamental_watch (MxAcctMGR's Compute screen)
 
 Connection: --host/--port/--user/--dbname, or SRM_PG* environment variables, or
 config.local.json; defaults postgres@192.168.0.223:5432/srm. Secrets: see srmlib/common.py.
@@ -85,7 +85,7 @@ LOADERS = {
     "fred-yields": market_series.load_fred,     # Treasury constant-maturity yields, NBER recessions (FRED, no key)
     "fmp-fundamentals": fundamentals.run,       # quarterly revenue, cash flow, capex, D&A (srm.fundamental_watch)
     "policy-benchmarks": policy.run,            # policy benchmarks' month-end snapshots from their dated mixes (V023)
-    "sample-portfolios": samples.run,           # MxPortMGR's sample accounts from real securities and prices
+    "sample-portfolios": samples.run,           # MxAcctMGR's sample accounts from real securities and prices
     "portfolio-snapshots": portfolios.run,      # holdings carried forward to the latest price date
 }
 # Not run by `load all`: name them to run them.

@@ -1,6 +1,6 @@
--- MxPortMGR · pmg DDL package · 10 seed data (generated)
+-- MxAcctMGR · pmg DDL package · 10 seed data (generated)
 --
--- Generated from MxPortMGR's own model (Universe.swift, Samples.swift, MarketHistory in
+-- Generated from MxAcctMGR's own model (Universe.swift, Samples.swift, MarketHistory in
 -- Attribution.swift, MarketReport.all in MarketReports.swift / ReportLibrary.swift, BehaviorLab.swift)
 -- by compiling those files with a small dumper, so the rows are exactly what the app holds —
 -- including the drifted-tracker sample and the monthly returns, which the app draws from seeded

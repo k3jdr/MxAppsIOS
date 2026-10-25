@@ -1,13 +1,13 @@
 //
 //  Securities.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
-//  Library ▸ Securities: MxDataHUB's Securities page in MxPortMGR — the security master's securities, searched by
+//  Library ▸ Securities: MxDataHUB's Securities page in MxAcctMGR — the security master's securities, searched by
 //  name or any identifier (ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI), filtered by type, benchmark and activity and by
 //  any column (its header: sort, values, conditions), a thousand at a time; and the selected one's year of prices,
 //  identifiers, issuer and security facts, listings, classification, benchmark membership and corporate actions.
 //
-//  MxDataHUB reads the database itself; MxPortMGR, sandboxed, reads it through the accounts service (Services/accounts:
+//  MxDataHUB reads the database itself; MxAcctMGR, sandboxed, reads it through the accounts service (Services/accounts:
 //  POST /securities/browse and /securities/browse/values, GET /securities/<id>/detail, GET /security-types), which runs
 //  MxDataHUB's queries. Links on tickers and names are the same rows in both apps (Shared/Links).
 //

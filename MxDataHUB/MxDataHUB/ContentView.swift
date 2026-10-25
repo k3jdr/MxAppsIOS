@@ -31,7 +31,7 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 screen
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Every screen's text can be selected and copied, as in MxPortMGR; tables select rows, which
+                    // Every screen's text can be selected and copied, as in MxAcctMGR; tables select rows, which
                     // ⌘C copies as tab-separated columns (TableCopy.swift).
                     .textSelection(.enabled)
                 Divider()
@@ -153,7 +153,7 @@ struct ContentView: View {
         }
         #if DEBUG
         // Self-test of the hover card: show a linked cell's card once the table is up (-linkHoverTest ID, e.g. YQ|symbol),
-        // as MxPortMGR does.
+        // as MxAcctMGR does.
         if let id = defaults.string(forKey: "linkHoverTest") {
             Task {
                 try? await Task.sleep(for: .seconds(6))

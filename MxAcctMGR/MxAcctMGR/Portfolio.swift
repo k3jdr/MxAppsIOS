@@ -1,6 +1,6 @@
 //
 //  Portfolio.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  A personal account's holdings — each a security or fund with its market value and, in a taxable account, its tax
 //  lots — and what can be read from them: look-through weights over the base securities, sector and asset-class
@@ -64,7 +64,7 @@ nonisolated struct Portfolio: Codable, Hashable, Sendable, Identifiable {
     /// Base securities with no returns from the given month on (0-based), for the missing-data case.
     var missingFrom: [String: Int] = [:]
     var symbol: String = "briefcase"
-    /// "srm" when the account lives in the security master (MxPortMGR Investments ▸ Security master), with its code.
+    /// "srm" when the account lives in the security master (MxAcctMGR Investments ▸ Security master), with its code.
     var source: String? = nil
     var srmCode: String? = nil
     var isSRM: Bool { source == "srm" }

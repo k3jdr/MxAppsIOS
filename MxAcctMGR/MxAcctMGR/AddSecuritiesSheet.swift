@@ -1,6 +1,6 @@
 //
 //  AddSecuritiesSheet.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Investments ▸ Add Securities…: find securities in the security master (stocks, ETFs, bond funds, mutual funds,
 //  Treasuries) and add them to My Portfolio by shares, with a tax lot (cost and date).

@@ -1,6 +1,6 @@
 //
 //  TableCopy.swift
-//  Shared by MxDataHUB and MxPortMGR (MxAppsIOS/Shared/Copy)
+//  Shared by MxDataHUB and MxAcctMGR (MxAppsIOS/Shared/Copy)
 //
 //  Copying a table's rows: select rows (⇧-click or ⌘-click for several, ⌘A for all), then Edit ▸
 //  Copy (⌘C) or the row's Copy Row puts them on the clipboard as lines of tab-separated columns under the table's

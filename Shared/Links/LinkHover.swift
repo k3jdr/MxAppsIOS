@@ -1,12 +1,12 @@
 //
 //  LinkHover.swift
-//  Shared by MxPortMGR and MxDataHUB (MxAppsIOS/Shared/Links)
+//  Shared by MxAcctMGR and MxDataHUB (MxAppsIOS/Shared/Links)
 //
 //  Resting the pointer on a link shows a card, as in MxNoteONE (LinkHover.swift there), Word and OneNote: the link's
 //  hover text, where the link goes (a web site, an email address), "Click to open", and buttons to edit the link (the
 //  Link dialog), copy its address or remove it. Links in the hover text open from the card. The card goes away when
 //  the pointer leaves the link and the card, or on a click or key press elsewhere. Other things can show a card of
-//  their own the same way (pointer(over:rect:in:card:)): MxPortMGR's reports, with your notes on them.
+//  their own the same way (pointer(over:rect:in:card:)): MxAcctMGR's reports, with your notes on them.
 //
 
 import AppKit
@@ -68,7 +68,7 @@ final class LinkHover {
         }
     }
 
-    /// The pointer is over something with a card of its own (MxPortMGR's reports), told apart by `key`, or over
+    /// The pointer is over something with a card of its own (MxAcctMGR's reports), told apart by `key`, or over
     /// nothing (nil). The card gets a function that closes it.
     func pointer(over key: URL?, rect: NSRect, in view: NSView, card: @escaping (_ close: @escaping () -> Void) -> AnyView) {
         guard let url = key, view.window != nil else {

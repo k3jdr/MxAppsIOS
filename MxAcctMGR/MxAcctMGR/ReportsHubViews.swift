@@ -1,6 +1,6 @@
 //
 //  ReportsHubViews.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Knowledge Library ▸ Report Library — the hierarchy of reports portfolio managers watch, by tier, with what each
 //  measures, why PMs care, which price drivers it moves, and the five with the greatest impact — and Knowledge Library ▸

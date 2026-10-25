@@ -1448,7 +1448,7 @@ final class NotebookStore {
     }
 
     /// A link opened from another app (mxnoteone://…, registered in Info.plist), e.g. a link on a company in
-    /// MxPortMGR: the notebooks load first if MxNoteONE was just launched for it, then it goes where the link leads.
+    /// MxAcctMGR: the notebooks load first if MxNoteONE was just launched for it, then it goes where the link leads.
     func openExternalLink(_ url: URL) {
         guard url.scheme == Self.linkScheme else { return }
         loadLibraryIfNeeded()

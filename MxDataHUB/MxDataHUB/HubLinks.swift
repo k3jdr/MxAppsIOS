@@ -4,7 +4,7 @@
 //
 //  MxDataHUB's side of the links on tickers and names (Shared/Links): the securities of the Securities page and of a
 //  portfolio's Holdings, and where their links are kept — srm.security_link (migration V014), through the app's own
-//  database connection. MxPortMGR reads and writes the same rows through the accounts service, so a link made in one
+//  database connection. MxAcctMGR reads and writes the same rows through the accounts service, so a link made in one
 //  app shows in the other.
 //
 

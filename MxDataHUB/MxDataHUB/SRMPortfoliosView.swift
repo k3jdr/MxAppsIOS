@@ -101,11 +101,11 @@ struct SRMPortfoliosView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     if portfolio.isPersonal {
-                        Button("Open in MxPortMGR") {
-                            if !AppLink.myPortfolio(portfolio.code).open() { store.errorMessage = "MxPortMGR is not installed." }
+                        Button("Open in MxAcctMGR") {
+                            if !AppLink.myPortfolio(portfolio.code).open() { store.errorMessage = "MxAcctMGR is not installed." }
                         }
-                        .help("Open this account as My Portfolio in MxPortMGR")
-                        .quickHelp("Open in MxPortMGR", "Opens this personal account as My Portfolio in MxPortMGR, where its tax lots are edited and it is analysed, optimized or tracked.")
+                        .help("Open this account as My Portfolio in MxAcctMGR")
+                        .quickHelp("Open in MxAcctMGR", "Opens this personal account as My Portfolio in MxAcctMGR, where its tax lots are edited and it is analysed, optimized or tracked.")
                     }
                 }
                 if portfolio.isPersonal {

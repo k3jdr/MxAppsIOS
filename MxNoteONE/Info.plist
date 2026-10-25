@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- mxnoteone:// links (Copy Link to Page, Paragraph, Section, Notebook or Pin) open here from other apps,
-	     e.g. a link on a symbol or company name in MxPortMGR: page/NOTEBOOK/PAGE[?e=…&p=…], section/NOTEBOOK/SECTION,
+	     e.g. a link on a symbol or company name in MxAcctMGR: page/NOTEBOOK/PAGE[?e=…&p=…], section/NOTEBOOK/SECTION,
 	     notebook/NOTEBOOK (NotebookStore.openLink) -->
 	<key>CFBundleURLTypes</key>
 	<array>

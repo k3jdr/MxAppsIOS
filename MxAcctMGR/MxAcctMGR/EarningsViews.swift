@@ -1,6 +1,6 @@
 //
 //  EarningsViews.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Knowledge Library ▸ Earnings Calendar and Earnings by Day: real companies' reports (sources in Earnings.swift). The
 //  calendar shows a month or a week — past days with how many companies beat or missed the consensus, upcoming days
@@ -518,7 +518,7 @@ struct EarningsSourcesBox: View {
                 source("Nasdaq.com earnings calendar", "Companies, times, market cap (today's, also for past days), consensus EPS (Zacks) and estimates, actual EPS and surprise — free, no key. U.S.-listed companies only; schedules a few weeks ahead and history back years. The time of day is left out once a day has passed, so times show only where this Mac saw the day's listing beforehand (marked ↺). An unofficial public API, fetched three days at a time.")
                 source("FMP earnings calendar (accounts service, port 8774)", "Revenue estimates and actuals, FMP's own EPS figures, and OTC, foreign and preferred listings. The plan reaches back 12 months (to \(EarningsDates.title(store.earnings.planStart, weekday: false))) and several months ahead; no company names or times. FMP's EPS can differ from Nasdaq.com's: another consensus, and for some companies GAAP EPS.")
                 source("Company history", "FMP's reports with revenue (decades back); Nasdaq.com's last four surprises and this quarter's forecast range and revisions.")
-                source("Kept on this Mac", "Each day's listings are kept in MxPortMGR's Application Support/Earnings folder, so past days open at once and keep their times; a listing is fetched again until three days after its date (FMP's: a week).")
+                source("Kept on this Mac", "Each day's listings are kept in MxAcctMGR's Application Support/Earnings folder, so past days open at once and keep their times; a listing is fetched again until three days after its date (FMP's: a week).")
             }
             Text("Real companies and their reports, shown to learn how an earnings calendar reads — not investment advice and not a recommendation to buy or sell anything.")
                 .font(.caption).foregroundStyle(.secondary)

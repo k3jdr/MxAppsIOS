@@ -1,6 +1,6 @@
 //
 //  Earnings.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Real earnings reports for Knowledge Library ▸ Earnings by Day and Earnings Calendar, from two sources merged by symbol:
 //

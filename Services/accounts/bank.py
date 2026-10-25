@@ -25,7 +25,7 @@
 A target account (an external account: srm.payee, V028 / V033) is offered as a target by the registers its funding
 sources name — the Checking Accounts register's (checking) and the card registers' (card); one first named in a
 register (typed, or a bank line accepted) is created with that register's source, and gains it when another register
-names it. Its password and user keys are never sent here: MxPortMGR keeps them in the Keychain.
+names it. Its password and user keys are never sent here: MxAcctMGR keeps them in the Keychain.
 
 A target account's link — a web page, an email address or a page in MxNoteONE, with words of its own and
 formatted hover text (srm.payee_link) — comes with it wherever it is a target: each register entry's payeeLink and
@@ -237,7 +237,7 @@ def add_transaction(conn, code, body, match=True):
                                   memo, amount, status, entered_by, updated_by)
         VALUES (%(aid)s, %(txn_date)s, %(kind)s, %(check_no)s, %(payee_id)s, %(payee_name)s, %(expense_account_id)s,
                 %(memo)s, %(amount)s, %(status)s, %(by)s, %(by)s) RETURNING txn_id""",
-                 dict(f, aid=aid, by=str(body.get("by") or "MxPortMGR")[:80]))
+                 dict(f, aid=aid, by=str(body.get("by") or "MxAcctMGR")[:80]))
     if match:
         fetch(conn, "SELECT srm.match_bank_lines(%s)", (aid,))
         conn.commit()
@@ -266,7 +266,7 @@ def update_transaction(conn, txn_id, body):
                             bank_line_id = CASE WHEN %(unmatch)s THEN NULL ELSE bank_line_id END,
                             version = version + 1, updated_by = %(by)s, updated_at = now()
                       WHERE txn_id = %(id)s RETURNING bank_account_id""",
-                  dict(f, id=txn_id, unmatch=unmatch, by=str(body.get("by") or "MxPortMGR")[:80]))
+                  dict(f, id=txn_id, unmatch=unmatch, by=str(body.get("by") or "MxAcctMGR")[:80]))
         aid = c.fetchone()[0]
     code = fetch(conn, "SELECT code FROM srm.bank_account WHERE bank_account_id = %s", (aid,))[0]["code"]
     conn.commit()
@@ -301,7 +301,7 @@ def set_status(conn, code, body):
         fetch(conn, """UPDATE srm.bank_txn SET status = %s,
                               bank_line_id = CASE WHEN %s = 'open' THEN NULL ELSE bank_line_id END,
                               version = version + 1, updated_by = %s, updated_at = now()
-                        WHERE txn_id = ANY (%s)""", (status, status, str(body.get("by") or "MxPortMGR")[:80], ids))
+                        WHERE txn_id = ANY (%s)""", (status, status, str(body.get("by") or "MxAcctMGR")[:80], ids))
     conn.commit()
     return {"changed": len(ids), **register(conn, code)}
 
@@ -342,7 +342,7 @@ def accept_line(conn, line_id, body):
     payee = body.get("payee") or (found[0]["name"] if found else (b["name"] or "").strip()[:120] or None)
     out = add_transaction(conn, b["code"], {"date": b["posted_date"].isoformat(), "kind": kind, "checkNo": b["check_no"],
                                              "payee": payee, "expenseAccountId": body.get("expenseAccountId"),
-                                             "memo": b["memo"], "amount": amount, "by": body.get("by") or "MxPortMGR"},
+                                             "memo": b["memo"], "amount": amount, "by": body.get("by") or "MxAcctMGR"},
                           match=False)
     # The new entry is this line: matched and cleared.
     fetch(conn, "UPDATE srm.bank_txn SET bank_line_id = %s, status = 'cleared' WHERE txn_id = %s", (line_id, out["id"]))
@@ -362,7 +362,7 @@ def match_line(conn, line_id, body):
     if txn[0]["bank_line_id"] or txn[0]["status"] == "void":
         raise Conflict("that entry is already matched or void")
     fetch(conn, """UPDATE srm.bank_txn SET bank_line_id = %s, status = 'cleared', version = version + 1, updated_by = %s,
-                          updated_at = now() WHERE txn_id = %s""", (line_id, body.get("by") or "MxPortMGR", int(body["txnId"])))
+                          updated_at = now() WHERE txn_id = %s""", (line_id, body.get("by") or "MxAcctMGR", int(body["txnId"])))
     conn.commit()
     return register(conn, b["code"])
 
@@ -447,7 +447,7 @@ PAYEE_COLUMNS = ("name", "nickname", "description", "status", "active", "referen
 
 def save_payee(conn, pid, body):
     """A target account, created (id 0) or changed from the version it was read at. A change keeps the saved value of
-    each field it doesn't send (an older MxPortMGR sends fewer, and names three of them address, website and active:
+    each field it doesn't send (an older MxAcctMGR sends fewer, and names three of them address, website and active:
     read as address1, logonUrl and status)."""
     name = (body.get("name") or "").strip()
     if not name:
@@ -502,7 +502,7 @@ def save_payee(conn, pid, body):
         phone=text("phone", 60, "phone"), notes=text("notes", 2000, "notes"),
         bank_names=[n for n in body["bankNames"] if isinstance(n, str) and n.strip()] if isinstance(body.get("bankNames"), list)
                    else cur.get("bank_names", []),
-        funding_sources=[x for x in FUNDING_SOURCES if x in sources], updated_by=str(body.get("by") or "MxPortMGR")[:80])
+        funding_sources=[x for x in FUNDING_SOURCES if x in sources], updated_by=str(body.get("by") or "MxAcctMGR")[:80])
     row = tuple(values[c] for c in PAYEE_COLUMNS)
     if int(pid) == 0:
         if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s)", (name,)):
@@ -519,7 +519,7 @@ def save_payee_note(conn, pid, body):
     """Only the external account's note (the register's hover text, edited in place); answers with the payee."""
     rows = fetch(conn, """UPDATE srm.payee SET notes = %s, version = version + 1, updated_by = %s, updated_at = now()
                            WHERE payee_id = %s RETURNING payee_id, notes, version""",
-                 ((body.get("note") or "").strip()[:2000] or None, str(body.get("by") or "MxPortMGR")[:80], int(pid)))
+                 ((body.get("note") or "").strip()[:2000] or None, str(body.get("by") or "MxAcctMGR")[:80], int(pid)))
     if not rows:
         raise LookupError("no payee %s" % pid)
     conn.commit()
@@ -542,7 +542,7 @@ def save_payee_link(conn, pid, body):
                   link_title AS "linkTitle"
         """,
                  (address[:2000], blank("text", 200), blank("hoverText", 4000), body.get("hoverRtf") or None,
-                  blank("title", 300), str(body.get("by") or "MxPortMGR")[:80], int(pid)))
+                  blank("title", 300), str(body.get("by") or "MxAcctMGR")[:80], int(pid)))
     if not rows:
         raise LookupError("no payee %s" % pid)
     conn.commit()

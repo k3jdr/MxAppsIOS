@@ -1,6 +1,6 @@
 //
 //  PageText.swift
-//  Shared by MxDataHUB and MxPortMGR (MxAppsIOS/Shared/Copy)
+//  Shared by MxDataHUB and MxAcctMGR (MxAppsIOS/Shared/Copy)
 //
 //  Copying a whole page or one section of it as text. SwiftUI selects within one Text at a time, so a drag can't run
 //  across a page's paragraphs, cards and grids. Instead Edit ▸ Copy Page Text, and Copy Section on a section's

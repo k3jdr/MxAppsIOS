@@ -1,4 +1,4 @@
--- MxPortMGR · pmg DDL package · 06 views
+-- MxAcctMGR · pmg DDL package · 06 views
 --
 -- Look-through (funds replaced by what they hold), sector and asset-class weights against the
 -- benchmark, the account checks the Portfolio step shows (Portfolio.issues), tax lots with their

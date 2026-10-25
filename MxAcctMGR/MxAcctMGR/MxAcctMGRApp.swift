@@ -1,6 +1,6 @@
 //
-//  MxPortMGRApp.swift
-//  MxPortMGR
+//  MxAcctMGRApp.swift
+//  MxAcctMGR
 //
 //  A portfolio-management IDE that teaches: one window with a guide in the sidebar — My Portfolio, Knowledge Library
 //  (walkthroughs, real earnings and the Why lessons) and the Library; Welcome in the Guide menu — over your own account or the sample
@@ -11,13 +11,13 @@
 import SwiftUI
 
 @main
-struct MxPortMGRApp: App {
+struct MxAcctMGRApp: App {
     @State private var store = PortStore()
     // Quitting with unsaved portfolio changes asks to Save, Don't Save or Cancel (PortfolioFile.swift).
     @NSApplicationDelegateAdaptor(PortAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Window("MxPortMGR", id: "main") {
+        Window("MxAcctMGR", id: "main") {
             ContentView(store: store)
                 .onAppear { PortAppDelegate.store = store }
         }
@@ -176,7 +176,7 @@ struct MxPortMGRApp: App {
             }
             QuickHelpCommands()
         }
-        // MxPortMGR ▸ Settings (⌘,): the headings' fonts and the instruction level (PortSettings.swift).
+        // MxAcctMGR ▸ Settings (⌘,): the headings' fonts and the instruction level (PortSettings.swift).
         Settings {
             PortSettingsView()
         }

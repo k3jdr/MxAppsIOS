@@ -1,6 +1,6 @@
 //
 //  LocalGridFilters.swift
-//  Shared (MxPortMGR's banking registers)
+//  Shared (MxAcctMGR's banking registers)
 //
 //  Excel-style sorting and filtering of rows held in memory, with the same GridQueryOptions, header
 //  buttons (columnHeaderFilters) and ColumnFilterPopover as the server-side grids. Each column says how it

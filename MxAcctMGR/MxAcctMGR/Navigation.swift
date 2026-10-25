@@ -1,6 +1,6 @@
 //
 //  Navigation.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  Back and Forward through the places you've visited, as in a browser and in MxNoteONE: the toolbar's ‹ and ›
 //  (hold either for the places before or after), Go ▸ Back / Forward / History, ⌘[ and ⌘] as in Safari, Finder and

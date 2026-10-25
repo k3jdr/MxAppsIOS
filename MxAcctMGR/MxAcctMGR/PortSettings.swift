@@ -1,8 +1,8 @@
 //
 //  PortSettings.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
-//  MxPortMGR ▸ Settings (⌘,). Text: a font name, size and style for each kind of text that takes room — the headings,
+//  MxAcctMGR ▸ Settings (⌘,). Text: a font name, size and style for each kind of text that takes room — the headings,
 //  and the numbers and tables (registers, the earnings calendar, IDs and codes, calculation results) — stepped down
 //  together or one by one. Guidance: how much teaching the screens show — every page's "Why this step" lesson, the
 //  line under its title, and the lesson-only pages. Banking: what the checking register's New entry line starts with.
@@ -276,7 +276,7 @@ private struct TextSettings: View {
                         Spacer()
                         Button("Restore Defaults") { settings.restoreStandard(section) }
                             .disabled(settings.isStandard(section))
-                            .help("The system font, in the sizes and styles MxPortMGR had before")
+                            .help("The system font, in the sizes and styles MxAcctMGR had before")
                     }
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                         GridRow {

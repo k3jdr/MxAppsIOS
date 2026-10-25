@@ -1,6 +1,6 @@
 //
 //  Samples.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  The sample accounts' lessons. The accounts themselves live in the security master (srm.py load sample-portfolios
 //  writes them: real securities, tax lots costed at the real closes on their purchase dates, cash, benchmark) and are

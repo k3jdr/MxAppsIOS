@@ -1,6 +1,6 @@
 //
 //  PortfolioSheets.swift
-//  MxPortMGR
+//  MxAcctMGR
 //
 //  File ▸ Open Portfolio… (the personal accounts in the security master, with their value, version and who saved
 //  them last) and File ▸ New Portfolio… (a code, name, account type, approach and benchmark; empty or from a sample).
@@ -261,7 +261,7 @@ struct RenamePortfolioSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Rename \(store.srmCode)").heading(.heading)
-            Text("The code stays the same — MxDataHUB and links (mxportmgr://my-portfolio/\(store.srmCode)) use it. The new name is saved with File ▸ Save.")
+            Text("The code stays the same — MxDataHUB and links (mxacctmgr://my-portfolio/\(store.srmCode)) use it. The new name is saved with File ▸ Save.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextField("Name", text: $name)
             HStack {

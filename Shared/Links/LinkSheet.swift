@@ -1,8 +1,8 @@
 //
 //  LinkSheet.swift
-//  Shared by MxPortMGR and MxDataHUB (MXcodeIDE/Shared/Links)
+//  Shared by MxAcctMGR and MxDataHUB (MXcodeIDE/Shared/Links)
 //
-//  A link on something other than a security's ticker or name — MxPortMGR's external accounts — made and shown as the
+//  A link on something other than a security's ticker or name — MxAcctMGR's external accounts — made and shown as the
 //  securities' links are (SecurityLinks.swift), after MxNoteONE's: the words shown as a link (a click opens it, the
 //  pointer resting on them shows the hover card, LinkHover.swift) and the Link dialog — Text to display, Address,
 //  formatted hover text with a preview of the card, pages to pick, and a link copied in MxNoteONE. Where the link is

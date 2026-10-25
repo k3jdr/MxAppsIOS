@@ -260,7 +260,7 @@ Section and New Section Group. Right-click a page for its own menu.
   Address. Clicking a link opens the place (a paragraph link scrolls to the paragraph and selects it, and still finds
   it after edits move it; a cell link selects the cell). A web address on the clipboard pastes as a link the same way.
 - **Links from other apps**: `mxnoteone://` links open in MxNoteONE from anywhere — the app registers the scheme
-  (`Info.plist`). Paste a copied link into MxPortMGR's Link dialog (*Use the Link Copied in MxNoteONE*, on an earnings
+  (`Info.plist`). Paste a copied link into MxAcctMGR's Link dialog (*Use the Link Copied in MxNoteONE*, on an earnings
   company's symbol or name, or a holding), a browser's address bar, or Terminal (`open 'mxnoteone://…'`): MxNoteONE
   comes forward — loading its open notebooks first if it was just launched for the link — and goes where the link
   leads, as a click on it inside does (page, paragraph, cell, pin, section or notebook). A link into a notebook that

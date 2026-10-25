@@ -6,7 +6,7 @@ each from the mix in effect on that day; months before the first mix take the fi
 measured against as far back as attribution looks. The snapshots replace the benchmark's earlier ones, so a re-dated
 or changed mix rewrites its history; srm.apply_benchmark_snapshot then updates its membership.
 
---benchmarks picks policy benchmarks by code (MxPortMGR's editor runs it for the one it saved); else every one.
+--benchmarks picks policy benchmarks by code (MxAcctMGR's editor runs it for the one it saved); else every one.
 """
 
 import datetime
@@ -33,7 +33,7 @@ def run(conn, cfg, args):
     today = datetime.date.today()
     codes = [c.upper() for c in (args.benchmarks or [])]
     with LoadRun(conn, "MANUAL", "policy_benchmarks", {"benchmarks": codes}) as run, conn.cursor() as cur:
-        src = source_id(cur, "MANUAL")      # the mixes are entered by hand (MxPortMGR's editor)
+        src = source_id(cur, "MANUAL")      # the mixes are entered by hand (MxAcctMGR's editor)
         cur.execute("""SELECT b.benchmark_id, b.code FROM srm.benchmark b
                         WHERE EXISTS (SELECT 1 FROM srm.benchmark_policy p WHERE p.benchmark_id = b.benchmark_id)
                           AND (%s::text[] IS NULL OR b.code = ANY(%s))
