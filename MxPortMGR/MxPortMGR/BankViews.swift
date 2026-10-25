@@ -1111,6 +1111,13 @@ struct ExternalAccountsView: View {
     @State private var adding = false
     @State private var newAccount = false
     @State private var showInactive = false
+    /// The selected row, edited in place: its values as typed, saved on Return, on a category picked, or when another
+    /// row is selected (Esc puts them back). This year and Last paid are the registers' own sums and never edited.
+    @State private var selected: Payee.ID?
+    @State private var draft: PayeeDraft?
+    @State private var rowProblem: String?
+    /// Rows being saved now: a second Return or row change before the save answers sends nothing more.
+    @State private var saving = Set<Int>()
 
     var body: some View {
         StepPage(store: store, subtitle: "Where the checking account's money goes to or comes from — a utility, a card, a brokerage, a person: the register's targets, not books MxPortMGR keeps.", lesson: [
@@ -1178,32 +1185,102 @@ struct ExternalAccountsView: View {
     private func payeesTable(_ b: ExpenseBook) -> some View {
         let names = Dictionary(uniqueKeysWithValues: b.expenseAccounts.map { ($0.id, $0.name) })
         let shown = b.payees.filter { (account == nil || $0.expenseAccountId == account) && ($0.active || showInactive) }
-        return Box(title: account.flatMap { names[$0] } ?? "All external accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from, with this year's payments and the last one. Double-click to edit one.") {
+        return Box(title: account.flatMap { names[$0] } ?? "All external accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from, with this year's payments and the last one. Select a row to edit its name, bank, last four digits, category and usual amount in place (Return saves, Esc puts it back); double-click or right-click for all its details. This year and Last paid are calculated from the registers.") {
             HStack {
                 Button("New External Account…") { adding = true }
                 Toggle("Show inactive", isOn: $showInactive).toggleStyle(.checkbox)
                 Spacer()
                 Text("Paid in \(String(b.year)): \(money2(shown.reduce(0) { $0 + max(0, $1.yearTotal) }))").monospacedDigit().foregroundStyle(.secondary)
             }
-            Table(shown) {
-                TableColumn("External account") { p in
-                    Text(p.name).foregroundStyle(p.active ? .primary : .secondary).help(p.notes ?? "")
+            if let rowProblem { Label(rowProblem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            // A row carries whether it is the one being edited, so the Table redraws its cells as fields when selected.
+            Table(shown.map { PayeeRow(payee: $0, editing: draft?.id == $0.id) }, selection: $selected) {
+                TableColumn("External account") { row in
+                    let p = row.payee
+                    if row.editing, let d = draft {
+                        TextField("Name", text: field(\.name)).onSubmit { commit(d.id) }
+                    } else {
+                        Text(p.name).foregroundStyle(p.active ? .primary : .secondary).help(p.notes ?? "")
+                    }
                 }.width(min: 100)
-                TableColumn("Bank / company") { p in Text(p.institution ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
-                TableColumn("Last 4") { p in Text(p.last4.map { "···\($0)" } ?? "").monospacedDigit().foregroundStyle(.secondary) }.width(min: 44, ideal: 56)
-                TableColumn("Category") { p in Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }.width(min: 70, ideal: 110)
-                TableColumn("Usual") { p in Text(p.defaultAmount.map(money2) ?? "").monospacedDigit() }.width(min: 50, ideal: 70)
-                TableColumn("This year") { p in Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary) }.width(min: 60, ideal: 84)
-                TableColumn("Last paid") { p in Text(shortDay(p.lastPaid)).monospacedDigit().foregroundStyle(.secondary) }.width(min: 60, ideal: 80)
+                TableColumn("Bank / company") { row in
+                    let p = row.payee
+                    if row.editing, let d = draft { TextField("Bank / company", text: field(\.institution)).onSubmit { commit(d.id) } }
+                    else { Text(p.institution ?? "").foregroundStyle(.secondary) }
+                }.width(min: 60, ideal: 100)
+                TableColumn("Last 4") { row in
+                    let p = row.payee
+                    if row.editing, let d = draft {
+                        TextField("····", text: field(\.last4)).monospacedDigit().onSubmit { commit(d.id) }
+                            .help("The account's last four characters, never the whole number")
+                    } else { Text(p.last4.map { "···\($0)" } ?? "").monospacedDigit().foregroundStyle(.secondary) }
+                }.width(min: 44, ideal: 56)
+                TableColumn("Category") { row in
+                    let p = row.payee
+                    if row.editing, let d = draft {
+                        Picker("", selection: Binding(get: { draft?.expenseAccountId }, set: { draft?.expenseAccountId = $0; commit(d.id) })) {
+                            Text("—").tag(Int?.none)
+                            ForEach(b.expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                        }
+                        .labelsHidden()
+                    } else { Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }
+                }.width(min: 70, ideal: 110)
+                TableColumn("Usual") { row in
+                    let p = row.payee
+                    if row.editing, let d = draft {
+                        TextField("Usual", value: Binding(get: { draft?.defaultAmount }, set: { draft?.defaultAmount = $0 }),
+                                  format: .number.precision(.fractionLength(2)))
+                            .monospacedDigit().onSubmit { commit(d.id) }
+                    } else { Text(p.defaultAmount.map(money2) ?? "").monospacedDigit() }
+                }.width(min: 50, ideal: 70)
+                // The registers' own sums: never edited.
+                TableColumn("This year") { row in
+                    let p = row.payee
+                    Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary)
+                        .help("Calculated by MxPortMGR from this year's check, card and expense entries with this target; not editable")
+                }.width(min: 60, ideal: 84)
+                TableColumn("Last paid") { row in
+                    let p = row.payee
+                    Text(shortDay(p.lastPaid)).monospacedDigit().foregroundStyle(.secondary)
+                        .help("The latest entry with this target, from the registers; not editable")
+                }.width(min: 60, ideal: 80)
             }
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
-                    Button("Edit External Account…") { editing = p }
+                    Button("Edit All Details…") { editing = p }
                 }
             } primaryAction: { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) { editing = p }
             }
+            .onChange(of: selected) { old, new in
+                // Leaving a row saves what was typed in it; the new row starts from its saved values.
+                if let old { commit(old) }
+                draft = new.flatMap { id in b.payees.first { $0.id == id } }.map(PayeeDraft.init)
+            }
+            .onExitCommand { if let id = draft?.id, let p = b.payees.first(where: { $0.id == id }) { draft = PayeeDraft(p) } }
             .frame(minHeight: CGFloat(min(max(shown.count, 6), 22)) * 24 + 30)
+        }
+    }
+
+    private func field(_ key: WritableKeyPath<PayeeDraft, String>) -> Binding<String> {
+        Binding(get: { draft?[keyPath: key] ?? "" }, set: { draft?[keyPath: key] = $0 })
+    }
+
+    /// Saves the edited row when its values changed: the whole external account (its other details as saved), from
+    /// the version it was read at — refused, with the reason, when someone changed it since.
+    private func commit(_ id: Int) {
+        guard let d = draft, d.id == id, !saving.contains(id), let p = book?.payees.first(where: { $0.id == id }),
+              d != PayeeDraft(p) else { return }
+        var body: [String: Any] = ["version": p.version, "name": d.name, "institution": d.institution, "last4": d.last4,
+                                   "address": p.address ?? "", "reference": p.reference ?? "", "phone": p.phone ?? "",
+                                   "website": p.website ?? "", "notes": p.notes ?? "", "active": p.active, "bankNames": p.bankNames]
+        body["expenseAccountId"] = d.expenseAccountId ?? NSNull()
+        body["defaultAmount"] = d.defaultAmount ?? NSNull()
+        saving.insert(id)
+        Task {
+            rowProblem = await save(id, body)
+            saving.remove(id)
+            if let saved = book?.payees.first(where: { $0.id == id }), selected == id { draft = PayeeDraft(saved) }
         }
     }
 
@@ -1216,6 +1293,28 @@ struct ExternalAccountsView: View {
             await load()
             return describe(error)
         }
+    }
+}
+
+/// A row of the External Accounts table: the account, and whether it is the row being edited.
+struct PayeeRow: Identifiable, Hashable {
+    var payee: Payee
+    var editing: Bool
+    var id: Int { payee.id }
+}
+
+/// An external account's values as the table edits them in place.
+struct PayeeDraft: Equatable {
+    var id: Int
+    var name: String
+    var institution: String
+    var last4: String
+    var expenseAccountId: Int?
+    var defaultAmount: Double?
+
+    init(_ p: Payee) {
+        id = p.id; name = p.name; institution = p.institution ?? ""; last4 = p.last4 ?? ""
+        expenseAccountId = p.expenseAccountId; defaultAmount = p.defaultAmount
     }
 }
 
