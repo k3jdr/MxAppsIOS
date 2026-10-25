@@ -67,7 +67,9 @@ def _work(cur, args):
         WITH held AS (
             SELECT security_id FROM srm.portfolio_holding
             UNION SELECT security_id FROM srm.portfolio_tax_lot
-            UNION SELECT security_id FROM srm.benchmark_constituent WHERE valid_to = 'infinity'),
+            -- Not the Vanguard funds' holdings (V036): their month-end valuations are all they have.
+            UNION SELECT c.security_id FROM srm.benchmark_constituent c JOIN srm.benchmark b USING (benchmark_id)
+                   WHERE c.valid_to = 'infinity' AND b.provider IS DISTINCT FROM 'Vanguard'),
         fresh AS (
             SELECT DISTINCT l.security_id FROM srm.price p JOIN srm.listing l USING (listing_id)
              WHERE p.price_date >= current_date - 5)

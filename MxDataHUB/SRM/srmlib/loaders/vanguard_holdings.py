@@ -20,6 +20,10 @@ Source: Vanguard's portfolio holdings — the JSON behind each fund's Portfolio 
     name the next month, class securitized, kind Pool, maturity its range's last date.
   * Weights are each holding's market value over the benchmark's total; cash, money-market, futures, forwards and
     swaps lines, and other lines without an identifier, are left out and the rest re-normalised to 100%.
+  * Month-end prices: a member no other source has priced in the month before (Massive, FedInvest, FMP …) gets
+    Vanguard's valuation on the benchmark's date, in dollars — market value per share for a stock, per 100 of face for
+    a bond (its local currency's face: a non-dollar bond's dollar value) — on a listing of its own on MIC XXXX (no
+    market) under its ISIN, CUSIP or SEDOL, source VANGUARD. Monthly only: these listings have no daily prices.
 
 The members are not per-symbol targets (srm.model.benchmark_targets leaves provider 'Vanguard' out), so these
 benchmarks' tens of thousands of securities don't send the FMP, OpenFIGI and SEC loaders on daily rounds.
@@ -31,7 +35,7 @@ import re
 import psycopg2.extras
 
 from ..common import LoadRun, debug, http, log, set_identifiers
-from ..model import create_security, guess_security_type, security_by_us_ticker, source_id
+from ..model import create_security, ensure_listing, guess_security_type, security_by_us_ticker, source_id
 
 URL = "https://investor.vanguard.com/vmf/api/{fund}/portfolio-holding/{kind}.json"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 Chrome/130 Safari/537.36",
@@ -49,6 +53,7 @@ AGENCY = re.compile(r"FEDERAL HOME LOAN BANK|FEDERAL FARM CREDIT|TENNESSEE VALLE
                     r"MORTGAGE|FREDDIE MAC|FANNIE MAE|PRIVATE EXPORT FUNDING", re.I)
 MUNICIPAL = re.compile(r"\bSTATE OF\b|\bCOUNTY\b|\bCITY OF\b|\bAUTHORITY\b|UNIVERSITY|MUNICIPAL|\bSCHOOL\b|"
                        r"\bTRANSIT\b|\bTURNPIKE\b|\bPORT OF\b", re.I)
+MIC = "XXXX"   # no market: a valuation, not an exchange's quote
 GOVERNMENT = re.compile(r"GOVERNMENT|REPUBLIC|KINGDOM|\bGILT\b|BUNDES|\bBONOS\b|OBRIGACOES|BUONI|\bOAT\b|JAPAN|"
                         r"PROVINCE|COMMONWEALTH|TREASURY|EUROPEAN (INVESTMENT BANK|UNION|STABILITY)|KREDITANSTALT|"
                         r"\bKFW\b|INTERNATIONAL BANK FOR|DEVELOPMENT BANK|INTER-AMERICAN|NEDERLANDSE WATERSCHAPS|"
@@ -153,6 +158,39 @@ def _country(isin, us_fund):
     return "US" if us_fund else None
 
 
+def _value(cur, run, members, kind, as_of, vanguard):
+    """Vanguard's month-end valuation for each member no other source priced in the month before; answers how many."""
+    ids = list(members)
+    cur.execute("""SELECT DISTINCT l.security_id FROM srm.listing l JOIN srm.price p USING (listing_id)
+                    WHERE l.security_id = ANY(%s) AND p.source_id <> %s AND p.price_date > %s - 31""", (ids, vanguard, as_of))
+    elsewhere = {r[0] for r in cur.fetchall()}
+    cur.execute("""SELECT security_id, listing_id, mic FROM srm.listing
+                    WHERE security_id = ANY(%s) AND current_date >= valid_from AND current_date < valid_to""", (ids,))
+    own, listed = {}, set()
+    for sid, lid, mic in cur.fetchall():
+        listed.add(sid)
+        if mic == MIC:
+            own.setdefault(sid, lid)
+    rows = []
+    for sid, (value, shares, face, key) in members.items():
+        units = shares if kind == "stock" else face / 100
+        if sid in elsewhere or not units or units <= 0 or not key:
+            continue
+        lid = own.get(sid)
+        if lid is None:
+            try:
+                lid, _ = ensure_listing(cur, sid, MIC, key, is_primary=sid not in listed, currency="USD")
+            except ValueError as e:
+                run.reject(key, f"no valuation listing: {e}")
+                continue
+        rows.append((lid, as_of, round(value / units, 6), "USD", vanguard, run.load_id))
+    psycopg2.extras.execute_values(cur, """
+        INSERT INTO srm.price (listing_id, price_date, close, currency_code, source_id, load_id) VALUES %s
+        ON CONFLICT (listing_id, price_date, source_id) DO UPDATE SET close = excluded.close, load_id = excluded.load_id""",
+        rows, page_size=2000)
+    return len(rows)
+
+
 def run(conn, cfg, args):
     wanted = [b.upper() for b in (getattr(args, "benchmarks", None) or FUNDS)]
     with conn.cursor() as cur:
@@ -207,7 +245,9 @@ def run(conn, cfg, args):
                         added += 1
                         pools += 1
                     terms.append((sid, "securitized", "Pool", name[:200], coupon, maturity, vanguard, run.load_id))
-                    members.setdefault(sid, [0.0, None])[0] += value
+                    m = members.setdefault(sid, [0.0, 0.0, 0.0, f"VGPOOL{sid}"])
+                    m[0] += value
+                    m[2] += _float(h.get("faceAmount")) or 0
                     continue
                 sid = (known.get("CUSIP", {}).get(cusip) or known.get("ISIN", {}).get(isin)
                        or known.get("SEDOL", {}).get(sedol))
@@ -231,10 +271,12 @@ def run(conn, cfg, args):
                     for id_type, v in (("CUSIP", cusip), ("ISIN", isin), ("SEDOL", sedol)):
                         if v:
                             known.setdefault(id_type, {}).setdefault(v, sid)
+                shares, face = _float(h.get("sharesHeld")) or 0, _float(h.get("faceAmount")) or 0
                 if sid in members:   # the same security on two lines: add them
-                    members[sid][0] += value
+                    m = members[sid]
+                    m[0] += value; m[1] += shares; m[2] += face
                     continue
-                members[sid] = [value, _float(h.get("sharesHeld")) or None]
+                members[sid] = [value, shares, face, isin or cusip or sedol]
                 for id_type, v in (("CUSIP", cusip), ("ISIN", isin), ("SEDOL", sedol)):
                     if v:
                         ids.append((sid, id_type, v, None, None))
@@ -248,16 +290,18 @@ def run(conn, cfg, args):
                     list({t[0]: t for t in terms}.values()))
             set_identifiers(cur, run, ids, "VANGUARD")
 
-            total = sum(v for v, _ in members.values())
+            total = sum(m[0] for m in members.values())
             cur.execute("DELETE FROM srm.benchmark_weight WHERE benchmark_id = %s AND as_of_date = %s", (benchmark_id, as_of))
             psycopg2.extras.execute_values(cur, """
                 INSERT INTO srm.benchmark_weight (benchmark_id, as_of_date, security_id, weight, shares, source_id, load_id)
-                VALUES %s""", [(benchmark_id, as_of, sid, v / total, s, vanguard, run.load_id)
-                               for sid, (v, s) in members.items()])
+                VALUES %s""", [(benchmark_id, as_of, sid, v / total, s or None, vanguard, run.load_id)
+                               for sid, (v, s, _, _) in members.items()])
             cur.execute("CALL srm.apply_benchmark_snapshot(%s, %s)", (benchmark_id, as_of))
+            valued = _value(cur, run, members, kind, as_of, vanguard)
             run.parameters["as_of"] = str(as_of)
             run.message = (f"{code} ({etf}) {as_of}: {len(members):,} members, {added:,} securities added"
                            + (f" ({pools} mortgage pool aggregates)" if pools else "")
+                           + f", {valued:,} priced at month-end"
                            + (f", {bad_ids:,} identifiers failing their check digits left out" if bad_ids else ""))
             log("  " + run.message)
             conn.commit()
