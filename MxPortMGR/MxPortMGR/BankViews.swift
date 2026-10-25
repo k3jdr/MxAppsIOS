@@ -1182,9 +1182,11 @@ struct TargetAccountsView: View {
     @State private var book: ExpenseBook?
     @State private var problem: String?
     @State private var adding = false
+    /// Edit Target Details (a row's context menu) is open for this account.
+    @State private var details: Payee?
     @State private var newAccount = false
     @State private var showInactive = false
-    /// The table's rows are read-only: select one for its context menu (its logon page and its link).
+    /// The table's rows are read-only: their context menu edits the account's details and its link.
     @State private var selected: Payee.ID?
 
     var body: some View {
@@ -1200,13 +1202,22 @@ struct TargetAccountsView: View {
         // A link changed (here or on a register's target): the table shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await load() } }
         #if DEBUG
-        // Self-tests: open the New Target Account editor once the list is loaded (-targetAccountNew YES).
+        // Self-tests, once the list is loaded: open New Target Account (-targetAccountNew YES) or a row's Edit Target
+        // Details (-targetDetailsEdit PAYEE_ID).
         .task(id: book == nil) {
-            if book != nil, UserDefaults.standard.bool(forKey: "targetAccountNew") { adding = true }
+            guard let book else { return }
+            let defaults = UserDefaults.standard
+            if defaults.bool(forKey: "targetAccountNew") { adding = true }
+            if defaults.object(forKey: "targetDetailsEdit") != nil {
+                details = book.payees.first { $0.id == defaults.integer(forKey: "targetDetailsEdit") }
+            }
         }
         #endif
         .sheet(isPresented: $adding) {
             TargetAccountSheet(payee: nil, expenseAccounts: book?.expenseAccounts ?? []) { body in await saveNew(body) }
+        }
+        .sheet(item: $details) { p in
+            TargetAccountSheet(payee: p, expenseAccounts: book?.expenseAccounts ?? [], detailsOnly: true) { body in await saveDetails(p.id, body) }
         }
         .sheet(isPresented: $newAccount) {
             ExpenseAccountSheet { body in
@@ -1218,7 +1229,7 @@ struct TargetAccountsView: View {
     private func payeesTable(_ b: ExpenseBook) -> some View {
         let names = Dictionary(uniqueKeysWithValues: b.expenseAccounts.map { ($0.id, $0.name) })
         let shown = b.payees.filter { $0.active || showInactive }
-        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from, with its next payment, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. The rows are read-only; right-click one for its logon page and its link. This year and Last paid are calculated from the registers.") {
+        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. Right-click a row (anywhere on it) for Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
             HStack {
                 Button("New Target Account…") { adding = true }
                 Button("New Category…") { newAccount = true }
@@ -1238,15 +1249,7 @@ struct TargetAccountsView: View {
                         if p.status != "active" { Text(p.status).font(.caption).foregroundStyle(.secondary) }
                     }
                 }.width(min: 100)
-                TableColumn("Nickname") { p in Text(p.nickname ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 80)
-                TableColumn("Bank / company") { p in Text(p.institution ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
-                TableColumn("Last 4") { p in Text(p.last4.map { "···\($0)" } ?? "").monospacedDigit().foregroundStyle(.secondary) }.width(min: 44, ideal: 56)
                 TableColumn("Category") { p in Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }.width(min: 70, ideal: 110)
-                TableColumn("Usual") { p in Text(p.defaultAmount.map(money2) ?? "").monospacedDigit() }.width(min: 50, ideal: 70)
-                TableColumn("Next payment") { p in
-                    Text([p.nextPaymentDate.map(shortDay), p.nextPaymentAmount.map(money2)].compactMap { $0 }.joined(separator: " · "))
-                        .monospacedDigit()
-                }.width(min: 70, ideal: 130)
                 TableColumn("Funding") { p in FundingMarks(sources: p.fundingSources) }.width(min: 44, ideal: 56)
                 // The registers' own sums.
                 TableColumn("This year") { p in
@@ -1258,12 +1261,13 @@ struct TargetAccountsView: View {
                         .help("The latest entry with this target, from the registers")
                 }.width(min: 60, ideal: 80)
             }
+            // One menu on the whole row: its words aren't selectable text, so a right-click on them doesn't bring up
+            // the text menu (Edit commands, Services) instead.
+            .textSelection(.disabled)
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
-                    if let url = p.logonUrl.flatMap(LinkRichText.url(fromAddress:)) {
-                        Button("Open Logon Page") { LinkInfo.follow(url) }
-                        Divider()
-                    }
+                    Button("Edit Target Details…") { details = p }
+                    Divider()
                     payeeLinkMenu(PayeeLinkTarget(p))
                 }
             }
@@ -1273,6 +1277,14 @@ struct TargetAccountsView: View {
 
     private func load() async {
         do { book = try await BankClient.book(); problem = nil } catch { problem = describe(error) }
+    }
+
+    /// Saves Edit Target Details; answers the account's id, or why it couldn't.
+    private func saveDetails(_ id: Int, _ body: [String: Any]) async -> PayeeSaved {
+        do { book = try await BankClient.savePayee(id, body); return PayeeSaved(id: id) } catch {
+            await load()
+            return PayeeSaved(error: describe(error))
+        }
     }
 
     /// Adds the New Target Account editor's account; answers its id, or why it couldn't.

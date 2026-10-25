@@ -72,11 +72,14 @@ nonisolated enum TargetSecrets {
 // MARK: - The editor
 
 /// New Target Account: every detail kept for it, its funding sources, and its password and user keys (this Mac's
-/// Keychain). It can also edit one (`payee`), though the Target Accounts rows are read-only for now.
+/// Keychain). With `detailsOnly` it is a row's Edit Target Details: the details alone — nickname, description, status,
+/// identifier, next payment, logon (URL, user name, password, user keys), user notes, address and funding sources —
+/// while the account's name, bank, last four digits, category, usual amount and bank names stay as saved.
 struct TargetAccountSheet: View {
     let payee: Payee?
     var expenseAccounts: [ExpenseAccount]
     var defaultAccount: Int? = nil
+    var detailsOnly = false
     var save: ([String: Any]) async -> PayeeSaved
     @Environment(\.dismiss) private var dismiss
 
@@ -114,12 +117,18 @@ struct TargetAccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(payee == nil ? "New Target Account" : "Edit \(payee!.name)")
+            Text(payee == nil ? "New Target Account" : detailsOnly ? "Edit Target Details" : "Edit \(payee!.name)")
                 .font(.title2.weight(.semibold))
                 .padding([.horizontal, .top], 18)
+            if detailsOnly, let p = payee {
+                // Its name, the bank when it isn't the name too, and the last four digits.
+                Text([p.name, p.institution == p.name ? nil : p.institution, p.last4.map { "···\($0)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18).padding(.top, 2)
+            }
             Form {
                 Section("Account") {
-                    TextField("Account name", text: $name)
+                    if !detailsOnly { TextField("Account name", text: $name) }
                     TextField("Nickname", text: $nickname)
                         .help("A short name of your own: the registers' target lists show it beside the name")
                     TextField("Description", text: $details, axis: .vertical).lineLimit(1...3)
@@ -130,15 +139,17 @@ struct TargetAccountSheet: View {
                     }
                     .help("Inactive and closed accounts keep their entries, but no register offers them as a target")
                     TextField("Identifier", text: $reference, prompt: Text("Your account or customer number with them"))
-                    TextField("Bank / company", text: $institution)
-                    TextField("Last four digits", text: $last4)
-                        .help("Shown when this is picked as a register entry's target")
-                    Picker("Category", selection: $expenseAccountId) {
-                        Text("None").tag(Int?.none)
-                        ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                    if !detailsOnly {
+                        TextField("Bank / company", text: $institution)
+                        TextField("Last four digits", text: $last4)
+                            .help("Shown when this is picked as a register entry's target")
+                        Picker("Category", selection: $expenseAccountId) {
+                            Text("None").tag(Int?.none)
+                            ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                        }
+                        TextField("Usual amount", value: $defaultAmount, format: .number.precision(.fractionLength(2)))
+                            .help("Filled in when it is picked as a register entry's target")
                     }
-                    TextField("Usual amount", value: $defaultAmount, format: .number.precision(.fractionLength(2)))
-                        .help("Filled in when it is picked as a register entry's target")
                 }
                 Section("Next payment") {
                     Toggle("A payment is due", isOn: $hasNextPayment)
@@ -172,6 +183,13 @@ struct TargetAccountSheet: View {
                     Text("The password and user keys are kept in this Mac's Keychain, never in the security master: other Macs, and others using the registers, don't see them.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                Section("Notes") {
+                    TextField("User notes", text: $notes, prompt: Text("Shown on hover in the registers"), axis: .vertical).lineLimit(2...5)
+                    if !detailsOnly {
+                        TextField("Bank's names for it", text: $bankNames)
+                            .help("How the bank's and card companies' downloads name this account, separated by semicolons: accepting a line remembers these")
+                    }
+                }
                 Section("Address") {
                     TextField("Address 1", text: $address1)
                     TextField("Address 2", text: $address2)
@@ -193,11 +211,6 @@ struct TargetAccountSheet: View {
                     Text(sources.isEmpty ? "With neither, no register offers it as a target."
                          : "Offered as a target in the \(FundingSource.allCases.filter { sources.contains($0.rawValue) }.map(\.register).joined(separator: " and ")).")
                         .font(.caption).foregroundStyle(.secondary)
-                }
-                Section("Notes") {
-                    TextField("User notes", text: $notes, prompt: Text("Shown on hover in the registers"), axis: .vertical).lineLimit(2...5)
-                    TextField("Bank's names for it", text: $bankNames)
-                        .help("How the bank's and card companies' downloads name this account, separated by semicolons: accepting a line remembers these")
                 }
             }
             .formStyle(.grouped)
@@ -259,15 +272,20 @@ struct TargetAccountSheet: View {
         defer { saving = false }
         var body: [String: Any] = [
             "name": name, "nickname": nickname, "description": details, "status": status, "reference": reference,
-            "institution": institution, "last4": last4, "logonUrl": logonUrl, "userName": userName,
+            "logonUrl": logonUrl, "userName": userName,
             "address1": address1, "address2": address2, "city": city, "state": state, "zipCode": zipCode, "phone": phone,
             "notes": notes, "fundingSources": FundingSource.allCases.map(\.rawValue).filter(sources.contains),
-            "bankNames": bankNames.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) },
             "nextPaymentDate": hasNextPayment ? isoDay.string(from: nextPaymentDate) : "",
         ]
-        body["expenseAccountId"] = expenseAccountId ?? NSNull()
-        body["defaultAmount"] = defaultAmount ?? NSNull()
         body["nextPaymentAmount"] = hasNextPayment ? (nextPaymentAmount.map { $0 as Any } ?? NSNull()) : NSNull()
+        // The details alone leave the account's name, bank, last four, category, usual amount and bank names as saved.
+        if !detailsOnly {
+            body["institution"] = institution
+            body["last4"] = last4
+            body["bankNames"] = bankNames.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+            body["expenseAccountId"] = expenseAccountId ?? NSNull()
+            body["defaultAmount"] = defaultAmount ?? NSNull()
+        }
         if let payee { body["version"] = payee.version }
         let saved = await save(body)
         if let e = saved.error { error = e; return }
