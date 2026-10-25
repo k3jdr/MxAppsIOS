@@ -5,7 +5,7 @@
 //  MxPortMGR ▸ Settings (⌘,). Text: a font name, size and style for each kind of text that takes room — the headings,
 //  and the numbers and tables (registers, the earnings calendar, IDs and codes, calculation results) — stepped down
 //  together or one by one. Guidance: how much teaching the screens show — every page's "Why this step" lesson, the
-//  line under its title, and the lesson-only pages.
+//  line under its title, and the lesson-only pages. Banking: what the checking register's New entry line starts with.
 //
 
 import AppKit
@@ -118,6 +118,18 @@ enum Guidance: String, CaseIterable, Identifiable {
     }
 }
 
+/// Settings ▸ Banking: the check number a new checking entry starts with, when its kind is Check.
+enum CheckNumberDefault: String, CaseIterable, Identifiable {
+    case empty = "Empty", next = "The register's next number"
+    var id: String { rawValue }
+}
+
+/// Settings ▸ Banking: the date a new checking entry starts with.
+enum EntryDateDefault: String, CaseIterable, Identifiable {
+    case previous = "The date of the entry entered before", today = "Today"
+    var id: String { rawValue }
+}
+
 @Observable
 final class PortSettings {
     static let shared = PortSettings()
@@ -129,6 +141,16 @@ final class PortSettings {
     var guidance: Guidance {
         didSet { UserDefaults.standard.set(guidance.rawValue, forKey: Self.guidanceKey) }
     }
+    /// The checking register's New entry: its kind (EntryForm.kinds), check number and date to start with.
+    var newEntryKind: String {
+        didSet { UserDefaults.standard.set(newEntryKind, forKey: "newEntryKind") }
+    }
+    var newEntryCheckNumber: CheckNumberDefault {
+        didSet { UserDefaults.standard.set(newEntryCheckNumber.rawValue, forKey: "newEntryCheckNumber") }
+    }
+    var newEntryDate: EntryDateDefault {
+        didSet { UserDefaults.standard.set(newEntryDate.rawValue, forKey: "newEntryDate") }
+    }
 
     private static let fontsKey = "headingFonts"
     private static let guidanceKey = "guidance"
@@ -138,6 +160,9 @@ final class PortSettings {
         fonts = UserDefaults.standard.data(forKey: Self.fontsKey)
             .flatMap { try? JSONDecoder().decode([String: KindFont].self, from: $0) } ?? [:]
         guidance = UserDefaults.standard.string(forKey: Self.guidanceKey).flatMap(Guidance.init(rawValue:)) ?? .full
+        newEntryKind = UserDefaults.standard.string(forKey: "newEntryKind") ?? "debit"
+        newEntryCheckNumber = UserDefaults.standard.string(forKey: "newEntryCheckNumber").flatMap(CheckNumberDefault.init(rawValue:)) ?? .empty
+        newEntryDate = UserDefaults.standard.string(forKey: "newEntryDate").flatMap(EntryDateDefault.init(rawValue:)) ?? .previous
     }
 
     subscript(_ kind: TextKind) -> KindFont {
@@ -214,12 +239,21 @@ struct LessonPageItems<Content: View>: View {
 // MARK: - The Settings window
 
 struct PortSettingsView: View {
+    /// The tab showing; a screen's gear button opens its own (the New entry line's opens Banking).
+    @AppStorage(PortSettingsView.tabKey) private var tab = "text"
+    static let tabKey = "settingsTab"
+
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             TextSettings()
                 .tabItem { Label("Text", systemImage: "textformat.size") }
+                .tag("text")
             GuidanceSettings()
                 .tabItem { Label("Guidance", systemImage: "graduationcap") }
+                .tag("guidance")
+            BankingSettings()
+                .tabItem { Label("Banking", systemImage: "building.columns") }
+                .tag("banking")
         }
         .frame(width: 800)
     }
@@ -294,6 +328,32 @@ private struct TextSettings: View {
             .frame(width: 110)
             .help("Its style (standard \(kind.standard.style.rawValue))")
         }
+    }
+}
+
+private struct BankingSettings: View {
+    @Bindable private var settings = PortSettings.shared
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Kind", selection: $settings.newEntryKind) {
+                    ForEach(EntryForm.kinds, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                Picker("Check number", selection: $settings.newEntryCheckNumber) {
+                    ForEach(CheckNumberDefault.allCases) { Text($0.rawValue).tag($0) }
+                }
+                Picker("Date", selection: $settings.newEntryDate) {
+                    ForEach(EntryDateDefault.allCases) { Text($0.rawValue).tag($0) }
+                }
+            } header: {
+                Text("Checking Accounts ▸ New entry")
+            } footer: {
+                Text("What the New entry line above the checking register starts with, and starts again with after each entry. The check number is filled in only for a check; the date of the entry before keeps a month's entries from the paper register on their day.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

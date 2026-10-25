@@ -241,7 +241,7 @@ struct CheckingView: View {
     @State private var accountSheet: BankAccount??
     @State private var matching: BankLine?
     @State private var selection = Set<RegisterEntry.ID>()
-    @State private var draft = EntryDraft()
+    @State private var draft = EntryDraft.newEntry()
     @State private var noteFor: RegisterEntry?
     /// The register's Excel-style sorting and column filters (the header buttons).
     @State private var grid = GridQueryOptions()
@@ -602,10 +602,8 @@ struct CheckingView: View {
         guard let code = register?.account.code else { return "Choose an account" }
         let error = await run { try await BankClient.add(code, draft.body) }
         if error == nil {
-            let keep = draft.date
-            draft = EntryDraft()
-            draft.date = keep
-            if let r = register { draft.checkNo = nextCheck(r) }
+            draft = EntryDraft.newEntry(after: draft.date)
+            if let r = register, draft.kind == "check", PortSettings.shared.newEntryCheckNumber == .next { draft.checkNo = nextCheck(r) }
         }
         return error
     }
@@ -804,6 +802,16 @@ struct GridFilterStatus: View {
 
 // MARK: - Entering a check
 
+/// A new entry as Settings ▸ Banking starts it: its kind, and the date of the entry before (`previous`) or today.
+extension EntryDraft {
+    static func newEntry(after previous: Date? = nil) -> EntryDraft {
+        var draft = EntryDraft()
+        draft.kind = PortSettings.shared.newEntryKind
+        if let previous, PortSettings.shared.newEntryDate == .previous { draft.date = previous }
+        return draft
+    }
+}
+
 struct EntryDraft {
     var date = Date()
     var kind = "check"
@@ -828,6 +836,11 @@ struct EntryForm: View {
     var save: () async -> String?
     @State private var error: String?
     @State private var saving = false
+    @AppStorage(PortSettingsView.tabKey) private var settingsTab = "text"
+    @Environment(\.openSettings) private var openSettings
+
+    /// A check's number starts as the register's next one only when Settings ▸ Banking says so.
+    private var fillsCheckNumber: Bool { PortSettings.shared.newEntryCheckNumber == .next }
 
     static let kinds = [("check", "Check"), ("debit", "Debit / card"), ("deposit", "Deposit"), ("transfer", "Transfer"),
                         ("fee", "Bank fee"), ("interest", "Interest")]
@@ -840,7 +853,10 @@ struct EntryForm: View {
                     ForEach(Self.kinds, id: \.0) { Text($0.1).tag($0.0) }
                 }
                 .labelsHidden().frame(width: 120)
-                .onChange(of: draft.kind) { if draft.kind == "check", draft.checkNo.isEmpty { draft.checkNo = nextCheck } }
+                .onChange(of: draft.kind) {
+                    if draft.kind != "check" { draft.checkNo = "" }
+                    else if fillsCheckNumber, draft.checkNo.isEmpty { draft.checkNo = nextCheck }
+                }
                 if draft.kind == "check" {
                     TextField("Check #", text: $draft.checkNo).frame(width: 70)
                 }
@@ -853,12 +869,23 @@ struct EntryForm: View {
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(saving || (draft.amount ?? 0) == 0 || (draft.kind == "check" && draft.checkNo.isEmpty))
                     .help("Add it to the register (⌘↩)")
+                Button {
+                    settingsTab = "banking"
+                    openSettings()
+                } label: { Image(systemName: "gearshape") }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("New Entry Defaults")
+                    .help("What a new entry starts with — its kind, check number and date (Settings ▸ Banking)")
             }
             if let error { Text(error).font(.callout).foregroundStyle(.red) }
         }
-        .onAppear { if draft.kind == "check", draft.checkNo.isEmpty { draft.checkNo = nextCheck } }
+        .onAppear { if fillsCheckNumber, draft.kind == "check", draft.checkNo.isEmpty { draft.checkNo = nextCheck } }
         // After an entry is added the register's next check number moves on: offer it.
-        .onChange(of: nextCheck) { if draft.kind == "check", draft.checkNo.isEmpty { draft.checkNo = nextCheck } }
+        .onChange(of: nextCheck) { if fillsCheckNumber, draft.kind == "check", draft.checkNo.isEmpty { draft.checkNo = nextCheck } }
+        // A new default kind applies to an entry not started yet.
+        .onChange(of: PortSettings.shared.newEntryKind) {
+            if draft.payee.isEmpty, draft.amount == nil { draft.kind = PortSettings.shared.newEntryKind }
+        }
     }
 
     private func fillFromPayee() {
