@@ -2,7 +2,7 @@
 //  PathViews.swift
 //  MxPortMGR
 //
-//  My Portfolio's screens, active and passive alike, and the active approach's own: the holdings and the benchmark,
+//  The Investments screens, active and passive alike, and the active approach's own: the holdings and the benchmark,
 //  today's risk, the active optimizer, the trades and their taxes, and attribution.
 //
 

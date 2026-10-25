@@ -11,7 +11,9 @@
 //  Banking ▸ External Accounts: where the money goes to or comes from — a utility, a card, a brokerage, a person —
 //  each with its bank or company, last four digits, category (an expense account: Utilities, Insurance …), usual
 //  amount and a note. They are the register's targets, not books MxPortMGR keeps: a new entry's target is picked with
-//  its last four digits showing, and the register shows the target's note on hover and edits it in place.
+//  its last four digits showing, and the register shows the target's note on hover and edits it in place. An external
+//  account can carry a link — a web page, an email address, a page in MxNoteONE — with words and hover text of its own
+//  (ExternalAccountLinks.swift): its name shows as that link here and in every register it is a target in.
 //
 
 import SwiftUI
@@ -59,6 +61,8 @@ struct RegisterEntry: Decodable, Identifiable, Hashable {
     var balance: Double
     /// The entry's line in the register (1, 2, 3 …), as on the paper register; changed only by Move Up / Move Down.
     var line: Int
+    /// The target's link (ExternalAccountLinks.swift), shown on its name.
+    var payeeLink: TargetLink? = nil
 }
 
 struct BankLine: Decodable, Identifiable, Hashable {
@@ -106,6 +110,8 @@ struct Payee: Decodable, Identifiable, Hashable {
     var last4: String?
     var yearTotal: Double
     var lastPaid: String?
+    /// Its link (ExternalAccountLinks.swift), shown on its name wherever it is a target.
+    var link: TargetLink?
 }
 
 struct ExpenseBook: Decodable {
@@ -163,6 +169,18 @@ nonisolated enum BankClient {
     struct Note: Decodable { var id: Int; var note: String?; var version: Int }
     static func savePayeeNote(_ id: Int, _ note: String) async throws -> Note {
         try await AccountsClient.request("PUT", "/payees/\(id)/note", body: ["note": note, "by": by], as: Note.self)
+    }
+    private struct LinkAnswer: Decodable { var id: Int; var link: TargetLink? }
+    /// Saves an external account's link, or with nil takes it off (srm.payee_link, V032).
+    static func savePayeeLink(_ id: Int, _ link: SecurityLink?) async throws {
+        if let link {
+            let body: [String: Any] = ["address": link.address, "text": link.text ?? "", "hoverText": link.tipPlain ?? "",
+                                       "hoverRtf": link.tip.flatMap { String(data: $0, encoding: .utf8) } ?? "",
+                                       "title": link.title ?? "", "by": by]
+            _ = try await AccountsClient.request("PUT", "/payees/\(id)/link", body: body, as: LinkAnswer.self)
+        } else {
+            _ = try await AccountsClient.request("DELETE", "/payees/\(id)/link", as: LinkAnswer.self)
+        }
     }
     static func saveExpenseAccount(_ id: Int, _ body: [String: Any]) async throws -> ExpenseBook {
         try await AccountsClient.request("PUT", "/expense-accounts/\(id)", body: body, as: ExpenseBook.self)
@@ -240,6 +258,8 @@ struct CheckingView: View {
                 if editing == nil, !busy { await refresh() }
             }
         }
+        // A target's link changed (here or in External Accounts): every entry with that target shows it.
+        .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .sheet(item: $editing) { e in
             EditEntrySheet(entry: e, payees: activePayees, expenseAccounts: book?.expenseAccounts ?? []) { body in
                 await run { try await BankClient.update(e.id, body) }
@@ -335,7 +355,7 @@ struct CheckingView: View {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Num") { e in Text(e.checkNo ?? kindLabel(e.kind)).monospacedDigit().foregroundStyle(e.checkNo == nil ? .secondary : .primary) }.width(min: 40, ideal: 60)
                 TableColumn("Target") { e in
-                    TargetCell(entry: e) { id, note in await saveNote(id, note) }
+                    TargetCell(entry: e, website: website(e)) { id, note in await saveNote(id, note) }
                 }.width(min: 140, ideal: 190)
                 TableColumn("Category") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 120)
                 TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
@@ -349,6 +369,7 @@ struct CheckingView: View {
                 if chosen.count == 1, let e = chosen.first {
                     Button("Edit Entry…") { editing = e }
                     if e.payeeId != nil { Button("Edit Note on \(e.payee ?? "the Target")…") { noteFor = e } }
+                    payeeLinkMenu(PayeeLinkTarget(e, website: website(e)))
                     Divider()
                     Button("Move Up") { Task { await move(e, down: false) } }
                         .disabled(!grid.isEmpty || e.line <= 1)
@@ -497,6 +518,11 @@ struct CheckingView: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// The entry's target's website (External Accounts), offered as a page in the Link dialog.
+    private func website(_ e: RegisterEntry) -> String? {
+        e.payeeId.flatMap { id in book?.payees.first { $0.id == id }?.website }
     }
 
     // MARK: Loading and saving
@@ -866,19 +892,36 @@ struct TargetPicker: View {
 }
 
 /// A register entry's target with its last four digits; its note shows on hover, and the pencil (on hover) edits it.
+/// A target with a link shows its name as the link — a click opens it, the pointer resting on it shows its hover card —
+/// and the link button (on hover) adds or edits it.
 struct TargetCell: View {
     let entry: RegisterEntry
+    /// The target's website (External Accounts), offered as a page in the Link dialog.
+    var website: String? = nil
     var saveNote: (Int, String) async -> String?
     @State private var hovering = false
     @State private var editing = false
 
     var body: some View {
+        let target = PayeeLinkTarget(entry, website: website)
         HStack(spacing: 4) {
-            Text(entry.payee ?? "—").strikethrough(entry.status == "void")
-            if let l4 = entry.payeeLast4 { Text("···\(l4)").foregroundStyle(.secondary).monospacedDigit() }
-            if entry.payeeNote?.isEmpty == false { Image(systemName: "note.text").font(.caption).foregroundStyle(.secondary) }
+            if let target, let link = target.link {
+                PayeeLinks.shared.words(target, link: link, struck: entry.status == "void", testID: "entry:\(entry.id)")
+            } else {
+                Text(entry.payee ?? "—").strikethrough(entry.status == "void")
+            }
+            Group {
+                if let l4 = entry.payeeLast4 { Text("···\(l4)").foregroundStyle(.secondary).monospacedDigit() }
+                if entry.payeeNote?.isEmpty == false { Image(systemName: "note.text").font(.caption).foregroundStyle(.secondary) }
+            }
+            // With a link, its words show the hover card; the rest of the cell keeps the note's tooltip.
+            .help(target?.link == nil ? "" : hoverText)
             Spacer(minLength: 0)
-            if entry.payeeId != nil, hovering || editing {
+            if let target, hovering || editing {
+                Button { PayeeLinks.shared.beginEdit(target) } label: { Image(systemName: "link") }
+                    .buttonStyle(.borderless)
+                    .help(target.link == nil ? "Add a link to \(target.name): a web page, an email address or a page in MxNoteONE, with its own words and hover text"
+                                             : "Edit the link on \(target.name)")
                 Button { editing = true } label: { Image(systemName: "pencil") }
                     .buttonStyle(.borderless)
                     .help("Edit the note on \(entry.payee ?? "this target")")
@@ -886,7 +929,7 @@ struct TargetCell: View {
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .help(hoverText)
+        .help(target?.link == nil ? hoverText : "")
         .popover(isPresented: $editing, arrowEdge: .bottom) {
             TargetNoteEditor(entry: entry, initial: entry.payeeNote ?? "") { note in
                 guard let id = entry.payeeId else { return nil }
@@ -1134,6 +1177,8 @@ struct ExternalAccountsView: View {
             }
         }
         .task { await load() }
+        // A link changed (here or on a register's target): the table shows it.
+        .onChange(of: PayeeLinks.shared.version) { Task { await load() } }
         .sheet(item: $editing) { p in
             PayeeSheet(payee: p, expenseAccounts: book?.expenseAccounts ?? []) { body in await save(p.id, body) }
         }
@@ -1199,6 +1244,8 @@ struct ExternalAccountsView: View {
                     let p = row.payee
                     if row.editing, let d = draft {
                         TextField("Name", text: field(\.name)).onSubmit { commit(d.id) }
+                    } else if let link = p.link?.link {
+                        PayeeLinks.shared.words(PayeeLinkTarget(p), link: link, testID: "payee:\(p.id)")
                     } else {
                         Text(p.name).foregroundStyle(p.active ? .primary : .secondary).help(p.notes ?? "")
                     }
@@ -1248,6 +1295,8 @@ struct ExternalAccountsView: View {
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
                     Button("Edit All Details…") { editing = p }
+                    Divider()
+                    payeeLinkMenu(PayeeLinkTarget(p))
                 }
             } primaryAction: { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) { editing = p }

@@ -281,7 +281,7 @@ struct HBars: View {
 }
 
 
-/// At the top of every My Portfolio step: whose account this is, how it is run, and where to start it from.
+/// At the top of every Investments step: whose account this is, how it is run, and where to start it from.
 struct MyPortfolioBar: View {
     @Bindable var store: PortStore
 

@@ -30,7 +30,7 @@ struct WelcomeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("The sidebar is the guide: My Portfolio has six steps; ⌥⌘↓ and ⌥⌘↑ move to the next and previous screen, and ⌘[ and ⌘] go back and forward, as in a browser.", systemImage: "sidebar.left")
                     Label("Quick Help, under the sidebar, explains whatever is under the pointer — a number, a column, a button. ⌥⌘/ shows or hides it; its ⧉ button floats it in its own window.", systemImage: "questionmark.bubble")
-                    Label("My Portfolio, at the top of the sidebar, walks your own account through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
+                    Label("Investments, in the sidebar, walks your own account (My Portfolio) through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
                     Label("Pick a sample account in the toolbar for the report walkthroughs and the Morning Briefing: each teaches an edge case. Library ▸ Sample Portfolios describes them all; copy one into My Portfolio to work through it.", systemImage: "briefcase")
                     Label("Engine in the toolbar: the built-in optimizers, or the shared Layer 3 services (portfolio-java, portfolio-cpp, analytics) that MxDataHUB and MxJobsWMS use.", systemImage: "cpu")
                 }
@@ -103,7 +103,7 @@ struct ChoosePathView: View {
                 Image(systemName: "person.crop.circle.fill").font(.largeTitle).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ready to work on your own account?").font(.title3.weight(.semibold))
-                    Text("My Portfolio walks your own holdings through six steps: choose Active or Passive index there, and steps 4 and 5 follow your choice. To learn on a sample first, copy one into My Portfolio (Library ▸ Sample Portfolios, or Start From a Sample).")
+                    Text("Investments walks your own holdings (My Portfolio) through six steps: choose Active or Passive index there, and steps 4 and 5 follow your choice. To learn on a sample first, copy one into My Portfolio (Library ▸ Sample Portfolios, or Start From a Sample).")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -111,7 +111,7 @@ struct ChoosePathView: View {
             }
             .padding(14)
             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-            .quickHelpArea("My Portfolio", "The six steps on your own account: My Holdings, My Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
+            .quickHelpArea("Investments", "The six steps on your own account: My Holdings, My Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
         }
     }
 }
@@ -233,7 +233,7 @@ struct WhyOptimizeView: View {
                     Image(systemName: "arrow.right").foregroundStyle(.secondary)
                     step("Weights & trades", "The mix with the best forecast reward per unit of risk inside the limits — and the trades to get there.")
                 }
-                Text("Without limits an optimizer bets heavily on whatever its forecasts like most — 'error maximisation'. My Portfolio's Optimize step (the active approach) lets you change each limit and see what binds.")
+                Text("Without limits an optimizer bets heavily on whatever its forecasts like most — 'error maximisation'. Investments' Optimize step (the active approach) lets you change each limit and see what binds.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }

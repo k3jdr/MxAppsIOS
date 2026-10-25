@@ -87,6 +87,7 @@ struct ContentView: View {
         }
         .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
         .sheet(item: Binding(get: { ReportNotes.shared.editing }, set: { ReportNotes.shared.editing = $0 })) { ReportNotesSheet(report: $0) }
+        .sheet(item: Binding(get: { PayeeLinks.shared.editing }, set: { PayeeLinks.shared.editing = $0 })) { PayeeLinkSheet(target: $0) }
         .sheet(isPresented: $store.showOpenPortfolio) { OpenPortfolioSheet(store: store) }
         .sheet(isPresented: $store.showNewPortfolio) { NewPortfolioSheet(store: store) }
         .sheet(isPresented: $store.showDecisions) { DecisionsSheet(store: store) }
@@ -174,7 +175,7 @@ struct ContentView: View {
         .pickerStyle(.menu)
         .fixedSize()
         .disabled(store.screen.group == .mine)
-        .help(store.screen.group == .mine ? "The My Portfolio path always uses My Portfolio" : "The account the report walkthroughs and the Morning Briefing work on")
+        .help(store.screen.group == .mine ? "The Investments steps always use My Portfolio, your own account" : "The account the report walkthroughs and the Morning Briefing work on")
         .quickHelpArea(PortHelp.samplePicker)
     }
 
@@ -245,6 +246,21 @@ struct ContentView: View {
                 let pb = NSPasteboard(name: NSPasteboard.Name(name))
                 pb.clearContents()
                 pb.setString(text ?? "<nil>", forType: .string)
+            }
+        }
+        // Links on external accounts: open the Link dialog (-payeeLinkEdit PAYEE_ID) or show a linked target's hover
+        // card (-payeeLinkHoverTest entry:TXN_ID in a register, payee:PAYEE_ID in External Accounts).
+        if let id = defaults.object(forKey: "payeeLinkEdit") != nil ? defaults.integer(forKey: "payeeLinkEdit") : nil {
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                PayeeLinks.shared.beginEdit((try? await BankClient.book())?.payees.first { $0.id == id }.map(PayeeLinkTarget.init))
+            }
+        }
+        if let id = defaults.string(forKey: "payeeLinkHoverTest") {
+            Task {
+                // Once the register (or External Accounts) has loaded and shows the linked words.
+                for _ in 0..<20 where LinkWordsAnchorView.anchors[id]?() == nil { try? await Task.sleep(for: .seconds(1)) }
+                LinkWordsAnchorView.testHover(id)
             }
         }
         if let id = defaults.string(forKey: "reportHoverTest") {

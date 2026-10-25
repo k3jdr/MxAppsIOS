@@ -23,9 +23,9 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target an external account with its last four digits and a note on hover; External Accounts — where the money goes to or comes from, by category); **My Portfolio** (6 steps, your own account); Knowledge Library (reports, earnings, VIX, Compute, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target an external account with its last four digits, a note on hover and its link; External Accounts — where the money goes to or comes from, by category, each with a link of its own); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, VIX, Compute, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
-| **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the My Portfolio steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
+| **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. |
 | **Status bar** | The account, its type, value and benchmark; the last action (e.g. "Optimized with Built-in (Swift) in 134 ms"); the educational-use banner. |
 
@@ -60,7 +60,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 | --- | --- |
 | **Edit** | (the standard items) · **Copy Page Text** ⌥⇧⌘C — the whole page as text · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
-| **Guide** | Welcome ⌘0 · Choose Your Path · My Portfolio steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
+| **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · VIX ⌥⌘V · Compute — Hyperscaler Capex ⌥⌘U · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
@@ -87,10 +87,10 @@ the foot of each step.
 * **Choose Your Path** — four questions (edge after costs, tolerance for differing from the market, time, taxes) set
   against each approach, and *Start My Portfolio*. It does not choose for you.
 
-### My Portfolio path
+### Investments path
 
-The clear path for your own account, in six steps. Every My Portfolio
-step works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each step shows
+The clear path for your own account, in six steps (the sidebar's **Investments** section, called My Portfolio before 2026-10-25). Every
+Investments step works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each step shows
 the account and sets **My approach** — *Active* or *Passive index* — its account type, and **Start From a Sample**
 (copy any sample's holdings, lots and benchmark) or reset to the account as saved in the security master.
 
@@ -143,7 +143,7 @@ the analytics service can analyse it.
 | **New Portfolio…** ⌘N | a code, name, account type, approach and benchmark; no holdings or a copy of a sample's; created in the security master and opened |
 | **Open Portfolio…** ⌘O | the personal accounts in the security master — value, version, when and by whom last saved (samples and closed portfolios on request) |
 | **Open Recent** | the last eight opened |
-| **Close Portfolio** | My Portfolio's steps then ask to open or create one |
+| **Close Portfolio** | The Investments steps then ask to open or create one |
 | **Save** ⌘S | holdings, lots, cash, benchmark, approach and **preferences** as the portfolio's next version |
 | **Revert to Saved** | drop the unsaved changes and read the saved version again |
 | **Duplicate Portfolio…** | a new portfolio (new code and name) from the saved version — lots, cash, benchmark, preferences — then opened |
@@ -377,6 +377,24 @@ BRK.B, BRK-B and BRK/B alike). Links stay on this Mac for tickers the security m
 the security master the next time it answers (the dialog says where each link is kept). Links made on this Mac before
 are sent there the same way, unless the security master already has one for that ticker or name.
 
+### Links on external accounts
+
+An external account (Banking ▸ External Accounts) can carry a link the same way, made with the same **Link** dialog
+and shown with the same hover card: *Text to display* (the account's name unless you change it), *Address* (a web
+page, an email address, or a page in MxNoteONE — *Use the Link Copied in MxNoteONE*; the account's own website is
+offered when it has one), and formatted **hover text** with links of its own, with a *Hover card preview* and *Remove
+Link*. Open it from a Checking or card register entry's target (the link button that shows on hover, or the row's
+context menu, *Add Link to … / Edit Link on …*), from an External Accounts row's context menu, or *Edit Link…* on the
+hover card.
+
+The link belongs to the external account, so it shows wherever the account is a target: its name is shown as the link
+in the Checking Accounts register's Target column, the card registers' and the External Accounts table. A click opens
+it; resting the pointer on it shows the hover card. It is kept in the security master (`srm.payee_link`, V032) through
+the accounts service (`PUT` / `DELETE /payees/<id>/link`), apart from the account's own details, so saving a link
+never conflicts with someone editing them. A change made on one screen shows on the others (each loads again after a
+save; the Checking register also every 30 seconds). The target's note (the pencil) stays as it was: with a link, it
+shows on the last four digits and the note mark, and the link's hover text on its words.
+
 ### Learn the Why
 
 * **Why Optimize?** — two live demos: diversification (volatility of 1–36 equal-weighted companies falling to the
@@ -487,6 +505,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
+| `ExternalAccountLinks.swift` | Links on external accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
-| `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; My Portfolio's steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
+| `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

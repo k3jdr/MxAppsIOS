@@ -189,13 +189,15 @@ def save_account(conn, code, body):
 TXN_SQL = """
     SELECT t.txn_id AS id, t.txn_date AS date, t.posted_date AS "postedDate", t.kind, t.payee_id AS "payeeId",
            coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
-           p.notes AS "payeeNote", t.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount", t.memo,
+           p.notes AS "payeeNote", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
+           t.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount", t.memo,
            t.amount, t.status, t.card_line_id AS "cardLineId", l.name AS "issuerName", l.category AS "issuerCategory",
            l.file_format AS "fileFormat", t.bank_txn_id AS "bankTxnId", ba.code AS "bankAccount", bt.txn_date AS "bankDate",
            bt.check_no AS "bankCheckNo", t.version, t.entered_by AS "enteredBy", t.created_at AS "enteredAt",
            t.updated_by AS "updatedBy", t.updated_at AS "updatedAt"
       FROM srm.card_txn t
       LEFT JOIN srm.payee p USING (payee_id)
+      LEFT JOIN srm.payee_link pl ON pl.payee_id = t.payee_id
       LEFT JOIN srm.expense_account e ON e.expense_account_id = t.expense_account_id
       LEFT JOIN srm.card_line l ON l.card_line_id = t.card_line_id
       LEFT JOIN srm.bank_txn bt ON bt.txn_id = t.bank_txn_id
@@ -205,8 +207,9 @@ TXN_SQL = """
 def register(conn, code):
     card = _card(conn, code)
     acct = [a for a in accounts(conn)["accounts"] if a["code"].upper() == card["code"].upper()][0]
-    rows = fetch(conn, TXN_SQL + " WHERE t.card_account_id = %s ORDER BY coalesce(t.posted_date, t.txn_date), t.txn_date, t.txn_id",
-                 (card["card_account_id"],))
+    rows = [bank.nest_link(r, "payeeLink") for r in
+            fetch(conn, TXN_SQL + " WHERE t.card_account_id = %s ORDER BY coalesce(t.posted_date, t.txn_date), t.txn_date, t.txn_id",
+                  (card["card_account_id"],))]
     balance = float(card["opening_balance"])
     for r in rows:
         if r["status"] != "void":

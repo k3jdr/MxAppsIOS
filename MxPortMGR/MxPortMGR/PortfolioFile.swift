@@ -162,7 +162,7 @@ extension PortStore {
         return nil
     }
 
-    /// Closes the open portfolio (File ▸ Close Portfolio): My Portfolio's steps then ask to open or create one.
+    /// Closes the open portfolio (File ▸ Close Portfolio): the Investments steps then ask to open or create one.
     func closePortfolio() {
         whenSettled("close \(srmCode)") { [self] in
             var empty = Samples.myPortfolio

@@ -66,7 +66,7 @@ struct MxPortMGRApp: App {
                     .keyboardShortcut("0", modifiers: .command)
                 Button("Choose Your Path") { store.go(.choosePath) }
                 Divider()
-                Section("My Portfolio") {
+                Section("Investments") {
                     ForEach(Array(Screen.myPath.enumerated()), id: \.element) { i, s in
                         Button(store.title(s, full: false)) { store.go(s) }
                             .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: [.command, .option])
@@ -87,7 +87,7 @@ struct MxPortMGRApp: App {
                     ForEach(store.portfolios) { p in Text(p.name).tag(p.id) }
                 }
                 Divider()
-                // My Portfolio's step 4 follows its approach: optimize (active) or build the tracker (passive).
+                // Investments' step 4 follows its approach: optimize (active) or build the tracker (passive).
                 Button(store.myApproach == .active ? "Optimize My Portfolio" : "Build My Index Tracker") {
                     store.go(.myImprove)
                     Task { if store.myApproach == .active { await store.optimize() } else { await store.buildTracker() } }

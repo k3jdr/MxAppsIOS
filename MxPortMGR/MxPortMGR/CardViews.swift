@@ -67,6 +67,8 @@ struct CardEntry: Decodable, Identifiable, Hashable {
     var enteredBy: String?
     var updatedBy: String?
     var balance: Double
+    /// The target's link (ExternalAccountLinks.swift).
+    var payeeLink: TargetLink?
 
     /// The entry as the check register's target cell shows it (target, last four digits, note on hover).
     var target: RegisterEntry {
@@ -74,7 +76,7 @@ struct CardEntry: Decodable, Identifiable, Hashable {
                       payeeInstitution: payeeInstitution, payeeNote: payeeNote, expenseAccountId: expenseAccountId,
                       expenseAccount: expenseAccount, memo: memo, amount: amount, status: status, bankLineId: cardLineId,
                       bankDate: postedDate, bankName: issuerName, version: version, enteredBy: enteredBy,
-                      updatedBy: updatedBy, balance: balance, line: 0)
+                      updatedBy: updatedBy, balance: balance, line: 0, payeeLink: payeeLink)
     }
 }
 
@@ -210,6 +212,8 @@ struct CardsView: View {
             }
         }
         .task { await reload() }
+        // A target's link changed (here, in Checking or in External Accounts): the register shows it.
+        .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .task(id: selected) {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -350,7 +354,7 @@ struct CardsView: View {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Kind") { e in Text(kindLabel(e.kind)).foregroundStyle(.secondary) }.width(min: 50, ideal: 64)
                 TableColumn("Target") { e in
-                    TargetCell(entry: e.target) { id, note in await saveNote(id, note) }
+                    TargetCell(entry: e.target, website: e.payeeId.flatMap { id in book?.payees.first { $0.id == id }?.website }) { id, note in await saveNote(id, note) }
                 }.width(min: 140, ideal: 200)
                 TableColumn("Category") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary).help(e.issuerCategory.map { "\(r.account.issuer): \($0)" } ?? "") }.width(min: 80, ideal: 130)
                 TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 90)

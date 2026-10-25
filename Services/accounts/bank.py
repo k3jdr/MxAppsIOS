@@ -15,6 +15,12 @@
     PUT  /expense-accounts/<id>                  create (id 0) or change one {name, kind, description}
     PUT  /payees/<id>                            create (id 0) or change an external account {version, name, institution, last4, …}
     PUT  /payees/<id>/note                       change only its note (the register's hover text) {note}
+    PUT  /payees/<id>/link                       its link (V032): {address, text, hoverText, hoverRtf, title, by}
+    DELETE /payees/<id>/link                     take the link off
+
+An external account's link — a web page, an email address or a page in MxNoteONE, with words of its own and
+formatted hover text (srm.payee_link) — comes with it wherever it is a target: each register entry's payeeLink and
+each payee's link, {address, text, tip (the hover text as RTF), title}, or null.
 
 Each entry's amount is signed: negative leaves the account (checks, debits, fees). A register entry is never
 deleted: it is voided (status void) so the check number stays accounted for.
@@ -117,7 +123,7 @@ def save_account(conn, code, body):
 TXN_SQL = """
     SELECT t.txn_id AS id, t.txn_date AS date, t.kind, t.check_no AS "checkNo", t.payee_id AS "payeeId",
            coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
-           p.notes AS "payeeNote",
+           p.notes AS "payeeNote", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
            coalesce(t.expense_account_id, p.expense_account_id) AS "expenseAccountId",
            e.name AS "expenseAccount", t.memo, t.amount, t.status, t.bank_line_id AS "bankLineId",
            b.posted_date AS "bankDate", b.name AS "bankName", t.version, t.entered_by AS "enteredBy",
@@ -125,14 +131,22 @@ TXN_SQL = """
            t.register_seq AS line
       FROM srm.bank_txn t
       LEFT JOIN srm.payee p USING (payee_id)
+      LEFT JOIN srm.payee_link pl ON pl.payee_id = t.payee_id
       LEFT JOIN srm.expense_account e ON e.expense_account_id = coalesce(t.expense_account_id, p.expense_account_id)
       LEFT JOIN srm.bank_line b ON b.bank_line_id = t.bank_line_id"""
+
+
+def nest_link(row, key):
+    """Puts a row's link columns (linkAddress, linkText, linkTip, linkTitle) together as row[key], or None."""
+    link = {k: row.pop("link" + k.capitalize(), None) for k in ("address", "text", "tip", "title")}
+    row[key] = link if link["address"] else None
+    return row
 
 
 def register(conn, code):
     aid = _account_id(conn, code)
     acct = [a for a in accounts(conn)["accounts"] if a["code"].upper() == code.upper()][0]
-    rows = fetch(conn, TXN_SQL + " WHERE t.bank_account_id = %s ORDER BY t.register_seq", (aid,))
+    rows = [nest_link(r, "payeeLink") for r in fetch(conn, TXN_SQL + " WHERE t.bank_account_id = %s ORDER BY t.register_seq", (aid,))]
     balance = float(acct["openingBalance"])
     for r in rows:
         if r["status"] != "void":
@@ -379,13 +393,13 @@ def expense_accounts(conn, q=None):
     payees = fetch(conn, """
         SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.default_amount AS "defaultAmount",
                p.address, p.reference, p.phone, p.website, p.bank_names AS "bankNames", p.notes, p.active, p.version,
-               p.institution, p.account_last4 AS last4,
+               p.institution, p.account_last4 AS last4, pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
                p.updated_by AS "updatedBy", p.updated_at AS "updatedAt",
                coalesce(sum(t.spent) FILTER (WHERE extract(year FROM t.txn_date) = %%s), 0) AS "yearTotal",
                max(t.txn_date) AS "lastPaid"
-          FROM srm.payee p LEFT JOIN (%s) t USING (payee_id)
-         GROUP BY p.payee_id ORDER BY lower(p.name)""" % SPEND, (year,))
-    return {"year": year, "expenseAccounts": accts, "payees": payees}
+          FROM srm.payee p LEFT JOIN (%s) t USING (payee_id) LEFT JOIN srm.payee_link pl USING (payee_id)
+         GROUP BY p.payee_id, pl.payee_id ORDER BY lower(p.name)""" % SPEND, (year,))
+    return {"year": year, "expenseAccounts": accts, "payees": [nest_link(p, "link") for p in payees]}
 
 
 def save_expense_account(conn, eid, body):
@@ -452,6 +466,35 @@ def save_payee_note(conn, pid, body):
     return {"id": rows[0]["payee_id"], "note": rows[0]["notes"], "version": rows[0]["version"]}
 
 
+def save_payee_link(conn, pid, body):
+    """The external account's link (srm.payee_link, V032), made or changed; answers with it."""
+    address = (body.get("address") or "").strip()
+    if not address:
+        raise ValueError("the link needs an address")
+    blank = lambda k, n: (body.get(k) or "").strip()[:n] or None
+    rows = fetch(conn, """
+        INSERT INTO srm.payee_link (payee_id, address, display_text, hover_text, hover_rtf, link_title, updated_at, updated_by)
+        SELECT payee_id, %s, %s, %s, %s, %s, now(), %s FROM srm.payee WHERE payee_id = %s
+        ON CONFLICT (payee_id) DO UPDATE SET address = excluded.address, display_text = excluded.display_text,
+            hover_text = excluded.hover_text, hover_rtf = excluded.hover_rtf, link_title = excluded.link_title,
+            updated_at = now(), updated_by = excluded.updated_by
+        RETURNING payee_id AS id, address AS "linkAddress", display_text AS "linkText", hover_rtf AS "linkTip",
+                  link_title AS "linkTitle"
+        """,
+                 (address[:2000], blank("text", 200), blank("hoverText", 4000), body.get("hoverRtf") or None,
+                  blank("title", 300), str(body.get("by") or "MxPortMGR")[:80], int(pid)))
+    if not rows:
+        raise LookupError("no payee %s" % pid)
+    conn.commit()
+    return nest_link(rows[0], "link")
+
+
+def delete_payee_link(conn, pid):
+    fetch(conn, "DELETE FROM srm.payee_link WHERE payee_id = %s", (int(pid),))
+    conn.commit()
+    return {"id": int(pid), "link": None}
+
+
 def route(conn, method, parts, body, q):
     """The bank endpoints' answer, or None when the path isn't one of them."""
     if parts == ["bank", "accounts"] and method == "GET":
@@ -478,6 +521,10 @@ def route(conn, method, parts, body, q):
         return save_expense_account(conn, parts[1], body)
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "note" and method == "PUT":
         return save_payee_note(conn, parts[1], body)
+    if len(parts) == 3 and parts[0] == "payees" and parts[2] == "link" and method == "PUT":
+        return save_payee_link(conn, parts[1], body)
+    if len(parts) == 3 and parts[0] == "payees" and parts[2] == "link" and method == "DELETE":
+        return delete_payee_link(conn, parts[1])
     if len(parts) == 2 and parts[0] == "payees" and method == "PUT":
         return save_payee(conn, parts[1], body)
     return None

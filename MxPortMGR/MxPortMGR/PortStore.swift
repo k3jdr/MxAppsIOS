@@ -23,7 +23,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     enum Group: String, CaseIterable {
-        case accounts = "Banking", start = "Start Here", mine = "My Portfolio", reports = "Knowledge Library",
+        case accounts = "Banking", start = "Start Here", mine = "Investments", reports = "Knowledge Library",
              library = "Data Library"
 
         /// The sidebar's sections (Start Here's screens are in the Guide menu only).
@@ -74,7 +74,7 @@ enum Screen: String, CaseIterable, Identifiable {
     /// The title with its group where the title alone is ambiguous (window title, Quick Help).
     var fullTitle: String {
         switch group {
-        case .mine: "My Portfolio · \(step!). \(title)"
+        case .mine: "Investments · \(step!). \(title)"
         default: title
         }
     }
@@ -109,7 +109,7 @@ enum Screen: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The step number on the My Portfolio path.
+    /// The step number on the Investments path.
     var step: Int? { Screen.myPath.firstIndex(of: self).map { $0 + 1 } }
 
     static let myPath: [Screen] = [.myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution]
@@ -161,7 +161,7 @@ final class PortStore {
     var screen: Screen = .myPortfolio {
         didSet {
             UserDefaults.standard.set(screen.rawValue, forKey: "screen")
-            // The My Portfolio path always works on the user's own account.
+            // The Investments path always works on the user's own account (My Portfolio).
             if screen.group == .mine, selectedID != "mine" { selectedID = "mine" }
         }
     }
@@ -173,7 +173,7 @@ final class PortStore {
     /// The passive reading of a shared screen: My Portfolio run passively.
     var passiveContext: Bool { screen.group == .mine && myApproach == .passive }
 
-    /// A screen's title as shown: My Portfolio's steps 3 and 4 follow the approach; the walkthrough shows its report.
+    /// A screen's title as shown: Investments' steps 3 and 4 follow the approach; the walkthrough shows its report.
     func title(_ s: Screen, full: Bool = true) -> String {
         let short: String
         switch s {
@@ -182,7 +182,7 @@ final class PortStore {
         case .reportWalkthrough: return currentReport.title
         default: return full ? s.fullTitle : (s.step.map { "\($0). \(s.title)" } ?? s.title)
         }
-        return full ? "My Portfolio · \(s.step!). \(short)" : "\(s.step!). \(short)"
+        return full ? "Investments · \(s.step!). \(short)" : "\(s.step!). \(short)"
     }
 
     var portfolios: [Portfolio]
@@ -284,7 +284,7 @@ final class PortStore {
     }
 
     var busy = false
-    /// My Portfolio ▸ Add Securities… is open.
+    /// Investments ▸ Add Securities… is open.
     var addingSecurities = false
     /// The row selected in Add Securities, for Edit ▸ Link… while that dialog is open.
     var addSecuritiesLink: LinkTarget?

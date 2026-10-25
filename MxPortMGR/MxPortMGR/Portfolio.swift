@@ -64,7 +64,7 @@ nonisolated struct Portfolio: Codable, Hashable, Sendable, Identifiable {
     /// Base securities with no returns from the given month on (0-based), for the missing-data case.
     var missingFrom: [String: Int] = [:]
     var symbol: String = "briefcase"
-    /// "srm" when the account lives in the security master (MxPortMGR My Portfolio ▸ Security master), with its code.
+    /// "srm" when the account lives in the security master (MxPortMGR Investments ▸ Security master), with its code.
     var source: String? = nil
     var srmCode: String? = nil
     var isSRM: Bool { source == "srm" }

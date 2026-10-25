@@ -4,7 +4,7 @@
 //
 //  Library ▸ Sample Portfolios: every sample account, the edge case it teaches, what to look for, and where to go
 //  with it. Use makes it the account the report walkthroughs and the Morning Briefing work on; Copy to My Portfolio
-//  makes an editable copy to work through the My Portfolio steps.
+//  makes an editable copy to work through the Investments steps.
 //
 
 import SwiftUI
@@ -46,7 +46,7 @@ struct SamplesView: View {
             HStack {
                 Button(selected ? "In Use" : "Use") { store.selectedID = p.id }.disabled(selected)
                 if p.id == "mine" {
-                    Button("My Portfolio Path") { store.go(.myPortfolio) }
+                    Button("Open in Investments") { store.go(.myPortfolio) }
                 }
                 if p.id != "mine" {
                     Button("Copy to My Portfolio") {

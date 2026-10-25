@@ -2,7 +2,7 @@
 //  PassiveViews.swift
 //  MxPortMGR
 //
-//  The passive approach's own screens (My Portfolio steps 4 and 5): building a tracker with fewer names (or one fund),
+//  The passive approach's own screens (Investments steps 4 and 5): building a tracker with fewer names (or one fund),
 //  and rebalance bands for the stock / bond / cash mix.
 //
 
