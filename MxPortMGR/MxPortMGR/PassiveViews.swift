@@ -56,7 +56,7 @@ struct TrackView: View {
                             }
                         }
                     }
-                    .font(.callout)
+                    .textKind(.results)
                 }
             } else {
                 ContentUnavailableView {
@@ -148,7 +148,7 @@ struct TrackView: View {
                     Text("Simplest; the fund rebalances itself. Switching in a taxable account can be done gradually.").foregroundStyle(.secondary)
                 }
             }
-            .font(.callout)
+            .textKind(.results)
         }
     }
 }
@@ -241,7 +241,7 @@ struct BandsView: View {
                             }
                         }
                     }
-                    .font(.callout)
+                    .textKind(.results)
                 }
             }
             if !trades.isEmpty { TaxBox(store: store, estimate: estimate) }

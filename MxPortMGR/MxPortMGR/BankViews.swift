@@ -391,6 +391,7 @@ struct CheckingView: View {
                 TableColumn("✓") { e in statusMark(e) }.width(44)
                 TableColumn("Balance") { e in Text(e.status == "void" ? "" : money2(e.balance)).monospacedDigit().foregroundStyle(e.balance < 0 ? .red : .primary) }.width(min: 70, ideal: 100)
             }
+            .tableText()
             .contextMenu(forSelectionType: RegisterEntry.ID.self) { ids in
                 let chosen = r.entries.filter { ids.contains($0.id) }
                 if chosen.count == 1, let e = chosen.first {
@@ -1307,6 +1308,7 @@ struct TargetAccountsView: View {
                         .help("The latest entry with this target, from the registers")
                 }.width(min: 60, ideal: 80)
             }
+            .tableText()
             // One menu on the whole row: its words aren't selectable text, so a right-click on them doesn't bring up
             // the text menu (Edit commands, Services) instead.
             .textSelection(.disabled)

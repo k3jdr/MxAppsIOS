@@ -371,6 +371,7 @@ struct ComputeView: View {
                 TableColumn("Depreciation") { r in Text(Self.billions(r.ttm.depreciation)).monospacedDigit() }.width(85)
                 TableColumn("Free cash flow") { r in Text(Self.billions(r.ttm.freeCashFlow)).monospacedDigit().foregroundStyle(Color.signed(r.ttm.freeCashFlow)) }.width(95)
             }
+            .tableText()
             .copyRowsMenu(rows, as: Self.spendersText)
             .copiesSelectedRows(rows, selected: spenderSelection, as: Self.spendersText)
             .frame(minHeight: CGFloat(rows.count) * 26 + 34)
@@ -422,6 +423,7 @@ struct ComputeView: View {
                 TableColumn("Revenue, last 4 qtrs") { r in Text(Self.billions(r.ttm.revenue)).monospacedDigit() }.width(120)
                 TableColumn("Growth") { r in Text(Self.signed(r.ttm.revenueGrowth)).monospacedDigit().foregroundStyle(Color.signed(r.ttm.revenueGrowth ?? 0)) }.width(70)
             }
+            .tableText()
             .copyRowsMenu(rows, as: Self.suppliersText)
             .copiesSelectedRows(rows, selected: supplierSelection, as: Self.suppliersText)
             .frame(minHeight: CGFloat(rows.count) * 26 + 34)

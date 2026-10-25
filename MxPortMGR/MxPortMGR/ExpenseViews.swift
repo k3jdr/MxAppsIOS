@@ -473,6 +473,7 @@ struct ExpenseLedgersView: View {
                         .foregroundStyle(e.balance > 0.005 ? .red : .primary)
                 }.width(min: 70, ideal: 100)
             }
+            .tableText()
             .contextMenu(forSelectionType: ExpenseEntry.ID.self) { ids in entryMenu(d.entries.filter { ids.contains($0.id) }) }
             primaryAction: { ids in
                 if ids.count == 1, let e = d.entries.first(where: { ids.contains($0.id) }) { editing = e }
@@ -612,6 +613,7 @@ struct ExpenseLedgersView: View {
                         .controlSize(.small).help("Record the next charge of \(s.description)")
                 }.width(64)
             }
+            .tableText()
             .frame(minHeight: CGFloat(min(max(d.subscriptions.count, 4), 16)) * 24 + 30)
         }
     }
@@ -636,6 +638,7 @@ struct ExpenseLedgersView: View {
                 TableColumn("Warranty") { a in warrantyLabel(a) }.width(min: 80, ideal: 140)
                 TableColumn("Status") { a in Text(a.status).foregroundStyle(a.status == "in service" ? Color.secondary : Color.orange) }.width(min: 60, ideal: 80)
             }
+            .tableText()
             .contextMenu(forSelectionType: ExpenseAsset.ID.self) { ids in
                 if let a = d.assets.first(where: { ids.contains($0.id) }) { Button("Edit Asset…") { assetSheet = .some(a) } }
             } primaryAction: { ids in
@@ -674,6 +677,7 @@ struct ExpenseLedgersView: View {
                 TableColumn("Status") { t in Text(t.status).foregroundStyle(t.status == "completed" ? .green : .secondary) }.width(min: 60, ideal: 84)
                 TableColumn("Certificate") { t in Text(t.certificateExpires.map { "to \(shortDay($0))" } ?? "").monospacedDigit() }.width(min: 60, ideal: 90)
             }
+            .tableText()
             .contextMenu(forSelectionType: TrainingRecord.ID.self) { ids in
                 if let t = d.training.first(where: { ids.contains($0.id) }) { Button("Edit Training…") { trainingSheet = .some(t) } }
             } primaryAction: { ids in
@@ -704,6 +708,7 @@ struct ExpenseLedgersView: View {
                 }.width(min: 60, ideal: 84)
                 TableColumn("Status") { t in Text(t.status).foregroundStyle(.secondary) }.width(min: 60, ideal: 80)
             }
+            .tableText()
             .contextMenu(forSelectionType: ExpenseTrip.ID.self) { ids in
                 if let t = d.trips.first(where: { ids.contains($0.id) }) {
                     Button("Edit Trip…") { tripSheet = .some(t) }
@@ -1117,6 +1122,7 @@ struct CardChargesSheet: View {
                 TableColumn("Category") { c in Text(c.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
                 TableColumn("Amount") { c in Text(money2(c.amount)).monospacedDigit() }.width(min: 60, ideal: 80)
             }
+            .tableText()
             .frame(height: 280)
             Picker("On line", selection: $lineId) {
                 Text("None").tag(Int?.none)

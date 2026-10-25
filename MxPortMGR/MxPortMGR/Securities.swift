@@ -361,6 +361,7 @@ struct SecuritiesView: View {
                 TableColumn("Market value") { r in Text(r.marketCap.map(Self.compact) ?? "").monospacedDigit().foregroundStyle(.secondary) }
                     .width(min: 56, ideal: 72)
             }
+            .tableText()
             .columnHeaderFilters(
                 types: SecuritiesStore.columnTypes, options: master.options,
                 loadValues: { [master] in try await master.values(column: $0) },
@@ -482,6 +483,7 @@ struct SecuritiesView: View {
                             TableColumn("To") { Text($0.to.isEmpty ? "current" : $0.to) }.width(min: 50, ideal: 58)
                             TableColumn("Source", value: \.source).width(min: 50, ideal: 74)
                         }
+                        .tableText()
                         .copyRowsMenu(detail.identifiers, as: Self.identifiersText)
                         .copiesSelectedRows(detail.identifiers, selected: identifierSelection, as: Self.identifiersText)
                         .frame(height: CGFloat(min(12, detail.identifiers.count + 1)) * 24 + 8)

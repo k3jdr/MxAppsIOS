@@ -267,6 +267,7 @@ struct EarningsDayView: View {
             companyColumns(held)
             figureColumns
         }
+        .tableText()
         .contextMenu(forSelectionType: EarningsEntry.ID.self) { keys in
             if let key = keys.first, let entry = rows.first(where: { $0.key == key }) {
                 linkMenu(LinkTarget.earnings(entry))
@@ -336,7 +337,7 @@ private struct SymbolCell: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            LinkedCell(target: .earnings(entry), font: .body.monospaced(), bold: held,
+            LinkedCell(target: .earnings(entry), font: PortSettings.shared.font(.ids), bold: held,
                        help: held ? "You hold \(entry.symbol)" : entry.onNasdaq ? entry.symbol
                            : entry.nameFromSecurityMaster ? "Only FMP's calendar lists \(entry.symbol); its name is the security master's"
                            : "Only FMP lists \(entry.symbol)")
@@ -444,7 +445,7 @@ struct CompanyEarningsBox: View {
                         }
                     }
                 }
-                .font(.callout)
+                .textKind(.results)
             } else if let note = c?.nasdaqNote {
                 Text("Nasdaq.com history: \(note)").font(.caption).foregroundStyle(.secondary)
             }
@@ -503,7 +504,7 @@ struct CompanyEarningsBox: View {
                 }
             }
         }
-        .font(.caption)
+        .textKind(.results, 10)
     }
 }
 
@@ -682,15 +683,15 @@ struct EarningsCalendarView: View {
 
     private func notable(_ title: String, _ rows: ArraySlice<DatedEntry>, held: Set<String>) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.subheadline.weight(.semibold))
-            if rows.isEmpty { Text("None in the days shown.").font(.callout).foregroundStyle(.secondary) }
+            Text(title).textKind(.calendar, 11, weight: .semibold)
+            if rows.isEmpty { Text("None in the days shown.").textKind(.calendar).foregroundStyle(.secondary) }
             ForEach(Array(rows)) { r in
                 Button { store.openEarningsDay(r.date, select: r.entry.key) } label: {
                     HStack(spacing: 6) {
                         Text(EarningsDates.date(r.date).formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
                             .foregroundStyle(.secondary).frame(width: 92, alignment: .leading)
                         Image(systemName: r.entry.time.symbol).foregroundStyle(.secondary).frame(width: 16)
-                        Text(r.entry.symbol).font(.callout.monospaced()).fontWeight(held.contains(r.entry.key) ? .bold : .regular).frame(width: 56, alignment: .leading)
+                        Text(r.entry.symbol).fontDesign(.monospaced).fontWeight(held.contains(r.entry.key) ? .bold : nil).frame(width: 56, alignment: .leading)
                         Text(r.entry.name).lineLimit(1)
                         Spacer()
                         if r.entry.reported {
@@ -700,7 +701,7 @@ struct EarningsCalendarView: View {
                             Text("est. \(EarningsFormat.eps(r.entry.epsEstimate))").monospacedDigit().foregroundStyle(.secondary)
                         }
                     }
-                    .font(.callout)
+                    .textKind(.calendar)
                     .contentShape(Rectangle())
                 }
                 .plainButton()
@@ -726,13 +727,14 @@ struct EarningsMonthCell: View {
         let today = date == EarningsDates.today()
         let past = date < EarningsDates.today()
         let pending = listed.count - reported.count
+        let cellScale = PortSettings.shared.scale(.calendar)
         let names = (listed.filter { held.contains($0.key) } + listed.filter { !held.contains($0.key) }.sorted { $0.size > $1.size })
             .prefix(weekend ? 2 : !reported.isEmpty && pending > 0 ? 3 : 4)
         Button { store.openEarningsDay(date) } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Text("\(EarningsDates.day(date))")
-                        .font(.callout.weight(today ? .bold : .regular))
+                        .textKind(.calendar, weight: today ? .bold : nil)
                         .foregroundStyle(today ? Color.white : .primary)
                         .padding(.horizontal, today ? 5 : 0)
                         .background(today ? Capsule().fill(Color.accentColor) : nil)
@@ -740,20 +742,20 @@ struct EarningsMonthCell: View {
                     if inMonth, e.isLoading(date), e.days[date]?.nasdaqFetched == nil {
                         ProgressView().controlSize(.mini)
                     } else if !listed.isEmpty {
-                        Text(listed.count.formatted()).font(.caption.monospacedDigit().weight(.semibold)).foregroundStyle(.secondary)
+                        Text(listed.count.formatted()).monospacedDigit().textKind(.calendar, 10, weight: .semibold).foregroundStyle(.secondary)
                     }
                 }
                 if !reported.isEmpty {
                     OutcomeBar(entries: reported)
                     if !weekend {
                         Text("\(reported.filter { $0.outcome == .beat }.count) beat · \(reported.filter { $0.outcome == .missed }.count) missed")
-                            .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            .textKind(.calendar, 10).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 ForEach(Array(names), id: \.key) { n in
                     HStack(spacing: 3) {
                         if held.contains(n.key) { Image(systemName: "briefcase.fill").font(.system(size: 8)).foregroundStyle(Color.accentColor) }
-                        Text(n.symbol).font(.caption.monospaced()).fontWeight(held.contains(n.key) ? .bold : .regular)
+                        Text(n.symbol).textKind(.calendar, 10).fontDesign(.monospaced).fontWeight(held.contains(n.key) ? .bold : nil)
                             .foregroundStyle(n.reported ? EarningsFormat.color(n.outcome) : .primary)
                         if !weekend, !n.reported, n.time != .notGiven {
                             Image(systemName: n.time.symbol).font(.system(size: 8)).foregroundStyle(.secondary)
@@ -762,11 +764,12 @@ struct EarningsMonthCell: View {
                     .lineLimit(1)
                 }
                 if pending > 0, !reported.isEmpty, !weekend {
-                    Text(past ? "\(pending) without a result" : "\(pending) to come").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    Text(past ? "\(pending) without a result" : "\(pending) to come").textKind(.calendar, 10).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             .padding(6)
-            .frame(maxWidth: .infinity, minHeight: 134, maxHeight: 134, alignment: .topLeading)
+            // As tall as the calendar's text needs (Settings ▸ Text ▸ Calendar).
+            .frame(maxWidth: .infinity, minHeight: 134 * cellScale, maxHeight: 134 * cellScale, alignment: .topLeading)
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(date == e.date ? Color.accentColor : Color.secondary.opacity(inMonth ? 0.15 : 0.05), lineWidth: date == e.date ? 2 : 1))
             .opacity(inMonth ? 1 : 0.4)
@@ -793,9 +796,9 @@ struct EarningsWeekColumn: View {
             Button { store.openEarningsDay(date) } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(EarningsDates.date(date).formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                        .heading(.name).foregroundStyle(date == EarningsDates.today() ? Color.accentColor : .primary)
+                        .textKind(.calendar, 13, weight: .bold).foregroundStyle(date == EarningsDates.today() ? Color.accentColor : .primary)
                     HStack {
-                        Text(listed.count == 1 ? "1 report" : "\(listed.count) reports").font(.caption).foregroundStyle(.secondary)
+                        Text(listed.count == 1 ? "1 report" : "\(listed.count) reports").textKind(.calendar, 10).foregroundStyle(.secondary)
                         if e.isLoading(date), e.days[date]?.nasdaqFetched == nil { ProgressView().controlSize(.mini) }
                     }
                     if !reported.isEmpty { OutcomeBar(entries: reported) }
@@ -808,14 +811,14 @@ struct EarningsWeekColumn: View {
             ForEach(Array(rows), id: \.key) { r in
                 Button { store.openEarningsDay(date, select: r.key) } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: r.time.symbol).font(.caption2).foregroundStyle(.secondary).frame(width: 14)
-                        Text(r.symbol).font(.callout.monospaced()).fontWeight(held.contains(r.key) ? .bold : .regular)
+                        Image(systemName: r.time.symbol).textKind(.calendar, 10).foregroundStyle(.secondary).frame(width: 14)
+                        Text(r.symbol).textKind(.calendar).fontDesign(.monospaced).fontWeight(held.contains(r.key) ? .bold : nil)
                             .foregroundStyle(held.contains(r.key) ? Color.accentColor : .primary)
                         Spacer(minLength: 2)
                         if r.reported {
-                            Text(EarningsFormat.eps(r.epsActual)).font(.caption.monospacedDigit()).foregroundStyle(EarningsFormat.color(r.outcome))
+                            Text(EarningsFormat.eps(r.epsActual)).monospacedDigit().textKind(.calendar, 10).foregroundStyle(EarningsFormat.color(r.outcome))
                         } else {
-                            Text(EarningsFormat.eps(r.epsEstimate)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            Text(EarningsFormat.eps(r.epsEstimate)).monospacedDigit().textKind(.calendar, 10).foregroundStyle(.secondary)
                         }
                     }
                     .contentShape(Rectangle())
@@ -825,7 +828,7 @@ struct EarningsWeekColumn: View {
             }
             if listed.count > rows.count {
                 Button("+\(listed.count - rows.count) more") { store.openEarningsDay(date) }
-                    .buttonStyle(.link).font(.caption)
+                    .buttonStyle(.link).textKind(.calendar, 10)
             }
         }
         .padding(8)

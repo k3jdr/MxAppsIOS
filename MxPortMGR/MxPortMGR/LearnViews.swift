@@ -374,7 +374,7 @@ struct ActiveVsPassiveView: View {
                 row("Main tool here", "Active optimizer (portfolio-java)", "Index tracker (portfolio-cpp)")
                 row("Attribution should show", "The bets you meant to make paying", "Effects close to zero")
             }
-            .font(.callout)
+            .textKind(.results)
             .padding(12)
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .quickHelpArea("Active vs Passive", "Typical ranges for funds and accounts; illustrative, not rules.", symbol: "tablecells")

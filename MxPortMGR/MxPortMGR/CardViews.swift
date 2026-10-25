@@ -376,6 +376,7 @@ struct CardsView: View {
                 TableColumn("✓") { e in statusMark(e) }.width(40)
                 TableColumn("Owed") { e in Text(e.status == "void" ? "" : money2(e.balance)).monospacedDigit() }.width(min: 70, ideal: 100)
             }
+            .tableText()
             .contextMenu(forSelectionType: CardEntry.ID.self) { ids in
                 let chosen = r.entries.filter { ids.contains($0.id) }
                 if chosen.count == 1, let e = chosen.first {
@@ -457,6 +458,7 @@ struct CardsView: View {
                     TableColumn("Paid") { s in Text(money2(s.paid)).monospacedDigit() }.width(min: 70, ideal: 90)
                     TableColumn("") { s in Text(s.state).foregroundStyle(stateColor(s.state)) }.width(min: 70, ideal: 100)
                 }
+                .tableText()
                 .contextMenu(forSelectionType: CardStatement.ID.self) { ids in
                     if let s = r.statements.first(where: { ids.contains($0.id) }) {
                         Button("Enter What the Statement Says…") { statement = s }

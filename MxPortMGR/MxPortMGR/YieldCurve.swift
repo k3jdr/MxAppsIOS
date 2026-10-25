@@ -505,6 +505,7 @@ struct RealYieldCurve: View {
                 TableColumn("Next recession began") { i in Text(i.recession.map { Self.day.string(from: $0) } ?? "none yet").foregroundStyle(i.recession == nil ? .secondary : .primary) }
                 TableColumn("Months later") { i in Text(i.leadMonths.map(String.init) ?? "—").monospacedDigit() }
             }
+            .tableText()
             .copyRowsMenu(rows, as: Self.inversionsText)
             .copiesSelectedRows(rows, selected: inversionSelection, as: Self.inversionsText)
             .frame(minHeight: CGFloat(rows.count) * 24 + 34)

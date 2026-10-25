@@ -427,6 +427,7 @@ struct AddCardTargetsSheet: View {
                         TableColumn("Last") { t in Text(shortDay(t.last)).monospacedDigit().foregroundStyle(.secondary) }.width(84)
                         TableColumn("Kind") { t in Text(t.kinds.joined(separator: ", ")).foregroundStyle(.secondary) }.width(min: 60, ideal: 90)
                     }
+                    .tableText()
                     .textSelection(.disabled)
                     .frame(minHeight: 320)
                 }

@@ -147,7 +147,7 @@ struct PortfolioView: View {
                     }
                 }
             }
-            .font(.callout)
+            .textKind(.results)
         }
     }
 
@@ -191,10 +191,10 @@ struct HoldingsTable: View {
             Table(p.holdings, selection: $store.holdingSelection, columnCustomization: $columns) {
                 TableColumn("Ticker") { h in
                     if let t = LinkTarget.holding(h) {
-                        LinkedCell(target: t, font: .body.monospaced(), color: h.security == nil || h.unpriced ? .red : .primary,
+                        LinkedCell(target: t, font: PortSettings.shared.font(.ids), color: h.security == nil || h.unpriced ? .red : .primary,
                                    help: h.unpriced ? "No price in the security master yet: valued at cost" : h.security?.priceDate.map { "Priced \($0)" })
                     } else {
-                        Text(h.ticker).font(.body.monospaced())
+                        Text(h.ticker).textKind(.ids)
                     }
                 }
                 .width(min: 50, ideal: 70)
@@ -277,6 +277,7 @@ struct HoldingsTable: View {
                 .width(48)
                 .customizationID("actions").disabledCustomizationBehavior(.all)
             }
+            .tableText()
             .contextMenu(forSelectionType: Holding.ID.self) { tickers in
                 let chosen = p.holdings.filter { tickers.contains($0.ticker) }
                 if chosen.count == 1, let h = chosen.first {
@@ -408,7 +409,7 @@ struct RiskView: View {
                         }
                     }
                 }
-                .font(.callout)
+                .textKind(.results)
             }
         }
     }
@@ -661,6 +662,7 @@ struct TradesView: View {
                         TableColumn("Held") { t in Text(held(t)).foregroundStyle(.secondary) }
                         .width(100)
                     }
+                    .tableText()
                     // Select rows (⇧ / ⌘ for several, ⌘A for all); ⌘C or Copy Row copies them under the column titles.
                     .copyRowsMenu(shown, as: tradesText)
                     .copiesSelectedRows(shown, selected: tradeSelection, as: tradesText)
@@ -719,7 +721,7 @@ struct TaxBox: View {
                         }
                     }
                 }
-                .font(.callout)
+                .textKind(.results)
             }
             if estimate.lines.contains(where: { $0.gain < 0 }) {
                 Label("A sale at a loss can offset gains (tax-loss harvesting). Buying the same security back within 30 days before or after makes it a wash sale and the loss is disallowed — a similar, not identical, fund keeps the exposure.",
@@ -867,6 +869,7 @@ struct AttributionResultView: View {
                     TableColumn("Interaction") { g in Text(signedPct(g.interaction)).monospacedDigit().foregroundStyle(Color.signed(g.interaction)) }.width(80)
                     TableColumn("Total") { g in Text(signedPct(g.total)).monospacedDigit().bold() }.width(70)
                 }
+                .tableText()
                 .copyRowsMenu(result.groups, as: Self.groupsText)
                 .copiesSelectedRows(result.groups, selected: groupSelection, as: Self.groupsText)
                 .frame(minHeight: CGFloat(result.groups.count) * 26 + 34)
@@ -895,7 +898,7 @@ struct AttributionResultView: View {
         Box(title: title, symbol: title == "Helped most" ? "arrow.up.circle" : "arrow.down.circle", help: "Securities with the largest contribution to active return: active weight times return, summed over the months.") {
             ForEach(rows) { c in
                 HStack {
-                    Text(c.ticker).font(.body.monospaced()).frame(width: 60, alignment: .leading)
+                    Text(c.ticker).textKind(.ids).frame(width: 60, alignment: .leading)
                     Text(c.sector).foregroundStyle(.secondary)
                     Spacer()
                     Text("\(pct(c.portfolioWeight)) vs \(pct(c.benchmarkWeight))").font(.caption).foregroundStyle(.secondary)

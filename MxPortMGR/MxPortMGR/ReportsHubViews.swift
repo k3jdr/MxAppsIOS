@@ -305,7 +305,7 @@ struct MorningBriefingView: View {
                     }
                     ForEach(Array(today)) { e in
                         HStack {
-                            Text(e.symbol).font(.callout.monospaced()).frame(width: 52, alignment: .leading)
+                            Text(e.symbol).textKind(.ids, 12).frame(width: 52, alignment: .leading)
                             Text(e.name).font(.callout).lineLimit(1)
                             Spacer()
                             Text(e.time.title).font(.caption).foregroundStyle(.secondary)

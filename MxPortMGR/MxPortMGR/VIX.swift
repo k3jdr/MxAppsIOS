@@ -455,6 +455,7 @@ struct VIXView: View {
                 TableColumn("Back under 20 on") { s in Text(s.backUnder20.map { Self.day.string(from: $0) } ?? "not yet") }
                 TableColumn("Trading days from peak") { s in Text(s.tradingDays.map(String.init) ?? "—").monospacedDigit() }
             }
+            .tableText()
             .copyRowsMenu(rows, as: Self.spikesText)
             .copiesSelectedRows(rows, selected: spikeSelection, as: Self.spikesText)
             .frame(minHeight: CGFloat(rows.count) * 24 + 34)

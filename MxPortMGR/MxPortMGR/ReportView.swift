@@ -260,7 +260,7 @@ struct ReportView: View {
                         }
                     }
                 }
-                .font(.callout)
+                .textKind(.results)
             }
             Text("A loss on paper only becomes permanent if you sell. Next: what would you do?").font(.callout).foregroundStyle(.secondary)
         }
@@ -462,7 +462,7 @@ struct LongRunView: View {
                         .quickHelpArea(QuickHelpItem(title: o.reaction.title, detail: o.reaction.summary + " Median annual return \(pct(o.annualReturn)) over \(result.settings.years) years; about \(String(format: "%.0f", o.trades)) trades.", symbol: o.reaction.symbol))
                     }
                 }
-                .font(.callout)
+                .textKind(.results)
                 Text("Missed best days: of the ten best days for stocks in each future, how many the account spent mostly out of the market. Tracking error: how differently the reaction's account moved from the plan's, a year. Worst drop: the median of each future's largest fall from a high.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }

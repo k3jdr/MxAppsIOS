@@ -35,7 +35,7 @@ struct OpenPortfolioSheet: View {
                 if loading { ProgressView().controlSize(.small) }
             }
             Table(visible, selection: $selection) {
-                TableColumn("Code") { r in Text(r.code).font(.body.monospaced()) }.width(min: 100, ideal: 130)
+                TableColumn("Code") { r in Text(r.code).textKind(.ids) }.width(min: 100, ideal: 130)
                 TableColumn("Name") { r in Text(r.name) }.width(min: 100, ideal: 150)
                 TableColumn("Type") { r in Text(r.accountType ?? "—").foregroundStyle(.secondary) }.width(70)
                 TableColumn("Benchmark") { r in Text(r.benchmark ?? "—").foregroundStyle(.secondary) }.width(72)
@@ -47,6 +47,7 @@ struct OpenPortfolioSheet: View {
                 TableColumn("Status") { r in Text(r.closedDate.map { "Closed \($0)" } ?? (r.code.caseInsensitiveCompare(store.srmCode) == .orderedSame ? "Open now" : ""))
                     .foregroundStyle(.secondary) }.width(80)
             }
+            .tableText()
             .contextMenu(forSelectionType: SRMAccountSummary.ID.self) { _ in } primaryAction: { ids in
                 if let id = ids.first { open(id) }
             }
@@ -170,6 +171,7 @@ struct DecisionsSheet: View {
                 TableColumn("Why") { d in Text(d.rationale ?? "").foregroundStyle(.secondary).lineLimit(2).help(d.rationale ?? "") }.width(min: 160, ideal: 280)
                 TableColumn("Version") { d in Text(d.portfolioVersion.map(String.init) ?? "").monospacedDigit() }.width(50)
             }
+            .tableText()
             .frame(minHeight: 180)
             GroupBox("Record a decision") {
                 VStack(alignment: .leading, spacing: 8) {
@@ -291,7 +293,7 @@ struct ImportHoldingsSheet: View {
                 .font(.callout).foregroundStyle(.secondary)
             Table(preview.rows) {
                 TableColumn("Line") { r in Text("\(r.line)").monospacedDigit().foregroundStyle(.secondary) }.width(36)
-                TableColumn("Ticker") { r in Text(r.ticker).font(.body.monospaced()) }.width(80)
+                TableColumn("Ticker") { r in Text(r.ticker).textKind(.ids) }.width(80)
                 TableColumn("Security") { r in Text(r.security?.name ?? "—") }.width(min: 160, ideal: 240)
                 TableColumn("Shares") { r in Text(r.quantity.formatted()).monospacedDigit() }.width(80)
                 TableColumn("Cost") { r in Text(r.cost.map(money) ?? "").monospacedDigit() }.width(90)
@@ -302,6 +304,7 @@ struct ImportHoldingsSheet: View {
                 }
                 .width(150)
             }
+            .tableText()
             .frame(minHeight: 240)
             if !preview.skipped.isEmpty {
                 Text("Skipped: " + preview.skipped.joined(separator: "; ")).font(.caption).foregroundStyle(.orange).lineLimit(3)
@@ -355,7 +358,7 @@ struct PolicyBenchmarkSheet: View {
                 Text("Policy Benchmarks").heading(.name)
                 List(list, selection: $selected) { b in
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(b.code).font(.body.monospaced())
+                        Text(b.code).textKind(.ids)
                         Text(b.name).font(.caption).foregroundStyle(.secondary)
                     }
                     .tag(b.code)

@@ -2,19 +2,34 @@
 //  PortSettings.swift
 //  MxPortMGR
 //
-//  MxPortMGR ▸ Settings (⌘,). Text: the larger text's fonts — a name, size and style for each kind of heading, stepped
-//  down together or one by one. Guidance: how much teaching the screens show — every page's "Why this step" lesson,
-//  the line under its title, and the lesson-only pages.
+//  MxPortMGR ▸ Settings (⌘,). Text: a font name, size and style for each kind of text that takes room — the headings,
+//  and the numbers and tables (registers, the earnings calendar, IDs and codes, calculation results) — stepped down
+//  together or one by one. Guidance: how much teaching the screens show — every page's "Why this step" lesson, the
+//  line under its title, and the lesson-only pages.
 //
 
 import AppKit
 import SwiftUI
 
-/// The kinds of larger text, each with a font of its own in Settings ▸ Text.
-enum HeadingRole: String, CaseIterable, Identifiable {
+/// The kinds of text with a font of their own in Settings ▸ Text.
+enum TextKind: String, CaseIterable, Identifiable {
     case pageTitle, pageSubtitle, heading, subheading, name, figure
+    case table, calendar, ids, results
 
     var id: String { rawValue }
+
+    enum Section: String, CaseIterable, Identifiable {
+        case headings = "Headings", numbers = "Numbers and Tables"
+        var id: String { rawValue }
+        var kinds: [TextKind] { TextKind.allCases.filter { $0.section == self } }
+    }
+
+    var section: Section {
+        switch self {
+        case .pageTitle, .pageSubtitle, .heading, .subheading, .name, .figure: .headings
+        case .table, .calendar, .ids, .results: .numbers
+        }
+    }
 
     var title: String {
         switch self {
@@ -24,6 +39,10 @@ enum HeadingRole: String, CaseIterable, Identifiable {
         case .subheading: "Subheadings"
         case .name: "Names"
         case .figure: "Figures"
+        case .table: "Registers and tables"
+        case .calendar: "Calendar"
+        case .ids: "IDs and codes"
+        case .results: "Results"
         }
     }
 
@@ -36,23 +55,32 @@ enum HeadingRole: String, CaseIterable, Identifiable {
         case .subheading: "Cards, decisions, an earnings day, a simulation's result"
         case .name: "Box and lesson titles; report, account, ledger and sample names"
         case .figure: "The numbers in the metric tiles"
+        case .table: "Every register's and table's rows: checking, cards, expenses, targets, holdings, trades, securities"
+        case .calendar: "The earnings calendar's days and its notable reports: dates, counts, symbols, EPS"
+        case .ids: "Tickers, symbols and portfolio codes (monospaced in the system font)"
+        case .results: "Calculation results: risk, trades, tracker, tax estimates, simulations, earnings history"
         }
     }
 
-    /// The macOS text style it used before Settings had it (title, title 3, title 2, headline).
-    var standard: HeadingFont {
+    /// The size and style it had before Settings had it (a macOS text style: title, title 3, title 2, headline, body,
+    /// callout). Smaller text of the same kind — a calendar day's caption — keeps its proportion to it.
+    var standard: KindFont {
         switch self {
-        case .pageTitle: HeadingFont(size: 26, style: .semibold)
-        case .pageSubtitle: HeadingFont(size: 15, style: .regular)
-        case .heading: HeadingFont(size: 17, style: .semibold)
-        case .subheading: HeadingFont(size: 15, style: .semibold)
-        case .name: HeadingFont(size: 13, style: .bold)
-        case .figure: HeadingFont(size: 17, style: .semibold)
+        case .pageTitle: KindFont(size: 26, style: .semibold)
+        case .pageSubtitle: KindFont(size: 15, style: .regular)
+        case .heading: KindFont(size: 17, style: .semibold)
+        case .subheading: KindFont(size: 15, style: .semibold)
+        case .name: KindFont(size: 13, style: .bold)
+        case .figure: KindFont(size: 17, style: .semibold)
+        case .table: KindFont(size: 13, style: .regular)
+        case .calendar: KindFont(size: 12, style: .regular)
+        case .ids: KindFont(size: 13, style: .regular)
+        case .results: KindFont(size: 12, style: .regular)
         }
     }
 }
 
-enum HeadingStyle: String, CaseIterable, Identifiable, Codable {
+enum FontStyle: String, CaseIterable, Identifiable, Codable {
     case light = "Light", regular = "Regular", medium = "Medium", semibold = "Semibold", bold = "Bold"
 
     var id: String { rawValue }
@@ -68,11 +96,11 @@ enum HeadingStyle: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-struct HeadingFont: Codable, Equatable {
+struct KindFont: Codable, Equatable {
     /// A font family's name; empty for the system font.
     var family = ""
     var size: Double
-    var style: HeadingStyle
+    var style: FontStyle
 }
 
 /// Settings ▸ Guidance: how much teaching the screens show.
@@ -95,7 +123,7 @@ final class PortSettings {
     static let shared = PortSettings()
 
     /// The fonts changed from their kind's standard, by kind.
-    private var fonts: [String: HeadingFont] {
+    private var fonts: [String: KindFont] {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(fonts), forKey: Self.fontsKey) }
     }
     var guidance: Guidance {
@@ -104,35 +132,42 @@ final class PortSettings {
 
     private static let fontsKey = "headingFonts"
     private static let guidanceKey = "guidance"
-    static let sizes: ClosedRange<Double> = 9...40
+    static let sizes: ClosedRange<Double> = 8...40
 
     private init() {
         fonts = UserDefaults.standard.data(forKey: Self.fontsKey)
-            .flatMap { try? JSONDecoder().decode([String: HeadingFont].self, from: $0) } ?? [:]
+            .flatMap { try? JSONDecoder().decode([String: KindFont].self, from: $0) } ?? [:]
         guidance = UserDefaults.standard.string(forKey: Self.guidanceKey).flatMap(Guidance.init(rawValue:)) ?? .full
     }
 
-    subscript(_ role: HeadingRole) -> HeadingFont {
-        get { fonts[role.rawValue] ?? role.standard }
-        set { fonts[role.rawValue] = newValue == role.standard ? nil : newValue }
+    subscript(_ kind: TextKind) -> KindFont {
+        get { fonts[kind.rawValue] ?? kind.standard }
+        set { fonts[kind.rawValue] = newValue == kind.standard ? nil : newValue }
     }
 
-    func font(_ role: HeadingRole) -> Font {
-        let f = self[role]
-        let font: Font = f.family.isEmpty ? .system(size: f.size, weight: f.style.weight)
-            : .custom(f.family, fixedSize: f.size).weight(f.style.weight)
-        return role == .figure ? font.monospacedDigit() : font
+    /// How much larger (over 1) or smaller a kind is than its standard.
+    func scale(_ kind: TextKind) -> Double { self[kind].size / kind.standard.size }
+
+    /// A kind's font. `standard` is the size the text had (smaller text of the kind keeps its proportion);
+    /// `weight`, emphasis the text has whatever the kind's style (today's date, a holding's symbol).
+    func font(_ kind: TextKind, standard: Double? = nil, weight: Font.Weight? = nil) -> Font {
+        let f = self[kind]
+        let size = (standard ?? kind.standard.size) * scale(kind)
+        let weight = weight ?? f.style.weight
+        let font: Font = f.family.isEmpty ? .system(size: size, weight: weight, design: kind == .ids ? .monospaced : .default)
+            : .custom(f.family, fixedSize: size).weight(weight)
+        return kind == .figure ? font.monospacedDigit() : font
     }
 
-    /// Every kind's size up or down by `points`.
-    func step(_ points: Double) {
-        for role in HeadingRole.allCases {
-            self[role].size = min(max(self[role].size + points, Self.sizes.lowerBound), Self.sizes.upperBound)
+    /// Every kind of a section a point larger (or smaller).
+    func step(_ points: Double, _ section: TextKind.Section) {
+        for kind in section.kinds {
+            self[kind].size = min(max(self[kind].size + points, Self.sizes.lowerBound), Self.sizes.upperBound)
         }
     }
 
-    var isStandard: Bool { fonts.isEmpty }
-    func restoreStandard() { fonts = [:] }
+    func isStandard(_ section: TextKind.Section) -> Bool { section.kinds.allSatisfy { fonts[$0.rawValue] == nil } }
+    func restoreStandard(_ section: TextKind.Section) { for kind in section.kinds { fonts[kind.rawValue] = nil } }
 
     var showsLessons: Bool { guidance == .full }
     var showsIntroductions: Bool { guidance != .minimal }
@@ -146,7 +181,20 @@ extension Screen {
 
 extension View {
     /// Larger text, in the font Settings ▸ Text gives its kind.
-    func heading(_ role: HeadingRole) -> some View { font(PortSettings.shared.font(role)) }
+    func heading(_ kind: TextKind) -> some View { font(PortSettings.shared.font(kind)) }
+
+    /// Text of a kind in Settings ▸ Text: a table's rows, the calendar, an ID, results. `standard` is the size the
+    /// text had, when smaller than its kind's (a caption); `weight`, emphasis it keeps whatever the kind's style.
+    func textKind(_ kind: TextKind, _ standard: Double? = nil, weight: Font.Weight? = nil) -> some View {
+        font(PortSettings.shared.font(kind, standard: standard, weight: weight))
+    }
+
+    /// A table's rows in the Registers and tables font, as tall as it needs: the rows follow their text (24 points at
+    /// the standard 13) once the minimum is lowered with it.
+    func tableText() -> some View {
+        font(PortSettings.shared.font(.table))
+            .environment(\.defaultMinListRowHeight, 24 * PortSettings.shared.scale(.table))
+    }
 }
 
 /// Menu items that open lesson-only pages, gone at Settings ▸ Guidance ▸ Minimal (a view of their own, so the menu
@@ -169,7 +217,7 @@ struct PortSettingsView: View {
             GuidanceSettings()
                 .tabItem { Label("Guidance", systemImage: "graduationcap") }
         }
-        .frame(width: 760)
+        .frame(width: 800)
     }
 }
 
@@ -180,63 +228,67 @@ private struct TextSettings: View {
 
     var body: some View {
         Form {
-            Section {
-                HStack {
-                    Button("Step Down") { settings.step(-1) }
-                        .help("Every heading one point smaller")
-                    Button("Step Up") { settings.step(1) }
-                        .help("Every heading one point larger")
-                    Spacer()
-                    Button("Restore Defaults") { settings.restoreStandard() }
-                        .disabled(settings.isStandard)
-                        .help("The system font, in the sizes and styles MxPortMGR had before")
-                }
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-                    GridRow {
-                        Text("Kind"); Text("Font name"); Text("Size"); Text("Style")
+            ForEach(TextKind.Section.allCases) { section in
+                Section {
+                    HStack {
+                        Button("Step Down") { settings.step(-1, section) }
+                            .help("Every kind below one point smaller")
+                        Button("Step Up") { settings.step(1, section) }
+                            .help("Every kind below one point larger")
+                        Spacer()
+                        Button("Restore Defaults") { settings.restoreStandard(section) }
+                            .disabled(settings.isStandard(section))
+                            .help("The system font, in the sizes and styles MxPortMGR had before")
                     }
-                    .font(.caption).foregroundStyle(.secondary)
-                    ForEach(HeadingRole.allCases) { role in
-                        Divider().gridCellColumns(4)
-                        row(role)
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                        GridRow {
+                            Text("Kind"); Text("Font name"); Text("Size"); Text("Style")
+                        }
+                        .font(.caption).foregroundStyle(.secondary)
+                        ForEach(section.kinds) { kind in
+                            Divider().gridCellColumns(4)
+                            row(kind)
+                        }
+                    }
+                } header: {
+                    Text(section.rawValue)
+                } footer: {
+                    if section == .numbers {
+                        Text("Each kind's name on the left is drawn in its font. Smaller text of a kind (a calendar day's count, a caption) keeps its proportion; other text keeps the system's sizes.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-            } header: {
-                Text("Headings")
-            } footer: {
-                Text("Each kind of larger text shows in its own font; its name on the left is drawn in it. Other text keeps the system's sizes.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .frame(minHeight: 640)
+        .frame(minHeight: 720)
     }
 
-    private func row(_ role: HeadingRole) -> some View {
+    private func row(_ kind: TextKind) -> some View {
         GridRow {
             VStack(alignment: .leading, spacing: 2) {
-                Text(role.title).heading(role).lineLimit(1)
-                Text(role.detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(kind.title).textKind(kind).lineLimit(1)
+                Text(kind.detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            .frame(width: 290, alignment: .leading)
-            Picker("Font name", selection: $settings[role].family) {
-                Text("System").tag("")
+            .frame(width: 330, alignment: .leading)
+            Picker("Font name", selection: $settings[kind].family) {
+                Text(kind == .ids ? "System Monospaced" : "System").tag("")
                 Divider()
                 ForEach(Self.families, id: \.self) { Text($0).tag($0) }
             }
             .labelsHidden()
             .frame(width: 170)
             .help("The font's name")
-            Stepper("\(Int(settings[role].size)) pt", value: $settings[role].size, in: PortSettings.sizes)
+            Stepper("\(Int(settings[kind].size)) pt", value: $settings[kind].size, in: PortSettings.sizes)
                 .monospacedDigit()
                 .frame(width: 80, alignment: .leading)
-                .help("Its size in points (standard \(Int(role.standard.size)) pt)")
-            Picker("Style", selection: $settings[role].style) {
-                ForEach(HeadingStyle.allCases) { Text($0.rawValue).tag($0) }
+                .help("Its size in points (standard \(Int(kind.standard.size)) pt)")
+            Picker("Style", selection: $settings[kind].style) {
+                ForEach(FontStyle.allCases) { Text($0.rawValue).tag($0) }
             }
             .labelsHidden()
             .frame(width: 110)
-            .help("Its style (standard \(role.standard.style.rawValue))")
+            .help("Its style (standard \(kind.standard.style.rawValue))")
         }
     }
 }

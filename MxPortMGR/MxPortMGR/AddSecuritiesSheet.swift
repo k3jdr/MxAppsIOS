@@ -135,7 +135,7 @@ struct SRMAddSecurities: View {
             Divider()
             HStack(spacing: 0) {
                 Table(results, selection: $selection, sortOrder: $sortOrder) {
-                    TableColumn(title("Ticker", !tickerFilter.isEmpty), value: \.ticker) { s in LinkedCell(target: .srm(s), font: .body.monospaced()) }.width(70)
+                    TableColumn(title("Ticker", !tickerFilter.isEmpty), value: \.ticker) { s in LinkedCell(target: .srm(s), font: PortSettings.shared.font(.ids)) }.width(70)
                     TableColumn(title("Name", !nameFilter.isEmpty), value: \.name) { s in LinkedCell(target: .srm(s, .name)) }.width(min: 160, ideal: 220)
                     TableColumn(title("Type", !types.isEmpty), value: \.typeKey) { s in Text(s.securityType ?? "—").foregroundStyle(.secondary) }.width(100)
                     TableColumn(title("Sector", !sectors.isEmpty), value: \.sectorKey) { s in Text(s.sector ?? "—").foregroundStyle(.secondary) }.width(120)
@@ -147,6 +147,7 @@ struct SRMAddSecurities: View {
                     TableColumn(title("As of", priced != .any), value: \.asOfKey) { s in Text(s.priceDate ?? "").foregroundStyle(.secondary) }.width(80)
                     TableColumn("Market value", value: \.marketCapKey) { s in Text(s.marketCap.map { compact($0) } ?? "").monospacedDigit().foregroundStyle(.secondary) }.width(84)
                 }
+                .tableText()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay { if results.isEmpty && (searching || !steps.isEmpty) { progressPanel } }
                 // Links on tickers and names: the security master's (as on the Securities page and in MxDataHUB);
@@ -349,7 +350,7 @@ struct SRMAddSecurities: View {
                         if let cusip = s.cusip { row("CUSIP", cusip) }
                         row("Security master id", "\(s.securityId)")
                     }
-                    .font(.callout)
+                    .textKind(.results)
                     Text(s.kind == "bond" ? "A bond fund: its price moves with interest rates; the risk model treats it as fixed income."
                          : s.kind == "fund" ? "A fund: one purchase holds many securities." : "One company's shares.")
                         .font(.callout).foregroundStyle(.secondary)
