@@ -126,6 +126,8 @@ struct SecureAccountsView: View {
     @State private var details: SecureAccount?
     @State private var renaming: SecureAccount?
     @State private var showInactive = false
+    /// Import Passwords and Keys… is open.
+    @State private var importing = false
     /// The table's rows are read-only: their context menu edits the account.
     @State private var selected: SecureAccount.ID?
 
@@ -139,12 +141,14 @@ struct SecureAccountsView: View {
         }
         .task { await load() }
         #if DEBUG
-        // Self-tests, once the list is loaded: open New Secure Account (-secureAccountNew YES), or a row's Edit Secure
-        // Account Details (-secureDetailsEdit ID) or Edit Secure Account Name (-secureNameEdit ID).
+        // Self-tests, once the list is loaded: open New Secure Account (-secureAccountNew YES), Import Passwords and Keys
+        // (-secureImport YES), or a row's Edit Secure Account Details (-secureDetailsEdit ID) or Edit Secure Account Name
+        // (-secureNameEdit ID).
         .task(id: accounts == nil) {
             guard let accounts else { return }
             let defaults = UserDefaults.standard
             if defaults.bool(forKey: "secureAccountNew") { adding = true }
+            if defaults.bool(forKey: "secureImport") { importing = true }
             if defaults.object(forKey: "secureDetailsEdit") != nil {
                 details = accounts.first { $0.id == defaults.integer(forKey: "secureDetailsEdit") }
             }
@@ -155,6 +159,9 @@ struct SecureAccountsView: View {
         #endif
         .sheet(isPresented: $adding) {
             SecureAccountSheet(account: nil) { body in await save(0, body) }
+        }
+        .sheet(isPresented: $importing) {
+            SecureImportSheet(accounts: accounts ?? [], save: { id, body in await save(id, body) }, done: { await load() })
         }
         .sheet(item: $details) { a in
             SecureAccountSheet(account: a) { body in await save(a.id, body) }
@@ -176,7 +183,7 @@ struct SecureAccountsView: View {
         "Paid": .number({ $0.paymentAmount }, display: { $0.paymentAmount.map(money2) }),
         "Renewal": .date({ $0.renewalDate }, display: { $0.renewalDate.map(shortDay) }),
         "Renewal amount": .number({ $0.renewalAmount }, display: { $0.renewalAmount.map(money2) }),
-        "Renewal status": .text { RenewalStatus.title($0.renewalStatus) },
+        "Renewal status": .text { $0.renewalDate == nil && $0.renewalAmount == nil ? nil : RenewalStatus.title($0.renewalStatus) },
     ]
 
     /// A service address's host, as the table shows it.
@@ -191,6 +198,8 @@ struct SecureAccountsView: View {
         return Box(title: "Secure accounts", symbol: "lock.shield", help: "The products and services you hold an account with: the service, your user name, the last payment and the renewal. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Secure Account Name… (names are unique) and Edit Secure Account Details… — description, service address and API, status, your logon, the product and service keys, the payment and the renewal. Keys and passwords stay in this Mac's Keychain.") {
             HStack {
                 Button("New Secure Account…") { adding = true }
+                Button("Import Passwords and Keys…") { importing = true }
+                    .help("Read a credentials worksheet from its Excel workbook and put each row's password and keys in this Mac's Keychain")
                 Toggle("Show inactive and closed", isOn: $showInactive).toggleStyle(.checkbox)
                 Spacer()
                 Text("Renewing: \(money2(renewing))").monospacedDigit().foregroundStyle(.secondary)
@@ -214,7 +223,8 @@ struct SecureAccountsView: View {
                 TableColumn("Renewal") { a in Text(shortDay(a.renewalDate)).monospacedDigit() }.width(min: 70, ideal: 84)
                 TableColumn("Renewal amount") { a in Text(a.renewalAmount.map(money2) ?? "").monospacedDigit() }.width(min: 70, ideal: 96)
                 TableColumn("Renewal status") { a in
-                    Text(RenewalStatus.title(a.renewalStatus))
+                    // Only for a subscription: an account with a renewal date or amount.
+                    Text(a.renewalDate == nil && a.renewalAmount == nil ? "" : RenewalStatus.title(a.renewalStatus))
                         .foregroundStyle(a.renewalStatus == RenewalStatus.decline.rawValue ? .orange : .primary)
                         .help(RenewalStatus(rawValue: a.renewalStatus)?.help ?? "")
                 }.width(min: 70, ideal: 90)

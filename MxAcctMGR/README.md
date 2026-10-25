@@ -486,6 +486,16 @@ on, and each has a copy button. The table's rows are read-only with Excel-style 
 right-click a row for *Edit Secure Account Name…* (refused when another account has the name, whatever its case; Save
 closes it) or *Edit Secure Account Details…* (also a double-click). *New Secure Account…* adds one.
 
+**Import Passwords and Keys…** reads a credentials worksheet from the workbook **open in Microsoft Excel** (Apple
+Events: macOS asks once whether MxAcctMGR may control Excel; an encrypted workbook can't be read from its file, and no
+CSV with passwords in plain text is made). Columns: A user ID, B password, C account description, D notes, E keys. Each
+row names a secure account as the accounts were seeded from it (2026-10-25, 101 from `.sync-up.xlsx` ▸ Creds): a web
+address without its scheme and `www.` (the address becoming the service URL), a license key or `(PIN …)` taken out of
+the description, the user ID when there's no description, and " 2", " 3" … after a name already taken. The row's
+password goes to the Keychain as the account's password; column E, else the license key or PIN, as its product key; a
+user ID that is a token (an API key's id) as its service key, never its user name. Notes fill an empty description
+(optional). Accounts not found are made. The preview shows names and which secrets each row has — never a secret.
+
 ### Learn the Why
 
 * **Why Optimize?** — two live demos: diversification (volatility of 1–36 equal-weighted companies falling to the

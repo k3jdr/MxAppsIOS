@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Secure Accounts ▸ Import Passwords and Keys… reads a credentials worksheet from the workbook open in Excel
+	     (Apple Events: macOS asks once). The sandbox, network and user-selected file entitlements come from the
+	     build settings. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<key>com.apple.security.temporary-exception.apple-events</key>
+	<array>
+		<string>com.microsoft.Excel</string>
+	</array>
+</dict>
+</plist>
