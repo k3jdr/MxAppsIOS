@@ -13,7 +13,7 @@ enum PortHelp {
         let detail: String
         switch screen {
         case .checking: detail = "The check book register, shared: everyone who writes checks on the account enters them here, kept in the security master. The bank's own lines (PNC downloads) are matched to the entries and mark them cleared; the ones left over are the bank's entries to accept."
-        case .expenses: detail = "Your payees, each in an expense account (Utilities, Insurance …) with its default amount, address and the reference it knows you by — and what each account and payee took this year."
+        case .expenses: detail = "The external accounts your checking account pays or is paid by — a utility, a card, a brokerage, a person — with the bank or company, the last four digits, a category and a note. They are the register's targets: not books MxPortMGR keeps."
         case .welcome: detail = "What MxPortMGR teaches, how the guide is laid out, and how Quick Help works. Everything runs on real data from the security master (accounts, securities, prices, benchmarks) and the analytics service (risk); the report walkthroughs are scenarios in the shape of real releases."
         case .choosePath: detail = "The questions that separate an actively managed portfolio from a passive index one, and a start button for My Portfolio. It doesn't choose for you."
         case .whyOptimize: detail = "Why a portfolio needs more than good picks: diversification, the risk–return trade-off, and what an optimizer does with forecasts, a risk model and limits. Two live demos."

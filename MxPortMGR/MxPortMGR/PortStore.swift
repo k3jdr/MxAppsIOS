@@ -23,7 +23,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     enum Group: String, CaseIterable {
-        case accounts = "Accounts", start = "Start Here", mine = "My Portfolio", reports = "Knowledge Library",
+        case accounts = "Banking", start = "Start Here", mine = "My Portfolio", reports = "Knowledge Library",
              library = "Data Library"
 
         /// The sidebar's sections (Start Here's screens are in the Guide menu only).
@@ -44,7 +44,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .checking: "Checking Accounts"
-        case .expenses: "Expense Accounts"
+        case .expenses: "External Accounts"
         case .welcome: "Welcome"
         case .choosePath: "Choose Your Path"
         case .whyOptimize: "Why Optimize?"
@@ -80,7 +80,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .checking: "checkmark.rectangle.stack"
-        case .expenses: "tray.2"
+        case .expenses: "arrow.left.arrow.right.square"
         case .welcome: "hand.wave"
         case .choosePath: "signpost.right.and.left"
         case .whyOptimize: "slider.horizontal.below.square.and.square.filled"

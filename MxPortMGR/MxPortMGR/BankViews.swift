@@ -2,14 +2,16 @@
 //  BankViews.swift
 //  MxPortMGR
 //
-//  Accounts ▸ Checking Accounts: the paper check book register, kept in the security master so everyone who writes
+//  Banking ▸ Checking Accounts: the paper check book register, kept in the security master so everyone who writes
 //  checks on the account enters them in one register (accounts service /bank, V027). The bank's side comes from its
 //  downloads (PNC Online Banking QFX / CSV, srm.py load pnc-bank): its lines are matched to the entries — same amount
 //  and check number, or same amount within a week — and mark them cleared; the lines left over are the bank's entries
 //  the register doesn't have yet, to accept or match.
 //
-//  Accounts ▸ Expense Accounts: the payees, each in an expense account (Utilities, Insurance …) with its default
-//  amount, address and the reference it knows you by; picking a payee in the register fills those in.
+//  Banking ▸ External Accounts: where the money goes to or comes from — a utility, a card, a brokerage, a person —
+//  each with its bank or company, last four digits, category (an expense account: Utilities, Insurance …), usual
+//  amount and a note. They are the register's targets, not books MxPortMGR keeps: a new entry's target is picked with
+//  its last four digits showing, and the register shows the target's note on hover and edits it in place.
 //
 
 import SwiftUI
@@ -40,6 +42,9 @@ struct RegisterEntry: Decodable, Identifiable, Hashable {
     var checkNo: String?
     var payeeId: Int?
     var payee: String?
+    var payeeLast4: String?
+    var payeeInstitution: String?
+    var payeeNote: String?
     var expenseAccountId: Int?
     var expenseAccount: String?
     var memo: String?
@@ -95,6 +100,8 @@ struct Payee: Decodable, Identifiable, Hashable {
     var notes: String?
     var active: Bool
     var version: Int
+    var institution: String?
+    var last4: String?
     var yearTotal: Double
     var lastPaid: String?
 }
@@ -141,6 +148,10 @@ nonisolated enum BankClient {
     static func savePayee(_ id: Int, _ body: [String: Any]) async throws -> ExpenseBook {
         try await AccountsClient.request("PUT", "/payees/\(id)", body: body.merging(["by": by]) { a, _ in a }, as: ExpenseBook.self)
     }
+    struct Note: Decodable { var id: Int; var note: String?; var version: Int }
+    static func savePayeeNote(_ id: Int, _ note: String) async throws -> Note {
+        try await AccountsClient.request("PUT", "/payees/\(id)/note", body: ["note": note, "by": by], as: Note.self)
+    }
     static func saveExpenseAccount(_ id: Int, _ body: [String: Any]) async throws -> ExpenseBook {
         try await AccountsClient.request("PUT", "/expense-accounts/\(id)", body: body, as: ExpenseBook.self)
     }
@@ -175,6 +186,10 @@ struct CheckingView: View {
     @State private var matching: BankLine?
     @State private var selection = Set<RegisterEntry.ID>()
     @State private var draft = EntryDraft()
+    @State private var noteFor: RegisterEntry?
+    /// Show only entries on or after a date (yyyy-MM-dd), to focus on this week's or this month's payments.
+    @AppStorage("registerFocusOn") private var focusOn = false
+    @AppStorage("registerFocusFrom") private var focusFrom = ""
 
     var body: some View {
         StepPage(store: store, subtitle: "The check book register, shared: everyone who writes checks enters them here, and the bank's own lines (PNC downloads) clear them.", lesson: [
@@ -226,6 +241,13 @@ struct CheckingView: View {
                 } catch { return describe(error) }
             }
         }
+        .sheet(item: $noteFor) { e in
+            TargetNoteEditor(entry: e, initial: e.payeeNote ?? "") { note in
+                guard let id = e.payeeId else { return nil }
+                return await saveNote(id, note)
+            }
+            .padding(6)
+        }
         .sheet(item: $matching) { line in
             MatchSheet(line: line, entries: (register?.entries ?? []).filter { $0.bankLineId == nil && $0.status == "open" }) { txn in
                 await run { try await BankClient.match(line.id, to: txn) }
@@ -273,15 +295,18 @@ struct CheckingView: View {
     }
 
     private func registerTable(_ r: CheckRegister) -> some View {
-        Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry, oldest first, with the running balance. Double-click to change one (the register is shared: a change made from an older copy is refused). Void keeps a check's number accounted for.") {
-            Table(r.entries, selection: $selection) {
-                TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 84)
+        let shown = focusOn ? r.entries.filter { $0.date >= focusDay } : r.entries
+        let hidden = r.entries.count - shown.count
+        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry, oldest first, with the running balance (over the whole register, also when earlier entries are hidden). Double-click to change one (the register is shared: a change made from an older copy is refused). Void keeps a check's number accounted for.") {
+            focusBar(hidden: hidden)
+            Table(shown, selection: $selection) {
+                TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Num") { e in Text(e.checkNo ?? kindLabel(e.kind)).monospacedDigit().foregroundStyle(e.checkNo == nil ? .secondary : .primary) }.width(min: 40, ideal: 60)
-                TableColumn("Payee") { e in
-                    Text(e.payee ?? "—").strikethrough(e.status == "void").help(entryHelp(e))
-                }.width(min: 100)
-                TableColumn("Expense account") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 150)
-                TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 150)
+                TableColumn("Target") { e in
+                    TargetCell(entry: e) { id, note in await saveNote(id, note) }
+                }.width(min: 140, ideal: 190)
+                TableColumn("Category") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 120)
+                TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
                 TableColumn("Payment") { e in Text(e.amount < 0 ? money2(-e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("Deposit") { e in Text(e.amount > 0 ? money2(e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("✓") { e in statusMark(e) }.width(28)
@@ -291,6 +316,7 @@ struct CheckingView: View {
                 let chosen = r.entries.filter { ids.contains($0.id) }
                 if chosen.count == 1, let e = chosen.first {
                     Button("Edit Entry…") { editing = e }
+                    if e.payeeId != nil { Button("Edit Note on \(e.payee ?? "the Target")…") { noteFor = e } }
                     Divider()
                     if e.status == "open" { Button("Mark Cleared") { Task { await setStatus(e, "cleared") } } }
                     if e.status == "cleared" || e.status == "reconciled" { Button("Mark Not Cleared") { Task { await setStatus(e, "open") } } }
@@ -308,7 +334,7 @@ struct CheckingView: View {
                 let chosen = r.entries.filter { selection.contains($0.id) }
                 return chosen.isEmpty ? [] : [NSItemProvider(object: Self.text(chosen) as NSString)]
             }
-            .frame(minHeight: CGFloat(min(max(r.entries.count, 6), 22)) * 24 + 30)
+            .frame(minHeight: CGFloat(min(max(shown.count, 6), 22)) * 24 + 30)
         }
     }
 
@@ -320,12 +346,12 @@ struct CheckingView: View {
                     Text(l.checkNo.map { "#\($0)" } ?? (l.type ?? "")).foregroundStyle(.secondary).frame(width: 60, alignment: .leading)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(l.name ?? "—")
-                        if let p = l.payee, p.lowercased() != (l.name ?? "").lowercased() { Text("payee \(p)").font(.caption).foregroundStyle(.secondary) }
+                        if let p = l.payee, p.lowercased() != (l.name ?? "").lowercased() { Text("target \(p)").font(.caption).foregroundStyle(.secondary) }
                     }
                     Spacer()
                     Text(money2(l.amount)).monospacedDigit().foregroundStyle(Color.signed(l.amount))
                     Button("Accept") { Task { await run { try await BankClient.accept(l.id) } } }
-                        .help("Add this line to the register as a cleared entry (its payee found by the bank's name for it)")
+                        .help("Add this line to the register as a cleared entry (its target found by the bank's name for it)")
                     Button("Match…") { matching = l }
                         .help("Tie this line to the register entry it is (an amount or date written differently)")
                 }
@@ -345,6 +371,49 @@ struct CheckingView: View {
         }
     }
 
+    /// The day the register shows from when earlier entries are hidden (a month back until one is chosen).
+    private var focusDay: String {
+        focusFrom.isEmpty ? isoDay.string(from: Calendar.current.date(byAdding: .month, value: -1, to: Date())!) : focusFrom
+    }
+
+    private func focusBar(hidden: Int) -> some View {
+        HStack(spacing: 8) {
+            Toggle("Hide entries before", isOn: $focusOn).toggleStyle(.checkbox)
+                .help("Show only the recent entries — this week's or this month's payments; the balances still count every entry")
+            DatePicker("", selection: Binding(get: { isoDay.date(from: focusDay) ?? Date() },
+                                              set: { focusFrom = isoDay.string(from: $0); focusOn = true }),
+                       displayedComponents: .date)
+                .labelsHidden().fixedSize().disabled(!focusOn)
+            Menu("Recent") {
+                Button("Last 7 Days") { focus(days: 7) }
+                Button("Last 30 Days") { focus(days: 30) }
+                Button("Last 90 Days") { focus(days: 90) }
+                Button("This Month") { focus(from: Calendar.current.dateInterval(of: .month, for: Date())!.start) }
+                Button("This Year") { focus(from: Calendar.current.dateInterval(of: .year, for: Date())!.start) }
+                Divider()
+                Button("Show All") { focusOn = false }
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            Spacer()
+            if focusOn, hidden > 0 {
+                Text("\(hidden) earlier entr\(hidden == 1 ? "y" : "ies") hidden").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func focus(days: Int) { focus(from: Calendar.current.date(byAdding: .day, value: -days, to: Date())!) }
+    private func focus(from day: Date) { focusFrom = isoDay.string(from: day); focusOn = true }
+
+    /// Saves a target's note (its hover text) and shows it in every entry with that target.
+    private func saveNote(_ payee: Int, _ note: String) async -> String? {
+        do {
+            _ = try await BankClient.savePayeeNote(payee, note)
+            await refresh()
+            book = try? await BankClient.book()
+            return nil
+        } catch { return describe(error) }
+    }
+
     private func kindLabel(_ k: String) -> String {
         ["debit": "DEB", "deposit": "DEP", "transfer": "XFR", "fee": "FEE", "interest": "INT"][k] ?? k.uppercased()
     }
@@ -362,11 +431,12 @@ struct CheckingView: View {
     }
 
     static func text(_ entries: [RegisterEntry]) -> String {
-        let head = ["Date", "Num", "Payee", "Expense account", "Memo", "Payment", "Deposit", "Status", "Balance"].joined(separator: "\t")
+        let head = ["Date", "Num", "Target", "Category", "Memo", "Payment", "Deposit", "Status", "Balance"].joined(separator: "\t")
         let lines = entries.map { e -> String in
             let pay = e.amount < 0 ? String(format: "%.2f", -e.amount) : ""
             let dep = e.amount > 0 ? String(format: "%.2f", e.amount) : ""
-            let cells: [String] = [e.date, e.checkNo ?? e.kind, e.payee ?? "", e.expenseAccount ?? "", e.memo ?? "", pay, dep, e.status,
+            let target = (e.payee ?? "") + (e.payeeLast4.map { " ···\($0)" } ?? "")
+            let cells: [String] = [e.date, e.checkNo ?? e.kind, target, e.expenseAccount ?? "", e.memo ?? "", pay, dep, e.status,
                                    String(format: "%.2f", e.balance)]
             return cells.joined(separator: "\t")
         }
@@ -485,7 +555,7 @@ struct EntryForm: View {
                         ("fee", "Bank fee"), ("interest", "Interest")]
 
     var body: some View {
-        Box(title: "New entry", symbol: "square.and.pencil", help: "Write it as on the check book's paper register: the date, the check number (or the kind of entry), who it is to, what it is for and the amount. Picking a known payee fills in its expense account and usual amount.") {
+        Box(title: "New entry", symbol: "square.and.pencil", help: "Write it as on the check book's paper register: the date, the check number (or the kind of entry), its target — the external account the money goes to or comes from, picked with its last four digits showing — what it is for and the amount. Picking a known target fills in its category and usual amount.") {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 DatePicker("", selection: $draft.date, displayedComponents: .date).labelsHidden().fixedSize()
                 Picker("", selection: $draft.kind) {
@@ -496,16 +566,11 @@ struct EntryForm: View {
                 if draft.kind == "check" {
                     TextField("Check #", text: $draft.checkNo).frame(width: 70)
                 }
-                TextField(draft.kind == "deposit" ? "From" : "Pay to", text: $draft.payee).frame(minWidth: 160)
-                    .onSubmit { fillFromPayee() }
-                Menu {
-                    ForEach(payees) { p in Button(p.name) { draft.payee = p.name; fillFromPayee() } }
-                } label: { Image(systemName: "person.crop.rectangle.stack") }
-                    .menuStyle(.borderlessButton).fixedSize()
-                    .help("Choose a payee from Expense Accounts")
-                    .disabled(payees.isEmpty)
+                TargetPicker(target: $draft.payee, payees: payees, prompt: draft.kind == "deposit" ? "From" : "Pay to") {
+                    fillFromPayee()
+                }
                 Picker("", selection: $draft.expenseAccountId) {
-                    Text("Expense account").tag(Int?.none)
+                    Text("Category").tag(Int?.none)
                     ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
                 }
                 .labelsHidden().frame(width: 170)
@@ -539,6 +604,122 @@ struct EntryForm: View {
     }
 }
 
+/// The entry's target: an external account picked from the list (name, bank or company, last four digits), or a new
+/// name typed in; the chosen account's last four digits show beside it.
+struct TargetPicker: View {
+    @Binding var target: String
+    var payees: [Payee]
+    var prompt: String
+    var label: String = ""
+    var picked: () -> Void
+
+    private var chosen: Payee? { payees.first { $0.name.caseInsensitiveCompare(target) == .orderedSame } }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            TextField(label, text: $target, prompt: Text(prompt)).frame(minWidth: 150)
+                .onSubmit(picked)
+            if let l4 = chosen?.last4 {
+                Text("···\(l4)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                    .help([chosen?.institution, "account ending \(l4)"].compactMap { $0 }.joined(separator: " · "))
+            }
+            Menu {
+                ForEach(payees) { p in
+                    Button(TargetPicker.title(p)) { target = p.name; picked() }
+                }
+            } label: { Image(systemName: "arrow.left.arrow.right.square") }
+                .menuStyle(.borderlessButton).fixedSize()
+                .help("Choose the target from External Accounts (with each account's last four digits)")
+                .disabled(payees.isEmpty)
+        }
+    }
+
+    static func title(_ p: Payee) -> String {
+        var t = p.name
+        if let l4 = p.last4 { t += "  ···\(l4)" }
+        if let i = p.institution, !i.isEmpty { t += "  (\(i))" }
+        return t
+    }
+}
+
+/// A register entry's target with its last four digits; its note shows on hover, and the pencil (on hover) edits it.
+struct TargetCell: View {
+    let entry: RegisterEntry
+    var saveNote: (Int, String) async -> String?
+    @State private var hovering = false
+    @State private var editing = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(entry.payee ?? "—").strikethrough(entry.status == "void")
+            if let l4 = entry.payeeLast4 { Text("···\(l4)").foregroundStyle(.secondary).monospacedDigit() }
+            if entry.payeeNote?.isEmpty == false { Image(systemName: "note.text").font(.caption).foregroundStyle(.secondary) }
+            Spacer(minLength: 0)
+            if entry.payeeId != nil, hovering || editing {
+                Button { editing = true } label: { Image(systemName: "pencil") }
+                    .buttonStyle(.borderless)
+                    .help("Edit the note on \(entry.payee ?? "this target")")
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .help(hoverText)
+        .popover(isPresented: $editing, arrowEdge: .bottom) {
+            TargetNoteEditor(entry: entry, initial: entry.payeeNote ?? "") { note in
+                guard let id = entry.payeeId else { return nil }
+                return await saveNote(id, note)
+            }
+        }
+    }
+
+    private var subtitle: String? { TargetNoteEditor.subtitle(entry) }
+
+    private var hoverText: String {
+        var lines: [String] = []
+        if let sub = subtitle { lines.append(sub) }
+        if let n = entry.payeeNote, !n.isEmpty { lines.append(n) }
+        if entry.payeeId != nil { lines.append(lines.isEmpty ? "No note yet: the pencil (or the row's context menu) adds one" : "(the pencil or the row's context menu edits the note)") }
+        return lines.joined(separator: "\n")
+    }
+}
+
+/// Edits the note on a register entry's target (the external account): the hover text every entry with it shows.
+struct TargetNoteEditor: View {
+    let entry: RegisterEntry
+    @State var initial: String
+    var save: (String) async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var error: String?
+
+    static func subtitle(_ entry: RegisterEntry) -> String? {
+        let parts = [entry.payeeInstitution, entry.payeeLast4.map { "account ending \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(entry.payee ?? "").font(.headline)
+            if let sub = Self.subtitle(entry) { Text(sub).font(.caption).foregroundStyle(.secondary) }
+            TextEditor(text: $initial).font(.body).frame(width: 300, height: 90)
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
+            Text("Where the money flows: shown on hover for every entry with this target.").font(.caption).foregroundStyle(.secondary)
+            if let error { Text(error).font(.caption).foregroundStyle(.red) }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    Task {
+                        error = await save(initial)
+                        if error == nil { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(12)
+    }
+}
+
 struct EditEntrySheet: View {
     let entry: RegisterEntry
     var payees: [Payee]
@@ -558,8 +739,8 @@ struct EditEntrySheet: View {
                 DatePicker("Date", selection: $draft.date, displayedComponents: .date)
                 Picker("Kind", selection: $draft.kind) { ForEach(EntryForm.kinds, id: \.0) { Text($0.1).tag($0.0) } }
                 if draft.kind == "check" { TextField("Check #", text: $draft.checkNo) }
-                TextField(draft.kind == "deposit" ? "From" : "Pay to", text: $draft.payee)
-                Picker("Expense account", selection: $draft.expenseAccountId) {
+                TargetPicker(target: $draft.payee, payees: payees, prompt: draft.kind == "deposit" ? "From" : "Pay to", label: "Target") {}
+                Picker("Category", selection: $draft.expenseAccountId) {
                     Text("None").tag(Int?.none)
                     ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
                 }
@@ -696,28 +877,28 @@ struct MatchSheet: View {
     }
 }
 
-// MARK: - Expense Accounts
+// MARK: - External Accounts
 
-struct ExpenseAccountsView: View {
+struct ExternalAccountsView: View {
     @Bindable var store: PortStore
     @State private var book: ExpenseBook?
     @State private var problem: String?
-    @State private var account: Int?           // nil: every payee
+    @State private var account: Int?           // nil: every external account
     @State private var editing: Payee?
     @State private var adding = false
     @State private var newAccount = false
     @State private var showInactive = false
 
     var body: some View {
-        StepPage(store: store, subtitle: "Who you pay, grouped in expense accounts: each payee with its usual amount, address and the reference it knows you by.", lesson: [
-            "Each payee belongs to an expense account (Utilities, Insurance, Housing …): the register files every check to its payee's account, so a year's spending adds up by account.",
-            "A payee's default amount and expense account fill in the register when you write its name; its reference is the account number the payee knows you by — for the memo line of the check.",
-            "PNC's downloads name payees their own way (\"DUKE ENERGY PAYMENT\"): accepting a bank line under a payee remembers that name, so the next one is filed to it.",
+        StepPage(store: store, subtitle: "Where the checking account's money goes to or comes from — a utility, a card, a brokerage, a person: the register's targets, not books MxPortMGR keeps.", lesson: [
+            "Each external account has its bank or company and its last four digits, so picking a register entry's target shows which account the money went to — and a note, shown on hover in the register and edited there.",
+            "Each is in a category (Utilities, Insurance, Housing …): the register files every entry under its target's category, so a year's spending adds up by category. Its usual amount fills in the register too.",
+            "PNC's downloads name them their own way (\"DUKE ENERGY PAYMENT\"): accepting a bank line under an external account remembers that name, so the next one is filed to it.",
         ]) {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             if let book {
                 HStack(alignment: .top, spacing: 14) {
-                    accountsList(book).frame(width: 300)
+                    accountsList(book).frame(width: 260)
                     payeesTable(book)
                 }
             }
@@ -737,9 +918,9 @@ struct ExpenseAccountsView: View {
     }
 
     private func accountsList(_ b: ExpenseBook) -> some View {
-        Box(title: "Expense accounts", symbol: "tray.2", help: "What the register's money is for. Choose one to see its payees; the totals are this year's register entries.") {
+        Box(title: "Categories", symbol: "tray.2", help: "What the register's money is for. Choose one to see its external accounts; the totals are this year's register entries.") {
             VStack(alignment: .leading, spacing: 2) {
-                row(nil, "All payees", "\(b.payees.filter { $0.active || showInactive }.count)", total: nil)
+                row(nil, "All external accounts", "\(b.payees.filter { $0.active || showInactive }.count)", total: nil)
                 ForEach(["expense", "income", "transfer"], id: \.self) { kind in
                     let accts = b.expenseAccounts.filter { $0.kind == kind }
                     if !accts.isEmpty {
@@ -751,7 +932,7 @@ struct ExpenseAccountsView: View {
                         }
                     }
                 }
-                Button("New Expense Account…") { newAccount = true }.buttonStyle(.link).padding(.top, 6)
+                Button("New Category…") { newAccount = true }.buttonStyle(.link).padding(.top, 6)
             }
         }
     }
@@ -774,24 +955,27 @@ struct ExpenseAccountsView: View {
     private func payeesTable(_ b: ExpenseBook) -> some View {
         let names = Dictionary(uniqueKeysWithValues: b.expenseAccounts.map { ($0.id, $0.name) })
         let shown = b.payees.filter { (account == nil || $0.expenseAccountId == account) && ($0.active || showInactive) }
-        return Box(title: account.flatMap { names[$0] } ?? "All payees", symbol: "person.2", help: "The payees, with this year's payments and the last one. Double-click to edit a payee.") {
+        return Box(title: account.flatMap { names[$0] } ?? "All external accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from, with this year's payments and the last one. Double-click to edit one.") {
             HStack {
-                Button("New Payee…") { adding = true }
+                Button("New External Account…") { adding = true }
                 Toggle("Show inactive", isOn: $showInactive).toggleStyle(.checkbox)
                 Spacer()
                 Text("Paid in \(String(b.year)): \(money2(shown.reduce(0) { $0 + max(0, $1.yearTotal) }))").monospacedDigit().foregroundStyle(.secondary)
             }
             Table(shown) {
-                TableColumn("Payee") { p in Text(p.name).foregroundStyle(p.active ? .primary : .secondary) }.width(min: 100)
-                TableColumn("Expense account") { p in Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }.width(min: 80, ideal: 150)
-                TableColumn("Usual amount") { p in Text(p.defaultAmount.map(money2) ?? "").monospacedDigit() }.width(min: 60, ideal: 90)
-                TableColumn("Reference") { p in Text(p.reference ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
-                TableColumn("This year") { p in Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary) }.width(min: 60, ideal: 90)
-                TableColumn("Last paid") { p in Text(shortDay(p.lastPaid)).monospacedDigit().foregroundStyle(.secondary) }.width(min: 60, ideal: 84)
+                TableColumn("External account") { p in
+                    Text(p.name).foregroundStyle(p.active ? .primary : .secondary).help(p.notes ?? "")
+                }.width(min: 100)
+                TableColumn("Bank / company") { p in Text(p.institution ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
+                TableColumn("Last 4") { p in Text(p.last4.map { "···\($0)" } ?? "").monospacedDigit().foregroundStyle(.secondary) }.width(min: 44, ideal: 56)
+                TableColumn("Category") { p in Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }.width(min: 70, ideal: 110)
+                TableColumn("Usual") { p in Text(p.defaultAmount.map(money2) ?? "").monospacedDigit() }.width(min: 50, ideal: 70)
+                TableColumn("This year") { p in Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary) }.width(min: 60, ideal: 84)
+                TableColumn("Last paid") { p in Text(shortDay(p.lastPaid)).monospacedDigit().foregroundStyle(.secondary) }.width(min: 60, ideal: 80)
             }
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
-                    Button("Edit Payee…") { editing = p }
+                    Button("Edit External Account…") { editing = p }
                 }
             } primaryAction: { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) { editing = p }
@@ -827,15 +1011,20 @@ struct PayeeSheet: View {
     @State private var website = ""
     @State private var bankNames = ""
     @State private var notes = ""
+    @State private var institution = ""
+    @State private var last4 = ""
     @State private var active = true
     @State private var error: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(payee == nil ? "New Payee" : "Edit \(payee!.name)").font(.title2.weight(.semibold))
+            Text(payee == nil ? "New External Account" : "Edit \(payee!.name)").font(.title2.weight(.semibold))
             Form {
                 TextField("Name", text: $name)
-                Picker("Expense account", selection: $expenseAccountId) {
+                TextField("Bank / company", text: $institution)
+                TextField("Last four digits", text: $last4)
+                    .help("Shown when this is picked as a register entry's target. Never the whole account number.")
+                Picker("Category", selection: $expenseAccountId) {
                     Text("None").tag(Int?.none)
                     ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
                 }
@@ -845,8 +1034,8 @@ struct PayeeSheet: View {
                 TextField("Phone", text: $phone)
                 TextField("Website", text: $website)
                 TextField("Bank's names for it", text: $bankNames)
-                    .help("How PNC's downloads name this payee, separated by semicolons: accepting a bank line remembers these")
-                TextField("Notes", text: $notes, axis: .vertical).lineLimit(1...3)
+                    .help("How PNC's downloads name this account, separated by semicolons: accepting a bank line remembers these")
+                TextField("Note (shown on hover in the register)", text: $notes, axis: .vertical).lineLimit(1...4)
                 Toggle("Active", isOn: $active)
             }
             if let error { Text(error).foregroundStyle(.red).font(.callout) }
@@ -857,6 +1046,7 @@ struct PayeeSheet: View {
                     Task {
                         var body: [String: Any] = ["name": name, "address": address, "reference": reference, "phone": phone,
                                                    "website": website, "notes": notes, "active": active,
+                                                   "institution": institution, "last4": last4,
                                                    "bankNames": bankNames.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }]
                         body["expenseAccountId"] = expenseAccountId ?? NSNull()
                         body["defaultAmount"] = defaultAmount ?? NSNull()
@@ -874,6 +1064,7 @@ struct PayeeSheet: View {
             name = p.name; expenseAccountId = p.expenseAccountId; defaultAmount = p.defaultAmount
             address = p.address ?? ""; reference = p.reference ?? ""; phone = p.phone ?? ""; website = p.website ?? ""
             bankNames = p.bankNames.joined(separator: "; "); notes = p.notes ?? ""; active = p.active
+            institution = p.institution ?? ""; last4 = p.last4 ?? ""
         }
     }
 }
@@ -887,7 +1078,7 @@ struct ExpenseAccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New Expense Account").font(.title2.weight(.semibold))
+            Text("New Category").font(.title2.weight(.semibold))
             Form {
                 TextField("Name", text: $name)
                 Picker("Kind", selection: $kind) { Text("Expense").tag("expense"); Text("Income").tag("income"); Text("Transfer").tag("transfer") }

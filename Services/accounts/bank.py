@@ -10,7 +10,8 @@
     POST /bank/accounts/<code>/import            read the bank's downloads now (srm-loader POST /load/pnc-bank)
     GET  /expense-accounts                       expense accounts with their payees and this year's totals
     PUT  /expense-accounts/<id>                  create (id 0) or change one {name, kind, description}
-    PUT  /payees/<id>                            create (id 0) or change one {version, name, expenseAccountId, …}
+    PUT  /payees/<id>                            create (id 0) or change an external account {version, name, institution, last4, …}
+    PUT  /payees/<id>/note                       change only its note (the register's hover text) {note}
 
 Each entry's amount is signed: negative leaves the account (checks, debits, fees). A register entry is never
 deleted: it is voided (status void) so the check number stays accounted for.
@@ -108,7 +109,8 @@ def save_account(conn, code, body):
 
 TXN_SQL = """
     SELECT t.txn_id AS id, t.txn_date AS date, t.kind, t.check_no AS "checkNo", t.payee_id AS "payeeId",
-           coalesce(p.name, t.payee_name) AS payee,
+           coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
+           p.notes AS "payeeNote",
            coalesce(t.expense_account_id, p.expense_account_id) AS "expenseAccountId",
            e.name AS "expenseAccount", t.memo, t.amount, t.status, t.bank_line_id AS "bankLineId",
            b.posted_date AS "bankDate", b.name AS "bankName", t.version, t.entered_by AS "enteredBy",
@@ -311,6 +313,7 @@ def expense_accounts(conn, q=None):
     payees = fetch(conn, """
         SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.default_amount AS "defaultAmount",
                p.address, p.reference, p.phone, p.website, p.bank_names AS "bankNames", p.notes, p.active, p.version,
+               p.institution, p.account_last4 AS last4,
                p.updated_by AS "updatedBy", p.updated_at AS "updatedAt",
                coalesce(-sum(t.amount) FILTER (WHERE t.status <> 'void' AND extract(year FROM t.txn_date) = %s), 0) AS "yearTotal",
                max(t.txn_date) FILTER (WHERE t.status <> 'void') AS "lastPaid"
@@ -341,17 +344,21 @@ def save_payee(conn, pid, body):
     name = (body.get("name") or "").strip()
     if not name:
         raise ValueError("name is required")
+    last4 = (body.get("last4") or "").strip() or None
+    if last4 and not re.match(r"^[0-9A-Za-z]{4}$", last4):
+        raise ValueError("last4 is the external account's last four characters (never the whole number)")
     values = (name[:120], body.get("expenseAccountId") or None,
               _num(body["defaultAmount"], "defaultAmount") if body.get("defaultAmount") not in (None, "") else None,
               body.get("address"), body.get("reference"), body.get("phone"), body.get("website"),
               [n for n in (body.get("bankNames") or []) if isinstance(n, str) and n.strip()], body.get("notes"),
-              bool(body.get("active", True)), str(body.get("by") or "MxPortMGR")[:80])
+              bool(body.get("active", True)), (body.get("institution") or "").strip()[:120] or None, last4,
+              str(body.get("by") or "MxPortMGR")[:80])
     if int(pid) == 0:
         if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s)", (name,)):
             raise Conflict("there is already a payee %s" % name)
         fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, default_amount, address, reference, phone, website,
-                                              bank_names, notes, active, updated_by)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", values)
+                                              bank_names, notes, active, institution, account_last4, updated_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", values)
     else:
         cur = fetch(conn, "SELECT version, updated_by, updated_at FROM srm.payee WHERE payee_id = %s FOR UPDATE", (int(pid),))
         if not cur:
@@ -362,10 +369,21 @@ def save_payee(conn, pid, body):
                            version=cur[0]["version"])
         fetch(conn, """UPDATE srm.payee SET name = %s, expense_account_id = %s, default_amount = %s, address = %s,
                               reference = %s, phone = %s, website = %s, bank_names = %s, notes = %s, active = %s,
-                              updated_by = %s, version = version + 1, updated_at = now() WHERE payee_id = %s""",
+                              institution = %s, account_last4 = %s, updated_by = %s, version = version + 1, updated_at = now() WHERE payee_id = %s""",
               values + (int(pid),))
     conn.commit()
     return expense_accounts(conn)
+
+
+def save_payee_note(conn, pid, body):
+    """Only the external account's note (the register's hover text, edited in place); answers with the payee."""
+    rows = fetch(conn, """UPDATE srm.payee SET notes = %s, version = version + 1, updated_by = %s, updated_at = now()
+                           WHERE payee_id = %s RETURNING payee_id, notes, version""",
+                 ((body.get("note") or "").strip()[:2000] or None, str(body.get("by") or "MxPortMGR")[:80], int(pid)))
+    if not rows:
+        raise LookupError("no payee %s" % pid)
+    conn.commit()
+    return {"id": rows[0]["payee_id"], "note": rows[0]["notes"], "version": rows[0]["version"]}
 
 
 def route(conn, method, parts, body, q):
@@ -388,6 +406,8 @@ def route(conn, method, parts, body, q):
         return expense_accounts(conn, q)
     if len(parts) == 2 and parts[0] == "expense-accounts" and method == "PUT":
         return save_expense_account(conn, parts[1], body)
+    if len(parts) == 3 and parts[0] == "payees" and parts[2] == "note" and method == "PUT":
+        return save_payee_note(conn, parts[1], body)
     if len(parts) == 2 and parts[0] == "payees" and method == "PUT":
         return save_payee(conn, parts[1], body)
     return None
