@@ -1,19 +1,19 @@
 //
-//  ExternalAccountLinks.swift
+//  TargetAccountLinks.swift
 //  MxPortMGR
 //
-//  Links on external accounts (Banking): a web page, an email address or a page in MxNoteONE on an external account,
+//  Links on target accounts (Banking): a web page, an email address or a page in MxNoteONE on a target account,
 //  with words of its own and formatted hover text — made and shown as links on securities are (Shared/Links): the
 //  Link dialog (Text to display, Address, Hover text) and the hover card. Kept in the security master
-//  (srm.payee_link, V032) through the accounts service, a link belongs to the external account: it shows wherever the
-//  account is a target — the Checking Accounts register's Target column, the card registers', External Accounts — and
+//  (srm.payee_link, V032) through the accounts service, a link belongs to the target account: it shows wherever the
+//  account is a target — the Checking Accounts register's Target column, the card registers', Target Accounts — and
 //  a change made in one shows in the others.
 //
 
 import Observation
 import SwiftUI
 
-/// An external account's link as the accounts service sends it (the hover text as RTF).
+/// A target account's link as the accounts service sends it (the hover text as RTF).
 struct TargetLink: Decodable, Hashable {
     var address: String
     var text: String?
@@ -23,21 +23,22 @@ struct TargetLink: Decodable, Hashable {
     var link: SecurityLink { SecurityLink(address: address, text: text, tip: tip.map { Data($0.utf8) }, title: title) }
 }
 
-/// The external account the Link dialog is open for.
+/// The target account the Link dialog is open for.
 struct PayeeLinkTarget: Identifiable {
     var payeeId: Int
     var name: String
     var last4: String?
     var institution: String?
+    /// Its logon page, offered to link to.
     var website: String?
     var link: SecurityLink?
     var id: Int { payeeId }
 
     init(_ p: Payee) {
-        payeeId = p.id; name = p.name; last4 = p.last4; institution = p.institution; website = p.website; link = p.link?.link
+        payeeId = p.id; name = p.name; last4 = p.last4; institution = p.institution; website = p.logonUrl; link = p.link?.link
     }
 
-    /// A register entry's target, when it has one (the website comes from External Accounts).
+    /// A register entry's target, when it has one (the logon page comes from Target Accounts).
     init?(_ e: RegisterEntry, website: String? = nil) {
         guard let id = e.payeeId else { return nil }
         payeeId = id; name = e.payee ?? ""; last4 = e.payeeLast4; institution = e.payeeInstitution
@@ -50,10 +51,10 @@ struct PayeeLinkTarget: Identifiable {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// The external account's own website, to link to.
+    /// The target account's logon page, to link to.
     var pages: [SecurityPage] {
         guard let w = website?.trimmingCharacters(in: .whitespaces), !w.isEmpty, let url = LinkRichText.url(fromAddress: w) else { return [] }
-        return [SecurityPage(title: "\(name) — its website", address: url.absoluteString)]
+        return [SecurityPage(title: "\(name) — its logon page", address: url.absoluteString)]
     }
 }
 
@@ -62,7 +63,7 @@ struct PayeeLinkTarget: Identifiable {
 final class PayeeLinks {
     static let shared = PayeeLinks()
 
-    /// The Link dialog is open for this external account.
+    /// The Link dialog is open for this target account.
     var editing: PayeeLinkTarget?
     /// Bumped when a link is saved or taken off: the Banking screens load again, so each shows it.
     private(set) var version = 0
@@ -74,7 +75,7 @@ final class PayeeLinks {
         editing = t
     }
 
-    /// Saves (or with nil takes off) the external account's link; answers why it couldn't, or nil.
+    /// Saves (or with nil takes off) the target account's link; answers why it couldn't, or nil.
     func save(_ link: SecurityLink?, for t: PayeeLinkTarget) async -> String? {
         do {
             try await BankClient.savePayeeLink(t.payeeId, link)
@@ -93,13 +94,13 @@ final class PayeeLinks {
     }
 }
 
-/// The Link dialog for an external account.
+/// The Link dialog for a target account.
 struct PayeeLinkSheet: View {
     let target: PayeeLinkTarget
 
     var body: some View {
         LinkSheet(subject: target.name, detail: target.detail, initial: target.link, words: target.name, pages: target.pages,
-                  whereKept: "Kept in the security master with the external account: it shows wherever \(target.name) is a target — the Checking and card registers, and External Accounts.") { link in
+                  whereKept: "Kept in the security master with the target account: it shows wherever \(target.name) is a target — the Checking and card registers, and Target Accounts.") { link in
             await PayeeLinks.shared.save(link, for: target)
         }
     }

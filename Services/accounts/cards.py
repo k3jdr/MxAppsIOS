@@ -189,7 +189,8 @@ def save_account(conn, code, body):
 TXN_SQL = """
     SELECT t.txn_id AS id, t.txn_date AS date, t.posted_date AS "postedDate", t.kind, t.payee_id AS "payeeId",
            coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
-           p.notes AS "payeeNote", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
+           p.notes AS "payeeNote", p.nickname AS "payeeNickname", p.next_payment_date AS "payeeNextDate",
+           p.next_payment_amount AS "payeeNextAmount", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
            t.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount", t.memo,
            t.amount, t.status, t.card_line_id AS "cardLineId", l.name AS "issuerName", l.category AS "issuerCategory",
            l.file_format AS "fileFormat", t.bank_txn_id AS "bankTxnId", ba.code AS "bankAccount", bt.txn_date AS "bankDate",
@@ -244,7 +245,7 @@ def _fields(conn, body, current=None):
     if status not in STATUSES:
         raise ValueError("status must be one of " + ", ".join(STATUSES))
     if "payeeId" in body or "payee" in body:
-        payee_id, payee_name, default_account = _payee(conn, body)
+        payee_id, payee_name, default_account = _payee(conn, body, source="card")
     else:
         payee_id, payee_name, default_account = cur.get("payeeId"), cur.get("payee"), None
     expense = body.get("expenseAccountId", cur.get("expenseAccountId")) or default_account

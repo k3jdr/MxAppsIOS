@@ -23,7 +23,7 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target an external account with its last four digits, a note on hover and its link; External Accounts — where the money goes to or comes from, by category, each with a link of its own); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, VIX, Compute, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, VIX, Compute, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. |
@@ -377,18 +377,46 @@ BRK.B, BRK-B and BRK/B alike). Links stay on this Mac for tickers the security m
 the security master the next time it answers (the dialog says where each link is kept). Links made on this Mac before
 are sent there the same way, unless the security master already has one for that ticker or name.
 
-### Links on external accounts
+### Target accounts (Banking ▸ Target Accounts)
 
-An external account (Banking ▸ External Accounts) can carry a link the same way, made with the same **Link** dialog
+A target account is where a register entry's money goes to or comes from — a utility, a card, a brokerage, a person
+(`srm.payee`; called External Accounts before 2026-10-25). The page lists them all in one table (the *Show inactive
+and closed* box adds those): name (as its link when it has one, with its status when not active), nickname, bank or
+company, last four digits, category, usual amount, next payment, **Funding** (a checkbook mark when the Checking
+register pays it, a card when the card registers do), this year's payments and the last one. Selecting a row edits its
+name, bank, last four digits, category and usual amount in place; *New Target Account…*, *New Category…* and, on a
+row (double-click or right-click), *Edit Target Account…*, *Open Logon Page* and its link.
+
+**Edit Target Account…** keeps every detail of it: *Account name*, *Nickname* (the registers' target lists show it
+beside the name), *Description*, *Status* (active; inactive or closed — kept with their entries, offered by no
+register), *Identifier* (your account or customer number with them), *Bank / company*, *Last four digits*, *Category*,
+*Usual amount*; the *Next payment* (date and amount, shown on the target's hover in the registers); *Logon URL* (open
+it from there), *User name*, *Password* and *User keys* (security answers, recovery codes, PINs; hidden until *Show the
+password and user keys*, each with a copy button); *Address 1*, *Address 2*, *City*, *State*, *Zip code*, *Phone
+number*; its **Funding sources**; *User notes* (the note shown on hover in the registers) and the bank's names for it.
+
+* **Funding sources** decide which registers offer it as a target: *Recipient of checking account payments* (the
+  Checking Accounts register's target list) and *Recipient of credit card payments* (the card registers'); either,
+  both, or neither (offered nowhere). Existing accounts started with the sources they had been paid from (V033), both
+  when not paid yet. A name typed in a register that isn't a target account becomes one with that register's source;
+  a target account a register names (typed, or a bank line accepted) gains that register's source.
+* **The password and user keys** are kept in this Mac's Keychain (service `com.k3jdr.MxPortMGR.target-accounts`, one
+  item each per account), never in the security master: other Macs, and others using the registers, don't see them,
+  and they don't move to another Mac (the app can't use iCloud Keychain without a provisioning profile). Everything
+  else is in the security master with the account (V033), shared like the registers.
+
+### Links on target accounts
+
+A target account can carry a link the same way, made with the same **Link** dialog
 and shown with the same hover card: *Text to display* (the account's name unless you change it), *Address* (a web
-page, an email address, or a page in MxNoteONE — *Use the Link Copied in MxNoteONE*; the account's own website is
+page, an email address, or a page in MxNoteONE — *Use the Link Copied in MxNoteONE*; the account's logon page is
 offered when it has one), and formatted **hover text** with links of its own, with a *Hover card preview* and *Remove
 Link*. Open it from a Checking or card register entry's target (the link button that shows on hover, or the row's
-context menu, *Add Link to … / Edit Link on …*), from an External Accounts row's context menu, or *Edit Link…* on the
+context menu, *Add Link to … / Edit Link on …*), from a Target Accounts row's context menu, or *Edit Link…* on the
 hover card.
 
-The link belongs to the external account, so it shows wherever the account is a target: its name is shown as the link
-in the Checking Accounts register's Target column, the card registers' and the External Accounts table. A click opens
+The link belongs to the target account, so it shows wherever the account is a target: its name is shown as the link
+in the Checking Accounts register's Target column, the card registers' and the Target Accounts table. A click opens
 it; resting the pointer on it shows the hover card. It is kept in the security master (`srm.payee_link`, V032) through
 the accounts service (`PUT` / `DELETE /payees/<id>/link`), apart from the account's own details, so saving a link
 never conflicts with someone editing them. A change made on one screen shows on the others (each loads again after a
@@ -505,7 +533,8 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
-| `ExternalAccountLinks.swift` | Links on external accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
+| `TargetAccounts.swift` | Target accounts: their funding sources, the password and user keys in this Mac's Keychain (`TargetSecrets`), and the Edit Target Account editor |
+| `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

@@ -996,7 +996,7 @@ struct LedgerSheet: View {
                 DatePicker("Starts", selection: $openingDate, displayedComponents: .date)
                 TextField("Unfunded then", value: $openingBalance, format: .number.precision(.fractionLength(2)))
                 Section("Funding") {
-                    Text("The external accounts whose transfers in the check register fund it: they link to its funding entries.")
+                    Text("The target accounts whose transfers in the check register fund it: they link to its funding entries.")
                         .font(.caption).foregroundStyle(.secondary)
                     List(payees.filter(\.active)) { p in
                         Toggle(TargetPicker.title(p), isOn: Binding(get: { fundingPayees.contains(p.id) },

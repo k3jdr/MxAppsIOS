@@ -67,8 +67,11 @@ struct CardEntry: Decodable, Identifiable, Hashable {
     var enteredBy: String?
     var updatedBy: String?
     var balance: Double
-    /// The target's link (ExternalAccountLinks.swift).
+    /// The target's link (TargetAccountLinks.swift), nickname and next payment.
     var payeeLink: TargetLink?
+    var payeeNickname: String?
+    var payeeNextDate: String?
+    var payeeNextAmount: Double?
 
     /// The entry as the check register's target cell shows it (target, last four digits, note on hover).
     var target: RegisterEntry {
@@ -76,7 +79,8 @@ struct CardEntry: Decodable, Identifiable, Hashable {
                       payeeInstitution: payeeInstitution, payeeNote: payeeNote, expenseAccountId: expenseAccountId,
                       expenseAccount: expenseAccount, memo: memo, amount: amount, status: status, bankLineId: cardLineId,
                       bankDate: postedDate, bankName: issuerName, version: version, enteredBy: enteredBy,
-                      updatedBy: updatedBy, balance: balance, line: 0, payeeLink: payeeLink)
+                      updatedBy: updatedBy, balance: balance, line: 0, payeeLink: payeeLink, payeeNickname: payeeNickname,
+                      payeeNextDate: payeeNextDate, payeeNextAmount: payeeNextAmount)
     }
 }
 
@@ -212,7 +216,7 @@ struct CardsView: View {
             }
         }
         .task { await reload() }
-        // A target's link changed (here, in Checking or in External Accounts): the register shows it.
+        // A target's link changed (here, in Checking or in Target Accounts): the register shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .task(id: selected) {
             while !Task.isCancelled {
@@ -255,7 +259,8 @@ struct CardsView: View {
         }
     }
 
-    private var activePayees: [Payee] { (book?.payees ?? []).filter(\.active) }
+    /// The targets this register offers: active target accounts with credit card among their funding sources.
+    private var activePayees: [Payee] { (book?.payees ?? []).filter { $0.offered(in: .card) } }
 
     private var accountBar: some View {
         HStack(spacing: 10) {
@@ -354,7 +359,7 @@ struct CardsView: View {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Kind") { e in Text(kindLabel(e.kind)).foregroundStyle(.secondary) }.width(min: 50, ideal: 64)
                 TableColumn("Target") { e in
-                    TargetCell(entry: e.target, website: e.payeeId.flatMap { id in book?.payees.first { $0.id == id }?.website }) { id, note in await saveNote(id, note) }
+                    TargetCell(entry: e.target, website: e.payeeId.flatMap { id in book?.payees.first { $0.id == id }?.logonUrl }) { id, note in await saveNote(id, note) }
                 }.width(min: 140, ideal: 200)
                 TableColumn("Category") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary).help(e.issuerCategory.map { "\(r.account.issuer): \($0)" } ?? "") }.width(min: 80, ideal: 130)
                 TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 90)
@@ -395,7 +400,7 @@ struct CardsView: View {
     }
 
     private func unlinked(_ r: CardRegister) -> some View {
-        Box(title: "Checking payments to \(r.account.payee ?? "this card"), not linked", symbol: "link.badge.plus", help: "Entries in a check register paid to this card's external account that no card payment is linked to yet — the card company's line for them hasn't been read, or its amount or date differs. Link… ties one to the card's payment it is.") {
+        Box(title: "Checking payments to \(r.account.payee ?? "this card"), not linked", symbol: "link.badge.plus", help: "Entries in a check register paid to this card's target account that no card payment is linked to yet — the card company's line for them hasn't been read, or its amount or date differs. Link… ties one to the card's payment it is.") {
             ForEach(r.unlinkedPayments) { p in
                 HStack(spacing: 10) {
                     Text(shortDay(p.date)).monospacedDigit().frame(width: 84, alignment: .leading)
@@ -760,9 +765,10 @@ struct CardAccountSheet: View {
                     .help("The day of the month the payment is due: in the month after the statement closes when it comes before the closing day")
                 Picker("Paid from checking as", selection: $payeeId) {
                     Text("None").tag(Int?.none)
-                    ForEach(payees.filter(\.active)) { p in Text(TargetPicker.title(p)).tag(Optional(p.id)) }
+                    // A recipient of checking account payments (and the one chosen, whatever it is now).
+                    ForEach(payees.filter { $0.offered(in: .checking) || $0.id == payeeId }) { p in Text(TargetPicker.title(p)).tag(Optional(p.id)) }
                 }
-                .help("The external account the check register pays this card as (Chase Card, Discover …): its payments there link to the card's")
+                .help("The target account the check register pays this card as (Chase Card, Discover …): its payments there link to the card's")
                 DatePicker("Register starts", selection: $openingDate, displayedComponents: .date)
                     .help("Best a statement's closing date: the first period is the next full one")
                 TextField("Owed then", value: $openingBalance, format: .number.precision(.fractionLength(2)))
@@ -836,7 +842,7 @@ struct PayCardSheet: View {
                 .buttonStyle(.link).font(.callout)
                 TextField("Memo", text: $memo, prompt: Text("\(card.name) payment"))
             }
-            Text("Writes a transfer in the checking register to \(card.payee ?? "the card's external account") and the card's payment, linked. The card company's line for it posts the payment when its download is read.")
+            Text("Writes a transfer in the checking register to \(card.payee ?? "the card's target account") and the card's payment, linked. The card company's line for it posts the payment when its download is read.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).foregroundStyle(.red).font(.callout).fixedSize(horizontal: false, vertical: true) }
             HStack {

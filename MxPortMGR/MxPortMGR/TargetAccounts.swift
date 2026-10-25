@@ -1,0 +1,286 @@
+//
+//  TargetAccounts.swift
+//  MxPortMGR
+//
+//  Banking ▸ Target Accounts: each target account's details (srm.payee, V033) and their editor — its name, nickname,
+//  description, status and identifier; its bank or company, last four digits, category and usual amount; the next
+//  payment due; where to log on and the user name; the address and phone; the note the registers show on hover; and
+//  its funding sources, the registers whose target lists offer it: recipients of checking account payments, of credit
+//  card payments, or both. The password and user keys are kept in this Mac's Keychain (TargetSecrets), never in the
+//  security master, so they are known only on the Mac they were entered on.
+//
+
+import AppKit
+import Security
+import SwiftUI
+
+/// The registers a target account is paid from: their target lists offer it (srm.payee.funding_sources).
+enum FundingSource: String, CaseIterable {
+    case checking, card
+
+    var title: String { self == .checking ? "Recipient of checking account payments" : "Recipient of credit card payments" }
+    var register: String { self == .checking ? "Checking Accounts register" : "card registers" }
+    var symbol: String { self == .checking ? "checkmark.rectangle.stack" : "creditcard" }
+}
+
+/// What saving a target account answered: its id (a new one's too), or why it couldn't.
+struct PayeeSaved {
+    var id: Int?
+    var error: String?
+}
+
+/// A target account's password and user keys, in this Mac's login Keychain — never in the security master. Each app
+/// build keeps its own (the service is named after the bundle), so a test build never reads the real app's.
+nonisolated enum TargetSecrets {
+    enum Kind: String { case password, keys = "user keys" }
+
+    private static var service: String { (Bundle.main.bundleIdentifier ?? "com.k3jdr.MxPortMGR") + ".target-accounts" }
+
+    private static func match(_ kind: Kind, _ payee: Int) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+         kSecAttrAccount as String: "\(payee) \(kind.rawValue)"]
+    }
+
+    static func get(_ kind: Kind, _ payee: Int) -> String? {
+        var query = match(kind, payee)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Saves it (empty or nil removes it); answers whether the Keychain took it.
+    @discardableResult
+    static func set(_ value: String?, _ kind: Kind, _ payee: Int, account name: String) -> Bool {
+        guard let value, !value.isEmpty else {
+            let status = SecItemDelete(match(kind, payee) as CFDictionary)
+            return status == errSecSuccess || status == errSecItemNotFound
+        }
+        let data = Data(value.utf8)
+        let update = [kSecValueData as String: data, kSecAttrLabel as String: "MxPortMGR: \(name) (\(kind.rawValue))"] as [String: Any]
+        var status = SecItemUpdate(match(kind, payee) as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            var add = match(kind, payee)
+            add.merge(update) { a, _ in a }
+            status = SecItemAdd(add as CFDictionary, nil)
+        }
+        return status == errSecSuccess
+    }
+}
+
+// MARK: - The editor
+
+/// New Target Account / Edit Target Account: every detail kept for it, its funding sources, and its password and user
+/// keys (this Mac's Keychain).
+struct TargetAccountSheet: View {
+    let payee: Payee?
+    var expenseAccounts: [ExpenseAccount]
+    var defaultAccount: Int? = nil
+    var save: ([String: Any]) async -> PayeeSaved
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    @State private var nickname = ""
+    @State private var details = ""
+    @State private var status = "active"
+    @State private var reference = ""
+    @State private var institution = ""
+    @State private var last4 = ""
+    @State private var expenseAccountId: Int?
+    @State private var defaultAmount: Double?
+    @State private var hasNextPayment = false
+    @State private var nextPaymentDate = Date()
+    @State private var nextPaymentAmount: Double?
+    @State private var logonUrl = ""
+    @State private var userName = ""
+    @State private var password = ""
+    @State private var keys = ""
+    /// As the Keychain had them when the editor opened (saved again only when changed).
+    @State private var savedPassword = ""
+    @State private var savedKeys = ""
+    @State private var showSecrets = false
+    @State private var address1 = ""
+    @State private var address2 = ""
+    @State private var city = ""
+    @State private var state = ""
+    @State private var zipCode = ""
+    @State private var phone = ""
+    @State private var notes = ""
+    @State private var bankNames = ""
+    @State private var sources: Set<String> = Set(FundingSource.allCases.map(\.rawValue))
+    @State private var error: String?
+    @State private var saving = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(payee == nil ? "New Target Account" : "Edit \(payee!.name)")
+                .font(.title2.weight(.semibold))
+                .padding([.horizontal, .top], 18)
+            Form {
+                Section("Account") {
+                    TextField("Account name", text: $name)
+                    TextField("Nickname", text: $nickname)
+                        .help("A short name of your own: the registers' target lists show it beside the name")
+                    TextField("Description", text: $details, axis: .vertical).lineLimit(1...3)
+                    Picker("Status", selection: $status) {
+                        Text("Active").tag("active")
+                        Text("Inactive").tag("inactive")
+                        Text("Closed").tag("closed")
+                    }
+                    .help("Inactive and closed accounts keep their entries, but no register offers them as a target")
+                    TextField("Identifier", text: $reference, prompt: Text("Your account or customer number with them"))
+                    TextField("Bank / company", text: $institution)
+                    TextField("Last four digits", text: $last4)
+                        .help("Shown when this is picked as a register entry's target")
+                    Picker("Category", selection: $expenseAccountId) {
+                        Text("None").tag(Int?.none)
+                        ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                    }
+                    TextField("Usual amount", value: $defaultAmount, format: .number.precision(.fractionLength(2)))
+                        .help("Filled in when it is picked as a register entry's target")
+                }
+                Section("Next payment") {
+                    Toggle("A payment is due", isOn: $hasNextPayment)
+                    if hasNextPayment {
+                        DatePicker("Date", selection: $nextPaymentDate, displayedComponents: .date)
+                        TextField("Amount", value: $nextPaymentAmount, format: .number.precision(.fractionLength(2)))
+                    }
+                }
+                Section {
+                    HStack {
+                        TextField("Logon URL", text: $logonUrl, prompt: Text("https://…"))
+                        Button { if let url = LinkRichText.url(fromAddress: logonUrl) { LinkInfo.follow(url) } } label: { Image(systemName: "arrow.up.right.square") }
+                            .buttonStyle(.borderless).disabled(LinkRichText.url(fromAddress: logonUrl) == nil)
+                            .help("Open the logon page in your browser")
+                    }
+                    secretRow("User name", text: $userName, secret: false)
+                    secretRow("Password", text: $password, secret: true)
+                    if showSecrets {
+                        TextField("User keys", text: $keys, axis: .vertical).lineLimit(2...5)
+                            .help("Security questions' answers, recovery codes, PINs: kept in this Mac's Keychain")
+                    } else {
+                        LabeledContent("User keys") {
+                            Text(keys.isEmpty ? "None" : "\(keys.split(whereSeparator: \.isNewline).count) line(s), hidden")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle("Show the password and user keys", isOn: $showSecrets)
+                } header: {
+                    Text("Logon")
+                } footer: {
+                    Text("The password and user keys are kept in this Mac's Keychain, never in the security master: other Macs, and others using the registers, don't see them.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Address") {
+                    TextField("Address 1", text: $address1)
+                    TextField("Address 2", text: $address2)
+                    TextField("City", text: $city)
+                    TextField("State", text: $state)
+                    TextField("Zip code", text: $zipCode)
+                    TextField("Phone number", text: $phone)
+                }
+                Section {
+                    ForEach(FundingSource.allCases, id: \.self) { f in
+                        Toggle(isOn: Binding(get: { sources.contains(f.rawValue) },
+                                             set: { if $0 { sources.insert(f.rawValue) } else { sources.remove(f.rawValue) } })) {
+                            Label(f.title, systemImage: f.symbol)
+                        }
+                    }
+                } header: {
+                    Text("Funding sources")
+                } footer: {
+                    Text(sources.isEmpty ? "With neither, no register offers it as a target."
+                         : "Offered as a target in the \(FundingSource.allCases.filter { sources.contains($0.rawValue) }.map(\.register).joined(separator: " and ")).")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Notes") {
+                    TextField("User notes", text: $notes, prompt: Text("Shown on hover in the registers"), axis: .vertical).lineLimit(2...5)
+                    TextField("Bank's names for it", text: $bankNames)
+                        .help("How the bank's and card companies' downloads name this account, separated by semicolons: accepting a line remembers these")
+                }
+            }
+            .formStyle(.grouped)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
+                    .padding(.horizontal, 18)
+            }
+            HStack {
+                Spacer()
+                if saving { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(payee == nil ? "Add" : "Save") { Task { await finish() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || saving)
+            }
+            .padding(18)
+        }
+        .frame(width: 540, height: 720)
+        .onAppear(perform: load)
+    }
+
+    /// A logon field with a copy button (the password masked unless shown).
+    private func secretRow(_ title: String, text: Binding<String>, secret: Bool) -> some View {
+        HStack {
+            if secret && !showSecrets { SecureField(title, text: text) } else { TextField(title, text: text) }
+            Button { copy(text.wrappedValue) } label: { Image(systemName: "doc.on.doc") }
+                .buttonStyle(.borderless).disabled(text.wrappedValue.isEmpty)
+                .help("Copy the \(title.lowercased())")
+        }
+    }
+
+    private func copy(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
+    }
+
+    private func load() {
+        guard let p = payee else {
+            expenseAccountId = defaultAccount
+            return
+        }
+        name = p.name; nickname = p.nickname ?? ""; details = p.description ?? ""; status = p.status
+        reference = p.reference ?? ""; institution = p.institution ?? ""; last4 = p.last4 ?? ""
+        expenseAccountId = p.expenseAccountId; defaultAmount = p.defaultAmount
+        hasNextPayment = p.nextPaymentDate != nil || p.nextPaymentAmount != nil
+        nextPaymentDate = p.nextPaymentDate.flatMap { isoDay.date(from: String($0.prefix(10))) } ?? Date()
+        nextPaymentAmount = p.nextPaymentAmount
+        logonUrl = p.logonUrl ?? ""; userName = p.userName ?? ""
+        address1 = p.address1 ?? ""; address2 = p.address2 ?? ""; city = p.city ?? ""; state = p.state ?? ""
+        zipCode = p.zipCode ?? ""; phone = p.phone ?? ""; notes = p.notes ?? ""
+        bankNames = p.bankNames.joined(separator: "; "); sources = Set(p.fundingSources)
+        savedPassword = TargetSecrets.get(.password, p.id) ?? ""; password = savedPassword
+        savedKeys = TargetSecrets.get(.keys, p.id) ?? ""; keys = savedKeys
+    }
+
+    /// Saves the details in the security master, then the password and user keys in this Mac's Keychain.
+    private func finish() async {
+        saving = true
+        defer { saving = false }
+        var body: [String: Any] = [
+            "name": name, "nickname": nickname, "description": details, "status": status, "reference": reference,
+            "institution": institution, "last4": last4, "logonUrl": logonUrl, "userName": userName,
+            "address1": address1, "address2": address2, "city": city, "state": state, "zipCode": zipCode, "phone": phone,
+            "notes": notes, "fundingSources": FundingSource.allCases.map(\.rawValue).filter(sources.contains),
+            "bankNames": bankNames.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) },
+            "nextPaymentDate": hasNextPayment ? isoDay.string(from: nextPaymentDate) : "",
+        ]
+        body["expenseAccountId"] = expenseAccountId ?? NSNull()
+        body["defaultAmount"] = defaultAmount ?? NSNull()
+        body["nextPaymentAmount"] = hasNextPayment ? (nextPaymentAmount.map { $0 as Any } ?? NSNull()) : NSNull()
+        if let payee { body["version"] = payee.version }
+        let saved = await save(body)
+        if let e = saved.error { error = e; return }
+        guard let id = saved.id else {
+            error = "Saved, but its password and user keys weren't: open it again to enter them."
+            return
+        }
+        let kept = (password == savedPassword || TargetSecrets.set(password, .password, id, account: name))
+            && (keys == savedKeys || TargetSecrets.set(keys, .keys, id, account: name))
+        if !kept {
+            error = "Saved, but the Keychain didn't take the password or user keys."
+            return
+        }
+        dismiss()
+    }
+}

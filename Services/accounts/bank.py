@@ -13,12 +13,21 @@
     POST /bank/accounts/<code>/import            read the bank's downloads now (srm-loader POST /load/pnc-bank)
     GET  /expense-accounts                       expense accounts with their payees and this year's totals
     PUT  /expense-accounts/<id>                  create (id 0) or change one {name, kind, description}
-    PUT  /payees/<id>                            create (id 0) or change an external account {version, name, institution, last4, …}
+    PUT  /payees/<id>                            create (id 0) or change a target account {version, name, nickname, description,
+                                                 status, reference (its identifier), institution, last4, expenseAccountId,
+                                                 defaultAmount, nextPaymentDate, nextPaymentAmount, logonUrl, userName,
+                                                 address1, address2, city, state, zipCode, phone, notes, bankNames,
+                                                 fundingSources: checking and / or card} (V033)
     PUT  /payees/<id>/note                       change only its note (the register's hover text) {note}
     PUT  /payees/<id>/link                       its link (V032): {address, text, hoverText, hoverRtf, title, by}
     DELETE /payees/<id>/link                     take the link off
 
-An external account's link — a web page, an email address or a page in MxNoteONE, with words of its own and
+A target account (an external account: srm.payee, V028 / V033) is offered as a target by the registers its funding
+sources name — the Checking Accounts register's (checking) and the card registers' (card); one first named in a
+register (typed, or a bank line accepted) is created with that register's source, and gains it when another register
+names it. Its password and user keys are never sent here: MxPortMGR keeps them in the Keychain.
+
+A target account's link — a web page, an email address or a page in MxNoteONE, with words of its own and
 formatted hover text (srm.payee_link) — comes with it wherever it is a target: each register entry's payeeLink and
 each payee's link, {address, text, tip (the hover text as RTF), title}, or null.
 
@@ -123,7 +132,8 @@ def save_account(conn, code, body):
 TXN_SQL = """
     SELECT t.txn_id AS id, t.txn_date AS date, t.kind, t.check_no AS "checkNo", t.payee_id AS "payeeId",
            coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
-           p.notes AS "payeeNote", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
+           p.notes AS "payeeNote", p.nickname AS "payeeNickname", p.next_payment_date AS "payeeNextDate",
+           p.next_payment_amount AS "payeeNextAmount", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
            coalesce(t.expense_account_id, p.expense_account_id) AS "expenseAccountId",
            e.name AS "expenseAccount", t.memo, t.amount, t.status, t.bank_line_id AS "bankLineId",
            b.posted_date AS "bankDate", b.name AS "bankName", t.version, t.entered_by AS "enteredBy",
@@ -163,8 +173,9 @@ def register(conn, code):
     return {"account": acct, "entries": rows, "bankOnly": lines}
 
 
-def _payee(conn, body):
-    """(payee_id, payee_name, expense_account_id default) from payeeId or a payee name (found or created)."""
+def _payee(conn, body, source="checking"):
+    """(payee_id, payee_name, expense_account_id default) from payeeId or a payee name (found or created). A target
+    named in a register (source: checking or card) is offered by that register's target list from then on."""
     if body.get("payeeId"):
         rows = fetch(conn, "SELECT payee_id, name, expense_account_id, default_amount FROM srm.payee WHERE payee_id = %s",
                      (int(body["payeeId"]),))
@@ -176,9 +187,11 @@ def _payee(conn, body):
         return None, None, None
     rows = fetch(conn, "SELECT payee_id, name, expense_account_id FROM srm.payee WHERE lower(name) = lower(%s)", (name,))
     if rows:
+        fetch(conn, """UPDATE srm.payee SET funding_sources = array_append(funding_sources, %s)
+                        WHERE payee_id = %s AND NOT (%s = ANY (funding_sources))""", (source, rows[0]["payee_id"], source))
         return rows[0]["payee_id"], rows[0]["name"], rows[0]["expense_account_id"]
-    rows = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, updated_by) VALUES (%s, %s, %s)
-                          RETURNING payee_id""", (name[:120], body.get("expenseAccountId") or None, body.get("by")))
+    rows = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, updated_by, funding_sources) VALUES (%s, %s, %s, %s)
+                          RETURNING payee_id""", (name[:120], body.get("expenseAccountId") or None, body.get("by"), [source]))
     return rows[0]["payee_id"], name, body.get("expenseAccountId")
 
 
@@ -392,7 +405,10 @@ def expense_accounts(conn, q=None):
          GROUP BY e.expense_account_id ORDER BY e.sort_order, e.name""" % SPEND, (year, year))
     payees = fetch(conn, """
         SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.default_amount AS "defaultAmount",
-               p.address, p.reference, p.phone, p.website, p.bank_names AS "bankNames", p.notes, p.active, p.version,
+               p.address_1 AS "address1", p.address_2 AS "address2", p.city, p.state, p.zip_code AS "zipCode",
+               p.reference, p.phone, p.logon_url AS "logonUrl", p.user_name AS "userName", p.nickname, p.description,
+               p.status, p.next_payment_date AS "nextPaymentDate", p.next_payment_amount AS "nextPaymentAmount",
+               p.funding_sources AS "fundingSources", p.bank_names AS "bankNames", p.notes, p.active, p.version,
                p.institution, p.account_last4 AS last4, pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
                p.updated_by AS "updatedBy", p.updated_at AS "updatedAt",
                coalesce(sum(t.spent) FILTER (WHERE extract(year FROM t.txn_date) = %%s), 0) AS "yearTotal",
@@ -420,37 +436,77 @@ def save_expense_account(conn, eid, body):
     return expense_accounts(conn)
 
 
+PAYEE_STATUSES = ("active", "inactive", "closed")
+FUNDING_SOURCES = ("checking", "card")
+# The target account's columns as save_payee writes them, in order.
+PAYEE_COLUMNS = ("name", "nickname", "description", "status", "active", "reference", "institution", "account_last4",
+                 "expense_account_id", "default_amount", "next_payment_date", "next_payment_amount", "logon_url",
+                 "user_name", "address_1", "address_2", "city", "state", "zip_code", "phone", "notes", "bank_names",
+                 "funding_sources", "updated_by")
+
+
 def save_payee(conn, pid, body):
+    """A target account, created (id 0) or changed from the version it was read at. A change keeps the saved value of
+    each field it doesn't send (an older MxPortMGR sends fewer, and names three of them address, website and active:
+    read as address1, logonUrl and status)."""
     name = (body.get("name") or "").strip()
     if not name:
         raise ValueError("name is required")
-    last4 = (body.get("last4") or "").strip() or None
+    cur = {}
+    if int(pid) != 0:
+        rows = fetch(conn, "SELECT * FROM srm.payee WHERE payee_id = %s FOR UPDATE", (int(pid),))
+        if not rows:
+            raise LookupError("no target account %s" % pid)
+        cur = rows[0]
+        if int(body.get("version", -1)) != cur["version"]:
+            conn.rollback()
+            raise Conflict("%s changed this target account since you opened it" % (cur["updated_by"] or "someone"),
+                           version=cur["version"])
+
+    def given(*keys):
+        return next((k for k in keys if k in body), None)
+
+    def text(column, n, *keys):
+        k = given(*keys)
+        return cur.get(column) if k is None else (str(body[k] or "")).strip()[:n] or None
+
+    def amount(column, key):
+        return cur.get(column) if key not in body else (_num(body[key], key) if body[key] not in (None, "") else None)
+
+    last4 = text("account_last4", 4, "last4")
     if last4 and not re.match(r"^[0-9A-Za-z]{4}$", last4):
-        raise ValueError("last4 is the external account's last four characters (never the whole number)")
-    values = (name[:120], body.get("expenseAccountId") or None,
-              _num(body["defaultAmount"], "defaultAmount") if body.get("defaultAmount") not in (None, "") else None,
-              body.get("address"), body.get("reference"), body.get("phone"), body.get("website"),
-              [n for n in (body.get("bankNames") or []) if isinstance(n, str) and n.strip()], body.get("notes"),
-              bool(body.get("active", True)), (body.get("institution") or "").strip()[:120] or None, last4,
-              str(body.get("by") or "MxPortMGR")[:80])
+        raise ValueError("last4 is the target account's last four characters (never the whole number)")
+    k = given("status", "active")
+    status = cur.get("status", "active") if k is None else (body["status"] if k == "status" else ("active" if body["active"] else "inactive"))
+    if status not in PAYEE_STATUSES:
+        raise ValueError("status must be one of " + ", ".join(PAYEE_STATUSES))
+    sources = body["fundingSources"] if "fundingSources" in body else cur.get("funding_sources", list(FUNDING_SOURCES))
+    if not isinstance(sources, list) or any(x not in FUNDING_SOURCES for x in sources):
+        raise ValueError("fundingSources lists checking and / or card")
+    k = given("nextPaymentDate")
+    values = dict(
+        name=name[:120], nickname=text("nickname", 80, "nickname"), description=text("description", 2000, "description"),
+        status=status, active=status == "active", reference=text("reference", 120, "reference"),
+        institution=text("institution", 120, "institution"), account_last4=last4,
+        expense_account_id=(body.get("expenseAccountId") or None) if "expenseAccountId" in body else cur.get("expense_account_id"),
+        default_amount=amount("default_amount", "defaultAmount"),
+        next_payment_date=cur.get("next_payment_date") if k is None else (_date(body[k]) if body[k] else None),
+        next_payment_amount=amount("next_payment_amount", "nextPaymentAmount"),
+        logon_url=text("logon_url", 500, "logonUrl", "website"), user_name=text("user_name", 200, "userName"),
+        address_1=text("address_1", 200, "address1", "address"), address_2=text("address_2", 200, "address2"),
+        city=text("city", 100, "city"), state=text("state", 60, "state"), zip_code=text("zip_code", 20, "zipCode"),
+        phone=text("phone", 60, "phone"), notes=text("notes", 2000, "notes"),
+        bank_names=[n for n in body["bankNames"] if isinstance(n, str) and n.strip()] if isinstance(body.get("bankNames"), list)
+                   else cur.get("bank_names", []),
+        funding_sources=[x for x in FUNDING_SOURCES if x in sources], updated_by=str(body.get("by") or "MxPortMGR")[:80])
+    row = tuple(values[c] for c in PAYEE_COLUMNS)
     if int(pid) == 0:
         if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s)", (name,)):
-            raise Conflict("there is already a payee %s" % name)
-        fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, default_amount, address, reference, phone, website,
-                                              bank_names, notes, active, institution, account_last4, updated_by)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", values)
+            raise Conflict("there is already a target account %s" % name)
+        fetch(conn, "INSERT INTO srm.payee (%s) VALUES (%s)" % (", ".join(PAYEE_COLUMNS), ", ".join(["%s"] * len(PAYEE_COLUMNS))), row)
     else:
-        cur = fetch(conn, "SELECT version, updated_by, updated_at FROM srm.payee WHERE payee_id = %s FOR UPDATE", (int(pid),))
-        if not cur:
-            raise LookupError("no payee %s" % pid)
-        if int(body.get("version", -1)) != cur[0]["version"]:
-            conn.rollback()
-            raise Conflict("%s changed this payee since you opened it" % (cur[0]["updated_by"] or "someone"),
-                           version=cur[0]["version"])
-        fetch(conn, """UPDATE srm.payee SET name = %s, expense_account_id = %s, default_amount = %s, address = %s,
-                              reference = %s, phone = %s, website = %s, bank_names = %s, notes = %s, active = %s,
-                              institution = %s, account_last4 = %s, updated_by = %s, version = version + 1, updated_at = now() WHERE payee_id = %s""",
-              values + (int(pid),))
+        fetch(conn, "UPDATE srm.payee SET %s, version = version + 1, updated_at = now() WHERE payee_id = %%s"
+              % ", ".join("%s = %%s" % c for c in PAYEE_COLUMNS), row + (int(pid),))
     conn.commit()
     return expense_accounts(conn)
 

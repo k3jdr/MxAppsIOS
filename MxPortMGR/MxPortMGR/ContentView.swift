@@ -133,7 +133,7 @@ struct ContentView: View {
         case .checking: CheckingView(store: store)
         case .cards: CardsView(store: store)
         case .expenseLedgers: ExpenseLedgersView(store: store)
-        case .expenses: ExternalAccountsView(store: store)
+        case .expenses: TargetAccountsView(store: store)
         case .welcome: WelcomeView(store: store)
         case .choosePath: ChoosePathView(store: store)
         case .whyOptimize: WhyOptimizeView(store: store)
@@ -248,8 +248,8 @@ struct ContentView: View {
                 pb.setString(text ?? "<nil>", forType: .string)
             }
         }
-        // Links on external accounts: open the Link dialog (-payeeLinkEdit PAYEE_ID) or show a linked target's hover
-        // card (-payeeLinkHoverTest entry:TXN_ID in a register, payee:PAYEE_ID in External Accounts).
+        // Links on target accounts: open the Link dialog (-payeeLinkEdit PAYEE_ID) or show a linked target's hover
+        // card (-payeeLinkHoverTest entry:TXN_ID in a register, payee:PAYEE_ID in Target Accounts).
         if let id = defaults.object(forKey: "payeeLinkEdit") != nil ? defaults.integer(forKey: "payeeLinkEdit") : nil {
             Task {
                 try? await Task.sleep(for: .seconds(4))
@@ -258,7 +258,7 @@ struct ContentView: View {
         }
         if let id = defaults.string(forKey: "payeeLinkHoverTest") {
             Task {
-                // Once the register (or External Accounts) has loaded and shows the linked words.
+                // Once the register (or Target Accounts) has loaded and shows the linked words.
                 for _ in 0..<20 where LinkWordsAnchorView.anchors[id]?() == nil { try? await Task.sleep(for: .seconds(1)) }
                 LinkWordsAnchorView.testHover(id)
             }

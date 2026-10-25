@@ -46,7 +46,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .checking: "Checking Accounts"
         case .cards: "Credit Card Accounts"
         case .expenseLedgers: "Expense Accounts"
-        case .expenses: "External Accounts"
+        case .expenses: "Target Accounts"
         case .welcome: "Welcome"
         case .choosePath: "Choose Your Path"
         case .whyOptimize: "Why Optimize?"
