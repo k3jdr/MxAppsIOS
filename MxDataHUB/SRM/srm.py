@@ -44,7 +44,7 @@ import traceback
 from srmlib import common, migrate
 from srmlib.common import Config, debug, log
 from srmlib.loaders import (blackrock, derivatives, earnings_symbols, fund_families, security_fixes, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
-                             nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard,
+                             nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard, vanguard_holdings,
                              vanguard_plan, pnc_bank, card_downloads)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
@@ -74,6 +74,7 @@ LOADERS = {
     "blackrock-funds": blackrock.run,           # iShares ETFs, BlackRock mutual funds and CEFs: family profiles, NAVs
     "fund-families": fund_families.run,         # every other family's mutual funds and ETFs (FMP's fund screener), NAVs
     "vanguard-plan": vanguard_plan.run,         # Vanguard 401(k) downloads: funds, transactions, positions, trust NAVs, lots
+    "vanguard-holdings": vanguard_holdings.run, # Vanguard index funds' month-end holdings as benchmarks VTSM VTBM VTISM VTIB (V036)
     "trust-navs": trust_navs.run,
     "card-downloads": card_downloads.run,       # credit card downloads (CSV / QFX) → card lines posted to the card registers
     "pnc-bank": pnc_bank.run,                   # PNC checking downloads (QFX / CSV) → bank lines matched to the check register               # collective trusts: statement NAVs carried by a proxy fund's returns
@@ -157,7 +158,8 @@ def main():
                       help="FMP loaders: every active security instead of benchmark / portfolio members (~13k calls)")
     load.add_argument("--funds", action="store_true",
                       help="nasdaq-prices: every active fund (ETF, ETN, closed-end fund; ~6,100 requests at 1/second)")
-    load.add_argument("--benchmarks", nargs="*", help="ssga: only these benchmark codes (SP500 DJIA SP400 SP600)")
+    load.add_argument("--benchmarks", nargs="*",
+                      help="ssga: only these benchmark codes (SP500 DJIA SP400 SP600); vanguard-holdings: VTSM VTBM VTISM VTIB")
     load.add_argument("--include-otc", action="store_true", help="sec-tickers: also create OTC securities")
     load.add_argument("--missing-sector", action="store_true",
                       help="fmp-profiles: active stocks, ADRs and REITs without a sector (never profiled)")

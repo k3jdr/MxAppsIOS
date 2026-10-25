@@ -84,6 +84,10 @@ CATEGORIES = [
      # State Street publishes a day's holdings the next business morning, so the newest SPDR file is dated a business
      # day back (two overnight, before the next one appears): freshness allows that lag.
      "dataLagDays": 1},
+    {"id": "fund-holdings", "name": "Fund holdings benchmarks", "loaders": ["vanguard-holdings"],
+     "description": "The Vanguard index funds of the 401(k) plan as benchmarks from Vanguard's month-end holdings (VTI, "
+                    "BND, VXUS, BNDX): VTSM, VTBM, VTISM, VTIB, every holding a security (MxAcctMGR's Securities filter).",
+     "cadence": "monthly"},
     {"id": "identifiers", "name": "Identifiers & issuer data",
      "loaders": ["openfigi", "fmp-profiles", "inherit-sectors", "sec-submissions", "gleif", "security-fixes"],
      "description": "FIGIs, ISINs, CUSIPs, sectors, SIC, incorporation, LEIs for benchmark and portfolio members.", "cadence": "weekly"},
@@ -143,6 +147,7 @@ CATEGORIES = [
 RUN_NAMES = {
     "reference": ["iso10383", "iso4217"], "nasdaqtrader": ["nasdaqtrader"], "sec-tickers": ["sec_company_tickers"],
     "ssga": ["ssga_spy", "ssga_dia", "ssga_mdy", "ssga_spsm"], "nasdaq100": ["nasdaq100"],
+    "vanguard-holdings": ["vanguard_holdings_vti", "vanguard_holdings_bnd", "vanguard_holdings_vxus", "vanguard_holdings_bndx"],
     "openfigi": ["openfigi_mapping"], "fmp-profiles": ["fmp_profiles"], "sec-submissions": ["sec_submissions"],
     "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "fmp-otc-prices": ["fmp_otc_prices"], "nasdaq-prices": ["nasdaq_prices"],
     "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "vanguard-plan": ["vanguard_plan"], "pnc-bank": ["pnc_bank"], "card-downloads": ["card_downloads"], "mutual-funds": ["mutual_funds"],
@@ -271,11 +276,12 @@ class SRM:
                 last = {r["loader"]: r for r in rows(cur)}
                 cur.execute("SELECT max(price_date) FROM srm.price")
                 price_date = cur.fetchone()[0]
-                # Only the benchmarks the loaders refresh: custom ones built in MxDataHUB keep their build date.
+                # Only the benchmarks the loaders refresh daily: custom ones built in MxDataHUB keep their build date,
+                # and the Vanguard funds' holdings are month-end.
                 cur.execute("""SELECT min(as_of_date), max(as_of_date) FROM srm.v_benchmark_summary
                                 WHERE provider IS DISTINCT FROM 'MxDataHUB' AND provider IS DISTINCT FROM 'MxAcctMGR'
                                   AND provider IS DISTINCT FROM 'MxPortMGR'
-                                  AND provider IS DISTINCT FROM 'Policy'""")
+                                  AND provider IS DISTINCT FROM 'Policy' AND provider IS DISTINCT FROM 'Vanguard'""")
                 bench_min, bench_max = cur.fetchone()
                 portfolio_min = None
                 if table_exists(cur, "srm.v_snapshot_coverage"):
@@ -351,11 +357,13 @@ class SRM:
                     cur.execute("""SELECT kind, code, snapshots, first_date, last_date, months, drifted_snapshots,
                                           max_gap_days FROM srm.v_snapshot_coverage ORDER BY kind, code""")
                     out["snapshotHistory"] = rows(cur)
-                # Coverage of the securities SRM enriches: current benchmark members.
+                # Coverage of the securities SRM enriches: current benchmark members (not the Vanguard funds'
+                # holdings, which the per-symbol loaders leave alone).
                 cur.execute("""
                     WITH members AS (
-                        SELECT DISTINCT security_id FROM srm.benchmark_constituent
-                         WHERE current_date >= valid_from AND current_date < valid_to)
+                        SELECT DISTINCT c.security_id FROM srm.benchmark_constituent c JOIN srm.benchmark b USING (benchmark_id)
+                         WHERE current_date >= c.valid_from AND current_date < c.valid_to
+                           AND b.provider IS DISTINCT FROM 'Vanguard')
                     SELECT count(*) AS members,
                            round(100.0 * count(v.isin) / nullif(count(*), 0), 1)           AS isin,
                            round(100.0 * count(v.cusip) / nullif(count(*), 0), 1)          AS cusip,
@@ -425,7 +433,9 @@ def quality_checks(status, stale_days):
         age = business_days_between(b["as_of_date"], today) if b["as_of_date"] else None
         # custom, blended and policy benchmarks aren't refreshed ('MxPortMGR': MxAcctMGR's before migration V034)
         if b.get("provider") not in ("MxDataHUB", "MxAcctMGR", "MxPortMGR", "Policy"):
-            add("benchmark %s fresh" % code, age is not None and age <= stale_days,
+            # The Vanguard funds' holdings are month-end, published some weeks after: fresh within ~two months.
+            limit = 45 if b.get("provider") == "Vanguard" else stale_days
+            add("benchmark %s fresh" % code, age is not None and age <= limit,
                 "as of %s (%s business days old)" % (b["as_of_date"], age))
         weight = float(b["weight_sum"] or 0)
         add("benchmark %s weights sum to 1" % code, abs(weight - 1) < 0.001, "weight sum %.6f" % weight)

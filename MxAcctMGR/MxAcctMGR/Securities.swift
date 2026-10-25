@@ -134,7 +134,13 @@ final class SecuritiesStore {
     private(set) var selectedID: SecurityRow.ID?
     private(set) var detail: SecurityDetail?
     private(set) var types: [String] = []
-    private(set) var benchmarks: [String] = []
+    /// The benchmarks the In filter offers: each one's code and name.
+    struct BenchmarkChoice: Decodable, Identifiable, Hashable {
+        var code: String
+        var name: String
+        var id: String { code }
+    }
+    private(set) var benchmarks: [BenchmarkChoice] = []
     private(set) var busy = false
     private(set) var problem: String?
 
@@ -189,10 +195,10 @@ final class SecuritiesStore {
     func loadLists() async {
         guard types.isEmpty else { return }
         struct Types: Decodable { var types: [String] }
-        struct Benchmarks: Decodable { struct B: Decodable { var code: String }; var benchmarks: [B] }
+        struct Benchmarks: Decodable { var benchmarks: [BenchmarkChoice] }
         if let data = try? await Self.call("GET", "/security-types"), let t = try? JSONDecoder().decode(Types.self, from: data) { types = t.types }
         if let data = try? await Self.call("GET", "/benchmarks"), let b = try? JSONDecoder().decode(Benchmarks.self, from: data) {
-            benchmarks = b.benchmarks.map(\.code)
+            benchmarks = b.benchmarks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         }
     }
 
@@ -334,7 +340,7 @@ struct SecuritiesView: View {
                 .quickHelp("Type", "Only securities of this type: common stock, ETF, ADR…")
                 Picker("In", selection: $master.benchmarkFilter) {
                     Text("Any benchmark").tag("")
-                    ForEach(master.benchmarks, id: \.self) { Text($0).tag($0) }
+                    ForEach(master.benchmarks) { Text($0.name).tag($0.code) }
                 }
                 .fixedSize()
                 .quickHelp("In", "Only the members of a benchmark on its latest date.")

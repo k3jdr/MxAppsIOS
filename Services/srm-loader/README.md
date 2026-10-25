@@ -37,7 +37,7 @@ Data-quality checks in `/status` (`fail` blocks the jobspace's status step until
 
 | Check | Fails when |
 | ----- | ---------- |
-| benchmark *X* fresh | constituents older than `--stale-days` business days |
+| benchmark *X* fresh | constituents older than `--stale-days` business days (the Vanguard funds' month-end holdings, VTSM VTBM VTISM VTIB: older than 45) |
 | benchmark *X* weights sum to 1 | weight sum off by more than 0.001 |
 | prices fresh | last price date older than `--stale-days` business days |
 | benchmark members with ISIN / CUSIP / composite FIGI ≥ 95% | coverage below 95% (warning) |
