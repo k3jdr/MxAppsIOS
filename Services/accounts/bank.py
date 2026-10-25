@@ -6,6 +6,8 @@
     POST /bank/accounts/<code>/transactions      add an entry {date, kind, checkNo, payeeId|payee, expenseAccountId, memo, amount, by}
     PUT  /bank/transactions/<id>                 change one {version, …}: refused (409) when someone changed it since
     POST /bank/transactions/<id>/move            move it one line up or down in the register {direction: up | down}
+    POST /bank/accounts/<code>/status            mark several entries cleared or not cleared {entries: [{id, version}],
+                                                 status: cleared | open}: all or none (409 when one changed since)
     POST /bank/lines/<id>/accept                 add the bank's line to the register (its payee found by name), cleared
     POST /bank/lines/<id>/match                  match it to an entry {txnId}
     POST /bank/accounts/<code>/import            read the bank's downloads now (srm-loader POST /load/pnc-bank)
@@ -244,6 +246,39 @@ def update_transaction(conn, txn_id, body):
     return register(conn, code)
 
 
+def set_status(conn, code, body):
+    """Marks the entries listed cleared, or not cleared (unmatching their bank lines), in one transaction: refused
+    whole (409) when one of them changed since it was read. Void entries are left as they are; a reconciled entry
+    stays reconciled when marked cleared."""
+    aid = _account_id(conn, code)
+    status = body.get("status")
+    if status not in ("cleared", "open"):
+        raise ValueError("status must be cleared or open")
+    wanted = {int(e["id"]): int(e["version"]) for e in body.get("entries") or [] if "id" in e and "version" in e}
+    if not wanted:
+        raise ValueError("entries is a list of {id, version}")
+    rows = fetch(conn, """SELECT txn_id, version, status, updated_by, updated_at FROM srm.bank_txn
+                           WHERE bank_account_id = %s AND txn_id = ANY (%s) FOR UPDATE""", (aid, list(wanted)))
+    if len(rows) != len(wanted):
+        conn.rollback()
+        raise LookupError("not every entry is in %s" % code)
+    stale = [r for r in rows if r["version"] != wanted[r["txn_id"]]]
+    if stale:
+        conn.rollback()
+        r = stale[0]
+        raise Conflict("%s changed %d of these entries since you opened them (the latest on %s); nothing was marked"
+                       % (r["updated_by"] or "someone", len(stale), r["updated_at"].strftime("%Y-%m-%d at %H:%M")))
+    ids = [r["txn_id"] for r in rows if r["status"] != "void"
+           and not (status == "cleared" and r["status"] in ("cleared", "reconciled")) and not (status == "open" and r["status"] == "open")]
+    if ids:
+        fetch(conn, """UPDATE srm.bank_txn SET status = %s,
+                              bank_line_id = CASE WHEN %s = 'open' THEN NULL ELSE bank_line_id END,
+                              version = version + 1, updated_by = %s, updated_at = now()
+                        WHERE txn_id = ANY (%s)""", (status, status, str(body.get("by") or "MxPortMGR")[:80], ids))
+    conn.commit()
+    return {"changed": len(ids), **register(conn, code)}
+
+
 def move_transaction(conn, txn_id, body):
     """Moves an entry one line up or down in its register (swaps it with its neighbour); answers with the register.
     The first line can't move up, nor the last down: nothing changes."""
@@ -427,6 +462,8 @@ def route(conn, method, parts, body, q):
         return register(conn, parts[2])
     if len(parts) == 4 and parts[:2] == ["bank", "accounts"] and parts[3] == "transactions" and method == "POST":
         return add_transaction(conn, parts[2], body)
+    if len(parts) == 4 and parts[:2] == ["bank", "accounts"] and parts[3] == "status" and method == "POST":
+        return set_status(conn, parts[2], body)
     if len(parts) == 4 and parts[:2] == ["bank", "accounts"] and parts[3] == "import" and method == "POST":
         return import_downloads(conn, parts[2])
     if len(parts) == 3 and parts[:2] == ["bank", "transactions"] and method == "PUT":

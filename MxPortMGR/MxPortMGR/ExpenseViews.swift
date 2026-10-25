@@ -451,6 +451,7 @@ struct ExpenseLedgersView: View {
                     ForEach(d.lines) { l in Text(l.name).tag(l.id) }
                 }
                 .fixedSize()
+                DateOrderToggle(options: $grid, key: "expenseRegisterNewestFirst")
                 Spacer()
                 if lineShown != 0 || !grid.filters.isEmpty {
                     Text("\(rows.count) entries · \(money2(rows.filter { $0.status == "actual" }.reduce(0) { $0 + $1.amount }))")

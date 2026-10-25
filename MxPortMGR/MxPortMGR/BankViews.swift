@@ -132,6 +132,12 @@ nonisolated enum BankClient {
     static func add(_ code: String, _ body: [String: Any]) async throws -> CheckRegister {
         try await AccountsClient.request("POST", "/bank/accounts/\(code)/transactions", body: body.merging(["by": by]) { a, _ in a }, as: CheckRegister.self)
     }
+    /// Marks several entries cleared or not cleared at once: all or none (refused when one changed since it was read).
+    static func setStatus(_ code: String, _ entries: [RegisterEntry], _ status: String) async throws -> CheckRegister {
+        try await AccountsClient.request("POST", "/bank/accounts/\(code)/status",
+                                         body: ["entries": entries.map { ["id": $0.id, "version": $0.version] }, "status": status, "by": by],
+                                         as: CheckRegister.self)
+    }
     /// Moves an entry one line up or down in its register (the only way its line changes).
     static func move(_ id: Int, down: Bool) async throws -> CheckRegister {
         try await AccountsClient.request("POST", "/bank/transactions/\(id)/move", body: ["direction": down ? "down" : "up", "by": by], as: CheckRegister.self)
@@ -354,6 +360,14 @@ struct CheckingView: View {
                     if e.status != "void" { Button("Void") { Task { await setStatus(e, "void") } } } else { Button("Restore") { Task { await setStatus(e, "open") } } }
                     Divider()
                 }
+                if chosen.count > 1 {
+                    let live = chosen.filter { $0.status != "void" }
+                    let open = live.filter { $0.status == "open" }
+                    Button("Mark \(open.count) Cleared") { Task { await setCleared(open, true) } }.disabled(open.isEmpty)
+                    Button("Mark \(live.count - open.count) Not Cleared") { Task { await setCleared(live.filter { $0.status != "open" }, false) } }
+                        .disabled(live.count == open.count)
+                    Divider()
+                }
                 if !chosen.isEmpty {
                     Button(chosen.count == 1 ? "Copy Entry" : "Copy \(chosen.count) Entries") { copy(Self.text(chosen)) }
                 }
@@ -556,9 +570,30 @@ struct CheckingView: View {
             Text(why ?? (chosen.map { "Line \($0.line) of \(r.entries.count): ⌥⌘↑ and ⌥⌘↓ move it, to match the paper register" } ?? ""))
                 .font(.callout).foregroundStyle(.secondary)
             Spacer()
+            clearedToggle(r)
         }
         .controlSize(.small)
         .help("The register keeps the paper register's order, not the dates': move an entry one line at a time. Its line is kept by the application — nothing else changes it.")
+    }
+
+    /// Marks the selected entries cleared — or, when every one of them is cleared already, not cleared (⌥⌘K), as
+    /// the paper register's ticks are checked off against the statement. Void entries are left as they are.
+    private func clearedToggle(_ r: CheckRegister) -> some View {
+        let live = r.entries.filter { selection.contains($0.id) && $0.status != "void" }
+        let open = live.filter { $0.status == "open" }
+        let clearing = !open.isEmpty
+        let title = live.isEmpty ? "Mark Cleared" : clearing ? "Mark \(open.count) Cleared" : "Mark \(live.count) Not Cleared"
+        return Button { Task { await setCleared(clearing ? open : live, clearing) } } label: {
+            Label(title, systemImage: clearing || live.isEmpty ? "checkmark.circle" : "arrow.uturn.backward.circle")
+        }
+        .keyboardShortcut("k", modifiers: [.option, .command])
+        .disabled(live.isEmpty || busy)
+        .help("Select entries (⌘-click or ⇧-click for several) and mark them cleared; when they all are, this marks them not cleared again (⌥⌘K)")
+    }
+
+    private func setCleared(_ entries: [RegisterEntry], _ cleared: Bool) async {
+        guard let code = register?.account.code, !entries.isEmpty else { return }
+        await run { try await BankClient.setStatus(code, entries, cleared ? "cleared" : "open") }
     }
 
     private func move(_ e: RegisterEntry, down: Bool) async {
@@ -649,6 +684,37 @@ struct RowShading: NSViewRepresentable {
         }
 
         @objc private func scrolled() { apply() }
+    }
+}
+
+/// Above a register: its Date column's order, oldest or newest first — the register's own order or the Date
+/// column sorted newest first, as the column's sort buttons would — remembered (under `key`) for next time.
+struct DateOrderToggle: View {
+    @Binding var options: GridQueryOptions
+    @AppStorage private var newestFirst: Bool
+
+    init(options: Binding<GridQueryOptions>, key: String) {
+        _options = options
+        _newestFirst = AppStorage(wrappedValue: false, key)
+    }
+
+    private static let newest = GridSort(column: "Date", ascending: false)
+
+    var body: some View {
+        Picker("Date", selection: Binding(get: { options.sort == Self.newest }, set: { newest in
+            if newest { options.sort = Self.newest } else if options.sort?.column == "Date" || options.sort == nil { options.sort = nil }
+            newestFirst = newest
+        })) {
+            Label("Oldest first", systemImage: "arrow.up").tag(false)
+            Label("Newest first", systemImage: "arrow.down").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .help("Show the register oldest first (its own order) or newest first, by date; the running balance stays each entry's place in the register")
+        .onAppear { if newestFirst, options.sort == nil { options.sort = Self.newest } }
+        // A sort picked from a column's header button: newest first only while it is the Date column, newest first.
+        .onChange(of: options.sort) { newestFirst = options.sort == Self.newest }
     }
 }
 

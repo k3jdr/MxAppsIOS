@@ -339,6 +339,7 @@ struct CardsView: View {
                     ForEach(r.statements) { s in Text("Statement closing \(shortDay(s.closingDate))").tag(s.closingDate) }
                 }
                 .fixedSize()
+                DateOrderToggle(options: $grid, key: "cardRegisterNewestFirst")
                 Spacer()
                 if period.count < r.entries.count {
                     Text("\(period.count) of \(r.entries.count) entries").font(.callout).foregroundStyle(.secondary)
