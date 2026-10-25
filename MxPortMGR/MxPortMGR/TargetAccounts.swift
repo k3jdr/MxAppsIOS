@@ -118,7 +118,7 @@ struct TargetAccountSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(payee == nil ? "New Target Account" : detailsOnly ? "Edit Target Details" : "Edit \(payee!.name)")
-                .font(.title2.weight(.semibold))
+                .heading(.heading)
                 .padding([.horizontal, .top], 18)
             if detailsOnly, let p = payee {
                 // Its name, the bank when it isn't the name too, and the last four digits.
@@ -327,7 +327,7 @@ struct TargetNameSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Target Account Name").font(.title2.weight(.semibold))
+            Text("Edit Target Account Name").heading(.heading)
             Form {
                 TextField("Account name", text: $name)
                     .onSubmit { if canSave { Task { await finish() } } }
@@ -398,7 +398,7 @@ struct AddCardTargetsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add from Card Registers").font(.title2.weight(.semibold))
+            Text("Add from Card Registers").heading(.heading)
             Text("The targets of credit card entries that aren't target accounts yet, as the card company names them. Those ticked become target accounts that the card registers offer, each in the category its entries mostly have, with those entries linked to it; a card line with the same name later is filed to it too. The card company's own lines (payments, interest, fees, adjustments) start unticked.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let targets {

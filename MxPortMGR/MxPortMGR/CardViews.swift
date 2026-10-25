@@ -683,7 +683,7 @@ struct CardEditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Entry").font(.title2.weight(.semibold))
+            Text("Edit Entry").heading(.heading)
             Text("Entered by \(entry.enteredBy ?? "—")\(entry.updatedBy.map { " · last changed by \($0)" } ?? "") · version \(entry.version)")
                 .font(.caption).foregroundStyle(.secondary)
             Form {
@@ -755,7 +755,7 @@ struct CardAccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(account == nil ? "New Credit Card Account" : "Edit \(account!.name)").font(.title2.weight(.semibold))
+            Text(account == nil ? "New Credit Card Account" : "Edit \(account!.name)").heading(.heading)
             Form {
                 TextField("Code", text: $code).disabled(account != nil)
                     .help("A short name for it: letters, digits, _ or - (CHASE_VISA)")
@@ -829,7 +829,7 @@ struct PayCardSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Pay \(card.name)").font(.title2.weight(.semibold))
+            Text("Pay \(card.name)").heading(.heading)
             if card.payeeId == nil {
                 Label("Set how the check register pays this card first (Edit… ▸ Paid from checking as).", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange).font(.callout)
@@ -886,7 +886,7 @@ struct LinkPaymentSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Link to a Checking Payment").font(.title2.weight(.semibold))
+            Text("Link to a Checking Payment").heading(.heading)
             Text("\(shortDay(entry.date)) · \(entry.payee ?? "Payment") · \(money2(-entry.amount))").foregroundStyle(.secondary)
             Text("The checking entry that paid it (closest amount first):").font(.callout)
             List(selection: $choice) {
@@ -929,7 +929,7 @@ struct StatementSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Statement Closing \(shortDay(statement.closingDate))").font(.title2.weight(.semibold))
+            Text("Statement Closing \(shortDay(statement.closingDate))").heading(.heading)
             Text("\(shortDay(statement.periodStart)) – \(shortDay(statement.closingDate)) · the register adds up to \(money2(statement.registerBalance))")
                 .font(.callout).foregroundStyle(.secondary)
             Form {

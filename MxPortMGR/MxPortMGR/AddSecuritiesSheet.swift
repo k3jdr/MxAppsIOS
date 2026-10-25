@@ -96,7 +96,7 @@ struct SRMAddSecurities: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Add Securities from the Security Master").font(.title2.weight(.semibold))
+                    Text("Add Securities from the Security Master").heading(.heading)
                     Text("Real securities and prices in MxDataHUB's srm database (192.168.0.223), through the accounts service.").font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -205,7 +205,7 @@ struct SRMAddSecurities: View {
     /// Over the empty table while the first page loads: each step done (with its time) and the one running.
     private var progressPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(searching ? "Reading the security master" : "No securities match").font(.headline)
+            Text(searching ? "Reading the security master" : "No securities match").heading(.name)
             Text("The accounts service (127.0.0.1:8774) queries MxDataHUB's srm database on 192.168.0.223.")
                 .font(.callout).foregroundStyle(.secondary)
             ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
@@ -338,7 +338,7 @@ struct SRMAddSecurities: View {
         if let s = selected {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(s.name).font(.title3.weight(.semibold))
+                    Text(s.name).heading(.subheading)
                     Text("\(s.ticker)\(s.mic.map { ":" + $0 } ?? "") · \(s.kindTitle)").foregroundStyle(.secondary)
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                         row("Price", s.price.map { "\(money($0)) on \(s.priceDate ?? "")" } ?? "No prices in the security master yet")

@@ -148,7 +148,7 @@ struct EarningsDayView: View {
             Button { e.date = EarningsDates.nextWeekday(e.date, 1) } label: { Image(systemName: "chevron.right") }
                 .help("The next weekday")
                 .quickHelp("Next Day", "The next weekday.")
-            Text(EarningsDates.title(e.date)).font(.title3.weight(.semibold))
+            Text(EarningsDates.title(e.date)).heading(.subheading)
             Button("Today") { e.date = today }
                 .disabled(e.date == today)
                 .help("Today's reports")
@@ -571,7 +571,7 @@ struct EarningsCalendarView: View {
             .quickHelp("Month or Week", "Month: each day's number of reports, how many beat or missed, and the largest names. Week: each weekday's largest reports with their EPS estimate or result.")
             Button { step(e, -1) } label: { Image(systemName: "chevron.left") }
                 .help(e.mode == .month ? "The month before" : "The week before")
-            Text(title).font(.title2.weight(.semibold)).frame(minWidth: 240)
+            Text(title).heading(.heading).frame(minWidth: 240)
             Button { step(e, 1) } label: { Image(systemName: "chevron.right") }
                 .help(e.mode == .month ? "The next month" : "The next week")
             Button("Today") { e.anchor = today }
@@ -793,7 +793,7 @@ struct EarningsWeekColumn: View {
             Button { store.openEarningsDay(date) } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(EarningsDates.date(date).formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                        .font(.headline).foregroundStyle(date == EarningsDates.today() ? Color.accentColor : .primary)
+                        .heading(.name).foregroundStyle(date == EarningsDates.today() ? Color.accentColor : .primary)
                     HStack {
                         Text(listed.count == 1 ? "1 report" : "\(listed.count) reports").font(.caption).foregroundStyle(.secondary)
                         if e.isLoading(date), e.days[date]?.nasdaqFetched == nil { ProgressView().controlSize(.mini) }

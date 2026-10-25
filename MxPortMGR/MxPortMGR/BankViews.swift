@@ -998,7 +998,7 @@ struct TargetNoteEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(entry.payee ?? "").font(.headline)
+            Text(entry.payee ?? "").heading(.name)
             if let sub = Self.subtitle(entry) { Text(sub).font(.caption).foregroundStyle(.secondary) }
             TextEditor(text: $initial).font(.body).frame(width: 300, height: 90)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
@@ -1032,7 +1032,7 @@ struct EditEntrySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Entry").font(.title2.weight(.semibold))
+            Text("Edit Entry").heading(.heading)
             Text("Entered by \(entry.enteredBy ?? "—")\(entry.updatedBy.map { " · last changed by \($0)" } ?? "") · version \(entry.version)")
                 .font(.caption).foregroundStyle(.secondary)
             Form {
@@ -1098,7 +1098,7 @@ struct AccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(account == nil ? "New Checking Account" : "Edit \(account!.name)").font(.title2.weight(.semibold))
+            Text(account == nil ? "New Checking Account" : "Edit \(account!.name)").heading(.heading)
             Form {
                 TextField("Code", text: $code).disabled(account != nil)
                     .help("A short name for it: letters, digits, _ or - (PNC_CHECKING)")
@@ -1146,7 +1146,7 @@ struct MatchSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Match PNC's Line").font(.title2.weight(.semibold))
+            Text("Match PNC's Line").heading(.heading)
             Text("\(shortDay(line.date)) · \(line.name ?? "—") · \(money2(line.amount))").foregroundStyle(.secondary)
             Text("The register entry it is (entries not cleared yet, closest amount first):").font(.callout)
             List(selection: $choice) {
@@ -1373,7 +1373,7 @@ struct ExpenseAccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New Category").font(.title2.weight(.semibold))
+            Text("New Category").heading(.heading)
             Form {
                 TextField("Name", text: $name)
                 Picker("Kind", selection: $kind) { Text("Expense").tag("expense"); Text("Income").tag("income"); Text("Transfer").tag("transfer") }

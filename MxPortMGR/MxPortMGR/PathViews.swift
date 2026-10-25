@@ -522,7 +522,7 @@ struct ResultSummary: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: icon).font(.title).foregroundStyle(color)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(result.decision.title).font(.title3.weight(.semibold))
+                    Text(result.decision.title).heading(.subheading)
                     Text(result.decision.reason).fixedSize(horizontal: false, vertical: true)
                     Text("\(result.engine) · \(result.status)\(result.method.map { " · " + $0.replacingOccurrences(of: "_", with: " ") } ?? "") · \(String(format: "%.0f", result.milliseconds)) ms")
                         .font(.caption).foregroundStyle(.secondary)
@@ -823,7 +823,7 @@ struct AttributionResultView: View {
                 Image(systemName: result.recommendation == "publish" ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(result.recommendation == "publish" ? .green : .orange).font(.title2)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(result.highlight).font(.headline)
+                    Text(result.highlight).heading(.name)
                     Text((result.recommendation == "publish" ? "Complete: " : "Review: ") + result.reasons.joined(separator: "; ") + ".")
                     Text(interpretation).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Text("\(result.engine) · \(result.method), monthly, Carino-linked").font(.caption).foregroundStyle(.secondary)

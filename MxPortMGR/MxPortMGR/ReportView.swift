@@ -107,7 +107,7 @@ struct ReportView: View {
                     Image(systemName: report.symbol).font(.title)
                     VStack(alignment: .leading) {
                         Text(report.title.uppercased()).font(.caption.weight(.bold)).foregroundStyle(.secondary)
-                        Text(report.headline).font(.title2.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                        Text(report.headline).heading(.heading).fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Text(report.source).font(.caption).foregroundStyle(.secondary)
@@ -397,7 +397,7 @@ struct LongRunView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(pick.reaction.isPlan ? "Staying with the plan: \(money(plan.medianEnd)) in the median future after \(result.settings.years) years."
                          : "“\(pick.reaction.title)”: \(money(pick.medianEnd)) vs \(money(plan.medianEnd)) for the plan in the median future — \(gap < 0 ? "" : "+")\(money(gap)) (\(signedPct(gap / plan.medianEnd, 1))).")
-                        .font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                        .heading(.subheading).fixedSize(horizontal: false, vertical: true)
                     if !pick.reaction.isPlan {
                         Text("It came out ahead of the plan in \(pct(pick.aheadOfPlan, 0)) of the futures. \(pick.aheadOfPlan > 0.5 ? "In these futures the reaction usually helped — check its worse outcomes and its risk below, and remember you can't know in advance which future you are in." : "Reacting sometimes works, but you can't know in advance which future you're in.")")
                             .fixedSize(horizontal: false, vertical: true)

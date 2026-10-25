@@ -23,7 +23,7 @@ struct ContentView: View {
     }
 
     private func sidebarRows(_ group: Screen.Group) -> some View {
-        ForEach(Screen.allCases.filter { $0.group == group }) { screen in
+        ForEach(Screen.allCases.filter { $0.group == group && PortSettings.shared.shows($0) }) { screen in
             Label(sidebarTitle(screen),
                   systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,6 +79,10 @@ struct ContentView: View {
         .task { start() }
         // Each place visited joins the history (Back and Forward, Navigation.swift).
         .onChange(of: store.place, initial: true) { store.recordPlace() }
+        // Settings ▸ Guidance ▸ Minimal closes a lesson-only page that is open.
+        .onChange(of: PortSettings.shared.guidance) {
+            if !PortSettings.shared.shows(store.screen) { store.go(.myPortfolio) }
+        }
         .onOpenURL { url in
             // mxportmgr://my-portfolio/CODE from MxDataHUB or MxJobsWMS (Shared/AppLinks.swift).
             if case let .myPortfolio(code)? = AppLink(url: url) {

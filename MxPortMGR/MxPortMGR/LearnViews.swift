@@ -37,7 +37,7 @@ struct WelcomeView: View {
                 .font(.callout)
             }
             Box(title: "The account now selected", symbol: store.portfolio.symbol) {
-                Text(store.portfolio.name).font(.title3.weight(.semibold))
+                Text(store.portfolio.name).heading(.subheading)
                 Text(store.portfolio.lesson).fixedSize(horizontal: false, vertical: true)
                 Button("See All Sample Portfolios") { store.go(.samples) }
             }
@@ -48,7 +48,7 @@ struct WelcomeView: View {
         Button { store.go(target) } label: {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: symbol).font(.largeTitle).foregroundStyle(Color.accentColor)
-                Text(title).font(.title3.weight(.semibold))
+                Text(title).heading(.subheading)
                 Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
@@ -83,9 +83,9 @@ struct ChoosePathView: View {
         ]) {
             Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 10) {
                 GridRow {
-                    Text("Question").font(.headline)
-                    Label("Active", systemImage: "wand.and.stars").font(.headline)
-                    Label("Passive", systemImage: "scope").font(.headline)
+                    Text("Question").heading(.name)
+                    Label("Active", systemImage: "wand.and.stars").heading(.name)
+                    Label("Passive", systemImage: "scope").heading(.name)
                 }
                 Divider().gridCellColumns(3)
                 ForEach(questions, id: \.0) { q in
@@ -102,7 +102,7 @@ struct ChoosePathView: View {
             HStack(spacing: 12) {
                 Image(systemName: "person.crop.circle.fill").font(.largeTitle).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Ready to work on your own account?").font(.title3.weight(.semibold))
+                    Text("Ready to work on your own account?").heading(.subheading)
                     Text("Investments walks your own holdings (My Portfolio) through six steps: choose Active or Passive index there, and steps 4 and 5 follow your choice. To learn on a sample first, copy one into My Portfolio (Library ▸ Sample Portfolios, or Start From a Sample).")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }

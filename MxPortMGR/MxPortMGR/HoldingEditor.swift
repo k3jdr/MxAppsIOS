@@ -65,14 +65,14 @@ struct EditHoldingSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if ticker == "CASH" {
-                Text("Edit Cash").font(.title2.weight(.semibold))
+                Text("Edit Cash").heading(.heading)
                 Form {
                     TextField("Cash ($)", value: $cash, format: .number.precision(.fractionLength(0...2)))
                 }
             } else {
                 let s = holding?.security
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Edit \(s?.displayTicker ?? ticker)").font(.title2.weight(.semibold))
+                    Text("Edit \(s?.displayTicker ?? ticker)").heading(.heading)
                     Text(s?.name ?? "").foregroundStyle(.secondary)
                     Text(price.map { "Latest price \(money($0))" + (s?.priceDate.map { " on \($0)" } ?? "") } ?? "No price yet: valued at cost")
                         .font(.callout).foregroundStyle(.secondary)

@@ -32,7 +32,7 @@ struct LessonCard: View {
             } label: {
                 HStack {
                     Image(systemName: symbol).foregroundStyle(.yellow)
-                    Text(title).font(.headline)
+                    Text(title).heading(.name)
                     Spacer()
                     Image(systemName: collapsed ? "chevron.down" : "chevron.up").font(.caption).foregroundStyle(.secondary)
                 }
@@ -63,7 +63,7 @@ struct MetricTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title2.weight(.semibold).monospacedDigit()).foregroundStyle(tint)
+            Text(value).heading(.figure).foregroundStyle(tint)
             if !caption.isEmpty { Text(caption).font(.caption2).foregroundStyle(.secondary).lineLimit(2) }
         }
         .padding(10)
@@ -84,7 +84,7 @@ struct Box<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 if let symbol { Image(systemName: symbol).foregroundStyle(.secondary) }
-                Text(title).font(.headline)
+                Text(title).heading(.name)
             }
             content
         }
@@ -168,11 +168,14 @@ struct StepPage<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title ?? store.title(store.screen)).font(.largeTitle.weight(.semibold))
-                    Text(subtitle).font(.title3).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(title ?? store.title(store.screen)).heading(.pageTitle)
+                    // Settings ▸ Guidance ▸ Minimal hides the introduction, Brief and Minimal the lesson.
+                    if PortSettings.shared.showsIntroductions {
+                        Text(subtitle).heading(.pageSubtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if store.screen.group == .mine { MyPortfolioBar(store: store) }
-                if !lesson.isEmpty {
+                if !lesson.isEmpty, PortSettings.shared.showsLessons {
                     LessonCard(store: store, id: store.screen.rawValue, title: lessonTitle, points: lesson)
                 }
                 content
@@ -298,7 +301,7 @@ struct MyPortfolioBar: View {
         HStack(spacing: 12) {
             Image(systemName: "person.crop.circle.badge.questionmark").font(.title2).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
-                Text("No portfolio open").font(.headline)
+                Text("No portfolio open").heading(.name)
                 Text("Open one from the security master or create a new one; the steps then work on it.").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -315,7 +318,7 @@ struct MyPortfolioBar: View {
                 Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
-                        Text("\(p.name) · \(p.srmCode ?? "")").font(.headline)
+                        Text("\(p.name) · \(p.srmCode ?? "")").heading(.name)
                         Text(store.openVersion == 0 ? "not saved yet" : "version \(store.openVersion)")
                             .font(.caption).foregroundStyle(.secondary)
                         if dirty {
@@ -396,7 +399,7 @@ struct CollapsibleBox<Content: View>: View {
                 HStack(spacing: 6) {
                     Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary).frame(width: 12)
                     Image(systemName: symbol).foregroundStyle(.secondary)
-                    Text(title).font(.headline)
+                    Text(title).heading(.name)
                     if !summary.isEmpty { Text(summary).font(.callout).foregroundStyle(.secondary) }
                     Spacer()
                     Text(collapsed ? "Show" : "Hide").font(.caption).foregroundStyle(.secondary)

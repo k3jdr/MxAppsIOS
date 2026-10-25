@@ -455,7 +455,7 @@ struct SecuritiesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(detail.security.name).font(.title2.bold()).textSelection(.enabled)
+                    Text(detail.security.name).heading(.heading).textSelection(.enabled)
                     Text([detail.security.ticker, detail.security.mic, detail.security.type, detail.security.sector]
                         .filter { !$0.isEmpty }.joined(separator: " · "))
                         .foregroundStyle(.secondary)
@@ -538,7 +538,7 @@ struct SecuritiesView: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
+            Text(title).heading(.name)
             content()
         }
     }

@@ -62,10 +62,12 @@ struct MxPortMGRApp: App {
                 .disabled(store.openPortfolio == nil || store.openVersion == 0)
             }
             CommandMenu("Guide") {
-                Button("Welcome") { store.go(.welcome) }
-                    .keyboardShortcut("0", modifiers: .command)
-                Button("Choose Your Path") { store.go(.choosePath) }
-                Divider()
+                LessonPageItems {
+                    Button("Welcome") { store.go(.welcome) }
+                        .keyboardShortcut("0", modifiers: .command)
+                    Button("Choose Your Path") { store.go(.choosePath) }
+                    Divider()
+                }
                 Section("Investments") {
                     ForEach(Array(Screen.myPath.enumerated()), id: \.element) { i, s in
                         Button(store.title(s, full: false)) { store.go(s) }
@@ -73,8 +75,10 @@ struct MxPortMGRApp: App {
                     }
                 }
                 Divider()
-                Menu("Learn the Why") {
-                    ForEach([Screen.whyOptimize, .whyAttribution, .activeVsPassive]) { s in Button(s.title) { store.go(s) } }
+                LessonPageItems {
+                    Menu("Learn the Why") {
+                        ForEach([Screen.whyOptimize, .whyAttribution, .activeVsPassive]) { s in Button(s.title) { store.go(s) } }
+                    }
                 }
                 Button("Securities") { store.go(.securities) }
                 Button("Sample Portfolios") { store.go(.samples) }
@@ -171,6 +175,10 @@ struct MxPortMGRApp: App {
                           || store.addingSecurities && store.addSecuritiesLink == nil)
             }
             QuickHelpCommands()
+        }
+        // MxPortMGR ▸ Settings (⌘,): the headings' fonts and the instruction level (PortSettings.swift).
+        Settings {
+            PortSettingsView()
         }
     }
 }

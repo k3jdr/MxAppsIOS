@@ -25,7 +25,7 @@ struct OpenPortfolioSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Open Portfolio").font(.title2.weight(.semibold))
+            Text("Open Portfolio").heading(.heading)
             Text("Portfolios kept in the security master (srm.portfolio), through the accounts service. One is open at a time.")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
@@ -93,7 +93,7 @@ struct NewPortfolioSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New Portfolio").font(.title2.weight(.semibold))
+            Text("New Portfolio").heading(.heading)
             Text("Created in the security master and opened. Its holdings, tax lots, preferences and every saved version are kept there.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
@@ -157,7 +157,7 @@ struct DecisionsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Decisions · \(store.srmCode)").font(.title2.weight(.semibold))
+            Text("Decisions · \(store.srmCode)").heading(.heading)
             Text("What was decided for this portfolio and why, kept in the security master with the portfolio's version at the time. Decisions are never edited: a change of mind is a new decision.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if store.openVersion == 0 {
@@ -226,7 +226,7 @@ struct DuplicatePortfolioSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Duplicate \(store.srmCode)").font(.title2.weight(.semibold))
+            Text("Duplicate \(store.srmCode)").heading(.heading)
             Text("A new portfolio with the saved version's holdings, lots, cash, benchmark and preferences, then opened. Unsaved changes are settled first.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
@@ -258,7 +258,7 @@ struct RenamePortfolioSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Rename \(store.srmCode)").font(.title2.weight(.semibold))
+            Text("Rename \(store.srmCode)").heading(.heading)
             Text("The code stays the same — MxDataHUB and links (mxportmgr://my-portfolio/\(store.srmCode)) use it. The new name is saved with File ▸ Save.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextField("Name", text: $name)
@@ -286,7 +286,7 @@ struct ImportHoldingsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Import Holdings from \(preview.file)").font(.title2.weight(.semibold))
+            Text("Import Holdings from \(preview.file)").heading(.heading)
             Text("\(preview.rows.count) rows: \(usable) found in the security master. Rows without a cost are costed at today's price; without a date, today. Nothing is saved until File ▸ Save.")
                 .font(.callout).foregroundStyle(.secondary)
             Table(preview.rows) {
@@ -352,7 +352,7 @@ struct PolicyBenchmarkSheet: View {
     var body: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Policy Benchmarks").font(.headline)
+                Text("Policy Benchmarks").heading(.name)
                 List(list, selection: $selected) { b in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(b.code).font(.body.monospaced())

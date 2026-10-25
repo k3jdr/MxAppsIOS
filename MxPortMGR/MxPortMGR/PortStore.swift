@@ -115,8 +115,8 @@ enum Screen: String, CaseIterable, Identifiable {
     static let myPath: [Screen] = [.myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution]
 
     /// The next and previous screens in the guide's order.
-    /// The screens Back and Next step through: the sidebar's, in its order.
-    static let guide: [Screen] = allCases.filter { Group.sidebar.contains($0.group) }
+    /// The screens Back and Next step through: the sidebar's, in its order (less those Settings ▸ Guidance hides).
+    static var guide: [Screen] { allCases.filter { Group.sidebar.contains($0.group) && PortSettings.shared.shows($0) } }
     var next: Screen? { Screen.guide.firstIndex(of: self).flatMap { $0 + 1 < Screen.guide.count ? Screen.guide[$0 + 1] : nil } }
     var previous: Screen? { Screen.guide.firstIndex(of: self).flatMap { $0 > 0 ? Screen.guide[$0 - 1] : nil } }
 }
@@ -160,6 +160,8 @@ nonisolated struct TaxEstimate: Sendable {
 final class PortStore {
     var screen: Screen = .myPortfolio {
         didSet {
+            // A lesson-only page that Settings ▸ Guidance hides opens My Portfolio instead.
+            if !PortSettings.shared.shows(screen) { screen = .myPortfolio; return }
             UserDefaults.standard.set(screen.rawValue, forKey: "screen")
             // The Investments path always works on the user's own account (My Portfolio).
             if screen.group == .mine, selectedID != "mine" { selectedID = "mine" }

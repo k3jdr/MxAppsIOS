@@ -25,7 +25,7 @@ struct ReportLibraryView: View {
             driverMatrix
             ForEach(ReportTier.all) { tier in
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(tier.title).font(.title2.weight(.semibold))
+                    Text(tier.title).heading(.heading)
                     Text(tier.summary).foregroundStyle(.secondary)
                     AdaptiveColumns(minimum: 340, spacing: 12, rowSpacing: 12) {
                         ForEach(MarketReport.all.filter { $0.tier == tier.id }) { reportCard($0).copyBlock() }
@@ -124,7 +124,7 @@ struct ReportLibraryView: View {
             HStack(alignment: .top) {
                 Image(systemName: r.symbol).font(.title2).foregroundStyle(Color.accentColor).frame(width: 30)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(r.title).font(.headline)
+                    Text(r.title).heading(.name)
                     Text(r.publisher).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     Text(r.frequency).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
@@ -358,7 +358,7 @@ struct MorningBriefingView: View {
             HStack(spacing: 6) {
                 Text("\(n)").font(.caption.weight(.bold)).frame(width: 18, height: 18).background(Color.accentColor.opacity(0.2), in: Circle())
                 Image(systemName: symbol).foregroundStyle(.secondary)
-                Text(title).font(.headline)
+                Text(title).heading(.name)
             }
             content()
             Text(use).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

@@ -30,7 +30,7 @@ struct SamplesView: View {
             HStack {
                 Image(systemName: p.symbol).font(.title2).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading) {
-                    Text(p.name).font(.headline)
+                    Text(p.name).heading(.name)
                     Text("\(p.account.rawValue) · \(money(p.total)) · vs \(p.benchmark) · \(p.style.rawValue)").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

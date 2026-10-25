@@ -240,7 +240,7 @@ struct ReportNotesSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(editing ? "Edit Notes" : "Add Notes").font(.headline)
+            Text(editing ? "Edit Notes" : "Add Notes").heading(.name)
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: report.symbol).font(.title3).foregroundStyle(Color.accentColor).frame(width: 24)
                 VStack(alignment: .leading, spacing: 1) {

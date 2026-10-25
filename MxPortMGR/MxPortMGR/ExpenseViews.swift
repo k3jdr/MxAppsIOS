@@ -567,12 +567,12 @@ struct ExpenseLedgersView: View {
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Circle().fill(Color(hex: l.color) ?? .secondary).frame(width: 10, height: 10)
-                Text(l.name).font(.headline).foregroundStyle(l.active ? .primary : .secondary)
+                Text(l.name).heading(.name).foregroundStyle(l.active ? .primary : .secondary)
                 Text(l.kind).font(.caption).foregroundStyle(.secondary)
                 if let a = l.expenseAccount { Text("→ \(a)").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
                 Text("\(l.entries) items").font(.caption).foregroundStyle(.secondary)
-                Text(money2(l.spent)).monospacedDigit().font(.headline)
+                Text(money2(l.spent)).monospacedDigit().heading(.name)
                 if let b = l.budget {
                     Text("of \(money2(b))").monospacedDigit().foregroundStyle(.secondary)
                     Text(l.remaining.map { $0 >= 0 ? "\(money2($0)) left" : "\(money2(-$0)) over" } ?? "")
@@ -900,7 +900,7 @@ struct ExpenseEntrySheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Entry").font(.title2.weight(.semibold))
+            Text("Edit Entry").heading(.heading)
             Text("Entered by \(entry.enteredBy ?? "—")\(entry.updatedBy.map { " · last changed by \($0)" } ?? "") · version \(entry.version)")
                 .font(.caption).foregroundStyle(.secondary)
             Form {
@@ -985,7 +985,7 @@ struct LedgerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(ledger == nil ? "New Expense Account" : "Edit \(ledger!.name)").font(.title2.weight(.semibold))
+            Text(ledger == nil ? "New Expense Account" : "Edit \(ledger!.name)").heading(.heading)
             Form {
                 TextField("Code", text: $code).disabled(ledger != nil).help("A short name for it: letters, digits, _ or - (TECH_2026)")
                 TextField("Name", text: $name)
@@ -1052,7 +1052,7 @@ struct FundSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Fund \(ledger.name)").font(.title2.weight(.semibold))
+            Text("Fund \(ledger.name)").heading(.heading)
             Form {
                 Picker("From", selection: $payeeId) {
                     ForEach(payees.filter { ledger.fundingPayees.contains($0.id) || $0.active }) { Text(TargetPicker.title($0)).tag(Optional($0.id)) }
@@ -1106,7 +1106,7 @@ struct CardChargesSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add Card Charges").font(.title2.weight(.semibold))
+            Text("Add Card Charges").heading(.heading)
             Text("Charges from Credit Card Accounts in the last year that no expense account has yet. Each is added once, linked to its charge.")
                 .font(.callout).foregroundStyle(.secondary)
             if loading { ProgressView() }
@@ -1168,7 +1168,7 @@ struct LineSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(line == nil ? "New Budget Line" : "Edit \(line!.name)").font(.title2.weight(.semibold))
+            Text(line == nil ? "New Budget Line" : "Edit \(line!.name)").heading(.heading)
             Form {
                 TextField("Name", text: $name)
                 Picker("Kind", selection: $kind) { ForEach(Self.kinds, id: \.self) { Text($0).tag($0) } }
@@ -1238,7 +1238,7 @@ struct AssetSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(asset == nil ? "New Asset" : "Edit \(asset!.name)").font(.title2.weight(.semibold))
+            Text(asset == nil ? "New Asset" : "Edit \(asset!.name)").heading(.heading)
             Form {
                 TextField("Name", text: $name)
                 Picker("Bought as", selection: $entryId) {
@@ -1319,7 +1319,7 @@ struct TrainingSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(record == nil ? "New Training" : "Edit \(record!.course)").font(.title2.weight(.semibold))
+            Text(record == nil ? "New Training" : "Edit \(record!.course)").heading(.heading)
             Form {
                 TextField("Course", text: $course)
                 TextField("Provider", text: $provider)
@@ -1381,7 +1381,7 @@ struct TripSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(trip == nil ? "New Trip" : "Edit \(trip!.name)").font(.title2.weight(.semibold))
+            Text(trip == nil ? "New Trip" : "Edit \(trip!.name)").heading(.heading)
             Form {
                 TextField("Trip", text: $name)
                 TextField("Traveler", text: $traveler)
