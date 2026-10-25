@@ -383,7 +383,8 @@ are sent there the same way, unless the security master already has one for that
 The register's bar has **Hide entries before** a date (or **Recent** ▸ the last 7, 30 or 90 days, this month, this
 year) and **Rows**: how many of the register's rows show at once (6–40, 22 at first; the rest scroll inside it). Fewer
 rows leave room for the rest of the page, so it needs less scrolling. Rows are as tall as Settings ▸ Text ▸ Registers
-and tables makes them.
+and tables makes them. Its columns: Line, Date, Num, Target, Payment, Deposit, ✓ (cleared) and Balance; an entry's
+category and memo are in *Edit Entry…* (double-click) and in *Copy Entry*.
 
 ### Target accounts (Banking ▸ Target Accounts)
 

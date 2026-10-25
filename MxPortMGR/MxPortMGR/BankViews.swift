@@ -363,8 +363,6 @@ struct CheckingView: View {
         "Date": .date({ $0.date }, display: { shortDay($0.date) }),
         "Num": .text { $0.checkNo ?? $0.kind },
         "Target": .text { $0.payee },
-        "Category": .text { $0.expenseAccount },
-        "Memo": .text { $0.memo },
         "Payment": .number({ $0.amount < 0 ? -$0.amount : nil }, display: { $0.amount < 0 ? money2(-$0.amount) : nil }),
         "Deposit": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
         "✓": .text { ["cleared": "Cleared", "reconciled": "Reconciled", "void": "Void"][$0.status] ?? "Not cleared" },
@@ -386,8 +384,6 @@ struct CheckingView: View {
                 TableColumn("Target") { e in
                     TargetCell(entry: e, website: website(e)) { id, note in await saveNote(id, note) }
                 }.width(min: 140, ideal: 190)
-                TableColumn("Category") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 120)
-                TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
                 TableColumn("Payment") { e in Text(e.amount < 0 ? money2(-e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("Deposit") { e in Text(e.amount > 0 ? money2(e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("✓") { e in statusMark(e) }.width(44)
