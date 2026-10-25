@@ -130,6 +130,8 @@ struct Payee: Decodable, Identifiable, Hashable {
     /// The registers whose target lists offer it (FundingSource).
     var fundingSources: [String]
     var yearTotal: Double
+    /// Every payment with it as the target, in all registers and years (`yearTotal` is this year's alone).
+    var totalPaid: Double?
     var lastPaid: String?
     /// Its link (TargetAccountLinks.swift), shown on its name wherever it is a target.
     var link: TargetLink?
@@ -1254,6 +1256,8 @@ struct TargetAccountsView: View {
                 return sources.isEmpty ? "None" : sources.map { $0 == .checking ? "Checking" : "Credit card" }.joined(separator: ", ")
             },
             "This year": .number({ $0.yearTotal == 0 ? nil : abs($0.yearTotal) }, display: { $0.yearTotal == 0 ? nil : money2(abs($0.yearTotal)) }),
+            "Total paid": .number({ p in p.totalPaid.flatMap { $0 == 0 ? nil : abs($0) } },
+                                  display: { p in p.totalPaid.flatMap { $0 == 0 ? nil : money2(abs($0)) } }),
             "Last paid": .date({ $0.lastPaid }, display: { $0.lastPaid.map(shortDay) }),
         ]
     }
@@ -1263,7 +1267,7 @@ struct TargetAccountsView: View {
         let columns = Self.columns(names)
         let listed = b.payees.filter { $0.active || showInactive }
         let shown = LocalGrid.rows(listed, grid, columns)
-        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Target Account Name… (names are unique), Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
+        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments, every payment in all years (Total paid) and the last one. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Target Account Name… (names are unique), Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
             HStack {
                 Button("New Target Account…") { adding = true }
                 Button("Add from Card Registers…") { addingFromCards = true }
@@ -1293,6 +1297,11 @@ struct TargetAccountsView: View {
                     Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary)
                         .help("Calculated by MxPortMGR from this year's check, card and expense entries with this target")
                 }.width(min: 60, ideal: 84)
+                TableColumn("Total paid") { p in
+                    let total = p.totalPaid ?? 0
+                    Text(total == 0 ? "" : money2(abs(total))).monospacedDigit().foregroundStyle(total < 0 ? .green : .primary)
+                        .help("Every check, card and expense entry with this target, in all years (green: money that came in)")
+                }.width(min: 70, ideal: 90)
                 TableColumn("Last paid") { p in
                     Text(shortDay(p.lastPaid)).monospacedDigit().foregroundStyle(.secondary)
                         .help("The latest entry with this target, from the registers")

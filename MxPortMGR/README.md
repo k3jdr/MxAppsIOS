@@ -382,8 +382,9 @@ are sent there the same way, unless the security master already has one for that
 A target account is where a register entry's money goes to or comes from — a utility, a card, a brokerage, a person
 (`srm.payee`; called External Accounts before 2026-10-25). The page lists them all in one table (the *Show inactive
 and closed* box adds those): name (as its link when it has one, with its status when not active), category,
-**Funding** (a checkbook mark when the Checking register pays it, a card when the card registers do), this year's
-payments and the last one. Each column header's button sorts and filters it, as in Excel (the registers' own: values
+**Funding** (a checkbook mark when the Checking register pays it, a card when the card registers do), *This year*
+(this calendar year's payments), *Total paid* (every payment in all registers and years — a card target last paid in
+2025 shows nothing this year but its total here) and *Last paid*. Each column header's button sorts and filters it, as in Excel (the registers' own: values
 to tick, text contains, number and date ranges), and *Clear Sort & Filters* above the table puts it back. Above the
 table: *New Target Account…*, *Add from Card Registers…* and *New Category…*.
 

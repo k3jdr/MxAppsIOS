@@ -412,7 +412,7 @@ def expense_accounts(conn, q=None):
                p.institution, p.account_last4 AS last4, pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
                p.updated_by AS "updatedBy", p.updated_at AS "updatedAt",
                coalesce(sum(t.spent) FILTER (WHERE extract(year FROM t.txn_date) = %%s), 0) AS "yearTotal",
-               max(t.txn_date) AS "lastPaid"
+               coalesce(sum(t.spent), 0) AS "totalPaid", max(t.txn_date) AS "lastPaid"
           FROM srm.payee p LEFT JOIN (%s) t USING (payee_id) LEFT JOIN srm.payee_link pl USING (payee_id)
          GROUP BY p.payee_id, pl.payee_id ORDER BY lower(p.name)""" % SPEND, (year,))
     return {"year": year, "expenseAccounts": accts, "payees": [nest_link(p, "link") for p in payees]}

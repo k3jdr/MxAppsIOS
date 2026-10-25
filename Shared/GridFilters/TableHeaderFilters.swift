@@ -104,6 +104,7 @@ private struct HeaderGeometry: NSViewRepresentable {
 
     static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator)
+        coordinator.stopWatchingMouse()
     }
 
     final class FlippedView: NSView {
@@ -117,6 +118,8 @@ private struct HeaderGeometry: NSViewRepresentable {
         private weak var tableView: NSTableView?
         private weak var header: NSTableHeaderView?
         private var reported: [String: CGRect] = [:]
+        /// Watches for the mouse button let go in the table's window (the end of a column drag).
+        private var mouseUps: Any?
 
         func update() {
             guard let probe, probe.window != nil else { return }
@@ -140,6 +143,23 @@ private struct HeaderGeometry: NSViewRepresentable {
                 clip.postsBoundsChangedNotifications = true
                 center.addObserver(self, selector: #selector(changed(_:)), name: NSView.boundsDidChangeNotification, object: clip)
             }
+            // After a column is dragged wider or narrower, measure again once the button is let go — and report
+            // even unchanged rectangles, in case the report made during the drag didn't reach the buttons.
+            if mouseUps == nil {
+                mouseUps = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+                    MainActor.assumeIsolated {
+                        if let self, event.window != nil, event.window === self.tableView?.window {
+                            DispatchQueue.main.async { [weak self] in self?.measure(force: true) }
+                        }
+                    }
+                    return event
+                }
+            }
+        }
+
+        func stopWatchingMouse() {
+            if let mouseUps { NSEvent.removeMonitor(mouseUps) }
+            mouseUps = nil
         }
 
         /// The table whose scroll view covers the middle of `probe`.
@@ -160,9 +180,14 @@ private struct HeaderGeometry: NSViewRepresentable {
             return best?.table
         }
 
-        @objc private func changed(_ notification: Notification) { measure() }
+        /// A column resized or moved, or the header scrolled: measure on the next turn of the run loop. A column
+        /// dragged with the mouse reports its width while SwiftUI is updating the window, when a change to the
+        /// buttons' places can be lost; measured after, it isn't.
+        @objc private func changed(_ notification: Notification) {
+            DispatchQueue.main.async { [weak self] in self?.measure() }
+        }
 
-        private func measure() {
+        private func measure(force: Bool = false) {
             guard let probe, let parent, let tableView, let header else { return }
             var rects: [String: CGRect] = [:]
             for (index, column) in tableView.tableColumns.enumerated() where !column.isHidden {
@@ -170,7 +195,7 @@ private struct HeaderGeometry: NSViewRepresentable {
                 guard parent.titles.contains(title) else { continue }
                 rects[title] = probe.convert(header.headerRect(ofColumn: index), from: header)
             }
-            guard rects != reported else { return }
+            guard force || rects != reported else { return }
             reported = rects
             parent.report(rects)
         }
