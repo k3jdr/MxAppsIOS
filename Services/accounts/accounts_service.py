@@ -75,6 +75,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import bank
 import cards
 import expenses
+import secure
 
 VERSION = 1
 PORT = 8774
@@ -106,6 +107,8 @@ DESCRIBE = {
         {"method": "GET", "path": "/expense-ledgers/{code}", "summary": "An expense account's book: budget lines, entries, subscriptions, assets, training, trips and alerts"},
         {"method": "POST", "path": "/expense-ledgers/{code}/entries", "summary": "Add an expense account entry (an item bought, a refund, a funding transfer)"},
         {"method": "GET", "path": "/expense-accounts", "summary": "Expense accounts with their payees and this year's totals"},
+        {"method": "GET", "path": "/secure-accounts", "summary": "Secure accounts: products and services held an account with, their subscription payment and renewal"},
+        {"method": "PUT", "path": "/secure-accounts/{id}", "summary": "Create (id 0) or change a secure account (version-checked; names unique); keys and passwords stay in the Mac's Keychain"},
         {"method": "GET", "path": "/accounts/{code}", "summary": "An account with its open tax lots, valued"},
         {"method": "PUT", "path": "/accounts/{code}", "summary": "Save an account as a new version (version-checked: 409 when it changed since it was opened); rewrites today's holdings"},
         {"method": "GET", "path": "/accounts/{code}/versions", "summary": "Every saved version of an account, newest first"},
@@ -1398,6 +1401,10 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 elif parts[:1] == ["cards"]:
                     out = cards.route(conn, method, parts, body, q)
+                    if out is None:
+                        return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
+                elif parts[:1] == ["secure-accounts"]:
+                    out = secure.route(conn, method, parts, body, q)
                     if out is None:
                         return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 elif parts[:1] in (["bank"], ["expense-accounts"], ["payees"]):

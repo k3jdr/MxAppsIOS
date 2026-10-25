@@ -138,6 +138,7 @@ struct ContentView: View {
         case .cards: CardsView(store: store)
         case .expenseLedgers: ExpenseLedgersView(store: store)
         case .expenses: TargetAccountsView(store: store)
+        case .secureAccounts: SecureAccountsView(store: store)
         case .welcome: WelcomeView(store: store)
         case .choosePath: ChoosePathView(store: store)
         case .whyOptimize: WhyOptimizeView(store: store)

@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -466,6 +466,25 @@ the accounts service (`PUT` / `DELETE /payees/<id>/link`), apart from the accoun
 never conflicts with someone editing them. A change made on one screen shows on the others (each loads again after a
 save; the Checking register also every 30 seconds). The target's note (the pencil) stays as it was: with a link, it
 shows on the last four digits and the note mark, and the link's hover text on its words.
+
+### Secure accounts (Banking ▸ Secure Accounts)
+
+Modeled on Target Accounts: the products and services you hold an account with — software, data services, APIs —
+kept in the security master (`srm.secure_account`, V035; the accounts service's `/secure-accounts`). Each has:
+
+* **Product**: its name (unique whatever its case), a description and its **product key** (a license key).
+* **Service**: its web address (*Open the Service Page* from the row's menu), its API (base URL or endpoint), its
+  **service key** (an API key) and its status — active, inactive or closed (*Show inactive and closed* lists those).
+* **Owner** (your user account): your user name and **password**.
+* **Subscription**: the last payment (date, amount) and the renewal — its date, its amount, and whether it
+  **auto-renews**, you **renew** it by hand, or you **decline** it and let it lapse (shown in orange). *Renewing* above
+  the table adds up the renewal amounts not declined.
+
+The product key, service key and password are kept in this Mac's Keychain (service `com.k3jdr.MxAcctMGR.secure-accounts`),
+never in the security master: other Macs don't see them; the editor masks them unless *Show the keys and password* is
+on, and each has a copy button. The table's rows are read-only with Excel-style sorting and filters on every column;
+right-click a row for *Edit Secure Account Name…* (refused when another account has the name, whatever its case; Save
+closes it) or *Edit Secure Account Details…* (also a double-click). *New Secure Account…* adds one.
 
 ### Learn the Why
 
