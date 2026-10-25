@@ -122,7 +122,7 @@ struct SecureAccountsView: View {
     @State private var adding = false
     /// The table's Excel-style sorting and column filters (the header buttons).
     @State private var grid = GridQueryOptions()
-    /// Edit Secure Account Details or Edit Secure Account Name (a row's context menu) is open for this account.
+    /// Edit Service Details or Edit Service Name (a row's context menu) is open for this account.
     @State private var details: SecureAccount?
     @State private var renaming: SecureAccount?
     @State private var showInactive = false
@@ -134,7 +134,7 @@ struct SecureAccountsView: View {
     var body: some View {
         StepPage(store: store, subtitle: "The products and services you hold an account with — software, data services, APIs — with their service, your logon and the subscription's payment and renewal.", lesson: [
             "Each secure account is a product: its name and description, its service's web address and API, and whether the service is active. Your user name is kept with it; its product key, service key and password stay in this Mac's Keychain, never in the security master.",
-            "Its subscription has the last payment (date and amount) and the renewal: when, how much, and whether it renews on its own, you renew it by hand, or you decline it and let it lapse. Sort or filter the Renewal column to see what comes due next.",
+            "Its subscription has the last payment (date and amount) and the renewal: when, how much, and whether it renews on its own, you renew it by hand, or you decline it and let it lapse — in Edit Service Details.",
         ]) {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             if let accounts { accountsTable(accounts) }
@@ -142,7 +142,7 @@ struct SecureAccountsView: View {
         .task { await load() }
         #if DEBUG
         // Self-tests, once the list is loaded: open New Secure Account (-secureAccountNew YES), Import Passwords and Keys
-        // (-secureImport YES), or a row's Edit Secure Account Details (-secureDetailsEdit ID) or Edit Secure Account Name
+        // (-secureImport YES), or a row's Edit Service Details (-secureDetailsEdit ID) or Edit Service Name
         // (-secureNameEdit ID).
         .task(id: accounts == nil) {
             guard let accounts else { return }
@@ -179,11 +179,6 @@ struct SecureAccountsView: View {
         "Status": .text { $0.status.capitalized },
         "Service": .text { $0.serviceUrl.flatMap(Self.host) },
         "User name": .text { $0.ownerUserName },
-        "Last payment": .date({ $0.paymentDate }, display: { $0.paymentDate.map(shortDay) }),
-        "Paid": .number({ $0.paymentAmount }, display: { $0.paymentAmount.map(money2) }),
-        "Renewal": .date({ $0.renewalDate }, display: { $0.renewalDate.map(shortDay) }),
-        "Renewal amount": .number({ $0.renewalAmount }, display: { $0.renewalAmount.map(money2) }),
-        "Renewal status": .text { $0.renewalDate == nil && $0.renewalAmount == nil ? nil : RenewalStatus.title($0.renewalStatus) },
     ]
 
     /// A service address's host, as the table shows it.
@@ -195,7 +190,7 @@ struct SecureAccountsView: View {
         let listed = all.filter { $0.active || showInactive }
         let shown = LocalGrid.rows(listed, grid, Self.columns)
         let renewing = listed.filter { $0.renewalStatus != RenewalStatus.decline.rawValue }.compactMap(\.renewalAmount).reduce(0, +)
-        return Box(title: "Secure accounts", symbol: "lock.shield", help: "The products and services you hold an account with: the service, your user name, the last payment and the renewal. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Secure Account Name… (names are unique) and Edit Secure Account Details… — description, service address and API, status, your logon, the product and service keys, the payment and the renewal. Keys and passwords stay in this Mac's Keychain.") {
+        return Box(title: "Service Product Table", symbol: "lock.shield", help: "The products and services you hold an account with: the product, its status, the service and your user name. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Service Name… (names are unique) and Edit Service Details… — description, service address and API, status, your logon, the product and service keys, the subscription's payment and renewal. Keys and passwords stay in this Mac's Keychain.") {
             HStack {
                 Button("New Secure Account…") { adding = true }
                 Button("Import Passwords and Keys…") { importing = true }
@@ -218,16 +213,6 @@ struct SecureAccountsView: View {
                     Text(a.serviceUrl.flatMap(Self.host) ?? "").foregroundStyle(.secondary).help(a.serviceUrl ?? "")
                 }.width(min: 80, ideal: 140)
                 TableColumn("User name") { a in Text(a.ownerUserName ?? "").foregroundStyle(.secondary) }.width(min: 70, ideal: 120)
-                TableColumn("Last payment") { a in Text(shortDay(a.paymentDate)).monospacedDigit() }.width(min: 70, ideal: 84)
-                TableColumn("Paid") { a in Text(a.paymentAmount.map(money2) ?? "").monospacedDigit() }.width(min: 60, ideal: 80)
-                TableColumn("Renewal") { a in Text(shortDay(a.renewalDate)).monospacedDigit() }.width(min: 70, ideal: 84)
-                TableColumn("Renewal amount") { a in Text(a.renewalAmount.map(money2) ?? "").monospacedDigit() }.width(min: 70, ideal: 96)
-                TableColumn("Renewal status") { a in
-                    // Only for a subscription: an account with a renewal date or amount.
-                    Text(a.renewalDate == nil && a.renewalAmount == nil ? "" : RenewalStatus.title(a.renewalStatus))
-                        .foregroundStyle(a.renewalStatus == RenewalStatus.decline.rawValue ? .orange : .primary)
-                        .help(RenewalStatus(rawValue: a.renewalStatus)?.help ?? "")
-                }.width(min: 70, ideal: 90)
             }
             .tableText()
             // One menu on the whole row: its words aren't selectable text, so a right-click on them doesn't bring up
@@ -239,8 +224,8 @@ struct SecureAccountsView: View {
                                  apply: { grid = $0 })
             .contextMenu(forSelectionType: SecureAccount.ID.self) { ids in
                 if ids.count == 1, let a = all.first(where: { ids.contains($0.id) }) {
-                    Button("Edit Secure Account Name…") { renaming = a }
-                    Button("Edit Secure Account Details…") { details = a }
+                    Button("Edit Service Name…") { renaming = a }
+                    Button("Edit Service Details…") { details = a }
                     if let url = a.serviceUrl.flatMap(LinkRichText.url(fromAddress:)) {
                         Divider()
                         Button("Open the Service Page") { LinkInfo.follow(url) }
@@ -272,7 +257,7 @@ struct SecureAccountsView: View {
 
 // MARK: - The editor
 
-/// New Secure Account, or a row's Edit Secure Account Details: the product, its service, your logon and the
+/// New Secure Account, or a row's Edit Service Details: the product, its service, your logon and the
 /// subscription. The product key, service key and password are saved in this Mac's Keychain once the security master
 /// has the account (a new one needs its id first).
 struct SecureAccountSheet: View {
@@ -304,7 +289,7 @@ struct SecureAccountSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(account == nil ? "New Secure Account" : "Edit Secure Account Details")
+            Text(account == nil ? "New Secure Account" : "Edit Service Details")
                 .heading(.heading)
                 .padding([.horizontal, .top], 18)
             if let account {
@@ -427,7 +412,7 @@ struct SecureAccountSheet: View {
         ]
         body["paymentAmount"] = hasPayment ? (paymentAmount.map { $0 as Any } ?? NSNull()) : NSNull()
         body["renewalAmount"] = hasRenewal ? (renewalAmount.map { $0 as Any } ?? NSNull()) : NSNull()
-        // Details leave the name as saved (Edit Secure Account Name changes it).
+        // Details leave the name as saved (Edit Service Name changes it).
         if let account { body["version"] = account.version } else { body["name"] = name }
         let answer = await save(body)
         if let e = answer.error { error = e; return }
@@ -447,7 +432,7 @@ struct SecureAccountSheet: View {
     }
 }
 
-// MARK: - Edit Secure Account Name
+// MARK: - Edit Service Name
 
 /// Renames a secure account (a row's context menu). Names are unique whatever their case: one another account already
 /// has can't be saved (the security master refuses it too, for a name taken since). Save closes the dialog.
@@ -471,13 +456,13 @@ struct SecureNameSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Edit Secure Account Name").heading(.heading)
+            Text("Edit Service Name").heading(.heading)
             Form {
                 TextField("Product name", text: $name)
                     .onSubmit { if canSave { Task { await finish() } } }
             }
             if let taken {
-                Label("There is already a secure account named \(taken): names are unique, whatever their case.", systemImage: "exclamationmark.triangle.fill")
+                Label("There is already a service named \(taken): names are unique, whatever their case.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange).font(.callout)
             } else if let error {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)

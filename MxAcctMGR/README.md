@@ -477,14 +477,15 @@ kept in the security master (`srm.secure_account`, V035; the accounts service's 
   **service key** (an API key) and its status — active, inactive or closed (*Show inactive and closed* lists those).
 * **Owner** (your user account): your user name and **password**.
 * **Subscription**: the last payment (date, amount) and the renewal — its date, its amount, and whether it
-  **auto-renews**, you **renew** it by hand, or you **decline** it and let it lapse (shown in orange). *Renewing* above
-  the table adds up the renewal amounts not declined.
+  **auto-renews**, you **renew** it by hand, or you **decline** it and let it lapse — kept in *Edit Service
+  Details*. *Renewing* above the table adds up the renewal amounts not declined.
 
 The product key, service key and password are kept in this Mac's Keychain (service `com.k3jdr.MxAcctMGR.secure-accounts`),
 never in the security master: other Macs don't see them; the editor masks them unless *Show the keys and password* is
-on, and each has a copy button. The table's rows are read-only with Excel-style sorting and filters on every column;
-right-click a row for *Edit Secure Account Name…* (refused when another account has the name, whatever its case; Save
-closes it) or *Edit Secure Account Details…* (also a double-click). *New Secure Account…* adds one.
+on, and each has a copy button. The **Service Product Table** lists each one's product, status, service and user name,
+read-only with Excel-style sorting and filters on every column; right-click a row for *Edit Service Name…* (refused
+when another service has the name, whatever its case; Save closes it) or *Edit Service Details…* (also a double-click).
+*New Secure Account…* adds one.
 
 **Import Passwords and Keys…** reads a credentials worksheet from the workbook **open in Microsoft Excel** (Apple
 Events: macOS asks once whether MxAcctMGR may control Excel; an encrypted workbook can't be read from its file, and no
