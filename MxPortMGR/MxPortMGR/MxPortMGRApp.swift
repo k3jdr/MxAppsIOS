@@ -125,8 +125,6 @@ struct MxPortMGRApp: App {
                     .keyboardShortcut("e", modifiers: [.command, .option, .shift])
                 Button("CBOE Volatility Index (VIX)") { store.go(.vix) }
                     .keyboardShortcut("v", modifiers: [.command, .option])
-                Button("Compute Asset Class") { store.go(.compute) }
-                    .keyboardShortcut("u", modifiers: [.command, .option])
                 Divider()
                 Section("The Five Most Important") {
                     ForEach(MarketReport.topFive) { r in
@@ -137,7 +135,14 @@ struct MxPortMGRApp: App {
                 Divider()
                 ForEach(ReportTier.all) { tier in
                     Menu(tier.title) {
-                        ForEach(MarketReport.all.filter { $0.tier == tier.id }) { r in Button(r.title) { store.openReport(r.id) } }
+                        ForEach(MarketReport.all.filter { $0.tier == tier.id }) { r in
+                            Button(r.title) { store.openReport(r.id) }
+                            // The hyperscalers' capex sits with the chip makers' sales.
+                            if r.id == MarketReport.semiconductors.id {
+                                Button("Compute Hyperscalers Tracking") { store.go(.compute) }
+                                    .keyboardShortcut("u", modifiers: [.command, .option])
+                            }
+                        }
                     }
                 }
                 Divider()

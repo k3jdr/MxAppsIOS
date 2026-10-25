@@ -63,7 +63,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .earningsCalendar: "Earnings Calendar"
         case .earningsDay: "Earnings by Day"
         case .vix: "CBOE Volatility Index (VIX)"
-        case .compute: "Compute Asset Class"
+        case .compute: "Compute Hyperscalers Tracking"
         case .reportWalkthrough: "Report Walkthrough"
         case .securities: "Securities"
         case .samples: "Sample Portfolios"
