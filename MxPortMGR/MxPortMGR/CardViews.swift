@@ -74,7 +74,7 @@ struct CardEntry: Decodable, Identifiable, Hashable {
                       payeeInstitution: payeeInstitution, payeeNote: payeeNote, expenseAccountId: expenseAccountId,
                       expenseAccount: expenseAccount, memo: memo, amount: amount, status: status, bankLineId: cardLineId,
                       bankDate: postedDate, bankName: issuerName, version: version, enteredBy: enteredBy,
-                      updatedBy: updatedBy, balance: balance)
+                      updatedBy: updatedBy, balance: balance, line: 0)
     }
 }
 

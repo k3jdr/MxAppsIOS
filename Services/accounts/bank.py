@@ -5,6 +5,7 @@
     GET  /bank/accounts/<code>/register          its entries (running balance) and the bank's lines not in it
     POST /bank/accounts/<code>/transactions      add an entry {date, kind, checkNo, payeeId|payee, expenseAccountId, memo, amount, by}
     PUT  /bank/transactions/<id>                 change one {version, …}: refused (409) when someone changed it since
+    POST /bank/transactions/<id>/move            move it one line up or down in the register {direction: up | down}
     POST /bank/lines/<id>/accept                 add the bank's line to the register (its payee found by name), cleared
     POST /bank/lines/<id>/match                  match it to an entry {txnId}
     POST /bank/accounts/<code>/import            read the bank's downloads now (srm-loader POST /load/pnc-bank)
@@ -15,6 +16,10 @@
 
 Each entry's amount is signed: negative leaves the account (checks, debits, fees). A register entry is never
 deleted: it is voided (status void) so the check number stays accounted for.
+
+The register is listed, and its balance run, in its own order — each entry's line, as on the shared paper register
+(V031): a new entry gets its line from the database (after the last line dated on or before it), and the only way
+to change it is to move the entry one line up or down. No endpoint sets a line.
 """
 
 import datetime as dt
@@ -114,7 +119,8 @@ TXN_SQL = """
            coalesce(t.expense_account_id, p.expense_account_id) AS "expenseAccountId",
            e.name AS "expenseAccount", t.memo, t.amount, t.status, t.bank_line_id AS "bankLineId",
            b.posted_date AS "bankDate", b.name AS "bankName", t.version, t.entered_by AS "enteredBy",
-           t.created_at AS "enteredAt", t.updated_by AS "updatedBy", t.updated_at AS "updatedAt"
+           t.created_at AS "enteredAt", t.updated_by AS "updatedBy", t.updated_at AS "updatedAt",
+           t.register_seq AS line
       FROM srm.bank_txn t
       LEFT JOIN srm.payee p USING (payee_id)
       LEFT JOIN srm.expense_account e ON e.expense_account_id = coalesce(t.expense_account_id, p.expense_account_id)
@@ -124,7 +130,7 @@ TXN_SQL = """
 def register(conn, code):
     aid = _account_id(conn, code)
     acct = [a for a in accounts(conn)["accounts"] if a["code"].upper() == code.upper()][0]
-    rows = fetch(conn, TXN_SQL + " WHERE t.bank_account_id = %s ORDER BY t.txn_date, t.check_no NULLS LAST, t.txn_id", (aid,))
+    rows = fetch(conn, TXN_SQL + " WHERE t.bank_account_id = %s ORDER BY t.register_seq", (aid,))
     balance = float(acct["openingBalance"])
     for r in rows:
         if r["status"] != "void":
@@ -236,6 +242,21 @@ def update_transaction(conn, txn_id, body):
     code = fetch(conn, "SELECT code FROM srm.bank_account WHERE bank_account_id = %s", (aid,))[0]["code"]
     conn.commit()
     return register(conn, code)
+
+
+def move_transaction(conn, txn_id, body):
+    """Moves an entry one line up or down in its register (swaps it with its neighbour); answers with the register.
+    The first line can't move up, nor the last down: nothing changes."""
+    direction = body.get("direction")
+    if direction not in ("up", "down"):
+        raise ValueError("direction must be up or down")
+    rows = fetch(conn, """SELECT a.code FROM srm.bank_txn t JOIN srm.bank_account a USING (bank_account_id)
+                           WHERE t.txn_id = %s""", (txn_id,))
+    if not rows:
+        raise LookupError("no register entry %s" % txn_id)
+    fetch(conn, "SELECT srm.move_bank_txn(%s, %s)", (txn_id, direction == "down"))
+    conn.commit()
+    return register(conn, rows[0]["code"])
 
 
 def _line(conn, line_id):
@@ -410,6 +431,8 @@ def route(conn, method, parts, body, q):
         return import_downloads(conn, parts[2])
     if len(parts) == 3 and parts[:2] == ["bank", "transactions"] and method == "PUT":
         return update_transaction(conn, int(parts[2]), body)
+    if len(parts) == 4 and parts[:2] == ["bank", "transactions"] and parts[3] == "move" and method == "POST":
+        return move_transaction(conn, int(parts[2]), body)
     if len(parts) == 4 and parts[:2] == ["bank", "lines"] and parts[3] in ("accept", "match") and method == "POST":
         return (accept_line if parts[3] == "accept" else match_line)(conn, int(parts[2]), body)
     if parts == ["expense-accounts"] and method == "GET":

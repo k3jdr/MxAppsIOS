@@ -57,6 +57,8 @@ struct RegisterEntry: Decodable, Identifiable, Hashable {
     var enteredBy: String?
     var updatedBy: String?
     var balance: Double
+    /// The entry's line in the register (1, 2, 3 …), as on the paper register; changed only by Move Up / Move Down.
+    var line: Int
 }
 
 struct BankLine: Decodable, Identifiable, Hashable {
@@ -129,6 +131,10 @@ nonisolated enum BankClient {
     }
     static func add(_ code: String, _ body: [String: Any]) async throws -> CheckRegister {
         try await AccountsClient.request("POST", "/bank/accounts/\(code)/transactions", body: body.merging(["by": by]) { a, _ in a }, as: CheckRegister.self)
+    }
+    /// Moves an entry one line up or down in its register (the only way its line changes).
+    static func move(_ id: Int, down: Bool) async throws -> CheckRegister {
+        try await AccountsClient.request("POST", "/bank/transactions/\(id)/move", body: ["direction": down ? "down" : "up", "by": by], as: CheckRegister.self)
     }
     static func update(_ id: Int, _ body: [String: Any]) async throws -> CheckRegister {
         try await AccountsClient.request("PUT", "/bank/transactions/\(id)", body: body.merging(["by": by]) { a, _ in a }, as: CheckRegister.self)
@@ -298,6 +304,7 @@ struct CheckingView: View {
 
     /// The register's columns for sorting and filtering, by their titles.
     static let columns: [String: LocalGridColumn<RegisterEntry>] = [
+        "Line": .number({ Double($0.line) }, display: { String($0.line) }),
         "Date": .date({ $0.date }, display: { shortDay($0.date) }),
         "Num": .text { $0.checkNo ?? $0.kind },
         "Target": .text { $0.payee },
@@ -313,10 +320,12 @@ struct CheckingView: View {
         let focused = focusOn ? r.entries.filter { $0.date >= focusDay } : r.entries
         let hidden = r.entries.count - focused.count
         let shown = LocalGrid.rows(focused, grid, Self.columns)
-        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry, oldest first, with the running balance (over the whole register, also when earlier entries are hidden, filtered or sorted otherwise). Each column header's button sorts and filters it, as in Excel. Double-click to change one (the register is shared: a change made from an older copy is refused). Void keeps a check's number accounted for.") {
+        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry in the register's own order — the paper register's, line by line (Move Up / Move Down) — with the running balance in that order (over the whole register, also when earlier entries are hidden, filtered or sorted otherwise). Each column header's button sorts and filters it, as in Excel. Double-click to change one (the register is shared: a change made from an older copy is refused). Void keeps a check's number accounted for.") {
             focusBar(hidden: hidden)
             GridFilterStatus(shown: shown.count, of: focused.count, options: $grid)
+            moveBar(r)
             Table(shown, selection: $selection) {
+                TableColumn("Line") { e in Text("\(e.line)").monospacedDigit().foregroundStyle(.secondary) }.width(min: 36, ideal: 48)
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Num") { e in Text(e.checkNo ?? kindLabel(e.kind)).monospacedDigit().foregroundStyle(e.checkNo == nil ? .secondary : .primary) }.width(min: 40, ideal: 60)
                 TableColumn("Target") { e in
@@ -334,6 +343,11 @@ struct CheckingView: View {
                 if chosen.count == 1, let e = chosen.first {
                     Button("Edit Entry…") { editing = e }
                     if e.payeeId != nil { Button("Edit Note on \(e.payee ?? "the Target")…") { noteFor = e } }
+                    Divider()
+                    Button("Move Up") { Task { await move(e, down: false) } }
+                        .disabled(!grid.isEmpty || e.line <= 1)
+                    Button("Move Down") { Task { await move(e, down: true) } }
+                        .disabled(!grid.isEmpty || e.line >= r.entries.count)
                     Divider()
                     if e.status == "open" { Button("Mark Cleared") { Task { await setStatus(e, "cleared") } } }
                     if e.status == "cleared" || e.status == "reconciled" { Button("Mark Not Cleared") { Task { await setStatus(e, "open") } } }
@@ -521,6 +535,31 @@ struct CheckingView: View {
             if let r = register { draft.checkNo = nextCheck(r) }
         }
         return error
+    }
+
+    /// Above the register: Move Up and Move Down for the selected entry (⌥⌘↑ / ⌥⌘↓), so the register's order can be
+    /// made the paper register's. Only in the register's own order: sorted or filtered, the neighbours aren't the lines.
+    private func moveBar(_ r: CheckRegister) -> some View {
+        let chosen = selection.count == 1 ? r.entries.first { selection.contains($0.id) } : nil
+        let why = !grid.isEmpty ? "Clear the sort and filters to move entries: moves follow the register's own order"
+            : chosen == nil ? "Select one entry to move it" : nil
+        return HStack(spacing: 8) {
+            Button { if let e = chosen { Task { await move(e, down: false) } } } label: { Label("Move Up", systemImage: "arrow.up") }
+                .keyboardShortcut(.upArrow, modifiers: [.option, .command])
+                .disabled(why != nil || (chosen?.line ?? 1) <= 1 || busy)
+            Button { if let e = chosen { Task { await move(e, down: true) } } } label: { Label("Move Down", systemImage: "arrow.down") }
+                .keyboardShortcut(.downArrow, modifiers: [.option, .command])
+                .disabled(why != nil || (chosen?.line ?? r.entries.count) >= r.entries.count || busy)
+            Text(why ?? (chosen.map { "Line \($0.line) of \(r.entries.count): ⌥⌘↑ and ⌥⌘↓ move it, to match the paper register" } ?? ""))
+                .font(.callout).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .controlSize(.small)
+        .help("The register keeps the paper register's order, not the dates': move an entry one line at a time. Its line is kept by the application — nothing else changes it.")
+    }
+
+    private func move(_ e: RegisterEntry, down: Bool) async {
+        await run { try await BankClient.move(e.id, down: down) }
     }
 
     private func setStatus(_ e: RegisterEntry, _ status: String) async {
