@@ -125,7 +125,7 @@ struct MxPortMGRApp: App {
                     .keyboardShortcut("e", modifiers: [.command, .option, .shift])
                 Button("CBOE Volatility Index (VIX)") { store.go(.vix) }
                     .keyboardShortcut("v", modifiers: [.command, .option])
-                Button("Compute — Hyperscaler Capex") { store.go(.compute) }
+                Button("Compute Asset Class") { store.go(.compute) }
                     .keyboardShortcut("u", modifiers: [.command, .option])
                 Divider()
                 Section("The Five Most Important") {

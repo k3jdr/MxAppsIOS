@@ -23,7 +23,7 @@ One window (`MxPortMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Asset Class, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. |
@@ -62,7 +62,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
-| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · Compute — Hyperscaler Capex ⌥⌘U · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
+| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · Compute Asset Class ⌥⌘U · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
 
 ### Back and Forward
@@ -254,7 +254,7 @@ markets within seconds, others shape positioning over weeks or months.
   last few trading days, else Cboe itself — read at most hourly and kept in the app's Caches folder for when neither
   can be reached. The Morning Briefing's illustrative
   VIX panel and the Report Library's morning reading link to it.
-* **Compute** (⌥⌘U) — AI compute as an asset theme, followed through what the hyperscalers spend to build it, with
+* **Compute Asset Class** (⌥⌘U) — AI compute as an asset theme, followed through what the hyperscalers spend to build it, with
   real reported figures: Microsoft, Alphabet, Amazon, Meta and Oracle's quarterly capex — combined for the latest
   calendar quarter all have reported and against a year earlier, over the last four quarters, and as a share of their
   operating cash flow and revenue — in a stacked chart by calendar quarter (3, 5 or 10 years); a table company by

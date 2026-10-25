@@ -297,7 +297,7 @@ struct ComputeView: View {
     // MARK: Parts
 
     private var loadingBox: some View {
-        Box(title: "Compute", symbol: "cpu") {
+        Box(title: "Compute Asset Class", symbol: "cpu") {
             if compute.loading {
                 HStack { ProgressView().controlSize(.small); Text("Reading the hyperscalers' statements (FMP, through the accounts service)…").foregroundStyle(.secondary) }
             } else {
