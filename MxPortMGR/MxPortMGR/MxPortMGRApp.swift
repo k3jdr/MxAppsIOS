@@ -123,7 +123,7 @@ struct MxPortMGRApp: App {
                     .keyboardShortcut("e", modifiers: [.command, .option])
                 Button("Earnings Today") { store.openEarningsDay(EarningsDates.today()) }
                     .keyboardShortcut("e", modifiers: [.command, .option, .shift])
-                Button("VIX") { store.go(.vix) }
+                Button("CBOE Volatility Index (VIX)") { store.go(.vix) }
                     .keyboardShortcut("v", modifiers: [.command, .option])
                 Button("Compute — Hyperscaler Capex") { store.go(.compute) }
                     .keyboardShortcut("u", modifiers: [.command, .option])
