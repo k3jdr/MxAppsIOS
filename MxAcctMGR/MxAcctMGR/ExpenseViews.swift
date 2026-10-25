@@ -253,6 +253,8 @@ struct ExpenseLedgersView: View {
     @AppStorage("expenseLedger") private var selected = ""
     @AppStorage("expenseTab") private var tab = "register"
     @AppStorage("expenseLineShown") private var lineShown = 0
+    /// How many of the register's rows show at once.
+    @AppStorage("expenseRegisterRows") private var registerRows = 26
     @State private var ledgers: [ExpenseLedger] = []
     @State private var data: ExpenseBookData?
     @State private var book: ExpenseBook?
@@ -458,6 +460,7 @@ struct ExpenseLedgersView: View {
                         .font(.callout).foregroundStyle(.secondary).monospacedDigit()
                         .help("The entries shown, and what they add up to (made, not scheduled; funding counts negative)")
                 }
+                RowsStepper(rows: $registerRows, range: 8...40, what: "register")
             }
             GridFilterStatus(shown: rows.count, of: byLine.count, options: $grid)
             Table(rows, selection: $selection) {
@@ -486,7 +489,7 @@ struct ExpenseLedgersView: View {
             .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
                                  loadValues: { (LocalGrid.values(byLine, column: $0, grid, Self.columns), false) },
                                  apply: { grid = $0 })
-            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 8), 26)))
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 8), registerRows)))
         }
     }
 

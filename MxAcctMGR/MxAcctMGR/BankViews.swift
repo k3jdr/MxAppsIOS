@@ -496,10 +496,7 @@ struct CheckingView: View {
             if focusOn, hidden > 0 {
                 Text("\(hidden) earlier entr\(hidden == 1 ? "y" : "ies") hidden").font(.callout).foregroundStyle(.secondary)
             }
-            Stepper("Rows: \(registerRows)", value: $registerRows, in: 6...40)
-                .monospacedDigit()
-                .fixedSize()
-                .help("How many of the register's rows show at once; the rest scroll inside it. Fewer leave room for the rest of the page.")
+            RowsStepper(rows: $registerRows, what: "register")
         }
     }
 
@@ -1216,6 +1213,8 @@ struct TargetAccountsView: View {
     @State private var renaming: Payee?
     @State private var newAccount = false
     @State private var showInactive = false
+    /// How many of the table's rows show at once.
+    @AppStorage("targetAccountsRows") private var tableRows = 22
     /// The table's rows are read-only: their context menu edits the account's details and its link.
     @State private var selected: Payee.ID?
 
@@ -1300,6 +1299,7 @@ struct TargetAccountsView: View {
                 Toggle("Show inactive and closed", isOn: $showInactive).toggleStyle(.checkbox)
                 Spacer()
                 Text("Paid in \(String(b.year)): \(money2(shown.reduce(0) { $0 + max(0, $1.yearTotal) }))").monospacedDigit().foregroundStyle(.secondary)
+                RowsStepper(rows: $tableRows)
             }
             GridFilterStatus(shown: shown.count, of: listed.count, options: $grid)
             Table(shown, selection: $selected) {
@@ -1346,7 +1346,7 @@ struct TargetAccountsView: View {
                     payeeLinkMenu(PayeeLinkTarget(p))
                 }
             }
-            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), 22)))
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), tableRows)))
         }
     }
 

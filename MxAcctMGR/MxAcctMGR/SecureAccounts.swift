@@ -126,6 +126,8 @@ struct SecureAccountsView: View {
     @State private var details: SecureAccount?
     @State private var renaming: SecureAccount?
     @State private var showInactive = false
+    /// How many of the table's rows show at once.
+    @AppStorage("secureAccountsRows") private var tableRows = 22
     /// Import Passwords and Keys… is open.
     @State private var importing = false
     /// The table's rows are read-only: their context menu edits the account.
@@ -199,6 +201,7 @@ struct SecureAccountsView: View {
                 Spacer()
                 Text("Renewing: \(money2(renewing))").monospacedDigit().foregroundStyle(.secondary)
                     .help("The renewal amounts of the accounts listed that aren't declined")
+                RowsStepper(rows: $tableRows)
             }
             GridFilterStatus(shown: shown.count, of: listed.count, options: $grid)
             Table(shown, selection: $selected) {
@@ -234,7 +237,7 @@ struct SecureAccountsView: View {
             } primaryAction: { ids in
                 if ids.count == 1, let a = all.first(where: { ids.contains($0.id) }) { details = a }
             }
-            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), 22)))
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), tableRows)))
         }
     }
 

@@ -104,6 +104,21 @@ extension View {
     }
 }
 
+/// How many of a table's rows show at once — the rest scroll inside it — kept per table (an @AppStorage key): fewer
+/// leave room for the rest of the page, so it needs less scrolling.
+struct RowsStepper: View {
+    @Binding var rows: Int
+    var range: ClosedRange<Int> = 6...40
+    var what = "table"
+
+    var body: some View {
+        Stepper("Rows: \(rows)", value: $rows, in: range)
+            .monospacedDigit()
+            .fixedSize()
+            .help("How many of the \(what)'s rows show at once; the rest scroll inside it. Fewer leave room for the rest of the page.")
+    }
+}
+
 /// Back and Next along the guide, with where they lead.
 struct StepFooter: View {
     @Bindable var store: PortStore

@@ -180,6 +180,9 @@ struct CardsView: View {
     @AppStorage("cardAccount") private var selected = ""
     /// The statement period the register shows (its closing date), or all of it.
     @AppStorage("cardStatementShown") private var period = ""
+    /// How many of the register's and the statements' rows show at once.
+    @AppStorage("cardRegisterRows") private var registerRows = 22
+    @AppStorage("cardStatementRows") private var statementRows = 12
     @State private var accounts: [CardAccount] = []
     @State private var register: CardRegister?
     @State private var book: ExpenseBook?
@@ -361,6 +364,7 @@ struct CardsView: View {
                 if period.count < r.entries.count {
                     Text("\(period.count) of \(r.entries.count) entries").font(.callout).foregroundStyle(.secondary)
                 }
+                RowsStepper(rows: $registerRows, what: "register")
             }
             GridFilterStatus(shown: rows.count, of: period.count, options: $grid)
             Table(rows, selection: $selection) {
@@ -404,7 +408,7 @@ struct CardsView: View {
             .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
                                  loadValues: { (LocalGrid.values(period, column: $0, grid, Self.columns), false) },
                                  apply: { grid = $0 })
-            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 6), 22)))
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 6), registerRows)))
         }
     }
 
@@ -439,6 +443,10 @@ struct CardsView: View {
                 Text(r.account.closeDay == nil ? "Set the statement closing day (Edit…) to see the periods." : "No statement has closed since the register starts.")
                     .font(.callout).foregroundStyle(.secondary)
             } else {
+                HStack {
+                    Spacer()
+                    RowsStepper(rows: $statementRows, range: 3...30, what: "statements table")
+                }
                 Table(r.statements) {
                     TableColumn("Closed") { s in Text(shortDay(s.closingDate)).monospacedDigit().help("\(shortDay(s.periodStart)) – \(shortDay(s.closingDate)), \(s.entries) entries") }.width(min: 70, ideal: 84)
                     TableColumn("Previous") { s in Text(money2(s.previousBalance)).monospacedDigit() }.width(min: 70, ideal: 90)
@@ -467,7 +475,7 @@ struct CardsView: View {
                 } primaryAction: { ids in
                     if let s = r.statements.first(where: { ids.contains($0.id) }) { statement = s }
                 }
-                .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(r.statements.count, 3), 12)))
+                .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(r.statements.count, 3), statementRows)))
             }
         }
     }
