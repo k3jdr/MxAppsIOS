@@ -142,6 +142,14 @@ nonisolated enum CardClient {
     static func register(_ code: String) async throws -> CardRegister {
         try await AccountsClient.request("GET", "/cards/accounts/\(code)/register", as: CardRegister.self)
     }
+    /// The card registers' targets that aren't target accounts yet (Target Accounts ▸ Add from Card Registers…).
+    static func targets() async throws -> [CardTarget] {
+        try await AccountsClient.request("GET", "/cards/targets", as: CardTargets.self).targets
+    }
+    /// Makes these card targets target accounts (recipients of credit card payments), their entries linked to them.
+    static func addTargets(_ names: [String]) async throws -> CardTargets {
+        try await AccountsClient.request("POST", "/cards/targets", body: signed(["names": names]), as: CardTargets.self)
+    }
     static func add(_ code: String, _ body: [String: Any]) async throws -> CardRegister {
         try await AccountsClient.request("POST", "/cards/accounts/\(code)/transactions", body: signed(body), as: CardRegister.self)
     }

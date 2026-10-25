@@ -383,7 +383,16 @@ A target account is where a register entry's money goes to or comes from — a u
 (`srm.payee`; called External Accounts before 2026-10-25). The page lists them all in one table (the *Show inactive
 and closed* box adds those): name (as its link when it has one, with its status when not active), category,
 **Funding** (a checkbook mark when the Checking register pays it, a card when the card registers do), this year's
-payments and the last one. Above the table: *New Target Account…* and *New Category…*.
+payments and the last one. Each column header's button sorts and filters it, as in Excel (the registers' own: values
+to tick, text contains, number and date ranges), and *Clear Sort & Filters* above the table puts it back. Above the
+table: *New Target Account…*, *Add from Card Registers…* and *New Category…*.
+
+**Add from Card Registers…** lists the targets credit card entries carry without a target account, as the card company
+names them (`GET /cards/targets`), with their entries, total, last date and kinds. The merchants (charges, credits)
+start ticked; the card company's own lines (payments, interest, fees, adjustments) don't. Adding makes each ticked one
+a target account that the card registers offer (a recipient of credit card payments), in the category its entries
+mostly have, and links those entries to it (`POST /cards/targets`); a card line with the same name later is filed to
+it too, as card lines find their target by name. A name a target account already has just gains the card source.
 
 The rows aren't edited in place. Right-clicking anywhere on a row (its words aren't selectable text, so the menu is
 the same on every column) offers:

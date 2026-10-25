@@ -363,3 +363,111 @@ struct TargetNameSheet: View {
         if error == nil { dismiss() }
     }
 }
+
+// MARK: - Add from Card Registers
+
+/// A name the card registers' entries carry without a target account (as the card company gives it).
+struct CardTarget: Decodable, Identifiable, Hashable {
+    var name: String
+    var entries: Int
+    var total: Double
+    var first: String?
+    var last: String?
+    var kinds: [String]
+    /// False for the card company's own lines (payments, interest, fees, adjustments).
+    var merchant: Bool
+    var id: String { name }
+}
+
+struct CardTargets: Decodable {
+    var targets: [CardTarget]
+    var added: Int?
+    var linked: Int?
+}
+
+/// Target Accounts ▸ Add from Card Registers…: the card registers' targets that aren't target accounts yet — the
+/// merchants ticked, the card company's own lines not — added as target accounts that the card registers offer, each
+/// in the category its entries mostly have, with its entries linked to it.
+struct AddCardTargetsSheet: View {
+    var added: () async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var targets: [CardTarget]?
+    @State private var chosen = Set<String>()
+    @State private var problem: String?
+    @State private var saving = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add from Card Registers").font(.title2.weight(.semibold))
+            Text("The targets of credit card entries that aren't target accounts yet, as the card company names them. Those ticked become target accounts that the card registers offer, each in the category its entries mostly have, with those entries linked to it; a card line with the same name later is filed to it too. The card company's own lines (payments, interest, fees, adjustments) start unticked.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let targets {
+                if targets.isEmpty {
+                    ContentUnavailableView("Every card target is a target account", systemImage: "checkmark.circle",
+                                           description: Text("The card registers' entries all have target accounts."))
+                } else {
+                    HStack {
+                        Button("Select All") { chosen = Set(targets.map(\.name)) }
+                        Button("Select None") { chosen = [] }
+                        Spacer()
+                        Text("\(chosen.count) of \(targets.count) selected").foregroundStyle(.secondary)
+                    }
+                    Table(targets) {
+                        TableColumn("") { t in
+                            Toggle("", isOn: Binding(get: { chosen.contains(t.name) },
+                                                     set: { if $0 { chosen.insert(t.name) } else { chosen.remove(t.name) } }))
+                                .labelsHidden()
+                        }
+                        .width(24)
+                        TableColumn("Target (as the card company names it)") { t in
+                            Text(t.name).foregroundStyle(t.merchant ? .primary : .secondary)
+                        }
+                        TableColumn("Entries") { t in Text("\(t.entries)").monospacedDigit() }.width(54)
+                        TableColumn("Total") { t in Text(money2(t.total)).monospacedDigit() }.width(90)
+                        TableColumn("Last") { t in Text(shortDay(t.last)).monospacedDigit().foregroundStyle(.secondary) }.width(84)
+                        TableColumn("Kind") { t in Text(t.kinds.joined(separator: ", ")).foregroundStyle(.secondary) }.width(min: 60, ideal: 90)
+                    }
+                    .textSelection(.disabled)
+                    .frame(minHeight: 320)
+                }
+            } else if problem == nil {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+            }
+            if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            HStack {
+                Spacer()
+                if saving { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(chosen.count == 1 ? "Add 1 Target Account" : "Add \(chosen.count) Target Accounts") { Task { await add() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(chosen.isEmpty || saving)
+            }
+        }
+        .padding(18)
+        .frame(width: 640, height: 600)
+        .task { await load() }
+    }
+
+    private func load() async {
+        do {
+            let found = try await CardClient.targets()
+            targets = found
+            chosen = Set(found.filter(\.merchant).map(\.name))
+            problem = nil
+        } catch {
+            problem = describe(error)
+        }
+    }
+
+    private func add() async {
+        saving = true
+        defer { saving = false }
+        do {
+            _ = try await CardClient.addTargets(targets?.map(\.name).filter(chosen.contains) ?? [])
+            await added()
+            dismiss()
+        } catch {
+            problem = describe(error)
+        }
+    }
+}

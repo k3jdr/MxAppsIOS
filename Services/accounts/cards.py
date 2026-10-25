@@ -13,6 +13,11 @@
     PUT  /cards/accounts/<code>/statements/<closing>   what the statement says {statementBalance, minimumDue, dueDate, notes}
     POST /cards/accounts/<code>/import                 {filename, text}: the download saved in the card's drop folder, then
                                                        read (srm-loader POST /load/card-downloads); with no file, read them now
+    GET  /cards/targets                                the card registers' targets that aren't target accounts: each name as
+                                                       the card company gives it, with its entries, total, dates and kinds
+    POST /cards/targets                                make them target accounts {names: [...], by}: each a recipient of credit
+                                                       card payments, in the category its entries mostly have, its entries
+                                                       linked to it (a name a target account has already gets the card source)
 
 Amounts are signed as a statement reads them: positive adds to the balance owed (charges, fees, interest), negative
 lowers it (payments, credits). An entry is never deleted: it is voided.
@@ -416,8 +421,60 @@ def import_downloads(conn, code, body):
             **register(conn, code)}
 
 
+# ------------------------------------------------------------------------------------------------------ card targets
+
+# The card company's own lines aren't targets: payments come from checking, interest, fees and adjustments from the card.
+OWN_KINDS = ("payment", "interest", "fee", "adjustment")
+
+
+def card_targets(conn):
+    """The names card entries carry without a target account (as the card company gives them), each with its entries,
+    total, first and last date and kinds; `merchant` is false for the card company's own lines."""
+    rows = fetch(conn, """
+        SELECT t.payee_name AS name, count(*) AS entries, sum(t.amount) AS total, min(t.txn_date) AS first,
+               max(t.txn_date) AS last, array_agg(DISTINCT t.kind) AS kinds
+          FROM srm.card_txn t
+         WHERE t.payee_id IS NULL AND coalesce(btrim(t.payee_name), '') <> '' AND t.status <> 'void'
+         GROUP BY t.payee_name ORDER BY count(*) DESC, lower(t.payee_name)""")
+    for r in rows:
+        r["merchant"] = not set(r["kinds"]) <= set(OWN_KINDS)
+    return {"targets": rows}
+
+
+def add_card_targets(conn, body):
+    """Makes card targets target accounts (recipients of credit card payments) and links their entries to them."""
+    names = [n.strip() for n in body.get("names") or [] if isinstance(n, str) and n.strip()]
+    if not names:
+        raise ValueError("names lists the card targets to add")
+    by = str(body.get("by") or "MxPortMGR")[:80]
+    added = linked = 0
+    for name in names:
+        found = fetch(conn, "SELECT payee_id FROM srm.payee WHERE lower(name) = lower(%s)", (name,))
+        if found:
+            pid = found[0]["payee_id"]
+            fetch(conn, """UPDATE srm.payee SET funding_sources = array_append(funding_sources, 'card')
+                            WHERE payee_id = %s AND NOT ('card' = ANY (funding_sources))""", (pid,))
+        else:
+            # Its category: the one its entries mostly have (the card company's category, or as entered).
+            category = fetch(conn, """SELECT expense_account_id FROM srm.card_txn
+                                     WHERE payee_id IS NULL AND lower(payee_name) = lower(%s) AND expense_account_id IS NOT NULL
+                                     GROUP BY 1 ORDER BY count(*) DESC LIMIT 1""", (name,))
+            pid = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, funding_sources, updated_by)
+                                 VALUES (%s, %s, '{card}', %s) RETURNING payee_id""",
+                        (name[:120], category[0]["expense_account_id"] if category else None, by))[0]["payee_id"]
+            added += 1
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE srm.card_txn SET payee_id = %s, version = version + 1, updated_by = %s, updated_at = now()
+                            WHERE payee_id IS NULL AND lower(payee_name) = lower(%s)""", (pid, by, name))
+            linked += cur.rowcount
+    conn.commit()
+    return {"added": added, "linked": linked, **card_targets(conn)}
+
+
 def route(conn, method, parts, body, q):
     """The card endpoints' answer, or None when the path isn't one of them."""
+    if parts == ["cards", "targets"]:
+        return card_targets(conn) if method == "GET" else add_card_targets(conn, body) if method == "POST" else None
     if parts == ["cards", "accounts"] and method == "GET":
         return accounts(conn)
     if len(parts) == 3 and parts[:2] == ["cards", "accounts"] and method == "PUT":

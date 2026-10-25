@@ -1182,6 +1182,10 @@ struct TargetAccountsView: View {
     @State private var book: ExpenseBook?
     @State private var problem: String?
     @State private var adding = false
+    /// Add from Card Registers… is open.
+    @State private var addingFromCards = false
+    /// The table's Excel-style sorting and column filters (the header buttons).
+    @State private var grid = GridQueryOptions()
     /// Edit Target Details or Edit Target Account Name (a row's context menu) is open for this account.
     @State private var details: Payee?
     @State private var renaming: Payee?
@@ -1203,12 +1207,14 @@ struct TargetAccountsView: View {
         // A link changed (here or on a register's target): the table shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await load() } }
         #if DEBUG
-        // Self-tests, once the list is loaded: open New Target Account (-targetAccountNew YES), or a row's Edit Target
+        // Self-tests, once the list is loaded: open New Target Account (-targetAccountNew YES), Add from Card Registers
+        // (-targetAccountsFromCards YES), or a row's Edit Target
         // Details (-targetDetailsEdit PAYEE_ID) or Edit Target Account Name (-targetNameEdit PAYEE_ID).
         .task(id: book == nil) {
             guard let book else { return }
             let defaults = UserDefaults.standard
             if defaults.bool(forKey: "targetAccountNew") { adding = true }
+            if defaults.bool(forKey: "targetAccountsFromCards") { addingFromCards = true }
             if defaults.object(forKey: "targetDetailsEdit") != nil {
                 details = book.payees.first { $0.id == defaults.integer(forKey: "targetDetailsEdit") }
             }
@@ -1219,6 +1225,9 @@ struct TargetAccountsView: View {
         #endif
         .sheet(isPresented: $adding) {
             TargetAccountSheet(payee: nil, expenseAccounts: book?.expenseAccounts ?? []) { body in await saveNew(body) }
+        }
+        .sheet(isPresented: $addingFromCards) {
+            AddCardTargetsSheet { await load() }
         }
         .sheet(item: $details) { p in
             TargetAccountSheet(payee: p, expenseAccounts: book?.expenseAccounts ?? [], detailsOnly: true) { body in await saveDetails(p.id, body) }
@@ -1235,18 +1244,37 @@ struct TargetAccountsView: View {
         }
     }
 
+    /// The table's columns for sorting and filtering, by their titles.
+    static func columns(_ categories: [Int: String]) -> [String: LocalGridColumn<Payee>] {
+        [
+            "Target account": .text { $0.name },
+            "Category": .text { p in p.expenseAccountId.flatMap { categories[$0] } },
+            "Funding": .text { p in
+                let sources = FundingSource.allCases.filter { p.fundingSources.contains($0.rawValue) }
+                return sources.isEmpty ? "None" : sources.map { $0 == .checking ? "Checking" : "Credit card" }.joined(separator: ", ")
+            },
+            "This year": .number({ $0.yearTotal == 0 ? nil : abs($0.yearTotal) }, display: { $0.yearTotal == 0 ? nil : money2(abs($0.yearTotal)) }),
+            "Last paid": .date({ $0.lastPaid }, display: { $0.lastPaid.map(shortDay) }),
+        ]
+    }
+
     private func payeesTable(_ b: ExpenseBook) -> some View {
         let names = Dictionary(uniqueKeysWithValues: b.expenseAccounts.map { ($0.id, $0.name) })
-        let shown = b.payees.filter { $0.active || showInactive }
-        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. Right-click a row (anywhere on it) for Edit Target Account Name… (names are unique), Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
+        let columns = Self.columns(names)
+        let listed = b.payees.filter { $0.active || showInactive }
+        let shown = LocalGrid.rows(listed, grid, columns)
+        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Target Account Name… (names are unique), Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
             HStack {
                 Button("New Target Account…") { adding = true }
+                Button("Add from Card Registers…") { addingFromCards = true }
+                    .help("Make the credit card entries' targets (as the card company names them) target accounts the card registers offer")
                 Button("New Category…") { newAccount = true }
                     .help("A category the registers file entries under (Utilities, Insurance …): each target account is in one")
                 Toggle("Show inactive and closed", isOn: $showInactive).toggleStyle(.checkbox)
                 Spacer()
                 Text("Paid in \(String(b.year)): \(money2(shown.reduce(0) { $0 + max(0, $1.yearTotal) }))").monospacedDigit().foregroundStyle(.secondary)
             }
+            GridFilterStatus(shown: shown.count, of: listed.count, options: $grid)
             Table(shown, selection: $selected) {
                 TableColumn("Target account") { p in
                     HStack(spacing: 4) {
@@ -1273,6 +1301,10 @@ struct TargetAccountsView: View {
             // One menu on the whole row: its words aren't selectable text, so a right-click on them doesn't bring up
             // the text menu (Edit commands, Services) instead.
             .textSelection(.disabled)
+            // Each column header's button sorts and filters it, as in Excel.
+            .columnHeaderFilters(types: LocalGrid.types(columns), options: grid,
+                                 loadValues: { (LocalGrid.values(listed, column: $0, grid, columns), false) },
+                                 apply: { grid = $0 })
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
                     Button("Edit Target Account Name…") { renaming = p }
