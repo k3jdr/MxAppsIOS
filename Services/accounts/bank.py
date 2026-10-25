@@ -462,6 +462,10 @@ def save_payee(conn, pid, body):
             conn.rollback()
             raise Conflict("%s changed this target account since you opened it" % (cur["updated_by"] or "someone"),
                            version=cur["version"])
+        # Names are unique whatever their case (srm.payee's index on lower(name)): say so rather than fail on the index.
+        if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s) AND payee_id <> %s", (name, int(pid))):
+            conn.rollback()
+            raise Conflict("there is already a target account named %s" % name, version=cur["version"])
 
     def given(*keys):
         return next((k for k in keys if k in body), None)

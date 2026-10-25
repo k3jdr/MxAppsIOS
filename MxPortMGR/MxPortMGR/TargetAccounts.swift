@@ -302,3 +302,64 @@ struct TargetAccountSheet: View {
         dismiss()
     }
 }
+
+// MARK: - Edit Target Account Name
+
+/// Renames a target account (a row's context menu). Names are unique whatever their case: one another account already
+/// has can't be saved (the security master refuses it too, for a name taken since). Save closes the dialog.
+struct TargetNameSheet: View {
+    let payee: Payee
+    /// Every target account's name, to say before saving when the new one is taken.
+    let names: [String]
+    var save: (String) async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var error: String?
+    @State private var saving = false
+
+    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Another account with this name (in any case), if there is one.
+    private var taken: String? {
+        guard trimmed.lowercased() != payee.name.lowercased() else { return nil }
+        return names.first { $0.lowercased() == trimmed.lowercased() }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Edit Target Account Name").font(.title2.weight(.semibold))
+            Form {
+                TextField("Account name", text: $name)
+                    .onSubmit { if canSave { Task { await finish() } } }
+            }
+            if let taken {
+                Label("There is already a target account named \(taken): names are unique, whatever their case.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).font(.callout)
+            } else if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
+            } else {
+                Text("The registers show the new name for every entry with this target.").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                if saving { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") { Task { await finish() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSave)
+            }
+        }
+        .padding(18)
+        .frame(width: 420)
+        .onAppear { name = payee.name }
+    }
+
+    private var canSave: Bool { !trimmed.isEmpty && trimmed != payee.name && taken == nil && !saving }
+
+    private func finish() async {
+        saving = true
+        error = await save(trimmed)
+        saving = false
+        if error == nil { dismiss() }
+    }
+}

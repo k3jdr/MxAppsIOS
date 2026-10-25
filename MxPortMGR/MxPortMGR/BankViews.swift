@@ -1182,8 +1182,9 @@ struct TargetAccountsView: View {
     @State private var book: ExpenseBook?
     @State private var problem: String?
     @State private var adding = false
-    /// Edit Target Details (a row's context menu) is open for this account.
+    /// Edit Target Details or Edit Target Account Name (a row's context menu) is open for this account.
     @State private var details: Payee?
+    @State private var renaming: Payee?
     @State private var newAccount = false
     @State private var showInactive = false
     /// The table's rows are read-only: their context menu edits the account's details and its link.
@@ -1202,14 +1203,17 @@ struct TargetAccountsView: View {
         // A link changed (here or on a register's target): the table shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await load() } }
         #if DEBUG
-        // Self-tests, once the list is loaded: open New Target Account (-targetAccountNew YES) or a row's Edit Target
-        // Details (-targetDetailsEdit PAYEE_ID).
+        // Self-tests, once the list is loaded: open New Target Account (-targetAccountNew YES), or a row's Edit Target
+        // Details (-targetDetailsEdit PAYEE_ID) or Edit Target Account Name (-targetNameEdit PAYEE_ID).
         .task(id: book == nil) {
             guard let book else { return }
             let defaults = UserDefaults.standard
             if defaults.bool(forKey: "targetAccountNew") { adding = true }
             if defaults.object(forKey: "targetDetailsEdit") != nil {
                 details = book.payees.first { $0.id == defaults.integer(forKey: "targetDetailsEdit") }
+            }
+            if defaults.object(forKey: "targetNameEdit") != nil {
+                renaming = book.payees.first { $0.id == defaults.integer(forKey: "targetNameEdit") }
             }
         }
         #endif
@@ -1218,6 +1222,11 @@ struct TargetAccountsView: View {
         }
         .sheet(item: $details) { p in
             TargetAccountSheet(payee: p, expenseAccounts: book?.expenseAccounts ?? [], detailsOnly: true) { body in await saveDetails(p.id, body) }
+        }
+        .sheet(item: $renaming) { p in
+            TargetNameSheet(payee: p, names: book?.payees.map(\.name) ?? []) { name in
+                await saveDetails(p.id, ["version": p.version, "name": name]).error
+            }
         }
         .sheet(isPresented: $newAccount) {
             ExpenseAccountSheet { body in
@@ -1229,7 +1238,7 @@ struct TargetAccountsView: View {
     private func payeesTable(_ b: ExpenseBook) -> some View {
         let names = Dictionary(uniqueKeysWithValues: b.expenseAccounts.map { ($0.id, $0.name) })
         let shown = b.payees.filter { $0.active || showInactive }
-        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. Right-click a row (anywhere on it) for Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
+        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. Right-click a row (anywhere on it) for Edit Target Account Name… (names are unique), Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
             HStack {
                 Button("New Target Account…") { adding = true }
                 Button("New Category…") { newAccount = true }
@@ -1266,6 +1275,7 @@ struct TargetAccountsView: View {
             .textSelection(.disabled)
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
+                    Button("Edit Target Account Name…") { renaming = p }
                     Button("Edit Target Details…") { details = p }
                     Divider()
                     payeeLinkMenu(PayeeLinkTarget(p))

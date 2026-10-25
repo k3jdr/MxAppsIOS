@@ -388,6 +388,9 @@ payments and the last one. Above the table: *New Target Account…* and *New Cat
 The rows aren't edited in place. Right-clicking anywhere on a row (its words aren't selectable text, so the menu is
 the same on every column) offers:
 
+* **Edit Target Account Name…** — renames it; Save closes the dialog. Names are unique whatever their case (the
+  security master's index on the lower-cased name): the dialog says when another account has the name and won't save
+  it, and the accounts service refuses one taken since. The registers show the new name for every entry with it.
 * **Edit Target Details…** — the account's details, in this order: *Nickname*, *Description*, *Status*,
   *Identifier*; the *Next payment* (date, amount); *Logon URL*, *User name*, *Password*, *User keys*; *User notes*;
   *Address 1*, *Address 2*, *City*, *State*, *Zip code*, *Phone number*; and its **Funding sources**. The account's
@@ -542,7 +545,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
-| `TargetAccounts.swift` | Target accounts: their funding sources, the password and user keys in this Mac's Keychain (`TargetSecrets`), and the editor: New Target Account, and a row's Edit Target Details |
+| `TargetAccounts.swift` | Target accounts: their funding sources, the password and user keys in this Mac's Keychain (`TargetSecrets`), the editor (New Target Account, a row's Edit Target Details) and Edit Target Account Name |
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
