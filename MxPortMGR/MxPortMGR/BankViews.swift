@@ -157,16 +157,16 @@ nonisolated enum BankClient {
     }
 }
 
-private let isoDay: DateFormatter = {
+let isoDay: DateFormatter = {
     let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX"); return f
 }()
 
-private func shortDay(_ s: String?) -> String {
+func shortDay(_ s: String?) -> String {
     guard let s, let d = isoDay.date(from: String(s.prefix(10))) else { return s ?? "" }
     return d.formatted(.dateTime.month(.twoDigits).day(.twoDigits).year())
 }
 
-private func describe(_ error: Error) -> String {
+func describe(_ error: Error) -> String {
     (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
 }
 

@@ -300,25 +300,35 @@ def import_downloads(conn, code):
 
 # ----------------------------------------------------------------------------------------------- payees and expense accounts
 
+# What was spent (positive) or received (negative), from the check registers and the credit card registers. A card
+# payment isn't spending: its charges are (V029), so the checking entry that pays a card goes in Transfers.
+SPEND = """
+    SELECT b.txn_date, b.payee_id, coalesce(b.expense_account_id, p.expense_account_id) AS expense_account_id,
+           -b.amount AS spent
+      FROM srm.bank_txn b LEFT JOIN srm.payee p USING (payee_id) WHERE b.status <> 'void'
+    UNION ALL
+    SELECT c.txn_date, c.payee_id, c.expense_account_id, c.amount
+      FROM srm.card_txn c WHERE c.status <> 'void' AND c.kind <> 'payment'"""
+
+
 def expense_accounts(conn, q=None):
     year = int((q or {}).get("year") or dt.date.today().year)
     accts = fetch(conn, """
+        WITH t AS (%s)
         SELECT e.expense_account_id AS id, e.name, e.kind, e.description,
-               coalesce(-sum(t.amount) FILTER (WHERE t.status <> 'void' AND extract(year FROM t.txn_date) = %s), 0) AS "yearTotal",
-               count(t.*) FILTER (WHERE t.status <> 'void' AND extract(year FROM t.txn_date) = %s) AS "yearEntries"
-          FROM srm.expense_account e
-          LEFT JOIN (srm.bank_txn t LEFT JOIN srm.payee p ON p.payee_id = t.payee_id)
-                 ON coalesce(t.expense_account_id, p.expense_account_id) = e.expense_account_id
-         GROUP BY e.expense_account_id ORDER BY e.sort_order, e.name""", (year, year))
+               coalesce(sum(t.spent) FILTER (WHERE extract(year FROM t.txn_date) = %%s), 0) AS "yearTotal",
+               count(t.*) FILTER (WHERE extract(year FROM t.txn_date) = %%s) AS "yearEntries"
+          FROM srm.expense_account e LEFT JOIN t ON t.expense_account_id = e.expense_account_id
+         GROUP BY e.expense_account_id ORDER BY e.sort_order, e.name""" % SPEND, (year, year))
     payees = fetch(conn, """
         SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.default_amount AS "defaultAmount",
                p.address, p.reference, p.phone, p.website, p.bank_names AS "bankNames", p.notes, p.active, p.version,
                p.institution, p.account_last4 AS last4,
                p.updated_by AS "updatedBy", p.updated_at AS "updatedAt",
-               coalesce(-sum(t.amount) FILTER (WHERE t.status <> 'void' AND extract(year FROM t.txn_date) = %s), 0) AS "yearTotal",
-               max(t.txn_date) FILTER (WHERE t.status <> 'void') AS "lastPaid"
-          FROM srm.payee p LEFT JOIN srm.bank_txn t USING (payee_id)
-         GROUP BY p.payee_id ORDER BY lower(p.name)""", (year,))
+               coalesce(sum(t.spent) FILTER (WHERE extract(year FROM t.txn_date) = %%s), 0) AS "yearTotal",
+               max(t.txn_date) AS "lastPaid"
+          FROM srm.payee p LEFT JOIN (%s) t USING (payee_id)
+         GROUP BY p.payee_id ORDER BY lower(p.name)""" % SPEND, (year,))
     return {"year": year, "expenseAccounts": accts, "payees": payees}
 
 

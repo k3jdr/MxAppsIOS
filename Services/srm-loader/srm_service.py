@@ -109,6 +109,12 @@ CATEGORIES = [
                     "the drop folders of bank_accounts.local.json, each line once, matched to the register's entries "
                     "(same amount and check number, or same amount within a week), which marks them cleared.",
      "cadence": "daily", "continueAfterFailure": ["pnc-bank"]},
+    {"id": "card-accounts", "name": "Credit card accounts", "loaders": ["card-downloads"],
+     "description": "Your card companies' side of MxPortMGR's credit card registers: Chase (CSV, QFX / OFX), Discover "
+                    "and Capital One (CSV) downloads in the drop folders of card_accounts.local.json, each line once "
+                    "(also when a CSV and a QFX overlap), posted to the card's register, with its payments linked to "
+                    "the checking entries that paid them.",
+     "cadence": "daily", "continueAfterFailure": ["card-downloads"]},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
     {"id": "bonds", "name": "Bonds: U.S. Treasuries", "loaders": ["treasuries"],
@@ -139,7 +145,7 @@ RUN_NAMES = {
     "ssga": ["ssga_spy", "ssga_dia", "ssga_mdy", "ssga_spsm"], "nasdaq100": ["nasdaq100"],
     "openfigi": ["openfigi_mapping"], "fmp-profiles": ["fmp_profiles"], "sec-submissions": ["sec_submissions"],
     "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "fmp-otc-prices": ["fmp_otc_prices"], "nasdaq-prices": ["nasdaq_prices"],
-    "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "vanguard-plan": ["vanguard_plan"], "pnc-bank": ["pnc_bank"], "mutual-funds": ["mutual_funds"],
+    "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "vanguard-plan": ["vanguard_plan"], "pnc-bank": ["pnc_bank"], "card-downloads": ["card_downloads"], "mutual-funds": ["mutual_funds"],
     "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],

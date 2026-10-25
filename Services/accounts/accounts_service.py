@@ -73,6 +73,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
 import bank
+import cards
 
 VERSION = 1
 PORT = 8774
@@ -99,6 +100,8 @@ DESCRIBE = {
         {"method": "GET", "path": "/accounts", "summary": "Personal accounts with value and cost"},
         {"method": "GET", "path": "/bank/accounts/{code}/register", "summary": "A checking account's shared check register and the bank's lines not in it"},
         {"method": "POST", "path": "/bank/accounts/{code}/transactions", "summary": "Add a register entry (check, debit, deposit …)"},
+        {"method": "GET", "path": "/cards/accounts/{code}/register", "summary": "A credit card's register (running balance owed), statements and unlinked checking payments"},
+        {"method": "POST", "path": "/cards/accounts/{code}/import", "summary": "Save a card download in its drop folder and read it (srm-loader card-downloads)"},
         {"method": "GET", "path": "/expense-accounts", "summary": "Expense accounts with their payees and this year's totals"},
         {"method": "GET", "path": "/accounts/{code}", "summary": "An account with its open tax lots, valued"},
         {"method": "PUT", "path": "/accounts/{code}", "summary": "Save an account as a new version (version-checked: 409 when it changed since it was opened); rewrites today's holdings"},
@@ -1386,6 +1389,10 @@ class Handler(BaseHTTPRequestHandler):
                     out = delete_link(conn, parts[1], parts[2])
                 elif len(parts) == 3 and parts[0] == "accounts" and parts[2] == "load-prices" and method == "POST":
                     out = load_prices(conn, parts[1])
+                elif parts[:1] == ["cards"]:
+                    out = cards.route(conn, method, parts, body, q)
+                    if out is None:
+                        return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 elif parts[:1] in (["bank"], ["expense-accounts"], ["payees"]):
                     out = bank.route(conn, method, parts, body, q)
                     if out is None:

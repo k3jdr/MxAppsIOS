@@ -130,6 +130,7 @@ struct ContentView: View {
     private var screen: some View {
         switch store.screen {
         case .checking: CheckingView(store: store)
+        case .cards: CardsView(store: store)
         case .expenses: ExternalAccountsView(store: store)
         case .welcome: WelcomeView(store: store)
         case .choosePath: ChoosePathView(store: store)

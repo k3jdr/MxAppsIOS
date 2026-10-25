@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to card_accounts.local.json (not in git). dropFolders: where you save Chase, Discover or Capital One card downloads (QFX / OFX and Chase's Chase1234_Activity….csv anywhere in them; other CSV files in a sub-folder named by the card's code). accounts: a card number's last four digits → the card's code in MxPortMGR (a card's own last four digits, set in MxPortMGR, map it too).",
+  "dropFolders": ["~/MyCodeGIT/MxDataSRM/src-cards"],
+  "accounts": {"1234": "CHASE_VISA"}
+}

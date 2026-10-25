@@ -13,7 +13,7 @@ import Observation
 enum Screen: String, CaseIterable, Identifiable {
     // In the sidebar's order (Back and Next follow it). Welcome and Choose Your Path aren't in the sidebar: the Guide
     // menu opens them.
-    case checking, expenses
+    case checking, cards, expenses
     case welcome, choosePath
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
@@ -32,7 +32,7 @@ enum Screen: String, CaseIterable, Identifiable {
 
     var group: Group {
         switch self {
-        case .checking, .expenses: .accounts
+        case .checking, .cards, .expenses: .accounts
         case .welcome, .choosePath: .start
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
@@ -44,6 +44,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .checking: "Checking Accounts"
+        case .cards: "Credit Card Accounts"
         case .expenses: "External Accounts"
         case .welcome: "Welcome"
         case .choosePath: "Choose Your Path"
@@ -80,6 +81,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .checking: "checkmark.rectangle.stack"
+        case .cards: "creditcard"
         case .expenses: "arrow.left.arrow.right.square"
         case .welcome: "hand.wave"
         case .choosePath: "signpost.right.and.left"
