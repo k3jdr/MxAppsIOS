@@ -269,6 +269,8 @@ struct ExpenseLedgersView: View {
     @State private var assetSheet: ExpenseAsset??
     @State private var trainingSheet: TrainingRecord??
     @State private var tripSheet: ExpenseTrip??
+    /// The register's Excel-style sorting and column filters (the header buttons).
+    @State private var grid = GridQueryOptions()
 
     static let tabs = [("register", "Register"), ("budget", "Budget"), ("subscriptions", "Subscriptions"), ("assets", "Assets"),
                        ("training", "Training"), ("travel", "Travel")]
@@ -423,9 +425,26 @@ struct ExpenseLedgersView: View {
 
     // MARK: Register
 
+    /// The register's columns for sorting and filtering, by their titles.
+    static let columns: [String: LocalGridColumn<ExpenseEntry>] = [
+        "Date": .date({ $0.date }, display: { shortDay($0.date) }),
+        "Line": .text { $0.kind == "funding" ? "Funding" : $0.line },
+        "Item": .text { $0.description },
+        "Vendor": .text { $0.vendor ?? $0.payee },
+        "Spent": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
+        "Funded": .number({ $0.amount < 0 ? -$0.amount : nil }, display: { $0.amount < 0 ? money2(-$0.amount) : nil }),
+        "✓": .text { e in
+            var s = [e.status == "scheduled" ? "Scheduled" : e.status == "void" ? "Void" : "Made"]
+            if e.approval != "none" { s.append(e.approval.capitalized) }
+            return s.joined(separator: ", ")
+        },
+        "Balance": .number({ $0.status == "void" ? nil : $0.balance }, display: { $0.status == "void" ? nil : money2(abs($0.balance)) }),
+    ]
+
     private func register(_ d: ExpenseBookData) -> some View {
-        let rows = lineShown == 0 ? d.entries : d.entries.filter { $0.lineId == lineShown }
-        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry in date order with the running balance (over the whole ledger, also when one line is shown). Double-click to change one; the ledger is shared, so a change made from an older copy is refused.") {
+        let byLine = lineShown == 0 ? d.entries : d.entries.filter { $0.lineId == lineShown }
+        let rows = LocalGrid.rows(byLine, grid, Self.columns)
+        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry in date order with the running balance (over the whole ledger, also when one line is shown or the rows are filtered or sorted otherwise). Each column header's button sorts and filters it, as in Excel. Double-click to change one; the ledger is shared, so a change made from an older copy is refused.") {
             HStack {
                 Picker("Show", selection: $lineShown) {
                     Text("Every line").tag(0)
@@ -433,11 +452,13 @@ struct ExpenseLedgersView: View {
                 }
                 .fixedSize()
                 Spacer()
-                if lineShown != 0 {
+                if lineShown != 0 || !grid.filters.isEmpty {
                     Text("\(rows.count) entries · \(money2(rows.filter { $0.status == "actual" }.reduce(0) { $0 + $1.amount }))")
                         .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                        .help("The entries shown, and what they add up to (made, not scheduled; funding counts negative)")
                 }
             }
+            GridFilterStatus(shown: rows.count, of: byLine.count, options: $grid)
             Table(rows, selection: $selection) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().foregroundStyle(e.status == "scheduled" ? .secondary : .primary).help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Line") { e in lineLabel(e) }.width(min: 90, ideal: 160)
@@ -445,7 +466,7 @@ struct ExpenseLedgersView: View {
                 TableColumn("Vendor") { e in Text(e.vendor ?? e.payee ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
                 TableColumn("Spent") { e in Text(e.amount > 0 ? money2(e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("Funded") { e in Text(e.amount < 0 ? money2(-e.amount) : "").monospacedDigit().foregroundStyle(.green) }.width(min: 60, ideal: 90)
-                TableColumn("") { e in statusMark(e) }.width(46)
+                TableColumn("✓") { e in statusMark(e) }.width(56)
                 TableColumn("Balance") { e in
                     Text(e.status == "void" ? "" : money2(abs(e.balance))).monospacedDigit()
                         .foregroundStyle(e.balance > 0.005 ? .red : .primary)
@@ -457,9 +478,12 @@ struct ExpenseLedgersView: View {
             }
             .textSelection(.disabled)
             .onCopyCommand {
-                let chosen = d.entries.filter { selection.contains($0.id) }
+                let chosen = rows.filter { selection.contains($0.id) }
                 return chosen.isEmpty ? [] : [NSItemProvider(object: Self.text(chosen) as NSString)]
             }
+            .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
+                                 loadValues: { (LocalGrid.values(byLine, column: $0, grid, Self.columns), false) },
+                                 apply: { grid = $0 })
             .frame(minHeight: CGFloat(min(max(rows.count, 8), 26)) * 24 + 30)
         }
     }

@@ -187,6 +187,8 @@ struct CheckingView: View {
     @State private var selection = Set<RegisterEntry.ID>()
     @State private var draft = EntryDraft()
     @State private var noteFor: RegisterEntry?
+    /// The register's Excel-style sorting and column filters (the header buttons).
+    @State private var grid = GridQueryOptions()
     /// Show only entries on or after a date (yyyy-MM-dd), to focus on this week's or this month's payments.
     @AppStorage("registerFocusOn") private var focusOn = false
     @AppStorage("registerFocusFrom") private var focusFrom = ""
@@ -294,11 +296,26 @@ struct CheckingView: View {
         }
     }
 
+    /// The register's columns for sorting and filtering, by their titles.
+    static let columns: [String: LocalGridColumn<RegisterEntry>] = [
+        "Date": .date({ $0.date }, display: { shortDay($0.date) }),
+        "Num": .text { $0.checkNo ?? $0.kind },
+        "Target": .text { $0.payee },
+        "Category": .text { $0.expenseAccount },
+        "Memo": .text { $0.memo },
+        "Payment": .number({ $0.amount < 0 ? -$0.amount : nil }, display: { $0.amount < 0 ? money2(-$0.amount) : nil }),
+        "Deposit": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
+        "✓": .text { ["cleared": "Cleared", "reconciled": "Reconciled", "void": "Void"][$0.status] ?? "Not cleared" },
+        "Balance": .number({ $0.status == "void" ? nil : $0.balance }, display: { $0.status == "void" ? nil : money2($0.balance) }),
+    ]
+
     private func registerTable(_ r: CheckRegister) -> some View {
-        let shown = focusOn ? r.entries.filter { $0.date >= focusDay } : r.entries
-        let hidden = r.entries.count - shown.count
-        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry, oldest first, with the running balance (over the whole register, also when earlier entries are hidden). Double-click to change one (the register is shared: a change made from an older copy is refused). Void keeps a check's number accounted for.") {
+        let focused = focusOn ? r.entries.filter { $0.date >= focusDay } : r.entries
+        let hidden = r.entries.count - focused.count
+        let shown = LocalGrid.rows(focused, grid, Self.columns)
+        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry, oldest first, with the running balance (over the whole register, also when earlier entries are hidden, filtered or sorted otherwise). Each column header's button sorts and filters it, as in Excel. Double-click to change one (the register is shared: a change made from an older copy is refused). Void keeps a check's number accounted for.") {
             focusBar(hidden: hidden)
+            GridFilterStatus(shown: shown.count, of: focused.count, options: $grid)
             Table(shown, selection: $selection) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Num") { e in Text(e.checkNo ?? kindLabel(e.kind)).monospacedDigit().foregroundStyle(e.checkNo == nil ? .secondary : .primary) }.width(min: 40, ideal: 60)
@@ -309,7 +326,7 @@ struct CheckingView: View {
                 TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
                 TableColumn("Payment") { e in Text(e.amount < 0 ? money2(-e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("Deposit") { e in Text(e.amount > 0 ? money2(e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
-                TableColumn("✓") { e in statusMark(e) }.width(28)
+                TableColumn("✓") { e in statusMark(e) }.width(44)
                 TableColumn("Balance") { e in Text(e.status == "void" ? "" : money2(e.balance)).monospacedDigit().foregroundStyle(e.balance < 0 ? .red : .primary) }.width(min: 70, ideal: 100)
             }
             .contextMenu(forSelectionType: RegisterEntry.ID.self) { ids in
@@ -331,9 +348,12 @@ struct CheckingView: View {
             }
             .textSelection(.disabled)
             .onCopyCommand {
-                let chosen = r.entries.filter { selection.contains($0.id) }
+                let chosen = shown.filter { selection.contains($0.id) }
                 return chosen.isEmpty ? [] : [NSItemProvider(object: Self.text(chosen) as NSString)]
             }
+            .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
+                                 loadValues: { (LocalGrid.values(focused, column: $0, grid, Self.columns), false) },
+                                 apply: { grid = $0 })
             .frame(minHeight: CGFloat(min(max(shown.count, 6), 22)) * 24 + 30)
         }
     }
@@ -522,6 +542,34 @@ struct CheckingView: View {
 }
 
 func money2(_ x: Double) -> String { x.formatted(.currency(code: "USD")) }
+
+/// Above a register: how many entries its column filters show, and a button that clears its sorting and filters.
+struct GridFilterStatus: View {
+    var shown: Int
+    var of: Int
+    @Binding var options: GridQueryOptions
+
+    var body: some View {
+        if !options.isEmpty {
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal.decrease.circle.fill").foregroundStyle(Color.accentColor)
+                Text(summary).font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                Button("Clear Sort & Filters") { options = GridQueryOptions() }
+                    .help("Show every entry in the register's own order")
+            }
+        }
+    }
+
+    private var summary: String {
+        var parts: [String] = []
+        if !options.filters.isEmpty {
+            parts.append("\(shown) of \(of) entries · filtered by \(options.filters.keys.sorted().joined(separator: ", "))")
+        }
+        if let sort = options.sort { parts.append("sorted by \(sort.column) \(sort.ascending ? "ascending" : "descending")") }
+        return parts.joined(separator: " · ")
+    }
+}
 
 // MARK: - Entering a check
 

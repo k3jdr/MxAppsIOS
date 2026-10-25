@@ -180,6 +180,8 @@ struct CardsView: View {
     @State private var statement: CardStatement?
     @State private var selection = Set<CardEntry.ID>()
     @State private var draft = CardDraft()
+    /// The register's Excel-style sorting and column filters (the header buttons).
+    @State private var grid = GridQueryOptions()
 
     var body: some View {
         StepPage(store: store, subtitle: "Each card's register: what was charged and paid, the balance owed and the credit left, statement by statement. The card company's downloads post to it.", lesson: [
@@ -314,9 +316,23 @@ struct CardsView: View {
         return r.entries.filter { let d = $0.postedDate ?? $0.date; return d >= s.periodStart && d <= s.closingDate }
     }
 
+    /// The register's columns for sorting and filtering, by their titles.
+    static let columns: [String: LocalGridColumn<CardEntry>] = [
+        "Date": .date({ $0.date }, display: { shortDay($0.date) }),
+        "Kind": .text { ["charge": "Charge", "credit": "Credit", "payment": "Payment", "fee": "Fee", "interest": "Interest", "adjustment": "Adjust"][$0.kind] ?? $0.kind },
+        "Target": .text { $0.payee },
+        "Category": .text { $0.expenseAccount },
+        "Memo": .text { $0.memo },
+        "Charge": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
+        "Credit": .number({ $0.amount < 0 ? -$0.amount : nil }, display: { $0.amount < 0 ? money2(-$0.amount) : nil }),
+        "✓": .text { ["posted": "Posted", "reconciled": "Reconciled", "void": "Void"][$0.status] ?? "Not posted" },
+        "Owed": .number({ $0.status == "void" ? nil : $0.balance }, display: { $0.status == "void" ? nil : money2($0.balance) }),
+    ]
+
     private func registerTable(_ r: CardRegister) -> some View {
-        let rows = shown(r)
-        return Box(title: "Register", symbol: "creditcard", help: "Every entry in posting order with the running balance owed (over the whole register, also when one statement is shown). Double-click to change one; the register is shared, so a change made from an older copy is refused. Picking a target for a card company's line maps its name there to that target from now on.") {
+        let period = shown(r)
+        let rows = LocalGrid.rows(period, grid, Self.columns)
+        return Box(title: "Register", symbol: "creditcard", help: "Every entry in posting order with the running balance owed (over the whole register, also when one statement is shown or the rows are filtered or sorted otherwise). Each column header's button sorts and filters it, as in Excel. Double-click to change one; the register is shared, so a change made from an older copy is refused. Picking a target for a card company's line maps its name there to that target from now on.") {
             HStack(spacing: 8) {
                 Picker("Show", selection: $period) {
                     Text("All entries").tag("")
@@ -324,10 +340,11 @@ struct CardsView: View {
                 }
                 .fixedSize()
                 Spacer()
-                if rows.count < r.entries.count {
-                    Text("\(rows.count) of \(r.entries.count) entries").font(.callout).foregroundStyle(.secondary)
+                if period.count < r.entries.count {
+                    Text("\(period.count) of \(r.entries.count) entries").font(.callout).foregroundStyle(.secondary)
                 }
             }
+            GridFilterStatus(shown: rows.count, of: period.count, options: $grid)
             Table(rows, selection: $selection) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Kind") { e in Text(kindLabel(e.kind)).foregroundStyle(.secondary) }.width(min: 50, ideal: 64)
@@ -362,9 +379,12 @@ struct CardsView: View {
             }
             .textSelection(.disabled)
             .onCopyCommand {
-                let chosen = r.entries.filter { selection.contains($0.id) }
+                let chosen = rows.filter { selection.contains($0.id) }
                 return chosen.isEmpty ? [] : [NSItemProvider(object: Self.text(chosen) as NSString)]
             }
+            .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
+                                 loadValues: { (LocalGrid.values(period, column: $0, grid, Self.columns), false) },
+                                 apply: { grid = $0 })
             .frame(minHeight: CGFloat(min(max(rows.count, 6), 22)) * 24 + 30)
         }
     }
