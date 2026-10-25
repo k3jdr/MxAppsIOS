@@ -22,6 +22,7 @@ to the register and srm.match_card_payments links the card's payments to the che
 import csv
 import datetime
 import hashlib
+import html
 import io
 import json
 import os
@@ -37,7 +38,7 @@ CHASE_FILE = re.compile(r"^chase(\d{4})_", re.I)
 
 def _tag(body, name):
     m = re.search(r"<" + name + r">([^<\r\n]*)", body)
-    return m.group(1).strip() if m else None
+    return html.unescape(m.group(1).strip()) if m else None
 
 
 def _ofx_date(v):
@@ -140,7 +141,8 @@ def read_csv(text):
     lines, seen = [], {}
 
     def cell(r, i):
-        return r[i].strip() if i is not None and i < len(r) else ""
+        # Chase's CSV writes some names HTML-escaped (BARNES &amp; NOBLE).
+        return html.unescape(r[i].strip()) if i is not None and i < len(r) else ""
 
     for r in rows[head + 1:]:
         posted = _day(cell(r, post)) or _day(cell(r, trans))
