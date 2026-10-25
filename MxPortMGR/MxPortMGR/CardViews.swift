@@ -404,7 +404,7 @@ struct CardsView: View {
             .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
                                  loadValues: { (LocalGrid.values(period, column: $0, grid, Self.columns), false) },
                                  apply: { grid = $0 })
-            .frame(minHeight: CGFloat(min(max(rows.count, 6), 22)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 6), 22)))
         }
     }
 
@@ -467,7 +467,7 @@ struct CardsView: View {
                 } primaryAction: { ids in
                     if let s = r.statements.first(where: { ids.contains($0.id) }) { statement = s }
                 }
-                .frame(minHeight: CGFloat(min(max(r.statements.count, 3), 12)) * 24 + 30)
+                .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(r.statements.count, 3), 12)))
             }
         }
     }

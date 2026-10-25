@@ -159,6 +159,10 @@ final class PortSettings {
         return kind == .figure ? font.monospacedDigit() : font
     }
 
+    /// A table's height for `rows` rows and its header, its rows as tall as the Registers and tables font makes them
+    /// (24 points at the standard 13).
+    func tableHeight(rows: Int) -> CGFloat { CGFloat(rows) * 24 * scale(.table) + 30 }
+
     /// Every kind of a section a point larger (or smaller).
     func step(_ points: Double, _ section: TextKind.Section) {
         for kind in section.kinds {

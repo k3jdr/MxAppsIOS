@@ -378,6 +378,13 @@ BRK.B, BRK-B and BRK/B alike). Links stay on this Mac for tickers the security m
 the security master the next time it answers (the dialog says where each link is kept). Links made on this Mac before
 are sent there the same way, unless the security master already has one for that ticker or name.
 
+### Checking register (Banking ▸ Checking Accounts)
+
+The register's bar has **Hide entries before** a date (or **Recent** ▸ the last 7, 30 or 90 days, this month, this
+year) and **Rows**: how many of the register's rows show at once (6–40, 22 at first; the rest scroll inside it). Fewer
+rows leave room for the rest of the page, so it needs less scrolling. Rows are as tall as Settings ▸ Text ▸ Registers
+and tables makes them.
+
 ### Target accounts (Banking ▸ Target Accounts)
 
 A target account is where a register entry's money goes to or comes from — a utility, a card, a brokerage, a person

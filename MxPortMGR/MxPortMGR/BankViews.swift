@@ -248,6 +248,8 @@ struct CheckingView: View {
     /// Show only entries on or after a date (yyyy-MM-dd), to focus on this week's or this month's payments.
     @AppStorage("registerFocusOn") private var focusOn = false
     @AppStorage("registerFocusFrom") private var focusFrom = ""
+    /// How many of the register's rows show at once (more scroll inside it): fewer leave room for the rest of the page.
+    @AppStorage("checkingRegisterRows") private var registerRows = 22
 
     var body: some View {
         StepPage(store: store, subtitle: "The check book register, shared: everyone who writes checks enters them here, and the bank's own lines (PNC downloads) clear them.", lesson: [
@@ -434,7 +436,7 @@ struct CheckingView: View {
             // An entry not cleared yet is shaded light yellow, as a pencilled line on the paper register, until the
             // bank clears it; cleared, reconciled and void entries keep the table's banded rows.
             .background(RowShading(marked: shown.map { $0.status == "open" }))
-            .frame(minHeight: CGFloat(min(max(shown.count, 6), 22)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), registerRows)))
         }
     }
 
@@ -498,6 +500,10 @@ struct CheckingView: View {
             if focusOn, hidden > 0 {
                 Text("\(hidden) earlier entr\(hidden == 1 ? "y" : "ies") hidden").font(.callout).foregroundStyle(.secondary)
             }
+            Stepper("Rows: \(registerRows)", value: $registerRows, in: 6...40)
+                .monospacedDigit()
+                .fixedSize()
+                .help("How many of the register's rows show at once; the rest scroll inside it. Fewer leave room for the rest of the page.")
         }
     }
 
@@ -1324,7 +1330,7 @@ struct TargetAccountsView: View {
                     payeeLinkMenu(PayeeLinkTarget(p))
                 }
             }
-            .frame(minHeight: CGFloat(min(max(shown.count, 6), 22)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), 22)))
         }
     }
 

@@ -486,7 +486,7 @@ struct ExpenseLedgersView: View {
             .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
                                  loadValues: { (LocalGrid.values(byLine, column: $0, grid, Self.columns), false) },
                                  apply: { grid = $0 })
-            .frame(minHeight: CGFloat(min(max(rows.count, 8), 26)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 8), 26)))
         }
     }
 
@@ -614,7 +614,7 @@ struct ExpenseLedgersView: View {
                 }.width(64)
             }
             .tableText()
-            .frame(minHeight: CGFloat(min(max(d.subscriptions.count, 4), 16)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(d.subscriptions.count, 4), 16)))
         }
     }
 
@@ -644,7 +644,7 @@ struct ExpenseLedgersView: View {
             } primaryAction: { ids in
                 if let a = d.assets.first(where: { ids.contains($0.id) }) { assetSheet = .some(a) }
             }
-            .frame(minHeight: CGFloat(min(max(d.assets.count, 4), 16)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(d.assets.count, 4), 16)))
         }
     }
 
@@ -683,7 +683,7 @@ struct ExpenseLedgersView: View {
             } primaryAction: { ids in
                 if let t = d.training.first(where: { ids.contains($0.id) }) { trainingSheet = .some(t) }
             }
-            .frame(minHeight: CGFloat(min(max(d.training.count, 4), 16)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(d.training.count, 4), 16)))
         }
     }
 
@@ -717,7 +717,7 @@ struct ExpenseLedgersView: View {
             } primaryAction: { ids in
                 if let t = d.trips.first(where: { ids.contains($0.id) }) { tripSheet = .some(t) }
             }
-            .frame(minHeight: CGFloat(min(max(d.trips.count, 4), 16)) * 24 + 30)
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(d.trips.count, 4), 16)))
         }
     }
 
