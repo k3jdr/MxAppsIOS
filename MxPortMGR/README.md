@@ -384,7 +384,9 @@ The register's bar has **Hide entries before** a date (or **Recent** ▸ the las
 year) and **Rows**: how many of the register's rows show at once (6–40, 22 at first; the rest scroll inside it). Fewer
 rows leave room for the rest of the page, so it needs less scrolling. Rows are as tall as Settings ▸ Text ▸ Registers
 and tables makes them. Its columns: Line, Date, Num, Target, Payment, Deposit, ✓ (cleared) and Balance; an entry's
-category and memo are in *Edit Entry…* (double-click) and in *Copy Entry*.
+category and memo are in *Edit Entry…* (double-click) and in *Copy Entry*. The **New entry** line above it takes
+the date, the kind (or check number), the target and the amount; picking a known target fills in its usual amount and
+files the entry under the target's category.
 
 ### Target accounts (Banking ▸ Target Accounts)
 

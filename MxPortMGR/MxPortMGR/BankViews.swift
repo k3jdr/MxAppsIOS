@@ -263,7 +263,7 @@ struct CheckingView: View {
             }
             if let r = register {
                 tiles(r.account)
-                EntryForm(draft: $draft, payees: activePayees, expenseAccounts: book?.expenseAccounts ?? [], nextCheck: nextCheck(r)) {
+                EntryForm(draft: $draft, payees: activePayees, nextCheck: nextCheck(r)) {
                     await add()
                 }
                 registerTable(r)
@@ -824,7 +824,6 @@ struct EntryDraft {
 struct EntryForm: View {
     @Binding var draft: EntryDraft
     var payees: [Payee]
-    var expenseAccounts: [ExpenseAccount]
     var nextCheck: String
     var save: () async -> String?
     @State private var error: String?
@@ -834,7 +833,7 @@ struct EntryForm: View {
                         ("fee", "Bank fee"), ("interest", "Interest")]
 
     var body: some View {
-        Box(title: "New entry", symbol: "square.and.pencil", help: "Write it as on the check book's paper register: the date, the check number (or the kind of entry), its target — the target account the money goes to or comes from, picked from those the checking register pays, with its last four digits showing — what it is for and the amount. Picking a known target fills in its category and usual amount.") {
+        Box(title: "New entry", symbol: "square.and.pencil", help: "Write it as on the check book's paper register: the date, the check number (or the kind of entry), its target — the target account the money goes to or comes from, picked from those the checking register pays, with its last four digits showing — and the amount. Picking a known target fills in its usual amount and files the entry under its category; Edit Entry adds a memo or changes the category.") {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 DatePicker("", selection: $draft.date, displayedComponents: .date).labelsHidden().fixedSize()
                 Picker("", selection: $draft.kind) {
@@ -848,12 +847,6 @@ struct EntryForm: View {
                 TargetPicker(target: $draft.payee, payees: payees, prompt: draft.kind == "deposit" ? "From" : "Pay to") {
                     fillFromPayee()
                 }
-                Picker("", selection: $draft.expenseAccountId) {
-                    Text("Category").tag(Int?.none)
-                    ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
-                }
-                .labelsHidden().frame(width: 170)
-                TextField("Memo", text: $draft.memo).frame(minWidth: 100)
                 TextField("Amount", value: $draft.amount, format: .number.precision(.fractionLength(2))).frame(width: 100)
                     .onSubmit { Task { await enter() } }
                 Button("Enter") { Task { await enter() } }
