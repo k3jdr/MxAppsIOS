@@ -2,12 +2,12 @@
 //  TargetAccounts.swift
 //  MxPortMGR
 //
-//  Banking ▸ Target Accounts: each target account's details (srm.payee, V033) and their editor — its name, nickname,
-//  description, status and identifier; its bank or company, last four digits, category and usual amount; the next
-//  payment due; where to log on and the user name; the address and phone; the note the registers show on hover; and
-//  its funding sources, the registers whose target lists offer it: recipients of checking account payments, of credit
-//  card payments, or both. The password and user keys are kept in this Mac's Keychain (TargetSecrets), never in the
-//  security master, so they are known only on the Mac they were entered on.
+//  Banking ▸ Target Accounts: each target account's details (srm.payee, V033) and the editor for a new one — its name,
+//  nickname, description, status and identifier; its bank or company, last four digits, category and usual amount;
+//  the next payment due; where to log on and the user name; the address and phone; the note the registers show on
+//  hover; and its funding sources, the registers whose target lists offer it: recipients of checking account payments,
+//  of credit card payments, or both. The password and user keys are kept in this Mac's Keychain (TargetSecrets), never
+//  in the security master, so they are known only on the Mac they were entered on.
 //
 
 import AppKit
@@ -71,8 +71,8 @@ nonisolated enum TargetSecrets {
 
 // MARK: - The editor
 
-/// New Target Account / Edit Target Account: every detail kept for it, its funding sources, and its password and user
-/// keys (this Mac's Keychain).
+/// New Target Account: every detail kept for it, its funding sources, and its password and user keys (this Mac's
+/// Keychain). It can also edit one (`payee`), though the Target Accounts rows are read-only for now.
 struct TargetAccountSheet: View {
     let payee: Payee?
     var expenseAccounts: [ExpenseAccount]

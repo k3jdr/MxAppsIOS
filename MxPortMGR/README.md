@@ -383,11 +383,11 @@ A target account is where a register entry's money goes to or comes from — a u
 (`srm.payee`; called External Accounts before 2026-10-25). The page lists them all in one table (the *Show inactive
 and closed* box adds those): name (as its link when it has one, with its status when not active), nickname, bank or
 company, last four digits, category, usual amount, next payment, **Funding** (a checkbook mark when the Checking
-register pays it, a card when the card registers do), this year's payments and the last one. Selecting a row edits its
-name, bank, last four digits, category and usual amount in place; *New Target Account…*, *New Category…* and, on a
-row (double-click or right-click), *Edit Target Account…*, *Open Logon Page* and its link.
+register pays it, a card when the card registers do), this year's payments and the last one. The rows are read-only
+(2026-10-25: a different way to edit the details is being planned); right-click one for *Open Logon Page* and its link.
+Above the table: *New Target Account…* and *New Category…*.
 
-**Edit Target Account…** keeps every detail of it: *Account name*, *Nickname* (the registers' target lists show it
+**New Target Account…** takes every detail of it: *Account name*, *Nickname* (the registers' target lists show it
 beside the name), *Description*, *Status* (active; inactive or closed — kept with their entries, offered by no
 register), *Identifier* (your account or customer number with them), *Bank / company*, *Last four digits*, *Category*,
 *Usual amount*; the *Next payment* (date and amount, shown on the target's hover in the registers); *Logon URL* (open
@@ -533,7 +533,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
-| `TargetAccounts.swift` | Target accounts: their funding sources, the password and user keys in this Mac's Keychain (`TargetSecrets`), and the Edit Target Account editor |
+| `TargetAccounts.swift` | Target accounts: their funding sources, the password and user keys in this Mac's Keychain (`TargetSecrets`), and the New Target Account editor |
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |

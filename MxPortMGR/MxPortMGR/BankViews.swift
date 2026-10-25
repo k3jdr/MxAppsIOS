@@ -1181,22 +1181,16 @@ struct TargetAccountsView: View {
     @Bindable var store: PortStore
     @State private var book: ExpenseBook?
     @State private var problem: String?
-    @State private var editing: Payee?
     @State private var adding = false
     @State private var newAccount = false
     @State private var showInactive = false
-    /// The selected row, edited in place: its values as typed, saved on Return, on a category picked, or when another
-    /// row is selected (Esc puts them back). This year and Last paid are the registers' own sums and never edited.
+    /// The table's rows are read-only: select one for its context menu (its logon page and its link).
     @State private var selected: Payee.ID?
-    @State private var draft: PayeeDraft?
-    @State private var rowProblem: String?
-    /// Rows being saved now: a second Return or row change before the save answers sends nothing more.
-    @State private var saving = Set<Int>()
 
     var body: some View {
         StepPage(store: store, subtitle: "Where the registers' money goes to or comes from — a utility, a card, a brokerage, a person: their targets, not books MxPortMGR keeps.", lesson: [
             "Each target account has its bank or company and its last four digits, so picking a register entry's target shows which account the money went to — and a note, shown on hover in the register and edited there. Its funding sources say which registers offer it: recipients of checking account payments, of credit card payments, or both.",
-            "Each is in a category (Utilities, Insurance, Housing …): the registers file every entry under its target's category, so a year's spending adds up by category. Its usual amount fills in the register; its next payment, nickname, identifier, logon and address are kept with it (Edit Target Account…). Its password and user keys stay in this Mac's Keychain, never in the security master.",
+            "Each is in a category (Utilities, Insurance, Housing …): the registers file every entry under its target's category, so a year's spending adds up by category. Its usual amount fills in the register; its next payment, nickname, identifier, logon and address are kept with it (New Target Account…). Its password and user keys stay in this Mac's Keychain, never in the security master.",
             "PNC's downloads name them their own way (\"DUKE ENERGY PAYMENT\"): accepting a bank line under a target account remembers that name, so the next one is filed to it.",
         ]) {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
@@ -1206,19 +1200,13 @@ struct TargetAccountsView: View {
         // A link changed (here or on a register's target): the table shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await load() } }
         #if DEBUG
-        // Self-tests: open a target account's editor once the list is loaded (-targetAccountEdit PAYEE_ID, 0 for a new one).
+        // Self-tests: open the New Target Account editor once the list is loaded (-targetAccountNew YES).
         .task(id: book == nil) {
-            let defaults = UserDefaults.standard
-            guard let book, defaults.object(forKey: "targetAccountEdit") != nil else { return }
-            let id = defaults.integer(forKey: "targetAccountEdit")
-            if id == 0 { adding = true } else { editing = book.payees.first { $0.id == id } }
+            if book != nil, UserDefaults.standard.bool(forKey: "targetAccountNew") { adding = true }
         }
         #endif
-        .sheet(item: $editing) { p in
-            TargetAccountSheet(payee: p, expenseAccounts: book?.expenseAccounts ?? []) { body in await saveDetails(p.id, body) }
-        }
         .sheet(isPresented: $adding) {
-            TargetAccountSheet(payee: nil, expenseAccounts: book?.expenseAccounts ?? []) { body in await saveDetails(0, body) }
+            TargetAccountSheet(payee: nil, expenseAccounts: book?.expenseAccounts ?? []) { body in await saveNew(body) }
         }
         .sheet(isPresented: $newAccount) {
             ExpenseAccountSheet { body in
@@ -1230,7 +1218,7 @@ struct TargetAccountsView: View {
     private func payeesTable(_ b: ExpenseBook) -> some View {
         let names = Dictionary(uniqueKeysWithValues: b.expenseAccounts.map { ($0.id, $0.name) })
         let shown = b.payees.filter { $0.active || showInactive }
-        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from, with its next payment, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. Select a row to edit its name, bank, last four digits, category and usual amount in place (Return saves, Esc puts it back); double-click or right-click for all its details (Edit Target Account…). This year and Last paid are calculated from the registers.") {
+        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from, with its next payment, the registers that pay it (Funding: checking, credit card), this year's payments and the last one. The rows are read-only; right-click one for its logon page and its link. This year and Last paid are calculated from the registers.") {
             HStack {
                 Button("New Target Account…") { adding = true }
                 Button("New Category…") { newAccount = true }
@@ -1239,110 +1227,47 @@ struct TargetAccountsView: View {
                 Spacer()
                 Text("Paid in \(String(b.year)): \(money2(shown.reduce(0) { $0 + max(0, $1.yearTotal) }))").monospacedDigit().foregroundStyle(.secondary)
             }
-            if let rowProblem { Label(rowProblem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
-            // A row carries whether it is the one being edited, so the Table redraws its cells as fields when selected.
-            Table(shown.map { PayeeRow(payee: $0, editing: draft?.id == $0.id) }, selection: $selected) {
-                TableColumn("Target account") { row in
-                    let p = row.payee
-                    if row.editing, let d = draft {
-                        TextField("Name", text: field(\.name)).onSubmit { commit(d.id) }
-                    } else {
-                        HStack(spacing: 4) {
-                            if let link = p.link?.link {
-                                PayeeLinks.shared.words(PayeeLinkTarget(p), link: link, testID: "payee:\(p.id)")
-                            } else {
-                                Text(p.name).foregroundStyle(p.active ? .primary : .secondary).help(p.notes ?? "")
-                            }
-                            if p.status != "active" { Text(p.status).font(.caption).foregroundStyle(.secondary) }
+            Table(shown, selection: $selected) {
+                TableColumn("Target account") { p in
+                    HStack(spacing: 4) {
+                        if let link = p.link?.link {
+                            PayeeLinks.shared.words(PayeeLinkTarget(p), link: link, testID: "payee:\(p.id)")
+                        } else {
+                            Text(p.name).foregroundStyle(p.active ? .primary : .secondary).help(p.notes ?? "")
                         }
+                        if p.status != "active" { Text(p.status).font(.caption).foregroundStyle(.secondary) }
                     }
                 }.width(min: 100)
-                TableColumn("Nickname") { row in Text(row.payee.nickname ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 80)
-                TableColumn("Bank / company") { row in
-                    let p = row.payee
-                    if row.editing, let d = draft { TextField("Bank / company", text: field(\.institution)).onSubmit { commit(d.id) } }
-                    else { Text(p.institution ?? "").foregroundStyle(.secondary) }
-                }.width(min: 60, ideal: 100)
-                TableColumn("Last 4") { row in
-                    let p = row.payee
-                    if row.editing, let d = draft {
-                        TextField("····", text: field(\.last4)).monospacedDigit().onSubmit { commit(d.id) }
-                            .help("The account's last four characters, never the whole number")
-                    } else { Text(p.last4.map { "···\($0)" } ?? "").monospacedDigit().foregroundStyle(.secondary) }
-                }.width(min: 44, ideal: 56)
-                TableColumn("Category") { row in
-                    let p = row.payee
-                    if row.editing, let d = draft {
-                        Picker("", selection: Binding(get: { draft?.expenseAccountId }, set: { draft?.expenseAccountId = $0; commit(d.id) })) {
-                            Text("—").tag(Int?.none)
-                            ForEach(b.expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
-                        }
-                        .labelsHidden()
-                    } else { Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }
-                }.width(min: 70, ideal: 110)
-                TableColumn("Usual") { row in
-                    let p = row.payee
-                    if row.editing, let d = draft {
-                        TextField("Usual", value: Binding(get: { draft?.defaultAmount }, set: { draft?.defaultAmount = $0 }),
-                                  format: .number.precision(.fractionLength(2)))
-                            .monospacedDigit().onSubmit { commit(d.id) }
-                    } else { Text(p.defaultAmount.map(money2) ?? "").monospacedDigit() }
-                }.width(min: 50, ideal: 70)
-                TableColumn("Next payment") { row in
-                    let p = row.payee
+                TableColumn("Nickname") { p in Text(p.nickname ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 80)
+                TableColumn("Bank / company") { p in Text(p.institution ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
+                TableColumn("Last 4") { p in Text(p.last4.map { "···\($0)" } ?? "").monospacedDigit().foregroundStyle(.secondary) }.width(min: 44, ideal: 56)
+                TableColumn("Category") { p in Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }.width(min: 70, ideal: 110)
+                TableColumn("Usual") { p in Text(p.defaultAmount.map(money2) ?? "").monospacedDigit() }.width(min: 50, ideal: 70)
+                TableColumn("Next payment") { p in
                     Text([p.nextPaymentDate.map(shortDay), p.nextPaymentAmount.map(money2)].compactMap { $0 }.joined(separator: " · "))
                         .monospacedDigit()
                 }.width(min: 70, ideal: 130)
-                TableColumn("Funding") { row in FundingMarks(sources: row.payee.fundingSources) }.width(min: 44, ideal: 56)
-                // The registers' own sums: never edited.
-                TableColumn("This year") { row in
-                    let p = row.payee
+                TableColumn("Funding") { p in FundingMarks(sources: p.fundingSources) }.width(min: 44, ideal: 56)
+                // The registers' own sums.
+                TableColumn("This year") { p in
                     Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary)
-                        .help("Calculated by MxPortMGR from this year's check, card and expense entries with this target; not editable")
+                        .help("Calculated by MxPortMGR from this year's check, card and expense entries with this target")
                 }.width(min: 60, ideal: 84)
-                TableColumn("Last paid") { row in
-                    let p = row.payee
+                TableColumn("Last paid") { p in
                     Text(shortDay(p.lastPaid)).monospacedDigit().foregroundStyle(.secondary)
-                        .help("The latest entry with this target, from the registers; not editable")
+                        .help("The latest entry with this target, from the registers")
                 }.width(min: 60, ideal: 80)
             }
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
-                    Button("Edit Target Account…") { editing = p }
-                    if let url = p.logonUrl.flatMap(LinkRichText.url(fromAddress:)) { Button("Open Logon Page") { LinkInfo.follow(url) } }
-                    Divider()
+                    if let url = p.logonUrl.flatMap(LinkRichText.url(fromAddress:)) {
+                        Button("Open Logon Page") { LinkInfo.follow(url) }
+                        Divider()
+                    }
                     payeeLinkMenu(PayeeLinkTarget(p))
                 }
-            } primaryAction: { ids in
-                if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) { editing = p }
             }
-            .onChange(of: selected) { old, new in
-                // Leaving a row saves what was typed in it; the new row starts from its saved values.
-                if let old { commit(old) }
-                draft = new.flatMap { id in b.payees.first { $0.id == id } }.map(PayeeDraft.init)
-            }
-            .onExitCommand { if let id = draft?.id, let p = b.payees.first(where: { $0.id == id }) { draft = PayeeDraft(p) } }
             .frame(minHeight: CGFloat(min(max(shown.count, 6), 22)) * 24 + 30)
-        }
-    }
-
-    private func field(_ key: WritableKeyPath<PayeeDraft, String>) -> Binding<String> {
-        Binding(get: { draft?[keyPath: key] ?? "" }, set: { draft?[keyPath: key] = $0 })
-    }
-
-    /// Saves the edited row when its values changed: the fields the table edits (the account's other details stay as
-    /// saved), from the version it was read at — refused, with the reason, when someone changed it since.
-    private func commit(_ id: Int) {
-        guard let d = draft, d.id == id, !saving.contains(id), let p = book?.payees.first(where: { $0.id == id }),
-              d != PayeeDraft(p) else { return }
-        var body: [String: Any] = ["version": p.version, "name": d.name, "institution": d.institution, "last4": d.last4]
-        body["expenseAccountId"] = d.expenseAccountId ?? NSNull()
-        body["defaultAmount"] = d.defaultAmount ?? NSNull()
-        saving.insert(id)
-        Task {
-            rowProblem = await save(id, body)
-            saving.remove(id)
-            if let saved = book?.payees.first(where: { $0.id == id }), selected == id { draft = PayeeDraft(saved) }
         }
     }
 
@@ -1350,18 +1275,14 @@ struct TargetAccountsView: View {
         do { book = try await BankClient.book(); problem = nil } catch { problem = describe(error) }
     }
 
-    private func save(_ id: Int, _ body: [String: Any]) async -> String? {
-        do { book = try await BankClient.savePayee(id, body); return nil } catch {
+    /// Adds the New Target Account editor's account; answers its id, or why it couldn't.
+    private func saveNew(_ body: [String: Any]) async -> PayeeSaved {
+        do { book = try await BankClient.savePayee(0, body) } catch {
             await load()
-            return describe(error)
+            return PayeeSaved(error: describe(error))
         }
-    }
-
-    /// Saves the editor's target account; answers its id (a new one's too), or why it couldn't.
-    private func saveDetails(_ id: Int, _ body: [String: Any]) async -> PayeeSaved {
-        if let error = await save(id, body) { return PayeeSaved(error: error) }
         let name = (body["name"] as? String ?? "").lowercased()
-        return PayeeSaved(id: id != 0 ? id : book?.payees.first { $0.name.lowercased() == name }?.id)
+        return PayeeSaved(id: book?.payees.first { $0.name.lowercased() == name }?.id)
     }
 }
 
@@ -1377,28 +1298,6 @@ struct FundingMarks: View {
             }
         }
         .font(.caption)
-    }
-}
-
-/// A row of the Target Accounts table: the account, and whether it is the row being edited.
-struct PayeeRow: Identifiable, Hashable {
-    var payee: Payee
-    var editing: Bool
-    var id: Int { payee.id }
-}
-
-/// A target account's values as the table edits them in place.
-struct PayeeDraft: Equatable {
-    var id: Int
-    var name: String
-    var institution: String
-    var last4: String
-    var expenseAccountId: Int?
-    var defaultAmount: Double?
-
-    init(_ p: Payee) {
-        id = p.id; name = p.name; institution = p.institution ?? ""; last4 = p.last4 ?? ""
-        expenseAccountId = p.expenseAccountId; defaultAmount = p.defaultAmount
     }
 }
 
