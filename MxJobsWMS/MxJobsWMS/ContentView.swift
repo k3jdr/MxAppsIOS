@@ -48,8 +48,9 @@ struct ContentView: View {
                 }
             }
             // The run bar's status, the console's height and a run prompt all change while a run goes;
-            // none of them may change the column's minimum size (see fixedColumnMinimum).
-            .fixedColumnMinimum(width: 480, height: 400)
+            // none of them may change the column's minimum size (see fixedColumnMinimum). No minimum width: AppKit
+            // already adds the sidebar and the inspector to it (see the window's minWidth below).
+            .fixedColumnMinimum(width: 0, height: 400)
             .inspector(isPresented: $editor.showInspector) {
                     InspectorView(space: $document.space, editor: editor, issues: issues)
                         .fixedColumnMinimum(width: 300, height: 300)
@@ -108,7 +109,11 @@ struct ContentView: View {
             EditorState.lastActive = editor
         }
         .onChange(of: activeState) { if activeState == .key { EditorState.lastActive = editor } }
-        .frame(minWidth: 1000, minHeight: 620)
+        // The detail column runs under the sidebar and the inspector (macOS 26), and the width AppKit requires for it
+        // counts the sidebar twice and the inspector once. A window narrower than that pushed the columns past its
+        // edges, the canvas's scroll bars ended up under the inspector, and the next resize aborted with the constraint
+        // update loop. 1160 = 2 × the sidebar's widest 320 + the inspector's widest 520.
+        .frame(minWidth: 1160, minHeight: 620)
         .quickHelpScreen(screen.name, screen.item, selection: JobsHelp.selection(document.space, editor: editor))
     }
 }

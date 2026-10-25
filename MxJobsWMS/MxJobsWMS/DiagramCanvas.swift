@@ -132,6 +132,7 @@ struct DiagramCanvas: View {
                 }
                 .scaleEffect(editor.zoom, anchor: .topLeading)
                 .frame(width: size.width * editor.zoom, height: size.height * editor.zoom, alignment: .topLeading)
+                .overlay(alignment: .topLeading) { ScrollBarRelayout().frame(width: 0, height: 0) }
         }
         .background(Color(nsColor: .textBackgroundColor))
         .focusable()
@@ -436,5 +437,58 @@ private struct GridDots: View {
             }
         }
         .frame(width: size.width, height: size.height)
+    }
+}
+
+/// Lays the canvas's scroll bars out again after the scroll view changes them. While a window opens, the scroll view
+/// shows its horizontal scroll bar and then, making room for it, swaps in a new scroller implementation laid out for a
+/// vertical bar: the bar stayed invisible, and a vertical knob stuck out at the canvas's bottom-right corner until the
+/// first scroll (macOS 26, scroll bars shown always). A one-point size change makes the scroll bars lay themselves out.
+private struct ScrollBarRelayout: NSViewRepresentable {
+    func makeNSView(context: Context) -> ScrollBarRelayoutView { ScrollBarRelayoutView() }
+    func updateNSView(_ view: ScrollBarRelayoutView, context: Context) {}
+}
+
+private final class ScrollBarRelayoutView: NSView {
+    private var observations: [NSKeyValueObservation] = []
+    private var clipObserver: NSObjectProtocol?
+    private var relayoutPending = false
+
+    // Clicks and drags go to the canvas.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        observations = []
+        if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) }
+        clipObserver = nil
+        guard window != nil, let scrollView = enclosingScrollView else { return }
+        // A scroll bar appearing or disappearing, and the scroll view resizing its clip view to make room.
+        for scroller in [scrollView.horizontalScroller, scrollView.verticalScroller].compactMap({ $0 }) {
+            observations.append(scroller.observe(\.isHidden) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.relayoutScrollBars() }
+            })
+        }
+        clipObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification,
+                                                              object: scrollView.contentView, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.relayoutScrollBars() }
+        }
+        relayoutScrollBars()
+    }
+
+    /// Once per turn of the run loop, after the scroll view's own layout.
+    private func relayoutScrollBars() {
+        guard !relayoutPending else { return }
+        relayoutPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            relayoutPending = false
+            guard let scrollView = enclosingScrollView else { return }
+            for scroller in [scrollView.horizontalScroller, scrollView.verticalScroller].compactMap({ $0 }) where !scroller.isHidden {
+                let size = scroller.frame.size
+                scroller.setFrameSize(NSSize(width: size.width + 1, height: size.height))
+                scroller.setFrameSize(size)
+            }
+        }
     }
 }
