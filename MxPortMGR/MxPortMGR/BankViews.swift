@@ -368,6 +368,9 @@ struct CheckingView: View {
             .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
                                  loadValues: { (LocalGrid.values(focused, column: $0, grid, Self.columns), false) },
                                  apply: { grid = $0 })
+            // An entry not cleared yet is shaded light yellow, as a pencilled line on the paper register, until the
+            // bank clears it; cleared, reconciled and void entries keep the table's banded rows.
+            .background(RowShading(marked: shown.map { $0.status == "open" }))
             .frame(minHeight: CGFloat(min(max(shown.count, 6), 22)) * 24 + 30)
         }
     }
@@ -581,6 +584,73 @@ struct CheckingView: View {
 }
 
 func money2(_ x: Double) -> String { x.formatted(.currency(code: "USD")) }
+
+/// Shades the rows of the Table it sits behind: rows marked true light yellow (a check register entry not cleared
+/// yet), the others in the table's own banded colours. It sets the background of the NSTableView's row views (so the
+/// band runs edge to edge and the selection still draws over it) whenever the marks change and as rows scroll in.
+struct RowShading: NSViewRepresentable {
+    var marked: [Bool]
+
+    static let yellow = NSColor(name: nil) { look in
+        look.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(red: 0.42, green: 0.37, blue: 0.08, alpha: 0.55)
+            : NSColor(red: 1.0, green: 0.965, blue: 0.74, alpha: 1)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSView { let v = NSView(); context.coordinator.probe = v; return v }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.marked = marked
+        DispatchQueue.main.async { context.coordinator.apply() }   // after the Table lays out its rows
+    }
+
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+        NotificationCenter.default.removeObserver(coordinator)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        weak var probe: NSView?
+        weak var table: NSTableView?
+        var marked: [Bool] = []
+
+        func apply() {
+            if table?.window == nil { attach() }
+            guard let table else { return }
+            let bands = NSColor.alternatingContentBackgroundColors
+            table.enumerateAvailableRowViews { rowView, row in
+                let yellow = row < marked.count && marked[row]
+                rowView.backgroundColor = yellow ? RowShading.yellow
+                    : (table.usesAlternatingRowBackgroundColors ? bands[row % bands.count] : .clear)
+            }
+        }
+
+        /// The table whose scroll view covers the middle of this view, watched as it scrolls.
+        private func attach() {
+            guard let probe, let root = probe.window?.contentView else { return }
+            let target = probe.convert(probe.bounds, to: nil)
+            let middle = CGPoint(x: target.midX, y: target.midY)
+            var best: (table: NSTableView, area: CGFloat)?
+            var stack = [root]
+            while let view = stack.popLast() {
+                if let t = view as? NSTableView, let scroll = t.enclosingScrollView {
+                    let frame = scroll.convert(scroll.bounds, to: nil)
+                    if frame.contains(middle), frame.width * frame.height < best?.area ?? .infinity { best = (t, frame.width * frame.height) }
+                }
+                stack.append(contentsOf: view.subviews)
+            }
+            table = best?.table
+            NotificationCenter.default.removeObserver(self)
+            if let clip = table?.enclosingScrollView?.contentView {
+                clip.postsBoundsChangedNotifications = true
+                NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: clip)
+            }
+        }
+
+        @objc private func scrolled() { apply() }
+    }
+}
 
 /// Above a register: how many entries its column filters show, and a button that clears its sorting and filters.
 struct GridFilterStatus: View {
