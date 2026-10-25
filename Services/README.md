@@ -1,6 +1,6 @@
 # Layer 3 services
 
-The compute and data services that **MxDataHUB**, **MxJobsWMS** and **MxAcctMGR** use. Each is a small HTTP service on this
+The compute and data services that **MxDataHUB**, **MxJobsMGR** and **MxAcctMGR** use. Each is a small HTTP service on this
 Mac (127.0.0.1 only), outside the apps' sandboxes, so it can use any libraries, solver licences, databases and
 credentials you give it.
 
@@ -9,15 +9,15 @@ credentials you give it.
 | | Role | Where you work |
 | --- | --- | --- |
 | **MxDataHUB** | **The data.** Securities, benchmarks, portfolios in the security master (PostgreSQL schema `srm`), and keeping each category of market data fresh. | Data Refresh, Portfolios, Benchmarks, Load History |
-| **MxJobsWMS** | **The processes.** Repeatable, scheduled, approved workflows over that data, in three layers: business operations, agents, Layer 3 data reads and computations. | Jobspaces built from the samples |
+| **MxJobsMGR** | **The processes.** Repeatable, scheduled, approved workflows over that data, in three layers: business operations, agents, Layer 3 data reads and computations. | Jobspaces built from the samples |
 | **MxAcctMGR** | **Learning portfolio management.** Illustrative accounts worked through the active and passive paths, with built-in Swift engines that mirror these services; Engine ▸ Layer 3 services sends the same inputs here inline to compare. | Samples, Active / Passive paths, Attribution |
 | **Services/** (here) | **The Layer 3 tools** the apps call: loaders, analytics, optimizers, risk. | Your IDE (IntelliJ IDEA, CLion, VS Code) |
 
 They link both ways: MxDataHUB's **Portfolios ▸ Workflows** (Optimize, Track, Attribution), **Benchmarks ▸ Track…**
-and **Data Refresh ▸ Automate in MxJobsWMS…** open the matching MxJobsWMS workflow for that portfolio or benchmark
-(`mxjobswms://sample/<id>?portfolio=&benchmark=`); MxJobsWMS's **Window ▸ Open MxDataHUB** goes the other way
+and **Data Refresh ▸ Automate in MxJobsMGR…** open the matching MxJobsMGR workflow for that portfolio or benchmark
+(`mxjobsmgr://sample/<id>?portfolio=&benchmark=`); MxJobsMGR's **Window ▸ Open MxDataHUB** goes the other way
 (`mxdatahub://…`). Both apps show these services, their state and their purpose under **Layer 3 Services**
-(MxJobsWMS: Window ▸ Layer 3 Services, ⌥⌘L, and the palette; MxDataHUB: Services & Workflows).
+(MxJobsMGR: Window ▸ Layer 3 Services, ⌥⌘L, and the palette; MxDataHUB: Services & Workflows).
 
 ## Run them
 
@@ -68,7 +68,7 @@ never pass through the workflow (in a jobspace: `"inputsUrl": "{{in:optInputs.in
 
 ## Use cases and their sample workflows
 
-Open them in MxJobsWMS (**File ▸ New from Sample…**) or from a portfolio in MxDataHUB.
+Open them in MxJobsMGR (**File ▸ New from Sample…**) or from a portfolio in MxDataHUB.
 
 | Use case | Sample | Layer 3 chain | Typical decision |
 | --- | --- | --- | --- |
@@ -105,5 +105,5 @@ illustrative samples (Engine ▸ Layer 3 services) and checks the answer against
 | portfolio-cpp | CLion or VS Code (CMake Tools, clangd) | `make`, `make test` (52 checks) |
 | contracts | any | `python3 contracts/check_engines.py` (Java and C++ `/optimize` agree) |
 
-In MxJobsWMS each service is a **Local service** subscription whose **Source Project** points here, so its steps have
+In MxJobsMGR each service is a **Local service** subscription whose **Source Project** points here, so its steps have
 **Open Project in …**; the Layer 3 Services window's **Add Step** creates the subscription and a step for an endpoint.

@@ -1,7 +1,7 @@
-# ADR-0009: Data (MxDataHUB) and processes (MxJobsWMS) are separate apps linked by URL schemes
+# ADR-0009: Data (MxDataHUB) and processes (MxJobsMGR) are separate apps linked by URL schemes
 
 - **Status:** Accepted — recorded retrospectively on 2026-10-17 from the code, READMEs and git history
-- **Applies to:** MxDataHUB, MxJobsWMS, Shared/AppLinks.swift
+- **Applies to:** MxDataHUB, MxJobsMGR, Shared/AppLinks.swift
 
 ## Context
 
@@ -12,18 +12,18 @@ execution — scheduling, approvals, agents, Layer 3 calls — is a different jo
 ## Decision
 
 Split responsibilities: **MxDataHUB keeps the data** (securities, benchmarks, portfolios, data freshness);
-**MxJobsWMS runs the processes** (repeatable, scheduled, approved workflows). Link them with **URL schemes**
+**MxJobsMGR runs the processes** (repeatable, scheduled, approved workflows). Link them with **URL schemes**
 defined once in `Shared/AppLinks.swift`:
 
-- `mxjobswms://sample/<id>?portfolio=CODE&benchmark=CODE` — Portfolios ▸ Workflows (Optimize, Track, Attribution),
-  Benchmarks ▸ Track…, Data Refresh ▸ Automate in MxJobsWMS…, Services & Workflows ▸ Open in MxJobsWMS.
-- `mxdatahub://portfolio/<CODE>`, `benchmark/<CODE>`, `data-refresh`, `services` — MxJobsWMS ▸ Window ▸ Open MxDataHUB.
+- `mxjobsmgr://sample/<id>?portfolio=CODE&benchmark=CODE` — Portfolios ▸ Workflows (Optimize, Track, Attribution),
+  Benchmarks ▸ Track…, Data Refresh ▸ Automate in MxJobsMGR…, Services & Workflows ▸ Open in MxJobsMGR.
+- `mxdatahub://portfolio/<CODE>`, `benchmark/<CODE>`, `data-refresh`, `services` — MxJobsMGR ▸ Window ▸ Open MxDataHUB.
 
 ## Consequences
 
 - Each app stays focused; each can be used alone.
 - Hand-offs carry only identifiers (codes); each app reads current data itself, so nothing goes stale in transit.
-- Both apps must be installed for hand-offs; the app reports "MxJobsWMS is not installed in Applications" otherwise.
+- Both apps must be installed for hand-offs; the app reports "MxJobsMGR is not installed in Applications" otherwise.
 - The URL format is a contract between the apps: change it in `AppLinks.swift` and release both together.
 
 ## Evidence

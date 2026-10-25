@@ -26,17 +26,17 @@ enum HubHelp {
                 + "Each snapshot is valued with the latest prices, checked (weights add up, every holding priced) and compared with the portfolio's benchmark."
         case .benchmarks:
             detail = "Loaded benchmarks: constituents and weights, sector weights and the index level. Build custom benchmarks from another's members, "
-                + "see which benchmarks the data sources can supply, and track one with a portfolio in MxJobsWMS."
+                + "see which benchmarks the data sources can supply, and track one with a portfolio in MxJobsMGR."
         case .refresh:
             detail = "Every category of market data in the security master: how fresh it is, when it was last loaded, and Refresh to run its srm.py loaders now through "
                 + "the SRM loader service on this Mac (127.0.0.1:8770). Refresh All runs them in dependency order; Preview only shows the commands. "
-                + "Automate in MxJobsWMS… opens the scheduled, checked and approved SRM Daily Refresh. "
-                + "Activity, on the right, streams what the loaders print as they run — from here or from MxJobsWMS — with warnings and errors marked."
+                + "Automate in MxJobsMGR… opens the scheduled, checked and approved SRM Daily Refresh. "
+                + "Activity, on the right, streams what the loaders print as they run — from here or from MxJobsMGR — with warnings and errors marked."
         case .loads:
             detail = "Where the data came from: how many securities have each identifier and from which sources, the data sources with their plan limits, "
                 + "the dated benchmark and portfolio weight snapshots attribution uses (a gap over a month shows in orange), and every load run with its row counts."
         case .services:
-            detail = "Workflows: the MxJobsWMS samples built on this data — portfolio workflows open for the portfolio selected in Portfolios. "
+            detail = "Workflows: the MxJobsMGR samples built on this data — portfolio workflows open for the portfolio selected in Portfolios. "
                 + "Layer 3 Services: the shared services (Services/) that refresh and analyse the security master, what each is for and how to start it."
         }
         return QuickHelpItem(title: section.rawValue, detail: detail, symbol: section.systemImage)
@@ -79,7 +79,7 @@ enum HubHelp {
             return QuickHelpItem(title: "\(p.code) — \(p.name)",
                                  detail: "\(store.holdings.count) holdings on \(store.snapshotDate ?? "–")"
                                     + (p.benchmarkCode.isEmpty ? ", no benchmark. " : " against \(p.benchmarkCode). ") + valid
-                                    + " Holdings on picks another date; vs Benchmark shows active weights; Workflows opens it in MxJobsWMS.",
+                                    + " Holdings on picks another date; vs Benchmark shows active weights; Workflows opens it in MxJobsMGR.",
                                  symbol: "briefcase")
         case .benchmarks:
             guard let b = store.selectedBenchmark else { return nil }
@@ -87,7 +87,7 @@ enum HubHelp {
                                  detail: "\(b.method.replacingOccurrences(of: "_", with: " "))-weighted, from \(b.source)"
                                     + (b.asOf.isEmpty ? "; no constituents loaded." : "; \(b.members) members on \(b.asOf).")
                                     + (b.isProxy ? " A proxy: \(b.proxyNote)" : "")
-                                    + " Its sector weights, index level and constituents are on the right; Track… builds a tracking portfolio in MxJobsWMS.",
+                                    + " Its sector weights, index level and constituents are on the right; Track… builds a tracking portfolio in MxJobsMGR.",
                                  symbol: "chart.pie")
         default:
             return nil
@@ -136,6 +136,6 @@ enum HubHelp {
     // MARK: Services & Workflows
 
     static let servicesTabs = QuickHelpItem(title: "Workflows / Layer 3 Services",
-                                            detail: "Workflows lists the MxJobsWMS samples built on this data; Layer 3 Services lists the shared services they call.",
+                                            detail: "Workflows lists the MxJobsMGR samples built on this data; Layer 3 Services lists the shared services they call.",
                                             symbol: "flowchart")
 }

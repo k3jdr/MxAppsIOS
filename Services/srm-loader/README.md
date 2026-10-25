@@ -1,6 +1,6 @@
 # SRM loader service
 
-The Layer 3 service behind **MxDataHUB ▸ Data Refresh** and MxJobsWMS's **SRM Daily Refresh** workflow: it refreshes
+The Layer 3 service behind **MxDataHUB ▸ Data Refresh** and MxJobsMGR's **SRM Daily Refresh** workflow: it refreshes
 the security master (`MxDataHUB/SRM/srm.py`) by data category or one loader at a time, and reports freshness and
 data quality. Start it with the others: `python3 Services/mxservices.py start`.
 

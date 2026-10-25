@@ -1,6 +1,6 @@
 # portfolio-java
 
-Layer 3 **active portfolio construction** in Java (used by MxJobsWMS's Active Portfolio Optimization sample):
+Layer 3 **active portfolio construction** in Java (used by MxJobsMGR's Active Portfolio Optimization sample):
 
 - `POST /optimize/active` → `mxjobs.active-optimization/1` — benchmark-relative mean-variance: maximise
   αᵀw − λ/2 (w − b)ᵀΣ(w − b), long-only, per-name cap, ±`maxActiveWeight` around the benchmark, sector bands
@@ -9,7 +9,7 @@ Layer 3 **active portfolio construction** in Java (used by MxJobsWMS's Active Po
   active share, sector actives, the 20 largest trades, binding constraints and a `decisionContext`.
 - `POST /optimize` → `mxjobs.optimization/1` — absolute long-only max-Sharpe / min-variance / mean-variance with
   a per-asset cap (the same algorithm as portfolio-cpp, so they agree).
-- `GET /describe` — what the service is for, shown in MxJobsWMS and MxDataHUB.
+- `GET /describe` — what the service is for, shown in MxJobsMGR and MxDataHUB.
 
 Why Java: constraint-heavy business rules stay readable and unit-tested in a long-running service.
 No runtime dependencies (JDK `HttpServer` and its own small JSON code); JUnit 5 for tests.

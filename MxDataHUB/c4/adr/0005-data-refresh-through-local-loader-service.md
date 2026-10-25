@@ -8,7 +8,7 @@
 Users want to see how fresh each category of market data is and refresh it from the app. The loaders are Python
 (`srm.py`) that need the database password, API keys and file access; the app is sandboxed with outgoing network
 only, so it cannot start Python or read the loaders' configuration. The same loaders must also run unattended in
-MxJobsWMS's SRM Daily Refresh workflow.
+MxJobsMGR's SRM Daily Refresh workflow.
 
 ## Decision
 
@@ -16,7 +16,7 @@ Wrap `srm.py` in the **srm-loader** HTTP service (`Services/srm-loader`, Python,
 loaders into **categories** (reference, universe, constituents, identifiers, prices, corporate actions, optional
 portfolio snapshots), computes their state (fresh, due, stale, failed) from `srm.v_load_history`, and runs them
 **one at a time**: `GET /categories`, `POST /refresh/{category}`, `POST /load/{loader}`, `GET /status`. The header
-`X-SRM-Dry-Run: 1` returns the commands without running them. MxDataHUB's Data Refresh screen and MxJobsWMS's
+`X-SRM-Dry-Run: 1` returns the commands without running them. MxDataHUB's Data Refresh screen and MxJobsMGR's
 SRM Daily Refresh sample both call it.
 
 ## Consequences
@@ -30,7 +30,7 @@ SRM Daily Refresh sample both call it.
 ## Alternatives considered
 
 - *Run srm.py from the app* — impossible in the sandbox without giving up the sandbox.
-- *A database-side job queue* — more infrastructure; MxJobsWMS already provides scheduling and approval.
+- *A database-side job queue* — more infrastructure; MxJobsMGR already provides scheduling and approval.
 
 ## Evidence
 

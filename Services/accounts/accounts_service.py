@@ -3,7 +3,7 @@
 
 Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V011) and serves:
 
-    GET  /health, /describe              status; what this service is for (shown in MxJobsWMS and MxDataHUB)
+    GET  /health, /describe              status; what this service is for (shown in MxJobsMGR and MxDataHUB)
     GET  /securities?q=&kind=&priced=&offset=&limit=   search securities by ticker, name, ISIN or CUSIP; kind = all |
                                          stocks | funds | bonds (fixed-income funds); priced=1 only those with prices;
                                          best first, a page at a time (limit ≤ 500) with the total that match; mutual

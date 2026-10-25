@@ -3,7 +3,7 @@
 //  MxAcctMGR
 //
 //  The market series MxDataHUB keeps in the security master (srm.market_series, V015: the VIX family from Cboe,
-//  Treasury yields and NBER recessions from FRED — srm.py load cboe-vix / fred-yields, scheduled in MxJobsWMS's SRM
+//  Treasury yields and NBER recessions from FRED — srm.py load cboe-vix / fred-yields, scheduled in MxJobsMGR's SRM
 //  Daily Refresh), through the accounts service's GET /market/series. It answers in the sources' own CSV layouts, so
 //  the VIX and Yield Curve screens parse it as they parse Cboe's and FRED's files — and read those directly when the
 //  security master can't be reached or hasn't been refreshed lately.

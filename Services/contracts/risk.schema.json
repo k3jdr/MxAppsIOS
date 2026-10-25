@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://k3jdr.com/mxjobs/schemas/mxjobs.risk/1",
-  "title": "MxJobsWMS portfolio risk report",
+  "title": "MxJobsMGR portfolio risk report",
   "description": "Returned by POST /risk of portfolio-cpp. Request: {assets, weights (asset → weight), covariance, expectedReturns?, confidence? (default 0.95), horizonDays? (default 1), portfolioValue? (default 1)}.",
   "type": "object",
   "required": ["schema", "status", "volatility", "valueAtRisk", "expectedShortfall", "riskContributions",

@@ -1,7 +1,7 @@
 # ADR-0010: Shared Swift sources are compiled into each app
 
 - **Status:** Accepted — recorded retrospectively on 2026-10-17 from the code, READMEs and git history
-- **Applies to:** MxDataHUB, MxJobsWMS (and MxDataSQL, MxFileMGR for Quick Help)
+- **Applies to:** MxDataHUB, MxJobsMGR (and MxDataSQL, MxFileMGR for Quick Help)
 
 ## Context
 

@@ -49,8 +49,8 @@ struct SRMBenchmarksView: View {
                         }
                     }
                     .disabled(store.selectedBenchmark == nil)
-                    .help("Build an index-tracking portfolio for this benchmark in MxJobsWMS")
-                    .quickHelp("Track", "Opens MxJobsWMS's passive tracking workflow for this benchmark: an index-tracking portfolio within a tracking-error budget.")
+                    .help("Build an index-tracking portfolio for this benchmark in MxJobsMGR")
+                    .quickHelp("Track", "Opens MxJobsMGR's passive tracking workflow for this benchmark: an index-tracking portfolio within a tracking-error budget.")
                     Spacer()
                     Button("Delete…", role: .destructive) { confirmDelete = true }
                         .disabled(!(store.selectedBenchmark?.isCustom ?? false))

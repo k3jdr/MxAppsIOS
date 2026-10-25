@@ -533,7 +533,7 @@ struct ResultSummary: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
             .quickHelpArea(QuickHelpItem(title: "Decision: \(result.decision.recommendation.replacingOccurrences(of: "_", with: " "))",
-                                         detail: "The same decision rules the Layer 3 services hand to MxJobsWMS agents: hold when turnover is under 2%, rebalance part of the way above the turnover limit, relax a limit that can't be met, otherwise rebalance. A rule of thumb for learning, not advice.",
+                                         detail: "The same decision rules the Layer 3 services hand to MxJobsMGR agents: hold when turnover is under 2%, rebalance part of the way above the turnover limit, relax a limit that can't be met, otherwise rebalance. A rule of thumb for learning, not advice.",
                                          symbol: icon))
             HStack(spacing: 10) {
                 MetricTile(title: "Tracking error", value: pct(result.trackingError, 2), caption: result.currentTrackingError.map { "today \(pct($0, 2))" } ?? "", help: PortHelp.terms["Tracking error"]!)

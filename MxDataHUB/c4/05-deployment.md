@@ -10,7 +10,7 @@ C4Deployment
     Deployment_Node(mac, "User's Mac", "macOS 26.6+, Apple silicon") {
         Deployment_Node(apps, "/Applications", "Signed app bundles") {
             Container(hub, "MxDataHUB.app", "SwiftUI, App Sandbox: outgoing network")
-            Container(wms, "MxJobsWMS.app", "SwiftUI, App Sandbox")
+            Container(wms, "MxJobsMGR.app", "SwiftUI, App Sandbox")
         }
         Deployment_Node(loopback, "Loopback 127.0.0.1", "started by Services/mxservices.py or launchd agents") {
             Container(loader, "srm-loader :8770", "Python")

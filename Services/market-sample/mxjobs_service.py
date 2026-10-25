@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MxJobsWMS sample Layer 3 service: quotes, price history and indicators over HTTP.
+"""MxJobsMGR sample Layer 3 service: quotes, price history and indicators over HTTP.
 
 Standard library only (Python 3.9+), so it runs with the python3 that ships with macOS:
 
@@ -229,14 +229,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MxJobsWMS sample Layer 3 service")
+    parser = argparse.ArgumentParser(description="MxJobsMGR sample Layer 3 service")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--token", default=os.environ.get("MXJOBS_SERVICE_TOKEN"),
                         help="require 'Authorization: Bearer TOKEN' (default: $MXJOBS_SERVICE_TOKEN, none)")
     args = parser.parse_args()
     Handler.token = args.token or None
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print("MxJobsWMS sample service on http://127.0.0.1:%d%s" %
+    print("MxJobsMGR sample service on http://127.0.0.1:%d%s" %
           (args.port, " (token required)" if Handler.token else ""), flush=True)
     try:
         server.serve_forever()

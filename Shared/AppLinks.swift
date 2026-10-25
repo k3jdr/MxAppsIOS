@@ -1,14 +1,15 @@
 //
 //  AppLinks.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxAcctMGR (MxAppsIOS/Shared)
+//  Shared by MxDataHUB, MxJobsMGR and MxAcctMGR (MxAppsIOS/Shared)
 //
 //  How the apps hand work to each other:
 //
 //    MxDataHUB  — the data: securities, benchmarks, portfolios, and refreshing each category of market data.
-//    MxJobsWMS  — the processes: repeatable, scheduled, approved workflows over that data.
+//    MxJobsMGR  — the processes: repeatable, scheduled, approved workflows over that data.
 //    MxAcctMGR  — the personal accounts: My Portfolio, kept in the security master with its tax lots.
 //
-//    mxjobswms://sample/<sample id>?portfolio=CODE&benchmark=CODE   new jobspace from a sample, for a portfolio
+//    mxjobsmgr://sample/<sample id>?portfolio=CODE&benchmark=CODE   new jobspace from a sample, for a portfolio
+//    (mxjobswms:// — the app's scheme before it was renamed from MxJobsWMS — still opens it.)
 //    mxdatahub://portfolio/<CODE>    mxdatahub://benchmark/<CODE>    mxdatahub://data-refresh    mxdatahub://services
 //    mxacctmgr://my-portfolio/<CODE>   My Portfolio, opened from the security-master account CODE (no code: as it is)
 //    (mxportmgr:// — the app's scheme before it was renamed from MxPortMGR — still opens it.)
@@ -17,7 +18,7 @@
 import AppKit
 
 nonisolated enum AppLink: Equatable, Sendable {
-    /// MxJobsWMS: a new jobspace from a sample, optionally for a portfolio and benchmark.
+    /// MxJobsMGR: a new jobspace from a sample, optionally for a portfolio and benchmark.
     case sample(id: String, portfolio: String?, benchmark: String?)
     /// MxDataHUB screens.
     case portfolio(String)
@@ -27,14 +28,16 @@ nonisolated enum AppLink: Equatable, Sendable {
     /// MxAcctMGR: My Portfolio, optionally the security-master account with this code.
     case myPortfolio(String?)
 
-    static let jobsScheme = "mxjobswms"
+    static let jobsScheme = "mxjobsmgr"
     static let hubScheme = "mxdatahub"
-    static let jobsBundleID = "com.k3jdr.MxJobsWMS"
+    static let jobsBundleID = "com.k3jdr.MxJobsMGR"
     static let hubBundleID = "com.k3jdr.MxDataHUB"
     static let acctScheme = "mxacctmgr"
     static let acctBundleID = "com.k3jdr.MxAcctMGR"
     /// MxAcctMGR's scheme while it was MxPortMGR, for links saved before the rename.
     static let legacyAcctScheme = "mxportmgr"
+    /// MxJobsMGR's scheme while it was MxJobsWMS, for links saved before the rename.
+    static let legacyJobsScheme = "mxjobswms"
 
     var url: URL {
         var c = URLComponents()
@@ -67,7 +70,7 @@ nonisolated enum AppLink: Equatable, Sendable {
         let value = c.path.split(separator: "/").first.map(String.init) ?? ""
         let query = { (name: String) in c.queryItems?.first { $0.name == name }?.value }
         switch (c.scheme, host) {
-        case (Self.jobsScheme, "sample") where !value.isEmpty:
+        case (Self.jobsScheme, "sample") where !value.isEmpty, (Self.legacyJobsScheme, "sample") where !value.isEmpty:
             self = .sample(id: value, portfolio: query("portfolio"), benchmark: query("benchmark"))
         case (Self.hubScheme, "portfolio") where !value.isEmpty: self = .portfolio(value)
         case (Self.hubScheme, "benchmark") where !value.isEmpty: self = .benchmark(value)
@@ -81,7 +84,7 @@ nonisolated enum AppLink: Equatable, Sendable {
     /// The app this link opens.
     var appName: String {
         switch self {
-        case .sample: "MxJobsWMS"
+        case .sample: "MxJobsMGR"
         case .myPortfolio: "MxAcctMGR"
         default: "MxDataHUB"
         }
@@ -90,7 +93,7 @@ nonisolated enum AppLink: Equatable, Sendable {
     /// Opens the link in the other app; returns false when that app is not installed.
     @MainActor @discardableResult
     func open() -> Bool {
-        let bundleID = appName == "MxJobsWMS" ? Self.jobsBundleID : appName == "MxAcctMGR" ? Self.acctBundleID : Self.hubBundleID
+        let bundleID = appName == "MxJobsMGR" ? Self.jobsBundleID : appName == "MxAcctMGR" ? Self.acctBundleID : Self.hubBundleID
         guard NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
                 || NSWorkspace.shared.urlForApplication(toOpen: url) != nil else { return false }
         return NSWorkspace.shared.open(url)

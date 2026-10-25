@@ -1,6 +1,6 @@
 //
 //  QuickHelp.swift
-//  Shared by MxDataHUB, MxJobsWMS, MxDataSQL and MxFileMGR (MxAppsIOS/Shared/QuickHelp; MxDataSQL and MxFileMGR compile only this folder of Shared)
+//  Shared by MxDataHUB, MxJobsMGR, MxDataSQL and MxFileMGR (MxAppsIOS/Shared/QuickHelp; MxDataSQL and MxFileMGR compile only this folder of Shared)
 //
 //  Quick Help, as in MxNoteONE (and Logic Pro): a panel that describes what's under the pointer — a
 //  button, a list, a table cell, a node — in a sentence or two, with its shortcut. With the pointer over
@@ -318,7 +318,7 @@ struct QuickHelpDock: View {
 extension View {
     /// Quick Help docked at the bottom of this view (a sidebar), as in MxNoteONE. A fixed height that scrolls a long
     /// description: a dock that grew with its text changed the split view column's minimum size whenever Quick Help
-    /// changed, and AppKit aborted on the update-constraints loop (MxJobsWMS, 2026-10-18).
+    /// changed, and AppKit aborted on the update-constraints loop (MxJobsMGR, 2026-10-18).
     func quickHelpDock(height: CGFloat = QuickHelpDock.sidebarHeight) -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) { QuickHelpDock(height: height) }
     }

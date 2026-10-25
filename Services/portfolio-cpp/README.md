@@ -1,6 +1,6 @@
 # portfolio-cpp
 
-Layer 3 **index tracking and risk** in C++17 (used by MxJobsWMS's Passive Index Tracking and Attribution samples):
+Layer 3 **index tracking and risk** in C++17 (used by MxJobsMGR's Passive Index Tracking and Attribution samples):
 
 - `POST /optimize/tracking` → `mxjobs.tracking/1` — the long-only portfolio of at most `maxNames` securities with
   the smallest ex-ante tracking error against a benchmark: full replication (`maxNames` 0), the largest weights, or
@@ -10,7 +10,7 @@ Layer 3 **index tracking and risk** in C++17 (used by MxJobsWMS's Passive Index 
   ratio, concentration; with `benchmarkWeights` (or an `inputsUrl` from the analytics service) also tracking error,
   beta, active-risk contributions by position and by sector.
 - `POST /optimize` → `mxjobs.optimization/1` — the same absolute optimization as portfolio-java.
-- `GET /describe` — what the service is for, shown in MxJobsWMS and MxDataHUB.
+- `GET /describe` — what the service is for, shown in MxJobsMGR and MxDataHUB.
 
 Why C++: thousands of iterations over a 500 × 500 covariance in milliseconds, for every rebalance or scenario. Header-only dependencies, pinned:
 [cpp-httplib](https://github.com/yhirose/cpp-httplib) v0.18.3 and [nlohmann/json](https://github.com/nlohmann/json) v3.11.3.

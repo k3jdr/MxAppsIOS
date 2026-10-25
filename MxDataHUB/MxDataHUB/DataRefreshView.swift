@@ -5,7 +5,7 @@
 //  Data Refresh: every category of market data in the security master — how fresh it is, when it was last
 //  loaded, and a Refresh button that runs its srm.py loaders through the SRM loader service
 //  (Services/srm-loader, 127.0.0.1:8770). The same loaders run on a schedule, with checks and approval,
-//  in MxJobsWMS's SRM Daily Refresh workflow (Automate in MxJobsWMS…). Activity, on the right, streams what the
+//  in MxJobsMGR's SRM Daily Refresh workflow (Automate in MxJobsMGR…). Activity, on the right, streams what the
 //  loaders print while they run (the service's GET /log), whoever started them, for whoever is watching the load.
 //
 
@@ -106,7 +106,7 @@ final class RefreshStore {
     /// The service's activity log as far as it has been read (the last 20,000 lines).
     var activity: [ActivityEntry] = []
     var lastSeq = 0
-    /// What the service is running now, whoever started it (this window, another, or MxJobsWMS).
+    /// What the service is running now, whoever started it (this window, another, or MxJobsMGR).
     var current: ActivityRun?
     var lastPoll: Date?
 
@@ -229,7 +229,7 @@ struct DataRefreshView: View {
                     categoryList
                 } trailing: {
                     ActivityPanel(refresh: refresh, store: store)
-                        .quickHelpArea("Activity", "What the loaders print while they run, line by line, whoever started them (here, another window or MxJobsWMS): "
+                        .quickHelpArea("Activity", "What the loaders print while they run, line by line, whoever started them (here, another window or MxJobsMGR): "
                                        + "each refresh and loader starting and ending with its status, time and rows, and warnings and errors marked. "
                                        + "Load History has every load's counts.",
                                        symbol: "text.alignleft")
@@ -245,7 +245,7 @@ struct DataRefreshView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Market data in the security master").font(.headline).lineLimit(1)
-                Text("Refresh a category now, or automate the whole refresh — with data-quality checks and approval — in MxJobsWMS.")
+                Text("Refresh a category now, or automate the whole refresh — with data-quality checks and approval — in MxJobsMGR.")
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer()
@@ -278,13 +278,13 @@ struct DataRefreshView: View {
             .quickHelp("Refresh All", "Refreshes every category in dependency order — later ones use the earlier ones — except the optional ones, and stops at the first failure.")
             Button {
                 if !AppLink.sample(id: "srm-daily-refresh", portfolio: nil, benchmark: nil).open() {
-                    refresh.error = "MxJobsWMS is not installed in Applications."
+                    refresh.error = "MxJobsMGR is not installed in Applications."
                 }
             } label: {
-                Label("Automate in MxJobsWMS…", systemImage: "flowchart")
+                Label("Automate in MxJobsMGR…", systemImage: "flowchart")
             }
             .help("Open the SRM Daily Refresh workflow: scheduled, checked and approved")
-            .quickHelp("Automate in MxJobsWMS", "Opens the SRM Daily Refresh workflow in MxJobsWMS: the same loaders on a schedule, with data-quality checks and the data steward's approval.")
+            .quickHelp("Automate in MxJobsMGR", "Opens the SRM Daily Refresh workflow in MxJobsMGR: the same loaders on a schedule, with data-quality checks and the data steward's approval.")
             Button {
                 Task { await refresh.load() }
             } label: {
@@ -301,7 +301,7 @@ struct DataRefreshView: View {
         List {
             Section {
                 ForEach(refresh.categories) { category in
-                    // A load the service runs for someone else (MxJobsWMS, another window) counts too.
+                    // A load the service runs for someone else (MxJobsMGR, another window) counts too.
                     let running = refresh.running == category.id || refresh.current?.category == category.id
                     CategoryRow(category: category, running: running,
                                 busy: refresh.running != nil || refresh.current.map { !$0.dryRun } == true) {
@@ -399,7 +399,7 @@ private struct ActivityPanel: View {
                 ContentUnavailableView(refresh.activity.isEmpty ? "No Activity Yet" : "No Matching Lines",
                                        systemImage: "text.alignleft",
                                        description: Text(refresh.activity.isEmpty
-                                            ? "Refresh a category: what its loaders print appears here as they run, with warnings and errors marked. Loads MxJobsWMS runs through the service appear here too."
+                                            ? "Refresh a category: what its loaders print appears here as they run, with warnings and errors marked. Loads MxJobsMGR runs through the service appear here too."
                                             : "No lines match the run, level or filter."))
                     .frame(maxHeight: .infinity)
             } else {
@@ -444,7 +444,7 @@ private struct ActivityPanel: View {
                 .background(Color.accentColor.opacity(0.12))
                 .overlay(alignment: .leading) { Rectangle().fill(Color.accentColor).frame(width: 3) }
             }
-            .quickHelpArea("Running Now", "The refresh the SRM loader service is running — from here, another window or MxJobsWMS: its current loader, "
+            .quickHelpArea("Running Now", "The refresh the SRM loader service is running — from here, another window or MxJobsMGR: its current loader, "
                            + "a bar by loaders finished, the latest line it printed and how long it has run.", symbol: "bolt.horizontal")
         } else if let end = refresh.activity.last(where: { $0.event == "run-end" }) {
             let status = end.status ?? (end.level == "error" ? "failed" : end.level == "warning" ? "partial" : "succeeded")

@@ -1,4 +1,4 @@
-# MxJobsWMS Layer 3 contracts
+# MxJobsMGR Layer 3 contracts
 
 Versioned JSON contracts between the Layer 3 compute services and the Layer 2 decision agents.
 

@@ -11,4 +11,4 @@ security master is already MxDataHUB's `srm.portfolio` / `srm.portfolio_tax_lot`
 | [ddl/](ddl/README.md) | PostgreSQL DDL package for schema `pmg`, seeded from the app's own model |
 | [tools/](tools/) | `generate_seed.sh` — rebuilds `ddl/10_seed.sql` by compiling the app's model files with `main.swift` |
 
-Related models: [MxDataHUB](../../MxDataHUB/data-model/README.md) (`srm`) and [MxJobsWMS](../../MxJobsWMS/data-model/README.md) (`wms`).
+Related models: [MxDataHUB](../../MxDataHUB/data-model/README.md) (`srm`) and [MxJobsMGR](../../MxJobsMGR/data-model/README.md) (`wms`).

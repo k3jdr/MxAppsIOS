@@ -239,7 +239,7 @@ struct QuickHelpPanel: View {
         }
         .padding(10)
         // A fixed height, as in the other MxAppsIOS apps: a panel that grew with its text changed the sidebar's
-        // minimum size whenever Quick Help changed (the layout loop that crashed MxJobsWMS, 2026-10-18).
+        // minimum size whenever Quick Help changed (the layout loop that crashed MxJobsMGR, 2026-10-18).
         .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .topLeading)
         .background(.background.opacity(0.6))
         .overlay(alignment: .top) { Divider() }

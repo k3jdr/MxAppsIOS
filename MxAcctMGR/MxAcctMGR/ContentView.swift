@@ -84,7 +84,7 @@ struct ContentView: View {
             if !PortSettings.shared.shows(store.screen) { store.go(.myPortfolio) }
         }
         .onOpenURL { url in
-            // mxacctmgr://my-portfolio/CODE from MxDataHUB or MxJobsWMS (Shared/AppLinks.swift).
+            // mxacctmgr://my-portfolio/CODE from MxDataHUB or MxJobsMGR (Shared/AppLinks.swift).
             if case let .myPortfolio(code)? = AppLink(url: url) {
                 if let code { store.requestOpen(code) } else { store.go(.myPortfolio) }
             }

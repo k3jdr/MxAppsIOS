@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start, stop and check the Layer 3 services that MxDataHUB and MxJobsWMS use.
+"""Start, stop and check the Layer 3 services that MxDataHUB and MxJobsMGR use.
 
     python3 Services/mxservices.py status            which services run, on which port, and what each is for
     python3 Services/mxservices.py start [ids…]       build if needed, then start (all when no ids)

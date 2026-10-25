@@ -3,7 +3,7 @@
 MxDataHUB is a native macOS business application (Swift, SwiftUI) for the **security reference master (SRM)**:
 securities and their identifiers, issuers and listings, benchmarks and portfolios, and the freshness of each category
 of market data. The data lives in PostgreSQL (schema `srm`) and is loaded from free and subscribed sources by Python
-loaders. MxDataHUB is **the data** half of a pair: its sibling [MxJobsWMS](../../MxJobsWMS/c4/README.md) runs **the
+loaders. MxDataHUB is **the data** half of a pair: its sibling [MxJobsMGR](../../MxJobsMGR/c4/README.md) runs **the
 processes** (scheduled, checked, approved workflows) over that data, and both use the same **Layer 3 services**.
 
 This folder documents the architecture with the [C4 model](https://c4model.com), Architecture Decision Records, a UI
@@ -28,7 +28,7 @@ flowchart LR
     user([Portfolio / data analyst])
     subgraph mac[macOS]
         hub[MxDataHUB app<br/>SwiftUI, sandboxed]
-        wms[MxJobsWMS app<br/>workflows]
+        wms[MxJobsMGR app<br/>workflows]
         svc[Layer 3 services<br/>127.0.0.1: srm-loader, analytics,<br/>portfolio-java, portfolio-cpp]
         cli[srm.py<br/>loader CLI and migrations]
         kc[(login Keychain)]
@@ -39,7 +39,7 @@ flowchart LR
     user --> hub
     hub -- "SQL over TCP (PostgresNIO)" --> db
     hub -- "HTTP /categories, /refresh" --> svc
-    hub <-- "mxjobswms:// and mxdatahub:// links" --> wms
+    hub <-- "mxjobsmgr:// and mxdatahub:// links" --> wms
     hub --> kc
     svc -- runs --> cli
     cli -- "psycopg2" --> db

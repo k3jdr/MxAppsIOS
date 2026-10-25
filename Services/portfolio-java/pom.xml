@@ -8,7 +8,7 @@
   <artifactId>portfolio-java</artifactId>
   <version>1.0.0</version>
   <packaging>jar</packaging>
-  <name>MxJobsWMS portfolio optimization service (Java)</name>
+  <name>MxJobsMGR portfolio optimization service (Java)</name>
 
   <properties>
     <maven.compiler.release>17</maven.compiler.release>

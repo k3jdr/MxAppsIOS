@@ -1,0 +1,1208 @@
+{
+  "description" : "Weekday morning refresh: agents gather quotes, FX, news and filings through the data layer, assemble rebalance instructions for approval, then execute and report the outcome.",
+  "format" : "mxjobspace",
+  "formatVersion" : 1,
+  "links" : [
+    {
+      "from" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
+      "id" : "55B401F8-8117-427F-BFE6-9A2DE2D546F7",
+      "label" : "",
+      "to" : "6E9212BF-AA72-41D4-80BF-E810A91532F7"
+    },
+    {
+      "from" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
+      "id" : "D5B60BFB-20A2-4325-A114-EDC29B1FD4B4",
+      "label" : "",
+      "to" : "323C2670-F3FF-40E4-B984-FF78523DB55D"
+    },
+    {
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "3B1EFAF7-54FE-47A0-A0D2-0C0AB550E8A5",
+      "label" : "",
+      "to" : "3C695CBC-D647-4A18-810F-B7EFB9FD18CF"
+    },
+    {
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "748D181B-1764-486B-AFA1-D336C7F27F68",
+      "label" : "",
+      "to" : "AA26FB47-4512-43A6-B138-A7530FA39C2B"
+    },
+    {
+      "from" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
+      "id" : "A22EE789-D187-4F61-BA2B-8C8E4DD84936",
+      "label" : "",
+      "to" : "53E4C323-E4C4-4275-AB47-EC237AE79508"
+    },
+    {
+      "from" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
+      "id" : "63453AEB-B2B3-41EE-AA47-EB4BEE93BA87",
+      "label" : "",
+      "to" : "86890E5A-7AB4-47B2-B54F-D1117A454F39"
+    },
+    {
+      "from" : "3C695CBC-D647-4A18-810F-B7EFB9FD18CF",
+      "id" : "CA382BAF-0504-49E9-8F14-D7B82D5E1A11",
+      "label" : "",
+      "to" : "096FCD4C-37A6-4F4B-A293-5E0283CC3C63"
+    },
+    {
+      "from" : "096FCD4C-37A6-4F4B-A293-5E0283CC3C63",
+      "id" : "46581D3B-7188-4932-A031-1156B9FC3AAB",
+      "label" : "quotes",
+      "to" : "6E9212BF-AA72-41D4-80BF-E810A91532F7"
+    },
+    {
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "5CF65D49-CA98-496A-BB00-61BF59DEF718",
+      "label" : "",
+      "to" : "56059FB3-C4A5-4A4E-90C7-0EC459417BD6"
+    },
+    {
+      "from" : "56059FB3-C4A5-4A4E-90C7-0EC459417BD6",
+      "id" : "86615024-F615-4791-AB65-AB1918A2434D",
+      "label" : "",
+      "to" : "31F44F4C-FD5A-4584-9154-72A6517A3464"
+    },
+    {
+      "from" : "31F44F4C-FD5A-4584-9154-72A6517A3464",
+      "id" : "4FF4DE29-C2F3-4691-B1C7-8E507AB6855A",
+      "label" : "signals",
+      "to" : "6E9212BF-AA72-41D4-80BF-E810A91532F7"
+    },
+    {
+      "from" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
+      "id" : "42F30529-AE65-4C35-BDFF-574E8781BE8A",
+      "label" : "",
+      "to" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303"
+    },
+    {
+      "from" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
+      "id" : "410AB631-72E6-4DAC-9247-97E1B976C543",
+      "label" : "",
+      "to" : "5C742E71-8471-48EC-84E1-5AD533FAE2B8"
+    },
+    {
+      "from" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
+      "id" : "6FD2FB7A-D1B5-4918-B70E-93E8D14EE82C",
+      "label" : "",
+      "to" : "460803BC-A6B3-4371-AB52-BB57EA30D566"
+    },
+    {
+      "from" : "5C742E71-8471-48EC-84E1-5AD533FAE2B8",
+      "id" : "E5F414B3-E37C-4B7D-A9EF-575095F81627",
+      "label" : "decisionContext",
+      "to" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303"
+    },
+    {
+      "from" : "460803BC-A6B3-4371-AB52-BB57EA30D566",
+      "id" : "53095DFC-24F3-4103-B825-23535CA2413D",
+      "label" : "VaR",
+      "to" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303"
+    },
+    {
+      "from" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
+      "id" : "D9FE7EC1-F63B-40CD-9453-7F24A6D834F5",
+      "label" : "nextStep",
+      "to" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03"
+    },
+    {
+      "from" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "id" : "13C0B757-6526-498E-A0BE-399C26013D80",
+      "label" : "",
+      "to" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E"
+    },
+    {
+      "from" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
+      "id" : "16116612-5F9D-4F2F-9F40-7CBC8A366D85",
+      "label" : "",
+      "to" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E"
+    },
+    {
+      "from" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E",
+      "id" : "227CBA93-AF20-41AD-8D95-8259336787C8",
+      "label" : "",
+      "to" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03"
+    },
+    {
+      "from" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03",
+      "id" : "D236ED05-14D3-4E09-B7FD-C1AECE3B7963",
+      "label" : "",
+      "to" : "ED8F57A1-F073-4A84-9329-13E9ED3F3DA1"
+    },
+    {
+      "from" : "ED8F57A1-F073-4A84-9329-13E9ED3F3DA1",
+      "id" : "1FEA0C6F-218A-4642-9170-D18978165BF3",
+      "label" : "approved",
+      "to" : "82B44E46-1981-445F-B25D-FE58B1319A7F"
+    },
+    {
+      "from" : "82B44E46-1981-445F-B25D-FE58B1319A7F",
+      "id" : "7449259C-FFDE-4B4F-AC8E-9FD537A590D4",
+      "label" : "",
+      "to" : "9F3B6D7F-D1FE-43C1-BAD9-9098C2077EA6"
+    }
+  ],
+  "name" : "Daily Market Data Refresh",
+  "nodes" : [
+    {
+      "arguments" : [
+        {
+          "id" : "4DD97BB9-065E-414F-989C-38021D899CEE",
+          "name" : "watchlist",
+          "required" : true,
+          "type" : "symbols",
+          "value" : "AAPL,MSFT,NVDA"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "337E5BD5-C32F-4840-90E7-AF1D97C7E5B4",
+      "kind" : "trigger",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "Refresh run started for the watchlist",
+        "outputName" : "run",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "schedule" : {
+        "intervalMinutes" : 60,
+        "mode" : "weekdays",
+        "time" : "07:30",
+        "timeZone" : "America/New_York"
+      },
+      "title" : "Morning refresh",
+      "x" : 400,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+
+        ],
+        "instructions" : "Combine the analyst view with current holdings into a list of instructions (symbol, action, quantity, limit price, rationale). Flag anything outside the risk limits.",
+        "model" : "",
+        "outputFormat" : "JSON array of instructions"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "651EC647-B12A-4E33-8169-D7E2C2FC9C03",
+      "kind" : "instructionSet",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "At least one instruction, or an explicit 'no action' note",
+        "outputName" : "instructions",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Assemble rebalance instructions",
+      "x" : 1320,
+      "y" : 120
+    },
+    {
+      "approval" : {
+        "approver" : "Portfolio owner",
+        "channel" : "inApp",
+        "expiresAfterMinutes" : 120,
+        "requireComment" : false,
+        "summaryTemplate" : "{{instructions.count}} instructions ready for {{today}}"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "ED8F57A1-F073-4A84-9329-13E9ED3F3DA1",
+      "kind" : "approvalGate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "approved",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Approve instructions",
+      "x" : 1580,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 0,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "execution" : {
+        "confirmBeforeSend" : true,
+        "mode" : "paper",
+        "target" : "Broker API (paper)"
+      },
+      "id" : "82B44E46-1981-445F-B25D-FE58B1319A7F",
+      "kind" : "executeRequest",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "executions",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Submit approved instructions",
+      "x" : 1840,
+      "y" : 120
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "9F3B6D7F-D1FE-43C1-BAD9-9098C2077EA6",
+      "kind" : "outcomeReport",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "Report delivered with fills, rejects and data gaps",
+        "outputName" : "",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "report" : {
+        "detailed" : false,
+        "includeFailures" : true,
+        "recipients" : "me"
+      },
+      "title" : "Daily outcome report",
+      "x" : 2100,
+      "y" : 120
+    },
+    {
+      "agent" : {
+        "inputs" : [
+          "run"
+        ],
+        "instructions" : "Fetch the latest quote for every watchlist symbol and the USD FX rates.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "6E9212BF-AA72-41D4-80BF-E810A91532F7",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "prices",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Market data agent",
+      "x" : 400,
+      "y" : 290
+    },
+    {
+      "agent" : {
+        "inputs" : [
+          "run"
+        ],
+        "instructions" : "Collect yesterday's company news and the latest SEC filings for each symbol; summarise anything that could move the price.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "323C2670-F3FF-40E4-B984-FF78523DB55D",
+      "kind" : "agentTask",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "events",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "News & filings agent",
+      "x" : 1040,
+      "y" : 410
+    },
+    {
+      "agent" : {
+        "inputs" : [
+          "prices",
+          "events"
+        ],
+        "instructions" : "Merge prices and events into a per-symbol view with a suggested action.",
+        "model" : "",
+        "outputFormat" : ""
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "DF1ED8B0-F7C4-44E6-8D06-E1EBC0513F3E",
+      "kind" : "aggregate",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "analysis",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Portfolio analyst",
+      "x" : 1320,
+      "y" : 410
+    },
+    {
+      "agent" : {
+        "inputs" : [
+          "optimization",
+          "risk"
+        ],
+        "instructions" : "Follow optimization.decisionContext (rebalance, rebalance_partially, hold, rerun_relaxed, escalate), and escalate when the risk step reports VaR above the limit.",
+        "model" : "",
+        "outputFormat" : "{nextStep, confidence, reason}"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "FABD4E1F-84EC-49DC-8624-728C5B0C6303",
+      "kind" : "decision",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "nextStep",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Choose next step",
+      "x" : 2110,
+      "y" : 430
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "GET",
+        "path" : "/query",
+        "query" : [
+          {
+            "id" : "E3161001-539A-449B-83B3-F5B08964013B",
+            "key" : "function",
+            "value" : "GLOBAL_QUOTE"
+          },
+          {
+            "id" : "CE198672-CA6F-430F-9C7B-4CCDBFB73825",
+            "key" : "symbol",
+            "value" : "{{symbol}}"
+          }
+        ],
+        "subscriptionID" : "7F632ECC-9EB3-4A27-95BE-7CD29D8C4FD5"
+      },
+      "arguments" : [
+        {
+          "id" : "1DC9F4A6-1A40-4495-BFA2-ADF99B423F92",
+          "name" : "symbol",
+          "required" : true,
+          "type" : "symbols",
+          "value" : "IBM"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "previous close",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "useFallback",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "3C695CBC-D647-4A18-810F-B7EFB9FD18CF",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "quote",
+        "requiredFields" : [
+          "Global Quote.05. price"
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Global quote",
+      "x" : 290,
+      "y" : 670
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "GET",
+        "path" : "/latest",
+        "query" : [
+          {
+            "id" : "4F664D94-1D19-48F0-83A4-A8DDEDB05043",
+            "key" : "base",
+            "value" : "USD"
+          },
+          {
+            "id" : "F0B5A965-07C8-4ACF-8BC7-A850271C6E6E",
+            "key" : "symbols",
+            "value" : "EUR,GBP,JPY"
+          }
+        ],
+        "subscriptionID" : "6557894A-C256-49D2-88FC-70B6D9CAB035"
+      },
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "AA26FB47-4512-43A6-B138-A7530FA39C2B",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "fx",
+        "requiredFields" : [
+          "rates.EUR"
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "USD FX rates",
+      "x" : 800,
+      "y" : 670
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "GET",
+        "path" : "/company-news",
+        "query" : [
+          {
+            "id" : "9CB13CB0-8A7B-4DAA-ACBF-44AE663E9023",
+            "key" : "symbol",
+            "value" : "{{symbol}}"
+          },
+          {
+            "id" : "7128C7CA-8DB2-4CDD-975C-3604BE4AA00C",
+            "key" : "from",
+            "value" : "{{yesterday}}"
+          },
+          {
+            "id" : "F74FE493-C132-4BA5-8D6F-D282513AEDC1",
+            "key" : "to",
+            "value" : "{{today}}"
+          }
+        ],
+        "subscriptionID" : "164DC432-30E5-45FB-96DD-4A157EC0B510"
+      },
+      "arguments" : [
+        {
+          "id" : "3558519E-168D-481C-8065-6BDB8BC60F74",
+          "name" : "symbol",
+          "required" : true,
+          "type" : "symbols",
+          "value" : "AAPL"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "53E4C323-E4C4-4275-AB47-EC237AE79508",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "news",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Company news",
+      "x" : 1040,
+      "y" : 670
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "GET",
+        "path" : "/submissions/CIK{{cik}}.json",
+        "query" : [
+
+        ],
+        "subscriptionID" : "41FB934D-A25D-4A6F-9CE2-38626D1BA29D"
+      },
+      "arguments" : [
+        {
+          "id" : "F4336114-9D4D-4F6A-A0DC-A99D45655F4F",
+          "name" : "cik",
+          "required" : true,
+          "type" : "text",
+          "value" : "0000320193"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "skip",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "86890E5A-7AB4-47B2-B54F-D1117A454F39",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "filings",
+        "requiredFields" : [
+          "filings.recent.form"
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Recent filings",
+      "x" : 1260,
+      "y" : 670
+    },
+    {
+      "arguments" : [
+
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "096FCD4C-37A6-4F4B-A293-5E0283CC3C63",
+      "kind" : "dataNormalize",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "quotes",
+        "requiredFields" : [
+
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Normalize quotes",
+      "transform" : {
+        "mappings" : [
+          {
+            "id" : "FE8356AD-D4F0-491E-B546-848170CD81D1",
+            "key" : "price",
+            "value" : "Global Quote.05. price"
+          },
+          {
+            "id" : "CB1F1A29-D35E-4B09-BFE0-8A7500E9A230",
+            "key" : "change",
+            "value" : "Global Quote.10. change percent"
+          }
+        ]
+      },
+      "x" : 530,
+      "y" : 670
+    },
+    {
+      "api" : {
+        "body" : "",
+        "headers" : [
+
+        ],
+        "method" : "GET",
+        "path" : "/indicators",
+        "query" : [
+          {
+            "id" : "E4170082-E46C-4822-978C-0C8314557F73",
+            "key" : "symbol",
+            "value" : "{{symbol}}"
+          },
+          {
+            "id" : "60C0AA93-340D-4B87-8D58-6D99BCD080AC",
+            "key" : "window",
+            "value" : "{{window}}"
+          }
+        ],
+        "subscriptionID" : "4D04D1FF-3ED4-44C0-9DE8-058ED8B59770"
+      },
+      "arguments" : [
+        {
+          "id" : "F5AB2A5E-C2F5-41BB-9668-EE07A415E388",
+          "name" : "symbol",
+          "required" : true,
+          "type" : "symbols",
+          "value" : "AAPL"
+        },
+        {
+          "id" : "2C7C7997-E73A-4178-B91B-1F97FF12D1CF",
+          "name" : "window",
+          "required" : false,
+          "type" : "number",
+          "value" : "14"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "56059FB3-C4A5-4A4E-90C7-0EC459417BD6",
+      "kind" : "apiRead",
+      "notes" : "Start the services first: python3 Services/mxservices.py start",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "",
+        "outputName" : "indicators",
+        "requiredFields" : [
+          "rsi",
+          "sma"
+        ],
+        "successStatus" : "200-299"
+      },
+      "title" : "Indicators (local Python)",
+      "x" : 1490,
+      "y" : 670
+    },
+    {
+      "arguments" : [
+        {
+          "id" : "A4C5F503-A543-40E7-B50C-52F384C8FAA2",
+          "name" : "oversold",
+          "required" : false,
+          "type" : "number",
+          "value" : "30"
+        },
+        {
+          "id" : "583090FD-4180-49C0-B1EF-6C1DF0B18251",
+          "name" : "overbought",
+          "required" : false,
+          "type" : "number",
+          "value" : "70"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "retry",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "31F44F4C-FD5A-4584-9154-72A6517A3464",
+      "kind" : "pythonScript",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+
+        ],
+        "description" : "buy / hold / sell from the RSI and the trend against the moving average",
+        "outputName" : "signals",
+        "requiredFields" : [
+          "signal"
+        ],
+        "successStatus" : "200-299"
+      },
+      "script" : {
+        "code" : "import json, sys\n\nrequest = json.load(sys.stdin)\nargs = request[\"arguments\"]\nind = request[\"inputs\"].get(\"indicators\", {})   # output of \"Indicators (local Python)\"\n\nrsi = ind.get(\"rsi\")\noversold = float(args.get(\"oversold\", 30))\noverbought = float(args.get(\"overbought\", 70))\n\nif rsi is None:\n    signal = \"unknown\"\nelif rsi <= oversold:\n    signal = \"buy\"\nelif rsi >= overbought:\n    signal = \"sell\"\nelse:\n    signal = \"hold\"\n\ntrend = \"up\" if (ind.get(\"last\") or 0) > (ind.get(\"sma\") or 0) else \"down\"\njson.dump({\"symbol\": ind.get(\"symbol\"), \"rsi\": rsi, \"trend\": trend, \"signal\": signal}, sys.stdout)\n",
+        "interpreter" : ""
+      },
+      "title" : "Score signals (Python)",
+      "x" : 1760,
+      "y" : 670
+    },
+    {
+      "api" : {
+        "body" : "{\n  \"assets\": [\"AAPL\", \"MSFT\", \"NVDA\", \"TLT\"],\n  \"expectedReturns\": [0.11, 0.10, 0.16, 0.04],\n  \"covariance\": [[0.0625, 0.0300, 0.0450, -0.0040], [0.0300, 0.0484, 0.0400, -0.0030],\n                 [0.0450, 0.0400, 0.1600, -0.0050], [-0.0040, -0.0030, -0.0050, 0.0196]],\n  \"objective\": \"max_sharpe\",\n  \"riskFreeRate\": {{riskFreeRate}},\n  \"maxWeight\": {{maxWeight}},\n  \"currentWeights\": {\"AAPL\": 0.25, \"MSFT\": 0.25, \"NVDA\": 0.25, \"TLT\": 0.25},\n  \"maxTurnover\": {{maxTurnover}}\n}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/optimize",
+        "query" : [
+
+        ],
+        "subscriptionID" : "574F9FA0-CE44-4184-9190-A72C0A399374"
+      },
+      "arguments" : [
+        {
+          "id" : "C6BECF48-DD85-48A1-90BD-D2AE9F347929",
+          "name" : "maxWeight",
+          "required" : true,
+          "type" : "number",
+          "value" : "0.4"
+        },
+        {
+          "id" : "F7C7BCA7-6706-49A9-BC74-5D030E59D284",
+          "name" : "riskFreeRate",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.02"
+        },
+        {
+          "id" : "32F8A82B-D201-478F-BFA8-BA2C4C37108E",
+          "name" : "maxTurnover",
+          "required" : false,
+          "type" : "number",
+          "value" : "0.2"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "5C742E71-8471-48EC-84E1-5AD533FAE2B8",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "18491019-BFF7-4BC9-8B61-8E090FFB59A5",
+            "op" : "==",
+            "path" : "solverStatus",
+            "value" : "optimal"
+          },
+          {
+            "id" : "9856A3B1-E6E2-4EF7-91C6-A5FF766DAE98",
+            "op" : "==",
+            "path" : "schema",
+            "value" : "mxjobs.optimization/1"
+          }
+        ],
+        "description" : "Max-Sharpe weights under the cap, with a decisionContext for the agent",
+        "outputName" : "optimization",
+        "requiredFields" : [
+          "weights",
+          "decisionContext.recommendation"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Optimize portfolio (Java)",
+      "x" : 2030,
+      "y" : 660
+    },
+    {
+      "api" : {
+        "body" : "{\n  \"assets\": [\"AAPL\", \"MSFT\", \"NVDA\", \"TLT\"],\n  \"weights\": {\"AAPL\": 0.25, \"MSFT\": 0.25, \"NVDA\": 0.25, \"TLT\": 0.25},\n  \"expectedReturns\": [0.11, 0.10, 0.16, 0.04],\n  \"covariance\": [[0.0625, 0.0300, 0.0450, -0.0040], [0.0300, 0.0484, 0.0400, -0.0030],\n                 [0.0450, 0.0400, 0.1600, -0.0050], [-0.0040, -0.0030, -0.0050, 0.0196]],\n  \"confidence\": 0.99,\n  \"horizonDays\": 10,\n  \"portfolioValue\": {{portfolioValue}}\n}",
+        "headers" : [
+
+        ],
+        "method" : "POST",
+        "path" : "/risk",
+        "query" : [
+
+        ],
+        "subscriptionID" : "301F0E37-0B79-4D68-8B90-BECAC0CDCD94"
+      },
+      "arguments" : [
+        {
+          "id" : "6FDEF1E2-251B-46C6-BAC0-2E2894A4AA85",
+          "name" : "portfolioValue",
+          "required" : true,
+          "type" : "number",
+          "value" : "1000000"
+        },
+        {
+          "id" : "DF3C49D0-C75E-4FC6-A62A-BC4C182BA1E0",
+          "name" : "maxVaR",
+          "required" : false,
+          "type" : "number",
+          "value" : "80000"
+        }
+      ],
+      "breakpoint" : false,
+      "enabled" : true,
+      "exceptions" : {
+        "exponentialBackoff" : true,
+        "fallbackValue" : "",
+        "maxRetries" : 2,
+        "notifyUser" : true,
+        "onFailure" : "escalateToUser",
+        "retryDelaySeconds" : 5,
+        "timeoutSeconds" : 30
+      },
+      "id" : "460803BC-A6B3-4371-AB52-BB57EA30D566",
+      "kind" : "apiRead",
+      "notes" : "",
+      "outcome" : {
+        "assertions" : [
+          {
+            "id" : "A46F879F-DB17-45C0-9217-877E6435B2E5",
+            "op" : "==",
+            "path" : "status",
+            "value" : "ok"
+          },
+          {
+            "id" : "10A948AE-B2A7-43AA-A13C-97DD940B0529",
+            "op" : "<",
+            "path" : "valueAtRisk",
+            "value" : "{{maxVaR}}"
+          }
+        ],
+        "description" : "10-day 99% VaR of the current holdings within the limit",
+        "outputName" : "risk",
+        "requiredFields" : [
+          "valueAtRisk",
+          "riskContributions"
+        ],
+        "successStatus" : "200"
+      },
+      "title" : "Portfolio risk (C++)",
+      "x" : 2230,
+      "y" : 660
+    }
+  ],
+  "run" : {
+    "agents" : "run",
+    "breakpointsEnabled" : true,
+    "data" : "mock",
+    "operations" : "interactive",
+    "stepDelay" : 0.4,
+    "stopOnError" : true
+  },
+  "subscriptions" : [
+    {
+      "auth" : "queryParameter",
+      "baseURL" : "https://www.alphavantage.co",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "https://www.alphavantage.co/documentation/",
+      "id" : "7F632ECC-9EB3-4A27-95BE-7CD29D8C4FD5",
+      "ide" : "vscode",
+      "keyName" : "apikey",
+      "name" : "Alpha Vantage",
+      "notes" : "",
+      "plan" : "Free (25 requests a day)",
+      "projectFolder" : "",
+      "provider" : "Alpha Vantage Inc.",
+      "rateLimitPerMinute" : 5
+    },
+    {
+      "auth" : "header",
+      "baseURL" : "https://finnhub.io/api/v1",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "https://finnhub.io/docs/api",
+      "id" : "164DC432-30E5-45FB-96DD-4A157EC0B510",
+      "ide" : "vscode",
+      "keyName" : "X-Finnhub-Token",
+      "name" : "Finnhub",
+      "notes" : "",
+      "plan" : "Free",
+      "projectFolder" : "",
+      "provider" : "Finnhub.io",
+      "rateLimitPerMinute" : 60
+    },
+    {
+      "auth" : "none",
+      "baseURL" : "https://api.frankfurter.dev/v1",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "https://frankfurter.dev",
+      "id" : "6557894A-C256-49D2-88FC-70B6D9CAB035",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Frankfurter FX",
+      "notes" : "",
+      "plan" : "",
+      "projectFolder" : "",
+      "provider" : "ECB reference rates",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "none",
+      "baseURL" : "https://data.sec.gov",
+      "defaultHeaders" : [
+        {
+          "id" : "90ED2281-54D7-4D5F-A944-6C90350D73B7",
+          "key" : "User-Agent",
+          "value" : "MxJobsMGR your-name@example.com"
+        }
+      ],
+      "docsURL" : "https://www.sec.gov/search-filings/edgar-application-programming-interfaces",
+      "id" : "41FB934D-A25D-4A6F-9CE2-38626D1BA29D",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "SEC EDGAR",
+      "notes" : "SEC asks every client to send a User-Agent naming the requester.",
+      "plan" : "",
+      "projectFolder" : "",
+      "provider" : "U.S. SEC",
+      "rateLimitPerMinute" : 600
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8765",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "4D04D1FF-3ED4-44C0-9DE8-058ED8B59770",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Local Python service",
+      "notes" : "Start it with: python3 Services/mxservices.py start (or python3 Services/market-sample/mxjobs_service.py --port 8765). Store a token here only if the service is started with --token.",
+      "plan" : "",
+      "projectFolder" : "",
+      "provider" : "This Mac",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8766",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "574F9FA0-CE44-4184-9190-A72C0A399374",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Portfolio optimizer (Java)",
+      "notes" : "Start it with: python3 Services/mxservices.py start (builds it first if needed)",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MxAppsIOS/Services/portfolio-java",
+      "provider" : "This Mac",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "localService",
+      "baseURL" : "http://127.0.0.1:8767",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "301F0E37-0B79-4D68-8B90-BECAC0CDCD94",
+      "ide" : "vscode",
+      "keyName" : "",
+      "name" : "Portfolio engine (C++)",
+      "notes" : "Start it with: python3 Services/mxservices.py start (builds it first if needed)",
+      "plan" : "",
+      "projectFolder" : "~/MyCodeGIT/MxAppsIOS/Services/portfolio-cpp",
+      "provider" : "This Mac",
+      "rateLimitPerMinute" : 0
+    },
+    {
+      "auth" : "header",
+      "baseURL" : "https://financialmodelingprep.com/stable/search-symbol?query=AAPL",
+      "defaultHeaders" : [
+
+      ],
+      "docsURL" : "",
+      "id" : "535A44A7-C7F4-42F4-B7CB-3CC254BEB053",
+      "ide" : "vscode",
+      "keyName" : "apikey",
+      "name" : "FMP  Data API",
+      "notes" : "",
+      "plan" : "",
+      "projectFolder" : "",
+      "provider" : "",
+      "rateLimitPerMinute" : 0
+    }
+  ]
+}

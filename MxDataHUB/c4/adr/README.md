@@ -15,13 +15,13 @@ template; a superseded record is kept and marked *Superseded by ADR-NNNN*.
 | [ADR-0006](0006-secrets-in-keychain-never-in-repository.md) | Secrets live in the Keychain, environment or untracked config — never in the repository | Accepted |
 | [ADR-0007](0007-identifiers-with-validity-ranges-in-the-database.md) | Identifiers are time-ranged and validated in the database | Accepted |
 | [ADR-0008](0008-dated-snapshots-for-benchmarks-and-portfolios.md) | Benchmarks and portfolios are kept as dated weight snapshots | Accepted |
-| [ADR-0009](0009-data-and-process-apps-linked-by-url-schemes.md) | Data (MxDataHUB) and processes (MxJobsWMS) are separate apps linked by URL schemes | Accepted |
+| [ADR-0009](0009-data-and-process-apps-linked-by-url-schemes.md) | Data (MxDataHUB) and processes (MxJobsMGR) are separate apps linked by URL schemes | Accepted |
 | [ADR-0010](0010-shared-swift-sources-compiled-into-each-app.md) | Shared Swift sources are compiled into each app | Accepted |
 | [ADR-0011](0011-app-sandbox-with-outgoing-network-only.md) | App Sandbox with outgoing network only | Accepted |
 | [ADR-0012](0012-quick-help-panel-for-in-app-documentation.md) | In-app documentation through a shared Quick Help panel | Accepted |
 
-Decisions shared with MxJobsWMS (0009 and 0010 here) are recorded in both apps' folders; see also
-[MxJobsWMS ADRs](../../../MxJobsWMS/c4/adr/README.md).
+Decisions shared with MxJobsMGR (0009 and 0010 here) are recorded in both apps' folders; see also
+[MxJobsMGR ADRs](../../../MxJobsMGR/c4/adr/README.md).
 
 ## Template
 

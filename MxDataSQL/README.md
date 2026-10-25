@@ -316,6 +316,6 @@ mode, the whole batch is rolled back. After an update, the grid reloads from the
 | `DiagramCanvas.swift`, `DiagramWindow.swift` | The shared canvas in the window (toolbar, status line, close prompt) |
 | `DiagramCommands.swift` | The Diagram menu, the Write DBML Save panel and Open DBML |
 | `SQLQuickHelp.swift` | What Quick Help says: the forms and dialogs, the selection, grid cells and column headers |
-| `../Shared/QuickHelp/` | The Quick Help panel, shared with MxDataHUB and MxJobsWMS (the only part of `../Shared` this app compiles) |
+| `../Shared/QuickHelp/` | The Quick Help panel, shared with MxDataHUB and MxJobsMGR (the only part of `../Shared` this app compiles) |
 
 The document type is declared in `Info.plist`, which is merged with the Info.plist that Xcode generates.

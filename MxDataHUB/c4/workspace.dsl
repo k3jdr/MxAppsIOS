@@ -10,14 +10,14 @@ workspace "MxDataHUB" "Security reference master app and the systems around it" 
 
     model {
         analyst = person "Portfolio / data analyst" "Searches securities, maintains portfolios and benchmarks, checks and refreshes market data."
-        steward = person "Data steward" "Owns data quality; approves the automated refresh in MxJobsWMS."
+        steward = person "Data steward" "Owns data quality; approves the automated refresh in MxJobsMGR."
 
         hub = softwareSystem "MxDataHUB" "Security master screens, portfolios, benchmarks, data refresh and load history." {
             app = container "MxDataHUB.app" "Native macOS app. Sandboxed, outgoing network only." "Swift, SwiftUI, PostgresNIO" {
                 shell = component "App shell" "Window, sidebar, Hub menu, Database drop-down, launch arguments, mxdatahub:// routing." "MxDataHUBApp, ContentView"
                 screens = component "Security master screens" "DB Connection, Securities, Portfolios, Benchmarks, Load History and their dialogs." "SwiftUI views"
                 refresh = component "Data Refresh" "Categories, freshness, Refresh / Refresh All / Preview only." "DataRefreshView, RefreshStore"
-                servicesWorkflows = component "Services & Workflows" "Layer 3 services and the MxJobsWMS samples for the selected portfolio." "ServicesWorkflowsView"
+                servicesWorkflows = component "Services & Workflows" "Layer 3 services and the MxJobsMGR samples for the selected portfolio." "ServicesWorkflowsView"
                 store = component "SRMStore" "Connection state, selections, row models and every SQL query and change." "Observable class"
                 pg = component "PostgresService" "PostgresNIO connection; parameterised SQL with text binds." "Swift"
                 keychain = component "Keychain" "Database password per user@host:port/database." "Security framework"
@@ -28,14 +28,14 @@ workspace "MxDataHUB" "Security reference master app and the systems around it" 
             db = container "SRM schema" "Securities, identifiers with validity, benchmarks and portfolios as dated snapshots, prices, load audit; rules as constraints and SQL functions." "PostgreSQL" "Database"
         }
 
-        services = softwareSystem "Layer 3 services" "Local HTTP services on 127.0.0.1, shared with MxJobsWMS." {
+        services = softwareSystem "Layer 3 services" "Local HTTP services on 127.0.0.1, shared with MxJobsMGR." {
             loader = container "srm-loader" "Data categories and freshness; runs srm.py loaders one at a time; status and quality." "Python HTTP :8770"
             analytics = container "analytics" "Optimization inputs, attribution." "Python HTTP :8772"
             java = container "portfolio-java" "Active optimization." "Java HTTP :8766"
             cpp = container "portfolio-cpp" "Index tracking and risk." "C++ HTTP :8767"
         }
 
-        wms = softwareSystem "MxJobsWMS" "Scheduled, checked and approved workflows over the security master." "External"
+        wms = softwareSystem "MxJobsMGR" "Scheduled, checked and approved workflows over the security master." "External"
         sources = softwareSystem "Data sources" "ISO 20022 MICs, SIX ISO 4217, Nasdaq Trader, SEC EDGAR, SSGA SPDR, Nasdaq.com, OpenFIGI, FMP, GLEIF." "External"
         loginKeychain = softwareSystem "macOS login Keychain" "Password items." "External"
 
@@ -50,7 +50,7 @@ workspace "MxDataHUB" "Security reference master app and the systems around it" 
         hub.cli -> hub.db "Migrates, upserts, audits" "psycopg2"
         hub.cli -> sources "Downloads" "HTTPS"
         services.analytics -> hub.db "Reads" "psycopg2"
-        hub.app -> wms "Opens a workflow for a portfolio or benchmark" "mxjobswms:// URL"
+        hub.app -> wms "Opens a workflow for a portfolio or benchmark" "mxjobsmgr:// URL"
         wms -> hub.app "Opens a portfolio, benchmark or screen" "mxdatahub:// URL"
         hub.app -> loginKeychain "Saves and reads the password"
 
@@ -64,7 +64,7 @@ workspace "MxDataHUB" "Security reference master app and the systems around it" 
         hub.app.keychain -> loginKeychain "SecItem API"
         hub.app.refresh -> services.loader "HTTP JSON"
         hub.app.servicesWorkflows -> hub.app.shared "ServicesView, SampleGalleryView, AppLink"
-        hub.app.shared -> wms "mxjobswms:// URL"
+        hub.app.shared -> wms "mxjobsmgr:// URL"
         hub.app.screens -> hub.app.quickHelp "Quick Help items"
 
         live = deploymentEnvironment "Desk" {

@@ -1,9 +1,9 @@
-// MxJobsWMS Layer 3 optimization and risk service (C++).
+// MxJobsMGR Layer 3 optimization and risk service (C++).
 //
 //   ./build/portfolio-cpp [--port 8767] [--token TOKEN]
 //
 //   GET  /health
-//   GET  /describe            what the service is for (shown in MxJobsWMS and MxDataHUB)
+//   GET  /describe            what the service is for (shown in MxJobsMGR and MxDataHUB)
 //   POST /optimize            mxjobs.optimize-request/1 → mxjobs.optimization/1 (absolute max-Sharpe / mean-variance)
 //   POST /optimize/tracking   inputs + maxNames         → mxjobs.tracking/1 (passive index tracking)
 //   POST /risk                weights + covariance (or inputsUrl) → mxjobs.risk/1, with active risk vs a benchmark
@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
         send(res, 500, error(what));
     });
 
-    std::printf("MxJobsWMS portfolio-cpp on http://127.0.0.1:%d%s\n", port, token.empty() ? "" : " (token required)");
+    std::printf("MxJobsMGR portfolio-cpp on http://127.0.0.1:%d%s\n", port, token.empty() ? "" : " (token required)");
     std::fflush(stdout);
     if (!server.listen("127.0.0.1", port)) {
         std::fprintf(stderr, "could not listen on 127.0.0.1:%d\n", port);

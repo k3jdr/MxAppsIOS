@@ -1,6 +1,6 @@
 //
 //  ServiceCatalog.swift
-//  Shared by MxDataHUB, MxJobsWMS and MxAcctMGR (MxAppsIOS/Shared)
+//  Shared by MxDataHUB, MxJobsMGR and MxAcctMGR (MxAppsIOS/Shared)
 //
 //  The Layer 3 services both apps rely on (MxAppsIOS/Services): what each is for, why it is written in its
 //  language, which use cases and samples it serves, and whether it is running now. The built-in entries mirror
@@ -183,7 +183,7 @@ nonisolated enum ServiceCatalog {
     }
 }
 
-/// The sample jobspaces of MxJobsWMS, as both apps describe them.
+/// The sample jobspaces of MxJobsMGR, as both apps describe them.
 nonisolated struct SampleInfo: Identifiable, Hashable, Sendable {
     var id: String
     var title: String

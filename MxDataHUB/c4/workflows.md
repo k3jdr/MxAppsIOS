@@ -9,7 +9,7 @@ objects.
 4. [Build a custom benchmark](#4-build-a-custom-benchmark)
 5. [Refresh a data category](#5-refresh-a-data-category)
 6. [Loader dependency order](#6-loader-dependency-order)
-7. [Hand a portfolio to MxJobsWMS and back](#7-hand-a-portfolio-to-mxjobswms-and-back)
+7. [Hand a portfolio to MxJobsMGR and back](#7-hand-a-portfolio-to-mxjobsmgr-and-back)
 8. [Daily data operations](#8-daily-data-operations)
 9. [Weight history for attribution](#9-weight-history-for-attribution)
 
@@ -90,7 +90,7 @@ flowchart TD
     L -- yes --> E
     L -- no --> M[vs Benchmark<br/>portfolio_active_weights, active share]
     M --> N{Next}
-    N -- Workflows menu --> O((MxJobsWMS: Optimize,<br/>Track or Attribution))
+    N -- Workflows menu --> O((MxJobsMGR: Optimize,<br/>Track or Attribution))
     N -- done --> P([Snapshot kept as history])
 ```
 
@@ -182,19 +182,19 @@ flowchart LR
 
 `srm.py load all` runs the same order and skips `portfolio-snapshots`.
 
-## 7. Hand a portfolio to MxJobsWMS and back
+## 7. Hand a portfolio to MxJobsMGR and back
 
 ```mermaid
 sequenceDiagram
     actor U as Portfolio manager
     participant H as MxDataHUB (Portfolios)
     participant OS as macOS Launch Services
-    participant W as MxJobsWMS
+    participant W as MxJobsMGR
     participant J as Jobspace window
 
     U->>H: Workflows ▸ Optimize — active vs SP500
     H->>H: AppLink.sample(active-optimization, DEMO_GROWTH, SP500).url
-    H->>OS: open mxjobswms://sample/active-optimization?portfolio=DEMO_GROWTH&benchmark=SP500
+    H->>OS: open mxjobsmgr://sample/active-optimization?portfolio=DEMO_GROWTH&benchmark=SP500
     OS->>W: application(_:open:)
     W->>W: Jobspace.fromSample(id, portfolio, benchmark)
     W->>J: new document with the sample
@@ -209,7 +209,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     start([Business day close]) --> auto{Automated?}
-    auto -- "yes: MxJobsWMS SRM Daily Refresh<br/>weekdays 18:30 New York" --> wms[MxJobsWMS runs the 12 loaders<br/>via srm-loader /load, then /status]
+    auto -- "yes: MxJobsMGR SRM Daily Refresh<br/>weekdays 18:30 New York" --> wms[MxJobsMGR runs the 12 loaders<br/>via srm-loader /load, then /status]
     wms --> review[Data quality analyst agent<br/>builds report and follow-ups]
     review --> approve{Data steward approves?}
     approve -- yes --> backfill[Run approved backfills<br/>dry run]
@@ -233,5 +233,5 @@ flowchart LR
     ph --> cov
     bw --> attr[analytics /attribution<br/>monthly weights: latest snapshot on or before month start]
     ph --> attr
-    attr --> wf((MxJobsWMS Performance &<br/>Risk Attribution))
+    attr --> wf((MxJobsMGR Performance &<br/>Risk Attribution))
 ```

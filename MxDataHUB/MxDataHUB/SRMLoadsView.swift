@@ -144,7 +144,7 @@ struct SRMLoadsView: View {
                 .quickHelpArea("Loads", "Every loader run (srm.load_run), newest first: when, which loader, how it ended, rows read, inserted, updated and rejected, API calls, how long it took and its message.",
                                symbol: "tray.and.arrow.down")
                 HStack {
-                    Text("Refresh data in Data Refresh, or with SRM/srm.py load all; automate it in MxJobsWMS.")
+                    Text("Refresh data in Data Refresh, or with SRM/srm.py load all; automate it in MxJobsMGR.")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Data Refresh") { store.section = .refresh }
                         .quickHelp("Data Refresh", "Goes to Data Refresh, to see how fresh each category is and run its loaders.", shortcut: "⌘5")

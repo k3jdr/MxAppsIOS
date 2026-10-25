@@ -95,7 +95,7 @@ struct ContentView: View {
         }
     }
 
-    /// mxdatahub:// links from MxJobsWMS (Shared/AppLinks.swift).
+    /// mxdatahub:// links from MxJobsMGR (Shared/AppLinks.swift).
     private func open(_ link: AppLink?) {
         switch link {
         case .portfolio(let code)?:
@@ -165,7 +165,7 @@ struct ContentView: View {
 }
 
 extension View {
-    /// Gives a split-view column or pane a constant minimum size, as MxJobsWMS does: one taken from the content
+    /// Gives a split-view column or pane a constant minimum size, as MxJobsMGR does: one taken from the content
     /// (a console's longest line, a text that wraps) changes as the content does, and widened the window or made
     /// AppKit loop on updating constraints. Content that needs more is clipped on the right. Not for the detail
     /// column itself: there it made hiding the sidebar on Securities loop and abort.

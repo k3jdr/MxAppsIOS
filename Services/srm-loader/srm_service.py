@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""MxJobsWMS Layer 3 service for MxDataHUB's securities master (SRM) loaders.
+"""MxJobsMGR Layer 3 service for MxDataHUB's securities master (SRM) loaders.
 
-Wraps MxDataHUB/SRM/srm.py so an MxJobsWMS jobspace can run the daily SRM refresh step by step:
+Wraps MxDataHUB/SRM/srm.py so an MxJobsMGR jobspace can run the daily SRM refresh step by step:
 
     python3 srm_service.py                         # http://127.0.0.1:8770, SRM folder found at ../../MxDataHUB/SRM
     python3 srm_service.py --srm-dir /path/to/MxDataHUB/SRM --port 8770 --token s3cret
@@ -694,7 +694,7 @@ def json_default(value):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MxJobsWMS Layer 3 service for the SRM loaders")
+    parser = argparse.ArgumentParser(description="MxJobsMGR Layer 3 service for the SRM loaders")
     parser.add_argument("--port", type=int, default=8770)
     parser.add_argument("--srm-dir", default=os.environ.get("SRM_DIR", DEFAULT_SRM_DIR))
     parser.add_argument("--token", default=os.environ.get("MXJOBS_SERVICE_TOKEN"))
@@ -706,7 +706,7 @@ def main():
     Handler.token = args.token or None
     Handler.stale_days = args.stale_days
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print("MxJobsWMS SRM service on http://127.0.0.1:%d for %s%s" %
+    print("MxJobsMGR SRM service on http://127.0.0.1:%d for %s%s" %
           (args.port, args.srm_dir, " (token required)" if Handler.token else ""), flush=True)
     try:
         server.serve_forever()

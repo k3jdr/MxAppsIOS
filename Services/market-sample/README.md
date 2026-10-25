@@ -21,7 +21,7 @@ The prices are **synthetic** — a repeatable random walk per symbol — so jobs
 without a data subscription. Replace `history()` with a real source (an API, a database, pandas) to make it live;
 the endpoints stay the same.
 
-It listens on `127.0.0.1` only. MxJobsWMS reaches it through a **Local Python service** subscription
+It listens on `127.0.0.1` only. MxJobsMGR reaches it through a **Local Python service** subscription
 (API Subscriptions ▸ + ▸ Local Python Service): base URL `http://127.0.0.1:8765`, authentication
 "Local service (optional token)" — store a token there only if you start the service with `--token`.
 The sample jobspace's **Indicators (local Python)** step calls `/indicators` and feeds **Score signals (Python)**.

@@ -1,12 +1,12 @@
 # ADR-0001: A native macOS app in SwiftUI
 
 - **Status:** Accepted — recorded retrospectively on 2026-10-17 from the code, READMEs and git history
-- **Applies to:** MxDataHUB (and its sibling MxJobsWMS)
+- **Applies to:** MxDataHUB (and its sibling MxJobsMGR)
 
 ## Context
 
 The security master is used by one person or a small desk on Macs, alongside other native tools in the same
-repository (MxDataSQL, MxFileMGR, MxNoteONE, MxJobsWMS). The screens are dense tables, charts and forms over a
+repository (MxDataSQL, MxFileMGR, MxNoteONE, MxJobsMGR). The screens are dense tables, charts and forms over a
 PostgreSQL database on the local network. Users expect keyboard shortcuts, menus, multiple windows from the other
 apps, Keychain integration and URL-scheme hand-offs between apps.
 

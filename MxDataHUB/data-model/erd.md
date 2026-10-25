@@ -394,5 +394,5 @@ portfolios.
 | ----------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------- |
 | MxAcctMGR `pmg.account.srm_code`                          | `srm.portfolio.code`                        | by code (no FK; `pmg` installs without `srm`)                 |
 | MxAcctMGR `pmg.security.srm_security_id`                  | `srm.security.security_id`                  | cached copy of a security-master security                     |
-| MxJobsWMS `wms.job_run.portfolio_code` / `benchmark_code` | `srm.portfolio.code` / `srm.benchmark.code` | by code, from `mxjobswms://sample/<id>?portfolio=&benchmark=` |
+| MxJobsMGR `wms.job_run.portfolio_code` / `benchmark_code` | `srm.portfolio.code` / `srm.benchmark.code` | by code, from `mxjobsmgr://sample/<id>?portfolio=&benchmark=` |
 | accounts service (8774)                                   | `srm.portfolio`, `srm.portfolio_tax_lot`    | writes MxAcctMGR's My Portfolio                               |

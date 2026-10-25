@@ -32,7 +32,7 @@ struct WelcomeView: View {
                     Label("Quick Help, under the sidebar, explains whatever is under the pointer — a number, a column, a button. ⌥⌘/ shows or hides it; its ⧉ button floats it in its own window.", systemImage: "questionmark.bubble")
                     Label("Investments, in the sidebar, walks your own account (My Portfolio) through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
                     Label("Pick a sample account in the toolbar for the report walkthroughs and the Morning Briefing: each teaches an edge case. Library ▸ Sample Portfolios describes them all; copy one into My Portfolio to work through it.", systemImage: "briefcase")
-                    Label("Engine in the toolbar: the built-in optimizers, or the shared Layer 3 services (portfolio-java, portfolio-cpp, analytics) that MxDataHUB and MxJobsWMS use.", systemImage: "cpu")
+                    Label("Engine in the toolbar: the built-in optimizers, or the shared Layer 3 services (portfolio-java, portfolio-cpp, analytics) that MxDataHUB and MxJobsMGR use.", systemImage: "cpu")
                 }
                 .font(.callout)
             }

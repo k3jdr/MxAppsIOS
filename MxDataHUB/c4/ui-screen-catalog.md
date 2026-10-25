@@ -21,14 +21,14 @@ flowchart LR
     port --> addh[[Add Holding…]]
     port --> paste[[Paste Holdings…]]
     port --> snap[[New Snapshot…]]
-    port -- Workflows menu --> wms((MxJobsWMS))
+    port -- Workflows menu --> wms((MxJobsMGR))
     bench --> build[[Build Custom…]]
     bench --> avail[[Availability…]]
     bench -- Track… --> wms
-    refresh -- Automate in MxJobsWMS… --> wms
+    refresh -- Automate in MxJobsMGR… --> wms
     refresh -- Load History --> loads
     loads -- Data Refresh --> refresh
-    svc -- Open in MxJobsWMS --> wms
+    svc -- Open in MxJobsMGR --> wms
     wms -. "mxdatahub://portfolio, benchmark,<br/>data-refresh, services" .-> window
 ```
 
@@ -78,7 +78,7 @@ without a connection.
 | **Dialogs** | **New / Edit Portfolio**: Code, Name, Description, Base currency, Benchmark. **New Snapshot**: date (copies the latest earlier snapshot). **Add Holding**: Identifier (live *Matches* as you type), Identifier type (Auto, …), Enter Shares or Weight %. **Paste Holdings**: one `identifier [type] shares\|weight%` per line; reports lines that failed. Delete asks for confirmation. |
 | **Data** | `portfolio`, `portfolio_holding`, `srm.add_holding`, `benchmark_weights`, `portfolio_valuation`, `portfolio_validate`, `portfolio_active_weights`, `resolve_identifier`. |
 | **Validation shown** | Weights add up to 100 %; every holding priced, and recently; inactive securities; short positions. *Valid: weights add up and every holding is priced.* |
-| **Hand-off** | Workflows → `mxjobswms://sample/{active-optimization\|passive-tracking\|attribution}?portfolio=CODE&benchmark=CODE`. |
+| **Hand-off** | Workflows → `mxjobsmgr://sample/{active-optimization\|passive-tracking\|attribution}?portfolio=CODE&benchmark=CODE`. |
 
 ### 4 · Benchmarks
 
@@ -88,18 +88,18 @@ without a connection.
 | **Layout** | Benchmark list (method, members, *PROXY* when ETF-based); constituents table with filter; weights by sector; index level chart; **Build Custom…**, **Availability…**, **Delete…**, **Track…**. |
 | **Dialogs** | **Build Custom Benchmark**: Code, Name, *Members of* (parent benchmark), **Weighting** (Equal weight / Market cap), **Sector** (All sectors / one). **Benchmark availability**: *Can be built* / *Cannot be built*, with reasons (licensing, plans). |
 | **Data** | `benchmark`, `v_benchmark_summary`, `benchmark_weights`, `classification_node`, `benchmark_level`, `srm.build_benchmark`. |
-| **Hand-off** | Track… → `mxjobswms://sample/passive-tracking?benchmark=CODE`. |
+| **Hand-off** | Track… → `mxjobsmgr://sample/passive-tracking?benchmark=CODE`. |
 
 ### 5 · Data Refresh
 
 | | |
 |---|---|
 | **Purpose** | See how fresh each category of market data is and refresh it. |
-| **Layout** | Header *Market data in the security master*, **Refresh All**, **Preview only (dry run)**, **Automate in MxJobsWMS…**, **Load History**; one row per category in dependency order (*later categories use the earlier ones*) with state badge, *Data as of*, *Last load*, cadence, loaders and **Refresh**; panel *This session's refreshes* with each loader's status, seconds and totals. |
+| **Layout** | Header *Market data in the security master*, **Refresh All**, **Preview only (dry run)**, **Automate in MxJobsMGR…**, **Load History**; one row per category in dependency order (*later categories use the earlier ones*) with state badge, *Data as of*, *Last load*, cadence, loaders and **Refresh**; panel *This session's refreshes* with each loader's status, seconds and totals. |
 | **Categories** | Reference data · Listed universe & issuers · Benchmark constituents · Identifiers & issuer data · Prices & index levels · Corporate actions · Portfolio snapshots (*Optional*). |
 | **States** | fresh · due · stale · failed (badge colours); **SRM Loader Service Not Running** with *Check Again* when 127.0.0.1:8770 does not answer. |
 | **Data** | srm-loader `GET /categories`, `POST /refresh/{id}` (`X-SRM-Dry-Run: 1` for preview). |
-| **Hand-off** | Automate in MxJobsWMS… → `mxjobswms://sample/srm-daily-refresh`. |
+| **Hand-off** | Automate in MxJobsMGR… → `mxjobsmgr://sample/srm-daily-refresh`. |
 
 ### 6 · Load History
 
@@ -114,10 +114,10 @@ without a connection.
 
 | | |
 |---|---|
-| **Purpose** | Show the Layer 3 services and the MxJobsWMS workflows built on them; open a workflow for the selected portfolio. |
-| **Layout** | Segmented **Workflows** / **Layer 3 Services**. *Workflows*: the five samples with the services each needs and whether they run; **Open in MxJobsWMS**. *Layer 3 Services*: each service's state, language and why, use cases, endpoints, start command, project folder (*Show Project in Finder*), and *Choosing a language*. |
+| **Purpose** | Show the Layer 3 services and the MxJobsMGR workflows built on them; open a workflow for the selected portfolio. |
+| **Layout** | Segmented **Workflows** / **Layer 3 Services**. *Workflows*: the five samples with the services each needs and whether they run; **Open in MxJobsMGR**. *Layer 3 Services*: each service's state, language and why, use cases, endpoints, start command, project folder (*Show Project in Finder*), and *Choosing a language*. |
 | **Data** | `ServiceCatalog` (built in) and `GET /health` per service. |
-| **Hand-off** | Open in MxJobsWMS → `mxjobswms://sample/<id>?portfolio=&benchmark=` (portfolio selected in Portfolios, else DEMO_GROWTH). |
+| **Hand-off** | Open in MxJobsMGR → `mxjobsmgr://sample/<id>?portfolio=&benchmark=` (portfolio selected in Portfolios, else DEMO_GROWTH). |
 
 ## Launch arguments (testing)
 

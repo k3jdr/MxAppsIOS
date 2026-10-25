@@ -13,8 +13,8 @@ news cost over the long run.
 > MxAcctMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
 > status bar says so on every screen.
 
-Sixth app in the MxAppsIOS family, next to MxJobsWMS, MxDataHUB, MxDataSQL, MxNoteONE and MxFileMGR. It re-implements
-MxDataHUB's portfolio optimization and attribution (which MxDataHUB hands to MxJobsWMS workflows and the Layer 3
+Sixth app in the MxAppsIOS family, next to MxJobsMGR, MxDataHUB, MxDataSQL, MxNoteONE and MxFileMGR. It re-implements
+MxDataHUB's portfolio optimization and attribution (which MxDataHUB hands to MxJobsMGR workflows and the Layer 3
 services) as interactive, explained steps, and can run them through the same **Layer 3 services** in `../Services`.
 
 **Renamed from MxPortMGR** (10/25/26): the personal accounts app — Banking as well as Investments — so it is named for
@@ -205,7 +205,7 @@ for a bond fund), volatility and momentum alpha come from the same `/inputs`, an
 expense ratio from the security master (Vanguard funds; other families' show none). A ticker two securities share
 shows as `TICKER:MIC` internally.
 
-`mxacctmgr://my-portfolio/CODE` (from MxDataHUB or MxJobsWMS ▸ Window ▸ Open MxAcctMGR) opens My Portfolio on that
+`mxacctmgr://my-portfolio/CODE` (from MxDataHUB or MxJobsMGR ▸ Window ▸ Open MxAcctMGR) opens My Portfolio on that
 security-master account.
 
 ### Knowledge Library

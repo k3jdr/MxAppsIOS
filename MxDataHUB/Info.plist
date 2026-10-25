@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- mxdatahub://portfolio/CODE, mxdatahub://benchmark/CODE, mxdatahub://data-refresh, mxdatahub://services
-	     (opened by MxJobsWMS; see Shared/AppLinks.swift) -->
+	     (opened by MxJobsMGR; see Shared/AppLinks.swift) -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

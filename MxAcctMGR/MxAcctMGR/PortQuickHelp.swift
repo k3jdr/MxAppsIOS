@@ -61,7 +61,7 @@ enum PortHelp {
 
     static let engine = QuickHelpItem(
         title: "Engine",
-        detail: "Built-in runs the optimizers inside MxAcctMGR. Layer 3 services sends the same inputs to portfolio-java (active, port 8766) and portfolio-cpp (tracking, port 8767), the engines MxJobsWMS and MxDataHUB use, so you can compare. Start them with python3 Services/mxservices.py start.",
+        detail: "Built-in runs the optimizers inside MxAcctMGR. Layer 3 services sends the same inputs to portfolio-java (active, port 8766) and portfolio-cpp (tracking, port 8767), the engines MxJobsMGR and MxDataHUB use, so you can compare. Start them with python3 Services/mxservices.py start.",
         symbol: "cpu")
 
     // MARK: Terms

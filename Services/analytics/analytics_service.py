@@ -3,7 +3,7 @@
 
 Reads the security master (MxDataHUB/SRM, PostgreSQL schema srm) and serves:
 
-    GET  /health, /describe            status; what this service is for (shown in MxJobsWMS and MxDataHUB)
+    GET  /health, /describe            status; what this service is for (shown in MxJobsMGR and MxDataHUB)
     GET  /portfolios, /benchmarks      what can be analysed
     POST /inputs                       optimization inputs for a portfolio and/or benchmark: universe, sectors,
                                        benchmark and current weights, shrunk covariance, expected returns or
@@ -917,7 +917,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MxJobsWMS / MxDataHUB portfolio analytics service")
+    parser = argparse.ArgumentParser(description="MxJobsMGR / MxDataHUB portfolio analytics service")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--srm-dir", default=os.environ.get("SRM_DIR", DEFAULT_SRM_DIR))
     parser.add_argument("--token", default=os.environ.get("MXJOBS_SERVICE_TOKEN"))

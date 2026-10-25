@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- mxacctmgr://my-portfolio/CODE opens My Portfolio from the security-master account CODE
-	     (MxDataHUB ▸ Portfolios ▸ Open in MxAcctMGR, MxJobsWMS ▸ Window ▸ Open MxAcctMGR; see Shared/AppLinks.swift).
+	     (MxDataHUB ▸ Portfolios ▸ Open in MxAcctMGR, MxJobsMGR ▸ Window ▸ Open MxAcctMGR; see Shared/AppLinks.swift).
 	     mxportmgr:// is the same link from before the app was renamed (MxPortMGR), kept for links saved elsewhere. -->
 	<key>CFBundleURLTypes</key>
 	<array>

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://k3jdr.com/mxjobs/schemas/mxjobs.optimization/1",
-  "title": "MxJobsWMS portfolio optimization outcome",
+  "title": "MxJobsMGR portfolio optimization outcome",
   "description": "Returned by POST /optimize of the Layer 3 optimization services (portfolio-java, portfolio-cpp). Layer 2 decision agents read decisionContext to pick the next step.",
   "type": "object",
   "required": ["schema", "solverStatus", "objective", "weights", "expectedReturn", "volatility", "sharpe",

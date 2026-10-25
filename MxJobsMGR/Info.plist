@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- mxjobsmgr://sample/ID?portfolio=CODE&benchmark=CODE (opened by MxDataHUB; see Shared/AppLinks.swift).
+	     mxjobswms:// is the same link from before the app was renamed (MxJobsWMS), kept for links saved elsewhere. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.k3jdr.MxJobsMGR</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mxjobsmgr</string>
+				<string>mxjobswms</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>MxJobsMGR Jobspace</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.k3jdr.mxjobsmgr.jobspace</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.k3jdr.mxjobsmgr.jobspace</string>
+			<key>UTTypeDescription</key>
+			<string>MxJobsMGR Jobspace</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>jobspace</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

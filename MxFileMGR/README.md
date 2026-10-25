@@ -129,7 +129,7 @@ twice a second).
 
 ## Quick Help
 
-**View ▸ Quick Help** (⌥⌘/) shows a panel at the bottom of the sidebar, as in MxNoteONE, MxDataHUB and MxJobsWMS,
+**View ▸ Quick Help** (⌥⌘/) shows a panel at the bottom of the sidebar, as in MxNoteONE, MxDataHUB and MxJobsMGR,
 telling what's under the pointer in a sentence or two, with its shortcut: toolbar and pane buttons, the path bar,
 filter, tabs, function keys, sidebar entries, the transfer panel — and in the file lists the item under the pointer
 (kind, size, date and what Return, Space, F3 and F4 do) or the column header (and how it's sorted). Over nothing it

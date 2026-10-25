@@ -1,7 +1,7 @@
 # ADR-0012: In-app documentation through a shared Quick Help panel
 
 - **Status:** Accepted — recorded retrospectively on 2026-10-17 from the code, READMEs and git history
-- **Applies to:** MxDataHUB (also MxJobsWMS, MxDataSQL, MxFileMGR, MxNoteONE)
+- **Applies to:** MxDataHUB (also MxJobsMGR, MxDataSQL, MxFileMGR, MxNoteONE)
 
 ## Context
 

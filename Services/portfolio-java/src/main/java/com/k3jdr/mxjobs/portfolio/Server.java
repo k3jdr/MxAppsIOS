@@ -12,13 +12,13 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
- * MxJobsWMS Layer 3 optimization service (Java).
+ * MxJobsMGR Layer 3 optimization service (Java).
  *
  * <pre>
  *   java -jar target/portfolio-java.jar [--port 8766] [--token TOKEN]
  *
  *   GET  /health
- *   GET  /describe          what the service is for (shown in MxJobsWMS and MxDataHUB)
+ *   GET  /describe          what the service is for (shown in MxJobsMGR and MxDataHUB)
  *   POST /optimize          mxjobs.optimize-request/1 → mxjobs.optimization/1 (absolute max-Sharpe / mean-variance)
  *   POST /optimize/active   mxjobs.active-request/1 → mxjobs.active-optimization/1 (benchmark-relative, active mandates)
  * </pre>
@@ -106,7 +106,7 @@ public final class Server {
         }
     }
 
-    /** What this service is for: shown in the Layer 3 Services view of MxJobsWMS and MxDataHUB. */
+    /** What this service is for: shown in the Layer 3 Services view of MxJobsMGR and MxDataHUB. */
     static Map<String, Object> describe(int port) {
         Map<String, Object> d = new LinkedHashMap<>();
         d.put("id", "portfolio-java");
@@ -175,7 +175,7 @@ public final class Server {
         }
         Server server = new Server(port, token);
         server.start();
-        System.out.println("MxJobsWMS portfolio-java on http://127.0.0.1:" + server.port()
+        System.out.println("MxJobsMGR portfolio-java on http://127.0.0.1:" + server.port()
                 + (server.token != null ? " (token required)" : ""));
     }
 }

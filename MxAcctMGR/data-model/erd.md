@@ -463,4 +463,4 @@ erDiagram
 | `pmg.security.srm_security_id` | `srm.security.security_id` | a cached copy, keyed `TICKER:MIC` when the ticker clashes with the illustrative universe |
 | `pmg.benchmark` (source `srm`) | `srm.benchmark.code` | cached weights for a security-master benchmark |
 | `pmg.attribution.srm_portfolio_code` | `srm.portfolio.code` | Attribution ▸ Source: a security-master portfolio (analytics `/attribution`) |
-| `pmg.engine_run.service_id` | MxJobsWMS `wms.layer3_service.service_id` | portfolio-java, portfolio-cpp, analytics |
+| `pmg.engine_run.service_id` | MxJobsMGR `wms.layer3_service.service_id` | portfolio-java, portfolio-cpp, analytics |

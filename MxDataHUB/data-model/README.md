@@ -10,4 +10,4 @@ The security reference master in PostgreSQL schema `srm`.
 
 The migrations in [`../SRM/migrations`](../SRM/migrations) stay the way an existing database is upgraded
 (`./srm.py migrate`); the DDL package is for a new database and as a single readable statement of the schema.
-Related models: [MxJobsWMS](../../MxJobsWMS/data-model/README.md) (`wms`) and [MxAcctMGR](../../MxAcctMGR/data-model/README.md) (`pmg`).
+Related models: [MxJobsMGR](../../MxJobsMGR/data-model/README.md) (`wms`) and [MxAcctMGR](../../MxAcctMGR/data-model/README.md) (`pmg`).

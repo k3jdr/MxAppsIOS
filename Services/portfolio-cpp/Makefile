@@ -1,4 +1,4 @@
-# MxJobsWMS portfolio-cpp — builds with clang++ (no CMake needed; CMakeLists.txt does the same).
+# MxJobsMGR portfolio-cpp — builds with clang++ (no CMake needed; CMakeLists.txt does the same).
 #   make            fetch the pinned header-only libraries (once) and build build/portfolio-cpp
 #   make test       build and run the unit tests
 #   make run        start the service on 127.0.0.1:8767
