@@ -29,7 +29,7 @@ struct SpendingAnalysisView: View {
     /// Link and Recipients… (the family page's link and whom Email… and Message… address).
     @State private var linkSettings = false
 
-    static let tabs = [("attribution", "Attribution"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Rules"),
+    static let tabs = [("attribution", "Overview"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Rules"),
                        ("family", "Family & Lifecycle"), ("sources", "Sources")]
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
@@ -1557,8 +1557,8 @@ private struct SpendingDeepDiveTab: View {
                 Text(row.reading).foregroundStyle(.secondary)
             }
             Spacer()
-            Button { back() } label: { Label("Attribution", systemImage: "chevron.backward") }
-                .help("Back to every category's attribution")
+            Button { back() } label: { Label("Overview", systemImage: "chevron.backward") }
+                .help("Back to the Overview: every category's attribution")
         }
     }
 

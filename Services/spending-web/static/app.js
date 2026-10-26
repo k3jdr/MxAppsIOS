@@ -21,7 +21,7 @@ const DRIVERS = {
   one_time: { title: "One-Time Event", effect: "oneTime", help: "An event that won't repeat" },
 };
 const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#16a085", "#a0a0a0"];
-const TABS = [["attribution", "Attribution"], ["deepdive", "Deep Dive"], ["tax", "Year-End Tax"], ["entries", "Entries"],
+const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["tax", "Year-End Tax"], ["entries", "Entries"],
               ["rules", "Rules"], ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
 const STALE_DAYS = 14, STALE_CPI_DAYS = 75;
 
@@ -31,7 +31,7 @@ const saved = (k, d) => { try { const v = localStorage.getItem("spending." + k);
 const keep = (k, v) => { try { localStorage.setItem("spending." + k, JSON.stringify(v)); } catch { /* private window */ } };
 const thisYear = new Date().getFullYear();
 const S = {
-  // A tab saved before the Forward Curve left this page opens Attribution.
+  // A tab saved before the Forward Curve left this page opens the Overview.
   tab: saved("tab", "attribution") === "curve" ? "attribution" : saved("tab", "attribution"), year: saved("year", thisYear), ytd: saved("ytd", true), full: saved("full", true),
   dive: saved("dive", "HEALTHCARE"),
   taxYear: saved("taxYear", new Date().getMonth() < 4 ? thisYear - 1 : thisYear), tax: null, taxProblem: null,
@@ -350,7 +350,7 @@ function diveTab() {
   const y = S.data.start.slice(0, 4), py = S.data.priorStart.slice(0, 4);
   let h = `<div class="bar"><label>Deep dive into <select data-set="dive">${S.setup.categories.map(c => `<option value="${c.code}"${c.code === code ? " selected" : ""}>${esc(c.name)}</option>`).join("")}<option value="${UNASSIGNED}"${code === UNASSIGNED ? " selected" : ""}>Not assigned</option></select></label>
     ${r ? `<b>${money(r.prior)} in ${py} → ${money(r.current)} in ${y}: ${signedMoney(r.change)}${r.growth === null ? "" : ` (${signedPct(r.growth)})`}</b><span class="muted">${esc(r.reading)}</span>` : ""}
-    <span class="spacer"></span><button data-tab="attribution">‹ Attribution</button></div>`;
+    <span class="spacer"></span><button data-tab="attribution">‹ Overview</button></div>`;
   if (!r) return h + `<p class="muted">Nothing in ${py} or ${y} is in ${esc(name)}.</p>` + lifecycleBox(code);
   h += `<div class="tiles">${EFFECTS.map(e => tile(e.name, signedMoney(r.effect(e.id)), r.share(e.id) === null ? "" : `${pct(r.share(e.id))} of the change`, e.help, e.color)).join("")}${tile("Prices (CPI)", signedPct(r.rate), r.basis === "CPI" ? (S.setup.categories.find(c => c.code === code)?.cpiName ?? "CPI") : "assumed")}</div>`;
   // Month by month.

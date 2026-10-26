@@ -570,7 +570,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   account's. A **tag** on a single entry overrides both, and can name an event ("Philmont 2026"). Rules are set on
   *Rules*; tags on *Entries* (double-click, or select several and right-click). The *Entries* context menu also opens
   the rule for an entry's target or expense account.
-* **Attribution.** For each category, `change = inflation + usage + lifecycle + behavior + one-time`. Inflation is
+* **Overview (the attribution).** For each category, `change = inflation + usage + lifecycle + behavior + one-time`. Inflation is
   the earlier year's spending times the category's CPI change, plus whatever spending tagged Inflation grew beyond it.
   Each other driver's effect is what its spending grew beyond inflation: Family Growth and New Activity (and spending
   with no driver) count as usage, Lifecycle Transition as lifecycle, Preference Change as behavior, One-Time Event as
@@ -580,7 +580,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   change by effect, and this year's spending by category and driver.
 * **Deep Dive.** Take one category apart: right-click (or double-click) its bar or its name in *This Year by
   Category and Driver* or *What Changed Each Category*, or click its name in Key Metrics. The **Deep Dive** tab (with
-  a category picker and a way back to Attribution) shows:
+  a category picker and a way back to the Overview) shows:
   - its earlier and current spending with each effect and the CPI change, as tiles and a waterfall;
   - its spending month by month in both years;
   - **By Driver**: each driver's spending in both years and what it grew beyond prices, adding up to the change with
@@ -768,5 +768,5 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |
