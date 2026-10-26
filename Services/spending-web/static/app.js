@@ -419,7 +419,7 @@ function entriesBox(list, title, locked) {
   const q = S.search.toLowerCase();
   const rows = list.filter(e => (S.period === "both" || (S.period === "current") === inNow(e))
     && (!S.unassignedOnly || !e.driver) && (locked || !S.cat || (e.category ?? UNASSIGNED) === S.cat)
-    && (!q || [e.payee, e.description, e.expenseAccount, e.event, e.register].some(v => (v ?? "").toLowerCase().includes(q))))
+    && (!q || [e.payee, e.description, e.event, e.register].some(v => (v ?? "").toLowerCase().includes(q))))
     .sort((a, b) => a.date < b.date ? 1 : -1);
   const body = `<div class="bar">
       <select data-set="period"><option value="current"${S.period === "current" ? " selected" : ""}>This year</option><option value="prior"${S.period === "prior" ? " selected" : ""}>Earlier year</option><option value="both"${S.period === "both" ? " selected" : ""}>Both</option></select>
@@ -427,8 +427,8 @@ function entriesBox(list, title, locked) {
       <label><input type="checkbox" data-set="unassignedOnly"${S.unassignedOnly ? " checked" : ""}> No driver yet</label>
       <input type="search" data-set="search" value="${esc(S.search)}" placeholder="Search payee, description, event">
       <span class="spacer"></span><span class="muted">${rows.length.toLocaleString()} entries, ${money(rows.reduce((a, e) => a + e.amount, 0))}</span></div>
-    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l">Expense account</th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Member</th><th class="l">Event</th><th></th></tr>
-    ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td><td class="l muted">${esc(e.expenseAccount ?? "")}</td>
+    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Member</th><th class="l">Event</th><th></th></tr>
+    ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td>
       <td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "No rule or tag")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "No rule or tag: counts as usage")}">${pick("driver", e)}</td>
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
     ${rows.length > S.shown ? `<p><button data-action="more">Show ${Math.min(200, rows.length - S.shown)} more</button></p>` : ""}`;
