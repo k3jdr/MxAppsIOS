@@ -46,6 +46,9 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
     GET  /market/series?ids=DGS1MO,DGS10&from=&format=csv   their values as CSV laid out as FRED's fredgraph.csv
                                          (observation_date, one column per series); format=ohlc with one id: as Cboe's
                                          history file (DATE,OPEN,HIGH,LOW,CLOSE with MM/DD/YYYY dates)
+    /spending/...                        household spending attribution (V037, spending.py): the family, categories,
+                                         rules, lifecycle triggers and per-entry tags; GET /spending/analysis gives every
+                                         spending dollar of two periods with each category's CPI inflation between them
 
 The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
 config.local.json), so MxAcctMGR's earnings screens get revenue figures with no API key in the sandboxed app; the
@@ -76,6 +79,7 @@ import bank
 import cards
 import expenses
 import secure
+import spending
 
 VERSION = 1
 PORT = 8774
@@ -108,6 +112,9 @@ DESCRIBE = {
         {"method": "POST", "path": "/expense-ledgers/{code}/entries", "summary": "Add an expense account entry (an item bought, a refund, a funding transfer)"},
         {"method": "GET", "path": "/expense-accounts", "summary": "Expense accounts with their payees and this year's totals"},
         {"method": "GET", "path": "/secure-accounts", "summary": "Secure accounts: products and services held an account with, their subscription payment and renewal"},
+        {"method": "GET", "path": "/spending/setup", "summary": "Spending Analysis: the family, spending categories with their CPI series, rules and lifecycle triggers"},
+        {"method": "GET", "path": "/spending/analysis", "summary": "Every spending dollar of two periods with category, driver and member, and each category's inflation between them"},
+        {"method": "PUT", "path": "/spending/tags/{source}/{entryId}", "summary": "One entry's own spending category, driver, family member or event"},
         {"method": "PUT", "path": "/secure-accounts/{id}", "summary": "Create (id 0) or change a secure account (version-checked; names unique); keys and passwords stay in the Mac's Keychain"},
         {"method": "GET", "path": "/accounts/{code}", "summary": "An account with its open tax lots, valued"},
         {"method": "PUT", "path": "/accounts/{code}", "summary": "Save an account as a new version (version-checked: 409 when it changed since it was opened); rewrites today's holdings"},
@@ -1401,6 +1408,10 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 elif parts[:1] == ["cards"]:
                     out = cards.route(conn, method, parts, body, q)
+                    if out is None:
+                        return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
+                elif parts[:1] == ["spending"]:
+                    out = spending.route(conn, method, parts, body, q)
                     if out is None:
                         return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
                 elif parts[:1] == ["secure-accounts"]:

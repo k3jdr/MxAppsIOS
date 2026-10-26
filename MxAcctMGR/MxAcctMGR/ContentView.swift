@@ -171,6 +171,7 @@ struct ContentView: View {
         case .vix: VIXView(store: store)
         case .compute: ComputeView(store: store)
         case .reportWalkthrough: ReportView(store: store, report: store.currentReport)
+        case .spending: SpendingAnalysisView(store: store)
         case .securities: SecuritiesView(store: store)
         case .samples: SamplesView(store: store)
         case .services:

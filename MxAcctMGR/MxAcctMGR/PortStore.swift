@@ -18,7 +18,7 @@ enum Screen: String, CaseIterable, Identifiable {
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
     case whyOptimize, whyAttribution, activeVsPassive, samples
-    case securities, services
+    case spending, securities, services
 
     var id: String { rawValue }
 
@@ -37,7 +37,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
              .whyOptimize, .whyAttribution, .activeVsPassive, .samples: .reports
-        case .securities, .services: .library
+        case .spending, .securities, .services: .library
         }
     }
 
@@ -66,6 +66,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .vix: "CBOE Volatility Index (VIX)"
         case .compute: "Compute Hyperscalers Tracking"
         case .reportWalkthrough: "Report Walkthrough"
+        case .spending: "Spending Analysis"
         case .securities: "SRM Table"
         case .samples: "Sample Portfolios"
         case .services: "Layer 3 Services"
@@ -105,6 +106,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .vix: "waveform.path.ecg.rectangle"
         case .compute: "cpu"
         case .reportWalkthrough: "newspaper"
+        case .spending: "chart.pie"
         case .securities: "doc.text.magnifyingglass"
         case .samples: "square.grid.2x2"
         case .services: "server.rack"

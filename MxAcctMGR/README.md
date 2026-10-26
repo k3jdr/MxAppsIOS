@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (Spending Analysis — why the family's spending changed and the children's forward curve; SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -70,7 +70,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 | **MxAcctMGR** | **Settings…** ⌘, — **Text**: a font name, size and style for each kind of text that takes room — **Headings** (page titles, page introductions, headings, subheadings, names, figures) and **Numbers and Tables** (registers and tables, whose rows follow their text's height; the earnings calendar, whose day cells shrink or grow with it; IDs and codes; calculation results) — each section with **Step Down** / **Step Up** (every kind a point smaller or larger) and **Restore Defaults**; **Banking**: what the checking register's New entry starts with (kind — Debit at first —, check number, date); **Guidance**: the instruction level — **Full** (everything), **Brief** (no "Why this step" lessons) or **Minimal** (also no line under the titles, and the lesson-only pages — Welcome, Choose Your Path, Why Optimize?, Why Attribution?, Active vs Passive — leave the sidebar, the Guide menu and Previous / Next Step) |
 | **Edit** | (the standard items) · **Copy Page Text** ⌥⇧⌘C — the whole page as text · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
-| **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · SRM Table · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
+| **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Spending Analysis · SRM Table · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report, and Compute Hyperscalers Tracking ⌥⌘U in Tier 6 below Semiconductor Sales · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
@@ -555,6 +555,48 @@ user ID that is a token (an API key's id) as its service key, never its user nam
   as you move the weights and returns.
 * **Active vs Passive** — what fees compound to over 30 years (fee and pre-fee alpha sliders) and a comparison table.
 
+## Spending Analysis (Reporting ▸ Spending Analysis)
+
+Household spending attribution: performance attribution for the family's spending. It explains why spending changed
+from one year to the next and forecasts what the children's ages bring. Everything is kept in the security master
+(V037) through the accounts service (`/spending/…`, `Services/accounts/spending.py`).
+
+* **Two dimensions on every dollar.** The spending is every entry of the check register in an expense account, the
+  credit cards' charges and credits, and the expense ledgers' items that aren't already a card or check entry
+  (`srm.v_spending_entry`). Each gets a **spending category** (Food, Housing, Transportation, Education, Activities,
+  Technology, Healthcare, Clothing, Travel, Other) and a **primary driver** (Inflation, Family Growth, New Activity,
+  Lifecycle Transition, Preference Change, One-Time Event), and optionally a family member. They come from **rules**:
+  an expense account's (V037 seeds the categories from the expense accounts' names) and, overriding it, a target
+  account's. A **tag** on a single entry overrides both, and can name an event ("Philmont 2026"). Rules are set on
+  *Rules*; tags on *Entries* (double-click, or select several and right-click). The *Entries* context menu also opens
+  the rule for an entry's target or expense account.
+* **Attribution.** For each category, `change = inflation + usage + lifecycle + behavior + one-time`. Inflation is
+  the earlier year's spending times the category's CPI change, plus whatever spending tagged Inflation grew beyond it.
+  Each other driver's effect is what its spending grew beyond inflation: Family Growth and New Activity (and spending
+  with no driver) count as usage, Lifecycle Transition as lifecycle, Preference Change as behavior, One-Time Event as
+  one-time. The effects add up to the change exactly. The **Key Metrics** table gives each category's earlier and
+  current spending, change, growth %, and each effect's share of the change, with a reading: unavoidable (prices or
+  age), habit change, one-time, or more of the same. Charts: a waterfall from last year to this year, each category's
+  change by effect, and this year's spending by category and driver.
+* **Periods.** A year against the year before, year to date by default (January 1 to today's date in both).
+  *Only registers covering both years* leaves out a register whose entries start after the earlier year does, so
+  its whole spending isn't counted as growth (the TECH_2026 ledger starts in December 2025).
+* **Inflation.** It comes from FRED's CPI-U series in the security master (`market_series` family INFLATION, loaded by
+  `srm.py load fred-yields`): food, shelter, transportation, tuition and childcare, recreation, information
+  technology, medical care, apparel, airline fares, and all items for Other. A category's change is its months in
+  this period over the same months a year earlier. With no values for those months, the category's assumed rate is
+  used, marked with `*`. *Family & Lifecycle* sets each category's series and assumption.
+* **Family Spending Forward Curve.** The family members are kept with their birth years. A child's age in a year is
+  the year less the birth year. Each **lifecycle trigger** (V037 seeds them; edit them on *Family & Lifecycle*) costs
+  its yearly amount in today's dollars in each year a child is of age for it, and a replacement costs it once every
+  few years. The seeded triggers: school by stage, tutors 14–16, SAT/ACT prep 16, applications 17, college 18–21;
+  club sports 10–12, scouts 11–17 with a high-adventure trip every other year 13–15; a phone from 12 every 3 years,
+  electronics 12–14, a laptop from 13 every 4, a tablet from 8 every 5; driver's ed 15, insurance and a car 16–18;
+  college visits 16–17. With *Grow with inflation* on, costs grow by their category's CPI change, except peak events,
+  which distance and participation drive. The chart stacks ten years by child or by category. *Waves Ahead* lists the
+  years whose costs rise most and what starts in them, the three-to-five-year ones first. *Year by Year* gives each
+  child's cost and age. *Child Lifecycle Model* draws the triggers by age with each child's age today.
+
 ## SRM Table (Reporting ▸ SRM Table)
 
 MxDataHUB's Securities page in MxAcctMGR: the security master's securities, searched by name or any identifier
@@ -660,4 +702,5 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its Attribution, Forward Curve, Entries, Rules and Family & Lifecycle tabs and their sheets |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

@@ -3,8 +3,9 @@
   * cboe-vix    Cboe's daily history files for the VIX family — VIX9D, VIX (30 days), VIX3M, VIX6M: open, high, low,
                 close back to 1990 (each file is the whole history, a few hundred KB).
   * fred-yields FRED's Treasury constant-maturity yields DGS1MO … DGS30 (daily, back to 1962), the FX rates DEXUSUK and
-                DEXCAUS (V021: pounds and Canadian dollars to dollars, for srm.fx_to_usd) and the NBER recession
-                indicator USREC (monthly). After the first load only the last 60 days are asked for (FRED revises
+                DEXCAUS (V021: pounds and Canadian dollars to dollars, for srm.fx_to_usd), the NBER recession
+                indicator USREC (monthly) and the consumer price indexes of family INFLATION (V037, monthly: all items
+                and the components MxAcctMGR's Spending Analysis follows). After the first load only the last 60 days are asked for (FRED revises
                 recent days); --force reads the whole history again, --since from a date.
 
 Every value is an upsert that changes a row only when its value changed, so the loaders can run any time.
@@ -151,23 +152,23 @@ def load_cboe(conn, cfg, args):
 
 
 def load_fred(conn, cfg, args):
-    """Treasury constant-maturity yields and the NBER recession indicator from FRED."""
+    """Treasury constant-maturity yields, FX rates, the NBER recession indicator and consumer prices from FRED."""
     with LoadRun(conn, "FRED", "fred_yields", {"since": args.since, "force": args.force}) as run, conn.cursor() as cur:
         src = source_id(cur, "FRED")
-        for family in ("TREASURY_CMT", "RECESSION", "FX"):
+        for family in ("TREASURY_CMT", "RECESSION", "FX", "INFLATION"):
             codes = _series(cur, family)
             if not codes:
                 continue
             start = args.since
             if not start and not args.force:
                 # Incremental once every series has values: from a little before the oldest of their latest values
-                # (FRED revises recent days; USREC's months are set long after the fact).
+                # (FRED revises recent days; USREC's months are set long after the fact, CPI's are revised each February).
                 cur.execute("""SELECT CASE WHEN count(*) = %s THEN min(last) END FROM (
                                    SELECT max(obs_date) AS last FROM srm.market_series_value
                                     WHERE series_code = ANY(%s) GROUP BY series_code) t""", (len(codes), codes))
                 last = cur.fetchone()[0]
                 if last:
-                    start = (last - datetime.timedelta(days=REVISION_DAYS if family != "RECESSION" else 400)).isoformat()
+                    start = (last - datetime.timedelta(days=REVISION_DAYS if family not in ("RECESSION", "INFLATION") else 400)).isoformat()
             # cosd takes one start date per series (a single date applies to the first series only).
             url = FRED_URL.format(ids=",".join(codes)) + (f"&cosd={','.join([start] * len(codes))}" if start else "")
             run.api_calls += 1
