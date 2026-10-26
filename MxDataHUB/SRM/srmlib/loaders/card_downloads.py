@@ -32,7 +32,8 @@ import re
 from ..common import LoadRun, debug, log
 
 SRM_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CONFIG_FILE = os.path.join(SRM_DIR, "card_accounts.local.json")
+# SRM_CARD_ACCOUNTS names another one (a test's drop folders).
+CONFIG_FILE = os.environ.get("SRM_CARD_ACCOUNTS") or os.path.join(SRM_DIR, "card_accounts.local.json")
 DEFAULT_FOLDERS = ["~/MyCodeGIT/MxDataSRM/src-cards"]
 CHASE_FILE = re.compile(r"^chase(\d{4})_", re.I)
 

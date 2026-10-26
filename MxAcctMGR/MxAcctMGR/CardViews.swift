@@ -8,7 +8,8 @@
 //  downloads (Chase CSV / QFX, Discover and Capital One CSV; srm.py load card-downloads): Import File… shows what one
 //  holds for the card (new lines, already read, totals by kind), then saves it in the card's drop folder and reads it; each line is read once, also when downloads overlap, and posts to the
 //  register — matching a charge entered by hand, else as a new entry with its target and category. A card's payments
-//  link to the checking entries that paid them (Pay… writes both).
+//  link to the checking entries that paid them (Pay… writes both). Remove… takes a card away with its register, the
+//  card company's lines and its statements, once its sheet has shown what goes and what stays.
 //
 
 import SwiftUI
@@ -149,6 +150,24 @@ struct CardImportPreview: Decodable {
     var entries: [Line]
 }
 
+/// What removing a card cleans up (GET …/removal), and what stays: shown before it is removed.
+struct CardRemoval: Decodable, Identifiable {
+    var code: String
+    var name: String
+    var entries: Int
+    var enteredHere: Int
+    var lines: Int
+    var statements: Int
+    var checkingLinked: Int
+    var expenseLinked: Int
+    var payee: String?
+    var folder: String
+    var files: [String]
+    /// Where its drop folder went, once removed.
+    var movedTo: String?
+    var id: String { code }
+}
+
 /// A download picked with Import File…, shown before it is imported.
 struct PendingCardImport: Identifiable {
     let id = UUID()
@@ -193,6 +212,18 @@ nonisolated enum CardClient {
     static func saveStatement(_ code: String, _ closing: String, _ body: [String: Any]) async throws -> CardRegister {
         try await AccountsClient.request("PUT", "/cards/accounts/\(code)/statements/\(closing)", body: signed(body), as: CardRegister.self)
     }
+    /// What removing the card would clean up, and what stays.
+    static func removal(_ code: String) async throws -> CardRemoval {
+        struct Answer: Decodable { var removal: CardRemoval }
+        return try await AccountsClient.request("GET", "/cards/accounts/\(code)/removal", as: Answer.self).removal
+    }
+    /// Removes the card with its entries, lines and statements: the cards left, and what went.
+    static func remove(_ code: String) async throws -> (accounts: [CardAccount], removed: CardRemoval) {
+        struct Answer: Decodable { var removed: CardRemoval; var accounts: [CardAccount] }
+        let by = BankClient.by.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+        let a = try await AccountsClient.request("DELETE", "/cards/accounts/\(code)?confirm=\(code)&by=\(by)", as: Answer.self)
+        return (a.accounts, a.removed)
+    }
     /// What a download holds for the card, saving nothing: refused when it isn't a card download or is another card's.
     static func previewFile(_ code: String, filename: String, text: String) async throws -> CardImportPreview {
         struct Answer: Decodable { var preview: CardImportPreview }
@@ -230,6 +261,12 @@ struct CardsView: View {
     @State private var statement: CardStatement?
     /// A download picked with Import File…, shown before it is imported.
     @State private var pending: PendingCardImport?
+    /// Remove… asks first: what goes with the card and what stays.
+    @State private var removing: CardRemoval?
+    #if DEBUG
+    /// The launch arguments' self-test ran (once: the arguments can't be taken back).
+    @State private var selfTested = false
+    #endif
     @State private var selection = Set<CardEntry.ID>()
     @State private var draft = CardDraft()
     /// The register's Excel-style sorting and column filters (the header buttons).
@@ -265,12 +302,14 @@ struct CardsView: View {
         // A target's link changed (here, in Checking or in Target Accounts): the register shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         #if DEBUG
-        // Self-test, once the register is loaded: Import File… with this file picked (-cardImportFile PATH; an
-        // unsandboxed test build reads it).
+        // Self-tests, once the register is loaded: Import File… with this file picked (-cardImportFile PATH; an
+        // unsandboxed test build reads it), or Remove… (-cardRemove YES).
         .task(id: register == nil) {
-            guard register != nil, let path = UserDefaults.standard.string(forKey: "cardImportFile") else { return }
-            UserDefaults.standard.removeObject(forKey: "cardImportFile")
-            preview(URL(fileURLWithPath: path))
+            guard register != nil, !selfTested else { return }
+            selfTested = true
+            let defaults = UserDefaults.standard
+            if let path = defaults.string(forKey: "cardImportFile") { preview(URL(fileURLWithPath: path)) }
+            if defaults.bool(forKey: "cardRemove") { Task { await askRemoval() } }
         }
         #endif
         .task(id: selected) {
@@ -306,6 +345,9 @@ struct CardsView: View {
                 await run { try await CardClient.link(e.id, to: bankTxn) }
             }
         }
+        .sheet(item: $removing) { r in
+            CardRemovalSheet(removal: r) { await removeCard(r) }
+        }
         .sheet(item: $pending) { p in
             if let a = register?.account {
                 CardImportSheet(card: a, pending: p) { await importPending(p) }
@@ -331,6 +373,9 @@ struct CardsView: View {
             .disabled(accounts.isEmpty)
             Button("New…") { accountSheet = .some(nil) }
             Button("Edit…") { accountSheet = .some(register?.account) }.disabled(register == nil)
+            Button("Remove…") { Task { await askRemoval() } }
+                .disabled(register == nil || busy)
+                .help("Remove this card with its register, the card company's lines and its statements: what goes and what stays shows first")
             Spacer()
             if busy { ProgressView().controlSize(.small) }
             if let message { Text(message).font(.callout).foregroundStyle(.secondary).lineLimit(2) }
@@ -665,6 +710,37 @@ struct CardsView: View {
             } catch {
                 message = describe(error)
             }
+        }
+    }
+
+    /// Shows what removing the selected card would clean up (the removal sheet).
+    private func askRemoval() async {
+        guard let code = register?.account.code else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            removing = try await CardClient.removal(code)
+        } catch {
+            message = describe(error)
+        }
+    }
+
+    /// Removes the card the sheet showed: nil when done, else why not.
+    private func removeCard(_ r: CardRemoval) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            let (left, gone) = try await CardClient.remove(r.code)
+            accounts = left
+            register = nil
+            let before = selected
+            selected = left.first?.code ?? ""
+            if selected == before { await refresh() }
+            message = "Removed \(gone.name): \(gone.entries.formatted()) entries, \(gone.lines.formatted()) lines, \(gone.statements) statements"
+                + (gone.movedTo == nil ? "" : "; its downloads are in \((gone.movedTo! as NSString).lastPathComponent) under _removed")
+            return nil
+        } catch {
+            return describe(error)
         }
     }
 
@@ -1155,5 +1231,82 @@ struct CardImportSheet: View {
             w.append("No expense account for the card company's \(p.unmapped.count == 1 ? "category" : "categories") \(p.unmapped.joined(separator: ", ")): \(p.unmapped.count == 1 ? "its" : "their") charges post without a category unless their target has one.")
         }
         return w
+    }
+}
+
+// MARK: - Removing a card
+
+/// Asks before a card is removed: what goes with it (its register entries, the card company's lines, its statements;
+/// its downloads moved aside) and what stays (the checking entries that paid it and the expense-ledger entries naming
+/// its charges, unlinked; the target accounts). Cancel is the default.
+struct CardRemovalSheet: View {
+    let removal: CardRemoval
+    var remove: () async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var removing = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text("Remove \(removal.name)?").heading(.heading)
+            }
+            Text("Removed with the card — this can't be undone:").font(.callout)
+            list(gone)
+            Text("Kept:").font(.callout)
+            list(kept)
+            if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            HStack {
+                Spacer()
+                if removing { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Remove \(removal.name)", role: .destructive) {
+                    Task {
+                        removing = true
+                        if let e = await remove() { error = e; removing = false } else { dismiss() }
+                    }
+                }
+                .disabled(removing)
+            }
+        }
+        .padding(18)
+        .frame(width: 500)
+    }
+
+    private func list(_ items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(items, id: \.self) { Text("•  " + $0).fixedSize(horizontal: false, vertical: true) }
+        }
+        .font(.callout)
+        .padding(.leading, 8)
+    }
+
+    private func count(_ n: Int, _ one: String, _ many: String) -> String { "\(n.formatted()) \(n == 1 ? one : many)" }
+
+    private var gone: [String] {
+        let r = removal
+        var g: [String] = []
+        if r.entries > 0 {
+            g.append(count(r.entries, "register entry", "register entries")
+                     + (r.enteredHere > 0 ? " (\(r.enteredHere.formatted()) entered here, not from a download)" : ""))
+        }
+        if r.lines > 0 { g.append(count(r.lines, "line", "lines") + " read from the card company's downloads") }
+        if r.statements > 0 { g.append(count(r.statements, "statement", "statements") + " entered from the card company's statements") }
+        if g.isEmpty { g.append("Only the card itself: it has no entries, lines or statements") }
+        if !r.files.isEmpty {
+            g.append(count(r.files.count, "download", "downloads") + " in its drop folder (\((r.folder as NSString).lastPathComponent)): moved to _removed beside it, not deleted")
+        }
+        return g
+    }
+
+    private var kept: [String] {
+        let r = removal
+        var k: [String] = []
+        if let p = r.payee { k.append("Its checking target \(p) and the checking entries that paid it" + (r.checkingLinked > 0 ? " (\(count(r.checkingLinked, "payment", "payments")) linked, now unlinked)" : "")) }
+        else if r.checkingLinked > 0 { k.append("The checking entries that paid it (\(count(r.checkingLinked, "payment", "payments")) linked, now unlinked)") }
+        if r.expenseLinked > 0 { k.append(count(r.expenseLinked, "expense-ledger entry", "expense-ledger entries") + " naming its charges, now unlinked") }
+        k.append("The target accounts its charges were filed to, and the activity log of its downloads")
+        return k
     }
 }

@@ -3,6 +3,11 @@
     GET  /cards/accounts                               cards with balance owed, available credit and the current statement
     PUT  /cards/accounts/<code>                        create or change one {name, issuer, last4, creditLimit, apr,
                                                        closeDay, dueDay, openingDate, openingBalance, payeeId, closedDate}
+    GET  /cards/accounts/<code>/removal                what removing it would clean up: its register entries, the card
+                                                       company's lines, its statements, its drop folder's downloads, and
+                                                       the checking and expense-ledger entries linked to it (they stay)
+    DELETE /cards/accounts/<code>?confirm=<code>&by=   removes it with its entries, lines and statements (the card's
+                                                       code repeated as confirm); its drop folder is moved to _removed
     GET  /cards/accounts/<code>/register               its entries (running balance owed), statements and the checking
                                                        payments to it not linked to a card payment
     POST /cards/accounts/<code>/transactions           add an entry {date, kind, payeeId|payee, expenseAccountId, memo, amount, by}
@@ -388,7 +393,7 @@ def save_statement(conn, code, closing, body):
     return register(conn, code)
 
 
-def _drop_folder(code):
+def _drop_folder(code, create=True):
     """The card's sub-folder of the first drop folder (card_accounts.local.json), where Import File… saves a download."""
     from srmlib.loaders import card_downloads   # SRM's folder is on sys.path (accounts_service.SRM)
     folders = card_downloads.DEFAULT_FOLDERS
@@ -396,7 +401,8 @@ def _drop_folder(code):
         with open(card_downloads.CONFIG_FILE) as f:
             folders = json.load(f).get("dropFolders") or folders
     folder = os.path.join(os.path.expanduser(folders[0]), code.upper())
-    os.makedirs(folder, exist_ok=True)
+    if create:
+        os.makedirs(folder, exist_ok=True)
     return folder
 
 
@@ -489,6 +495,53 @@ def import_downloads(conn, code, body):
             **register(conn, code)}
 
 
+# ------------------------------------------------------------------------------------------------------------ removal
+
+def removal(conn, code):
+    """What removing the card would clean up: its register entries (and how many were entered here, not from a
+    download), the card company's lines, its statements and its drop folder's files; and what stays, unlinked: the
+    checking entries that paid it and the expense-ledger entries naming its charges."""
+    card = _card(conn, code)
+    counts = fetch(conn, """
+        SELECT (SELECT count(*) FROM srm.card_txn WHERE card_account_id = %(a)s) AS entries,
+               (SELECT count(*) FROM srm.card_txn WHERE card_account_id = %(a)s AND card_line_id IS NULL) AS "enteredHere",
+               (SELECT count(*) FROM srm.card_line WHERE card_account_id = %(a)s) AS lines,
+               (SELECT count(*) FROM srm.card_statement WHERE card_account_id = %(a)s) AS statements,
+               (SELECT count(*) FROM srm.card_txn WHERE card_account_id = %(a)s AND bank_txn_id IS NOT NULL) AS "checkingLinked",
+               (SELECT count(*) FROM srm.expense_entry e JOIN srm.card_txn t ON t.txn_id = e.card_txn_id
+                 WHERE t.card_account_id = %(a)s) AS "expenseLinked",
+               (SELECT name FROM srm.payee WHERE payee_id = %(p)s) AS payee""",
+                   {"a": card["card_account_id"], "p": card["payee_id"]})[0]
+    folder = _drop_folder(card["code"], create=False)
+    files = sorted(n for n in os.listdir(folder) if not n.startswith(".")) if os.path.isdir(folder) else []
+    return {"removal": dict(counts, code=card["code"], name=card["name"], folder=folder, files=files)}
+
+
+def remove_account(conn, code, q):
+    """Removes the card with its register entries, the card company's lines and its statements (they go with it:
+    ON DELETE CASCADE); checking and expense-ledger entries linked to its entries stay, unlinked. Its drop folder is
+    moved to the drop folder's _removed folder (card-downloads doesn't read there), not deleted."""
+    card = _card(conn, code)
+    if (q.get("confirm") or "").upper() != card["code"].upper():
+        raise ValueError("removing a credit card account needs confirm=%s (its code)" % card["code"])
+    gone = removal(conn, code)["removal"]
+    fetch(conn, "DELETE FROM srm.card_account WHERE card_account_id = %s", (card["card_account_id"],))
+    conn.commit()
+    folder, moved = gone["folder"], None
+    if os.path.isdir(folder):
+        if os.listdir(folder):
+            moved = os.path.join(os.path.dirname(folder), "_removed",
+                                 "%s-%s" % (card["code"].upper(), dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            os.makedirs(os.path.dirname(moved), exist_ok=True)
+            os.rename(folder, moved)
+        else:
+            os.rmdir(folder)
+    print("card account %s removed by %s: %s entries, %s lines, %s statements%s" % (
+        card["code"], q.get("by") or "MxAcctMGR", gone["entries"], gone["lines"], gone["statements"],
+        ", drop folder moved to " + moved if moved else ""), flush=True)
+    return {"removed": dict(gone, movedTo=moved), **accounts(conn)}
+
+
 # ------------------------------------------------------------------------------------------------------ card targets
 
 # The card company's own lines aren't targets: payments come from checking, interest, fees and adjustments from the card.
@@ -547,6 +600,10 @@ def route(conn, method, parts, body, q):
         return accounts(conn)
     if len(parts) == 3 and parts[:2] == ["cards", "accounts"] and method == "PUT":
         return save_account(conn, parts[2], body)
+    if len(parts) == 3 and parts[:2] == ["cards", "accounts"] and method == "DELETE":
+        return remove_account(conn, parts[2], q)
+    if len(parts) == 4 and parts[:2] == ["cards", "accounts"] and parts[3] == "removal" and method == "GET":
+        return removal(conn, parts[2])
     if len(parts) == 4 and parts[:2] == ["cards", "accounts"] and method in ("GET", "POST"):
         action = {("GET", "register"): register, ("POST", "transactions"): add_transaction, ("POST", "pay"): pay,
                   ("POST", "import"): import_downloads}.get((method, parts[3]))

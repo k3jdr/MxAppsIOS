@@ -420,6 +420,16 @@ card-downloads` through srm-loader (it shows in the shared activity log): each l
 register — matching a charge entered by hand, else as a new entry with its target and category — and the card's
 payments link to the checking entries that paid them once *Paid from checking as* is set.
 
+### Removing a card (Banking ▸ Credit Card Accounts ▸ Remove…)
+
+**Remove…** beside Edit… first asks, in a sheet, with what removing the card would clean up (`GET
+/cards/accounts/<code>/removal`): its register entries (and how many were entered here rather than downloaded), the
+lines read from the card company's downloads, the statements entered, and the downloads in its drop folder — and what
+stays: its checking target and the checking entries that paid it, the expense-ledger entries naming its charges (both
+unlinked), the target accounts its charges were filed to, and the activity log. **Cancel** is the default; **Remove
+*card*** takes it away (`DELETE /cards/accounts/<code>?confirm=<code>`), which can't be undone. Its drop folder is moved
+to `src-cards/_removed/<CODE>-<date-time>/`, not deleted, where card-downloads doesn't read it.
+
 ### Target accounts (Banking ▸ Target Accounts)
 
 A target account is where a register entry's money goes to or comes from — a utility, a card, a brokerage, a person
@@ -624,7 +634,7 @@ code), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 
 hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding VTI` selects a holding in My Holdings. Debug builds only:
 `-linkEdit symbol` (or `name`) opens the Link dialog for the selected company or holding, and `-linkHoverTest ID`
 (e.g. `META|symbol`) shows a linked cell's hover card as if the pointer rested on it, and
-`-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard), and `-addSecurities YES -addLinkEdit META|name` opens the Link dialog for that row of Add Securities. `-screen cards -cardAccount DISCOVER -cardImportFile PATH` opens Import File… with that file picked (an unsandboxed test build reads it: `ENABLE_APP_SANDBOX=NO`).
+`-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard), and `-addSecurities YES -addLinkEdit META|name` opens the Link dialog for that row of Add Securities. `-screen cards -cardAccount DISCOVER -cardImportFile PATH` opens Import File… with that file picked (an unsandboxed test build reads it: `ENABLE_APP_SANDBOX=NO`), and `-cardRemove YES` opens Remove… (test it on a scratch database, with `SRM_CARD_ACCOUNTS` naming a card_accounts file whose drop folder is a scratch one).
 
 ## Files
 
