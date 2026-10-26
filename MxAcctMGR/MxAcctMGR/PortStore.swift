@@ -160,6 +160,9 @@ nonisolated struct TaxEstimate: Sendable {
 @MainActor
 @Observable
 final class PortStore {
+    /// An mxacctmgr://secure-accounts link (MxJobsMGR's API Subscriptions) for Secure Accounts to act on once its list
+    /// is loaded: open an account's details, or New Secure Account filled in.
+    var secureRequest: AppLink?
     var screen: Screen = .myPortfolio {
         didSet {
             // A lesson-only page that Settings ▸ Guidance hides opens My Portfolio instead.

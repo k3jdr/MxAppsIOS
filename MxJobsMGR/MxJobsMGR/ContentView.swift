@@ -15,7 +15,7 @@ struct ContentView: View {
     var body: some View {
         // Re-run the checks when keys change in the subscriptions dialog.
         let _ = editor.keyRevision
-        let _ = KeychainChanges.shared.revision  // re-run the key checks when a key is saved or removed
+        let _ = KeychainChanges.shared.revision  // re-run the key checks when MxAcctMGR may have changed a key
         let issues = Validator.check(document.space)
         let screen = JobsHelp.screen(document.space, editor: editor, problems: issues.count)
         NavigationSplitView {
@@ -93,7 +93,7 @@ struct ContentView: View {
                     .frame(width: 420, height: min(420, CGFloat(issues.count) * 34 + 60))
                 }
                 Button("API Subscriptions", systemImage: "key.horizontal") { editor.showSubscriptions = true }
-                    .help("Layer 3 API subscriptions and keys")
+                    .help("Layer 3 API subscriptions and their secure accounts")
                     .quickHelp("API Subscriptions", JobsHelp.subscriptions.detail, shortcut: "⌥⌘K")
                 Button("Inspector", systemImage: "sidebar.trailing") { editor.showInspector.toggle() }
                     .help("Show or hide the properties panel")
@@ -102,6 +102,18 @@ struct ContentView: View {
         }
         .sheet(isPresented: $editor.showSubscriptions, onDismiss: { editor.keyRevision += 1 }) {
             SubscriptionsDialog(space: $document.space, editor: editor)
+        }
+        .sheet(isPresented: $editor.showKeyMove) { KeyMoveSheet(space: $document.space) }
+        // MxAcctMGR ▸ Secure Accounts, read again whenever MxJobsMGR becomes active: link the subscriptions waiting
+        // for an account, and offer to move the keys MxJobsMGR still keeps itself.
+        .task(id: KeychainChanges.shared.revision) {
+            await SecureAccountsList.shared.loadIfNeeded()
+            var space = document.space
+            if SecureAccountsList.shared.link(&space) { document.space = space }
+            if !editor.keyMoveOffered, !KeyMove.pending(document.space).isEmpty {
+                editor.keyMoveOffered = true
+                editor.showKeyMove = true
+            }
         }
         .focusedSceneValue(\.editor, editor)
         .onAppear {

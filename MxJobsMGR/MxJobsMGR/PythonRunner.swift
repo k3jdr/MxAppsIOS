@@ -76,7 +76,7 @@ enum PythonRunner {
         for name in ["HOME", "TMPDIR", "USER"] { env[name] = parent[name] }
         if let sub = subscription {
             env["MXJOBS_BASE_URL"] = sub.baseURL
-            if sub.auth != .none, let key = Keychain.secret(for: sub.keychainAccount) {
+            if sub.auth != .none, let key = SecureKeys.key(for: sub) {
                 env["MXJOBS_API_KEY"] = key
                 if isEnvName(sub.keyName) { env[sub.keyName] = key }
             }

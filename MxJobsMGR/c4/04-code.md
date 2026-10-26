@@ -53,7 +53,8 @@ classDiagram
         defaultHeaders: [KeyValue]
         notes
         projectFolder, ide: IDEChoice
-        keychainAccount = subscription-id
+        secureAccountID: Int?
+        secureAccountName
     }
     class RunSettings {
         operations: OperationsAction = interactive

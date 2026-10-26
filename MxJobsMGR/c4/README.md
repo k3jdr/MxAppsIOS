@@ -32,6 +32,7 @@ flowchart LR
         wms[MxJobsMGR app<br/>SwiftUI, sandboxed]
         files[(*.jobspace files<br/>JSON)]
         kc[(login Keychain<br/>API keys)]
+        acct[MxAcctMGR app<br/>Secure Accounts]
         py[python3<br/>in the app sandbox]
         hub[MxDataHUB app]
         svc[Layer 3 services 127.0.0.1<br/>srm-loader 8770, analytics 8772,<br/>portfolio-java 8766, portfolio-cpp 8767,<br/>market-sample 8765]
@@ -41,7 +42,9 @@ flowchart LR
 
     pm --> wms
     wms <--> files
-    wms --> kc
+    wms -- "reads keys" --> kc
+    acct -- "saves keys" --> kc
+    wms -- "mxacctmgr://secure-accounts" --> acct
     wms -- "Python Script steps" --> py
     wms -- "API Data Read steps, HTTP" --> svc
     wms -- "API Data Read steps, HTTPS" --> api

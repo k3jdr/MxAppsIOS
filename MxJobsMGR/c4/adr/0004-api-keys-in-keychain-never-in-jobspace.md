@@ -1,6 +1,6 @@
 # ADR-0004: API keys live in the Keychain, never in a jobspace
 
-- **Status:** Accepted — recorded retrospectively on 2026-10-17 from the code, READMEs and git history
+- **Status:** Superseded by [ADR-0018](0018-api-keys-kept-by-mxacctmgr-secure-accounts.md) (2026-10-25: keys are kept by MxAcctMGR ▸ Secure Accounts; they still never enter a jobspace) — recorded retrospectively on 2026-10-17 from the code, READMEs and git history
 - **Applies to:** MxJobsMGR.app
 
 ## Context

@@ -65,6 +65,9 @@ final class EditorState {
     var subscriptionToEdit: UUID?
     /// Bumped when API keys may have changed, so checks that read the Keychain run again.
     var keyRevision = 0
+    /// Move Keys to Secure Accounts is open; it is offered once per window (KeyMove.swift).
+    var showKeyMove = false
+    var keyMoveOffered = false
     var showConsole = false
     var consoleHeight: CGFloat = 230
 

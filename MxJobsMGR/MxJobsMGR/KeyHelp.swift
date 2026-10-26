@@ -4,7 +4,7 @@
 //
 //  Help for adding API subscription keys: a guide per provider (where to get the key, how it is
 //  sent, free-tier limits), a key test that calls the provider once, and the Help ▸ Adding API Keys
-//  window. Keys go to the Keychain only; they are never written to the jobspace.
+//  window. Keys are kept in MxAcctMGR ▸ Secure Accounts (SecureKeys.swift), never in the jobspace.
 //
 
 import SwiftUI
@@ -37,7 +37,7 @@ struct ProviderGuide: Identifiable {
                 "Open the Alpha Vantage key page (Get a Key…).",
                 "Fill in the short form (what you use it for, organisation, email) and press GET FREE API KEY.",
                 "The key appears on the page right away — a 16-character code of letters and digits. Copy it.",
-                "Here, paste it into API key and press Save Key, then Test Key.",
+                "In MxAcctMGR ▸ Secure Accounts, put it in the account's Service key (New in MxAcctMGR… under API Key makes one); then Test Key here.",
             ],
             limits: "Free tier: 25 requests a day. Premium plans raise the limit.",
             notes: [
@@ -57,7 +57,7 @@ struct ProviderGuide: Identifiable {
             steps: [
                 "Create a free account (Get a Key…) and confirm your email.",
                 "Your API key is shown on the Finnhub dashboard. Copy it.",
-                "Here, paste it into API key and press Save Key, then Test Key.",
+                "In MxAcctMGR ▸ Secure Accounts, put it in the account's Service key (New in MxAcctMGR… under API Key makes one); then Test Key here.",
             ],
             limits: "Free tier: 60 calls a minute; some endpoints need a paid plan.",
             notes: ["MxJobsMGR sends the key in the X-Finnhub-Token header."]),
@@ -71,7 +71,7 @@ struct ProviderGuide: Identifiable {
                 "Set Base URL to https://financialmodelingprep.com/stable — only the address every call starts with. "
                     + "Each API Data Read step adds its own path and parameters, e.g. /search-name with query=apple, "
                     + "/historical-price-eod/full with symbol=AAPL and from=2026-01-01, or /quote with symbol=AAPL.",
-                "Paste the key into API key, press Save Key, then Test Key (it reads Apple's profile).",
+                "Put the key in the service key of its secure account in MxAcctMGR ▸ Secure Accounts, then Test Key here (it reads Apple's profile).",
                 "For the security master's price loads (SRM Daily Refresh ▸ End-of-day prices, Index levels, Profiles, "
                     + "Corporate actions) the key must also be in SRM's own Keychain item: in Terminal run "
                     + "security add-generic-password -s SRM-api -a fmp -w and paste it. Those steps call the srm-loader "
@@ -108,7 +108,7 @@ struct ProviderGuide: Identifiable {
             needsKey: false, auth: .localService, keyName: "",
             steps: [
                 "No key is needed unless you start the service with a token (--token or MXJOBS_SERVICE_TOKEN).",
-                "If you do, save the same token here; it is sent as “Authorization: Bearer …”.",
+                "If you do, make it the service key of a secure account in MxAcctMGR ▸ Secure Accounts and choose that account here; it is sent as “Authorization: Bearer …”.",
             ],
             limits: "Whatever the service allows.",
             notes: ["Services (MxAppsIOS/Services, start them with python3 Services/mxservices.py start): market-sample (8765), portfolio-java (8766), portfolio-cpp (8767), srm-loader (8770), analytics (8772)."]),
@@ -122,7 +122,7 @@ struct ProviderGuide: Identifiable {
             "Sign up with the provider and find the API key in its dashboard or account settings.",
             "Check its documentation for how the key is sent, and set Authentication to match: "
                 + "a query parameter (name it, e.g. apikey or token), a header (e.g. X-API-Key), or a Bearer token.",
-            "Paste the key into API key, press Save Key, then Test Key — or Test Call on one of its API Data Read steps.",
+            "Put the key in its secure account's Service key in MxAcctMGR ▸ Secure Accounts, choose that account here, then Test Key — or Test Call on one of its API Data Read steps.",
         ],
         limits: "See the provider's plan.",
         notes: [])
@@ -171,9 +171,9 @@ enum KeyTester {
     /// Calls the provider once with `key` (the stored key when nil) and says whether it was accepted.
     static func test(_ sub: ApiSubscription, key explicitKey: String? = nil) async -> KeyTestResult {
         var sub = sub
-        let key = explicitKey ?? Keychain.secret(for: sub.keychainAccount)
+        let key = explicitKey ?? SecureKeys.key(for: sub)
         if sub.auth.requiresKey, key == nil {
-            return KeyTestResult(verdict: .invalid, message: "No key stored yet.")
+            return KeyTestResult(verdict: .invalid, message: Validator.missingKey(sub))
         }
         // A cheap request each known provider answers.
         var node = JobNode(kind: .apiRead)
@@ -346,17 +346,21 @@ struct KeysHelpView: View {
                      + "or click a “no API key stored” problem.")
                 step(2, "Select the subscription. Under **API Key**, press **?** for that provider's steps and "
                      + "**Get a Key…** to sign up.")
-                step(3, "Paste the key into **API key** and press **Save Key**.")
-                step(4, "Press **Test Key**: MxJobsMGR calls the provider once and says whether the key was accepted.")
-                step(5, "Run the jobspace with Layer 3 set to **Live**, or use **Test Call** on a step.")
+                step(3, "Choose its **Secure account**, or press **New in MxAcctMGR…** to make one there.")
+                step(4, "In MxAcctMGR ▸ Banking ▸ **Secure Accounts**, put the key in the account's **Service key** "
+                     + "(Edit Service Details; **Open in MxAcctMGR** goes straight to it).")
+                step(5, "Back here, press **Test Key**: MxJobsMGR calls the provider once and says whether the key was accepted.")
+                step(6, "Run the jobspace with Layer 3 set to **Live**, or use **Test Call** on a step.")
             }
-            Label("Keys are stored in your login Keychain (service com.k3jdr.MxJobsMGR), never in the jobspace file — "
-                  + "share a jobspace without its keys, and enter them again on another Mac.",
+            Label("Keys are kept by MxAcctMGR ▸ Secure Accounts in your login Keychain (service "
+                  + "com.k3jdr.MxAcctMGR.secure-accounts), never in the jobspace file — share a jobspace without its keys. "
+                  + "MxJobsMGR only reads them; it has no place to enter one.",
                   systemImage: "lock.shield")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Label("Remove Key deletes it from the Keychain; deleting a subscription removes its key too.",
-                  systemImage: "trash")
+            Label("Keys MxJobsMGR kept itself before are moved by Move Keys to Secure Accounts (offered when a jobspace "
+                  + "has some, and in API Subscriptions). Deleting a subscription leaves its secure account and key in MxAcctMGR.",
+                  systemImage: "arrow.right.circle")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

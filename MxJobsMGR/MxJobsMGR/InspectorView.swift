@@ -94,16 +94,21 @@ private struct JobspaceInspector: View {
 struct KeyStatus: View {
     var subscription: ApiSubscription
     var body: some View {
-        let _ = KeychainChanges.shared.revision  // redraw when a key is saved or removed
+        let _ = KeychainChanges.shared.revision  // redraw when MxAcctMGR may have changed a key
         if subscription.auth == .none {
             Text("No key needed").font(.caption).foregroundStyle(.secondary)
         } else if subscription.auth == .localService {
-            Text(Keychain.hasSecret(for: subscription.keychainAccount) ? "Local · token stored" : "Local · no token")
+            Text(SecureKeys.hasKey(for: subscription) ? "Local · token in Secure Accounts" : "Local · no token")
                 .font(.caption).foregroundStyle(.secondary)
-        } else if Keychain.hasSecret(for: subscription.keychainAccount) {
-            Label("Key stored", systemImage: "key.fill").font(.caption).foregroundStyle(.green)
+        } else if SecureKeys.hasKey(for: subscription) {
+            Label("Key in Secure Accounts", systemImage: "key.fill").font(.caption).foregroundStyle(.green)
+                .help("The service key of “\(subscription.secureAccountName)” in MxAcctMGR ▸ Secure Accounts")
+        } else if subscription.secureAccountID == nil {
+            Label("No secure account", systemImage: "key.slash").font(.caption).foregroundStyle(.orange)
+                .help("Choose the MxAcctMGR secure account whose service key it sends, in API Subscriptions")
         } else {
             Label("No key", systemImage: "key.slash").font(.caption).foregroundStyle(.orange)
+                .help("“\(subscription.secureAccountName)” has no service key yet: add it in MxAcctMGR ▸ Secure Accounts")
         }
     }
 }

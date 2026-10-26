@@ -39,6 +39,20 @@ struct ValidationIssue: Identifiable {
 }
 
 enum Validator {
+    /// Why a subscription that needs a key can't send one: it names no secure account, or its account has no service key.
+    nonisolated static func missingKey(_ sub: ApiSubscription) -> String {
+        sub.secureAccountID == nil
+            ? "“\(sub.name)” has no secure account: choose the one whose key it sends under API Subscriptions (the keys are in MxAcctMGR ▸ Secure Accounts)."
+            : "“\(sub.secureAccountName)” has no service key: add it in MxAcctMGR ▸ Secure Accounts."
+    }
+
+    /// The warning for a step whose subscription needs a key it can't send.
+    static func keyIssue(_ node: JobNode, _ sub: ApiSubscription) -> ValidationIssue? {
+        guard sub.auth.requiresKey, !SecureKeys.hasKey(for: sub) else { return nil }
+        let message = sub.secureAccountID == nil ? "no secure account chosen for “\(sub.name)”" : "no service key in Secure Accounts for “\(sub.name)”"
+        return .init(severity: .warning, message: "“\(node.title)”: \(message).", nodeID: node.id, subscriptionID: sub.id)
+    }
+
     static func check(_ space: Jobspace) -> [ValidationIssue] {
         var issues: [ValidationIssue] = []
         let linked = Set(space.links.flatMap { [$0.from, $0.to] })
@@ -62,9 +76,7 @@ enum Validator {
             case .apiRead:
                 guard let api = node.api else { break }
                 if let sub = space.subscription(api.subscriptionID) {
-                    if sub.auth.requiresKey, !Keychain.hasSecret(for: sub.keychainAccount) {
-                        issues.append(.init(severity: .warning, message: "“\(node.title)”: no API key stored for “\(sub.name)”.", nodeID: node.id, subscriptionID: sub.id))
-                    }
+                    if let issue = Validator.keyIssue(node, sub) { issues.append(issue) }
                 } else {
                     issues.append(.init(severity: .error, message: "“\(node.title)” has no API subscription.", nodeID: node.id))
                 }
@@ -79,10 +91,7 @@ enum Validator {
                 if PythonRunner.locate(spec.interpreter) == nil {
                     issues.append(.init(severity: .warning, message: "“\(node.title)”: no Python interpreter found.", nodeID: node.id))
                 }
-                if let sub = space.subscription(spec.subscriptionID), sub.auth.requiresKey,
-                   !Keychain.hasSecret(for: sub.keychainAccount) {
-                    issues.append(.init(severity: .warning, message: "“\(node.title)”: no API key stored for “\(sub.name)”.", nodeID: node.id, subscriptionID: sub.id))
-                }
+                if let sub = space.subscription(spec.subscriptionID), let issue = Validator.keyIssue(node, sub) { issues.append(issue) }
             case .approvalGate:
                 if node.approval?.approver.isEmpty ?? true {
                     issues.append(.init(severity: .info, message: "“\(node.title)” has no approver named.", nodeID: node.id))

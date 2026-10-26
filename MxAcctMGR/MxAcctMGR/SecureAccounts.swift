@@ -8,6 +8,11 @@
 //  key, the service key and the password are kept in this Mac's Keychain (SecureSecrets), never in the security master.
 //  The table's rows are read-only: their context menu renames one (names are unique) or edits its details.
 //
+//  The service key is also the API key MxJobsMGR's subscriptions send: a subscription names its secure account and
+//  MxJobsMGR reads the key from this Mac's Keychain (both apps are signed by the same team, so it isn't asked). Its
+//  API Subscriptions opens mxacctmgr://secure-accounts/<id> (Edit Service Details) or /new?name=…&api=…&url=…
+//  (New Secure Account, filled in) — Shared/AppLinks.swift.
+//
 
 import AppKit
 import Security
@@ -74,7 +79,8 @@ nonisolated enum SecureClient {
 
 /// A secure account's product key, service key and password, in this Mac's login Keychain — never in the security
 /// master. Each app build keeps its own (the service is named after the bundle), so a test build never reads the real
-/// app's.
+/// app's. Items are made trusting MxJobsMGR too (Shared/SharedKeys.swift), which reads the service keys as the API keys
+/// its subscriptions send.
 nonisolated enum SecureSecrets {
     enum Kind: String { case productKey = "product key", serviceKey = "service key", password }
 
@@ -94,6 +100,11 @@ nonisolated enum SecureSecrets {
         return String(data: data, encoding: .utf8)
     }
 
+    /// Whether it is stored, without reading it.
+    static func has(_ kind: Kind, _ id: Int) -> Bool {
+        SecItemCopyMatching(match(kind, id) as CFDictionary, nil) == errSecSuccess
+    }
+
     /// Saves it (empty or nil removes it); answers whether the Keychain took it.
     @discardableResult
     static func set(_ value: String?, _ kind: Kind, _ id: Int, product name: String) -> Bool {
@@ -101,15 +112,7 @@ nonisolated enum SecureSecrets {
             let status = SecItemDelete(match(kind, id) as CFDictionary)
             return status == errSecSuccess || status == errSecItemNotFound
         }
-        let data = Data(value.utf8)
-        let update = [kSecValueData as String: data, kSecAttrLabel as String: "MxAcctMGR: \(name) (\(kind.rawValue))"] as [String: Any]
-        var status = SecItemUpdate(match(kind, id) as CFDictionary, update as CFDictionary)
-        if status == errSecItemNotFound {
-            var add = match(kind, id)
-            add.merge(update) { a, _ in a }
-            status = SecItemAdd(add as CFDictionary, nil)
-        }
-        return status == errSecSuccess
+        return SharedKeys.save(value, label: "MxAcctMGR: \(name) (\(kind.rawValue))", match: match(kind, id), partner: AppLink.jobsBundleID)
     }
 }
 
@@ -132,16 +135,23 @@ struct SecureAccountsView: View {
     @State private var importing = false
     /// The table's rows are read-only: their context menu edits the account.
     @State private var selected: SecureAccount.ID?
+    /// New Secure Account filled in from an mxacctmgr://secure-accounts/new link.
+    @State private var draft: SecureDraft?
+    /// Which of each account's keys and password the Keychain holds, read when the list loads.
+    @State private var stored: [Int: String] = [:]
 
     var body: some View {
         StepPage(store: store, subtitle: "The products and services you hold an account with — software, data services, APIs — with their service, your logon and the subscription's payment and renewal.", lesson: [
             "Each secure account is a product: its name and description, its service's web address and API, and whether the service is active. Your user name is kept with it; its product key, service key and password stay in this Mac's Keychain, never in the security master.",
             "Its subscription has the last payment (date and amount) and the renewal: when, how much, and whether it renews on its own, you renew it by hand, or you decline it and let it lapse — in Edit Service Details.",
+            "The service key is also the API key: MxJobsMGR's API subscriptions each name a secure account and send its service key, so this is the one place API keys are entered and changed.",
         ]) {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             if let accounts { accountsTable(accounts) }
         }
         .task { await load() }
+        // MxJobsMGR's Move Keys may have added service keys meanwhile.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in readStored() }
         #if DEBUG
         // Self-tests, once the list is loaded: open New Secure Account (-secureAccountNew YES), Import Passwords and Keys
         // (-secureImport YES), or a row's Edit Service Details (-secureDetailsEdit ID) or Edit Service Name
@@ -159,13 +169,38 @@ struct SecureAccountsView: View {
             }
         }
         #endif
-        .sheet(isPresented: $adding) {
-            SecureAccountSheet(account: nil) { body in await save(0, body) }
+        // An mxacctmgr://secure-accounts link from MxJobsMGR, once the list is loaded.
+        .task(id: TaskKey(loaded: accounts != nil, request: store.secureRequest)) {
+            guard let accounts, let request = store.secureRequest else { return }
+            store.secureRequest = nil
+            switch request {
+            case let .secureAccount(id?):
+                if let a = accounts.first(where: { $0.id == id }) {
+                    if !a.active { showInactive = true }
+                    selected = a.id
+                    details = a
+                } else {
+                    problem = "There is no secure account \(id) any more: choose another for the subscription in MxJobsMGR."
+                }
+            case let .newSecureAccount(name, api, url):
+                if let a = accounts.first(where: { $0.name.lowercased() == name.lowercased() }) {
+                    selected = a.id
+                    details = a
+                } else {
+                    draft = SecureDraft(name: name, serviceApi: api ?? "", serviceUrl: url ?? "")
+                    adding = true
+                }
+            default:
+                break
+            }
+        }
+        .sheet(isPresented: $adding, onDismiss: { draft = nil; readStored() }) {
+            SecureAccountSheet(account: nil, draft: draft) { body in await save(0, body) }
         }
         .sheet(isPresented: $importing) {
             SecureImportSheet(accounts: accounts ?? [], save: { id, body in await save(id, body) }, done: { await load() })
         }
-        .sheet(item: $details) { a in
+        .sheet(item: $details, onDismiss: readStored) { a in
             SecureAccountSheet(account: a) { body in await save(a.id, body) }
         }
         .sheet(item: $renaming) { a in
@@ -183,6 +218,11 @@ struct SecureAccountsView: View {
         "User name": .text { $0.ownerUserName },
     ]
 
+    /// What the Keys column lists for an account: which of its keys and password this Mac's Keychain holds.
+    static func storedKeys(_ id: Int) -> String {
+        [SecureSecrets.Kind.serviceKey, .productKey, .password].filter { SecureSecrets.has($0, id) }.map(\.rawValue).joined(separator: ", ")
+    }
+
     /// A service address's host, as the table shows it.
     static func host(_ address: String) -> String? {
         LinkRichText.url(fromAddress: address)?.host() ?? (address.isEmpty ? nil : address)
@@ -192,7 +232,7 @@ struct SecureAccountsView: View {
         let listed = all.filter { $0.active || showInactive }
         let shown = LocalGrid.rows(listed, grid, Self.columns)
         let renewing = listed.filter { $0.renewalStatus != RenewalStatus.decline.rawValue }.compactMap(\.renewalAmount).reduce(0, +)
-        return Box(title: "Service Product Table", symbol: "lock.shield", help: "The products and services you hold an account with: the product, its status, the service and your user name. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Service Name… (names are unique) and Edit Service Details… — description, service address and API, status, your logon, the product and service keys, the subscription's payment and renewal. Keys and passwords stay in this Mac's Keychain.") {
+        return Box(title: "Service Product Table", symbol: "lock.shield", help: "The products and services you hold an account with: the product, its status, the service and your user name. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Service Name… (names are unique) and Edit Service Details… — description, service address and API, status, your logon, the product and service keys, the subscription's payment and renewal. Keys and passwords stay in this Mac's Keychain; Keys lists which are stored. A service key is also the API key MxJobsMGR's subscriptions linked to the account send.") {
             HStack {
                 Button("New Secure Account…") { adding = true }
                 Button("Import Passwords and Keys…") { importing = true }
@@ -216,6 +256,10 @@ struct SecureAccountsView: View {
                     Text(a.serviceUrl.flatMap(Self.host) ?? "").foregroundStyle(.secondary).help(a.serviceUrl ?? "")
                 }.width(min: 80, ideal: 140)
                 TableColumn("User name") { a in Text(a.ownerUserName ?? "").foregroundStyle(.secondary) }.width(min: 70, ideal: 120)
+                TableColumn("Keys") { a in
+                    Text(stored[a.id] ?? "").foregroundStyle(.secondary)
+                        .help("Kept in this Mac's Keychain. The service key is the API key MxJobsMGR's subscriptions linked to this account send.")
+                }.width(min: 70, ideal: 150)
             }
             .tableText()
             // One menu on the whole row: its words aren't selectable text, so a right-click on them doesn't bring up
@@ -243,6 +287,11 @@ struct SecureAccountsView: View {
 
     private func load() async {
         do { accounts = try await SecureClient.list().secureAccounts; problem = nil } catch { problem = describe(error) }
+        readStored()
+    }
+
+    private func readStored() {
+        stored = Dictionary(uniqueKeysWithValues: (accounts ?? []).map { ($0.id, Self.storedKeys($0.id)) })
     }
 
     /// Saves a new account (id 0), its details or its name; answers its id, or why it couldn't.
@@ -258,6 +307,20 @@ struct SecureAccountsView: View {
     }
 }
 
+/// What the link task waits on: the list loaded, and a link to act on.
+private struct TaskKey: Equatable {
+    var loaded: Bool
+    var request: AppLink?
+}
+
+/// New Secure Account's starting values, from MxJobsMGR's New in MxAcctMGR… (a subscription's name, base URL and
+/// documentation address).
+struct SecureDraft: Equatable {
+    var name: String
+    var serviceApi: String
+    var serviceUrl: String
+}
+
 // MARK: - The editor
 
 /// New Secure Account, or a row's Edit Service Details: the product, its service, your logon and the
@@ -265,6 +328,8 @@ struct SecureAccountsView: View {
 /// has the account (a new one needs its id first).
 struct SecureAccountSheet: View {
     let account: SecureAccount?
+    /// A new account's starting values (an mxacctmgr://secure-accounts/new link).
+    var draft: SecureDraft? = nil
     var save: ([String: Any]) async -> PayeeSaved
     @Environment(\.dismiss) private var dismiss
 
@@ -313,6 +378,7 @@ struct SecureAccountSheet: View {
                     }
                     TextField("Service API", text: $serviceApi, prompt: Text("Its base URL or endpoint"))
                     secretRow("Service key", text: $serviceKey)
+                        .help("Also the API key MxJobsMGR sends for the API subscriptions linked to this account")
                     Picker("Service status", selection: $status) {
                         Text("Active").tag("active")
                         Text("Inactive").tag("inactive")
@@ -389,6 +455,9 @@ struct SecureAccountSheet: View {
     }
 
     private func load() {
+        if account == nil, let draft {
+            name = draft.name; serviceApi = draft.serviceApi; serviceUrl = draft.serviceUrl
+        }
         guard let a = account else { return }
         name = a.name; details = a.description ?? ""; serviceUrl = a.serviceUrl ?? ""; serviceApi = a.serviceApi ?? ""
         status = a.status; userName = a.ownerUserName ?? ""

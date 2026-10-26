@@ -3,7 +3,8 @@
 //  MxJobsMGR
 //
 //  Layer 3 configuration: the API subscriptions of the jobspace (base URL, how the
-//  key is sent, rate limit, default headers) and their keys, kept in the Keychain.
+//  key is sent, rate limit, default headers) and the MxAcctMGR secure account whose
+//  service key each sends. The keys themselves are entered in MxAcctMGR ▸ Secure Accounts.
 //
 
 import SwiftUI
@@ -15,6 +16,7 @@ struct SubscriptionsDialog: View {
 
     @State private var selection: UUID?
     @State private var confirmDelete = false
+    @State private var moveKeys = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,7 +53,7 @@ struct SubscriptionsDialog: View {
                     .padding(6)
                 }
                 .frame(minWidth: 190, idealWidth: 210, maxWidth: 280)
-                .quickHelpArea("Subscriptions", "This jobspace's API subscriptions and whether each has its key stored. Select one to edit it; − deletes it and its stored key.", symbol: "list.bullet")
+                .quickHelpArea("Subscriptions", "This jobspace's API subscriptions and whether each has a key in MxAcctMGR ▸ Secure Accounts. Select one to edit it; − deletes it (its key stays in Secure Accounts).", symbol: "list.bullet")
 
                 Group {
                     if let selection, let i = space.subscriptions.firstIndex(where: { $0.id == selection }) {
@@ -66,10 +68,15 @@ struct SubscriptionsDialog: View {
             }
             Divider()
             HStack {
-                Text("API keys are kept in your Keychain, never in the jobspace file.")
+                Text("API keys are kept in MxAcctMGR ▸ Secure Accounts, never in the jobspace file.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                let _ = KeychainChanges.shared.revision
+                if !KeyMove.pending(space).isEmpty {
+                    Button("Move Keys to Secure Accounts…") { moveKeys = true }
+                        .help("Some subscriptions still have their keys in MxJobsMGR's own Keychain items")
+                }
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
@@ -80,12 +87,14 @@ struct SubscriptionsDialog: View {
             selection = editor.subscriptionToEdit ?? space.subscriptions.first?.id
             editor.subscriptionToEdit = nil
         }
+        .sheet(isPresented: $moveKeys) { KeyMoveSheet(space: $space) }
+        .task(id: KeychainChanges.shared.revision) { await SecureAccountsList.shared.loadIfNeeded() }
         .confirmationDialog("Delete this subscription?", isPresented: $confirmDelete) {
-            Button("Delete Subscription and Key", role: .destructive) { deleteSelected() }
+            Button("Delete Subscription", role: .destructive) { deleteSelected() }
         } message: {
             let n = selection.map(usage(of:)) ?? 0
-            Text(n > 0 ? "\(n) API read\(n == 1 ? "" : "s") use it and will be left without a subscription. Its stored key is removed from the Keychain."
-                       : "Its stored key is removed from the Keychain.")
+            Text(n > 0 ? "\(n) API read\(n == 1 ? "" : "s") use it and will be left without a subscription. Its secure account and key stay in MxAcctMGR."
+                       : "Its secure account and key stay in MxAcctMGR.")
         }
     }
 
@@ -99,8 +108,7 @@ struct SubscriptionsDialog: View {
     }
 
     private func deleteSelected() {
-        guard let id = selection, let sub = space.subscription(id) else { return }
-        Keychain.deleteSecret(for: sub.keychainAccount)
+        guard let id = selection, space.subscription(id) != nil else { return }
         space.subscriptions.removeAll { $0.id == id }
         for i in space.nodes.indices {
             if space.nodes[i].api?.subscriptionID == id { space.nodes[i].api?.subscriptionID = nil }
@@ -114,12 +122,7 @@ private struct SubscriptionForm: View {
     @Binding var subscription: ApiSubscription
     var usage: Int
 
-    @State private var newKey = ""
-    @State private var hasKey = false
-    @State private var keyMessage: String?
     @State private var showHelp = false
-    @State private var testing = false
-    @State private var testResult: KeyTestResult?
 
     var body: some View {
         Form {
@@ -156,62 +159,11 @@ private struct SubscriptionForm: View {
                 }
                 if subscription.auth != .none {
                     if subscription.auth == .localService {
-                        Text("Optional: store a token only if the service requires one (sent as “Authorization: Bearer …”).")
+                        Text("Optional: choose a secure account only if the service requires a token (its service key is sent as “Authorization: Bearer …”).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    LabeledContent(subscription.auth == .localService ? "Token" : "API key") {
-                        HStack {
-                            // AppKit field: reports every change (typing or pasting), so Save Key sees it at once.
-                            SecureKeyField(placeholder: hasKey ? "Paste to replace the stored key"
-                                                               : subscription.auth == .localService ? "Optional token" : "Paste your key",
-                                           text: $newKey,
-                                           onSubmit: saveKey)
-                                .frame(minWidth: 160)
-                            Button("Save Key", action: saveKey)
-                                .help("Save the key to your Keychain (or press Return in the field)")
-                        }
-                    }
-                    HStack {
-                        Spacer()
-                        Button {
-                            pasteAndSave()
-                        } label: {
-                            Label("Paste & Save", systemImage: "doc.on.clipboard")
-                        }
-                        .controlSize(.small)
-                        .help("Save the key on the clipboard without pasting it into the field")
-                    }
-                    HStack {
-                        if hasKey {
-                            Label("Key stored in Keychain", systemImage: "key.fill").foregroundStyle(.green)
-                            Spacer()
-                            Button {
-                                runKeyTest()
-                            } label: {
-                                Label("Test Key", systemImage: "checkmark.shield")
-                            }
-                            .disabled(testing)
-                            Button("Remove Key", role: .destructive) {
-                                Keychain.deleteSecret(for: subscription.keychainAccount)
-                                refresh()
-                                keyMessage = "Key removed."
-                            }
-                        } else {
-                            Label("No key stored", systemImage: "key.slash").foregroundStyle(.orange)
-                        }
-                    }
-                    if let keyMessage {
-                        Text(keyMessage).font(.caption).foregroundStyle(.secondary)
-                    }
-                    if testing {
-                        HStack { ProgressView().controlSize(.small); Text("Testing the key…").font(.caption) }
-                    } else if let testResult {
-                        Label(testResult.message, systemImage: testResult.symbol)
-                            .font(.caption)
-                            .foregroundStyle(testResult.color)
-                            .textSelection(.enabled)
-                    }
+                    SecureAccountSection(subscription: $subscription)
                 }
                 let guide = ProviderGuide.matching(subscription)
                 if guide.id != "generic", guide.auth != subscription.auth, guide.needsKey || subscription.auth.requiresKey {
@@ -300,11 +252,6 @@ private struct SubscriptionForm: View {
             .quickHelpArea(JobsHelp.section("Notes"))
         }
         .formStyle(.grouped)
-        .onAppear(perform: refresh)
-    }
-
-    private func refresh() {
-        hasKey = Keychain.hasSecret(for: subscription.keychainAccount)
     }
 
     private func chooseFolder() {
@@ -317,92 +264,5 @@ private struct SubscriptionForm: View {
         ProjectOpener.remember(url)  // lets CLion / Xcode / Finder be handed the folder later
         let home = ProjectOpener.realHome
         subscription.projectFolder = url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
-    }
-
-    private func runKeyTest() {
-        testing = true
-        testResult = nil
-        let sub = subscription
-        Task {
-            testResult = await KeyTester.test(sub)
-            testing = false
-        }
-    }
-
-    private func pasteAndSave() {
-        guard let text = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.isEmpty else {
-            keyMessage = "The clipboard has no text. Copy your key first."
-            return
-        }
-        guard !text.contains("\n"), text.count <= 512 else {
-            keyMessage = "The clipboard holds more than a key (several lines or very long text). Copy just the key."
-            return
-        }
-        newKey = text
-        saveKey()
-    }
-
-    private func saveKey() {
-        let key = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else {
-            keyMessage = "Paste your key into the field first (or use Paste & Save)."
-            return
-        }
-        if Keychain.setSecret(key, for: subscription.keychainAccount, label: subscription.name) {
-            keyMessage = "Key saved to your Keychain."
-            runKeyTest()
-            newKey = ""
-        } else {
-            keyMessage = "The key could not be saved to the Keychain."
-        }
-        refresh()
-    }
-}
-
-/// A secure text field that updates its binding on every edit (typing and pasting) and calls
-/// `onSubmit` on Return. SwiftUI's SecureField did not pass a paste on until the field lost focus,
-/// which left Save Key disabled.
-struct SecureKeyField: NSViewRepresentable {
-    var placeholder: String
-    @Binding var text: String
-    var onSubmit: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeNSView(context: Context) -> NSSecureTextField {
-        let field = NSSecureTextField()
-        field.placeholderString = placeholder
-        field.delegate = context.coordinator
-        field.target = context.coordinator
-        field.action = #selector(Coordinator.submit(_:))
-        field.bezelStyle = .roundedBezel
-        field.lineBreakMode = .byTruncatingTail
-        field.cell?.isScrollable = true
-        field.cell?.wraps = false
-        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        return field
-    }
-
-    func updateNSView(_ field: NSSecureTextField, context: Context) {
-        context.coordinator.parent = self
-        if field.stringValue != text { field.stringValue = text }
-        field.placeholderString = placeholder
-    }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: SecureKeyField
-        init(_ parent: SecureKeyField) { self.parent = parent }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            parent.text = field.stringValue
-        }
-
-        @objc func submit(_ sender: NSTextField) {
-            parent.text = sender.stringValue
-            guard !sender.stringValue.isEmpty else { return }
-            parent.onSubmit()
-        }
     }
 }

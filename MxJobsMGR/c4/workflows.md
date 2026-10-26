@@ -38,15 +38,19 @@ flowchart TD
 sequenceDiagram
     actor D as Designer
     participant S as SubscriptionsDialog
-    participant K as Keychain (com.k3jdr.MxJobsMGR)
+    participant A as MxAcctMGR ▸ Secure Accounts
+    participant K as Keychain (com.k3jdr.MxAcctMGR.secure-accounts)
     participant T as ApiTester
     participant P as Provider API
 
     D->>S: New Subscription (or Local Python Service preset)
     D->>S: name, provider, base URL, auth style, key name, headers, plan
-    D->>S: paste key, Save Key (or Paste & Save)
-    S->>K: save secret for subscription-<id>
-    S->>T: Test Key
+    D->>S: choose its Secure account (or New in MxAcctMGR…)
+    S->>A: Open in MxAcctMGR (mxacctmgr://secure-accounts/<id>)
+    D->>A: paste the key into Service key, Save
+    A->>K: save "<id> service key", trusting both apps
+    D->>S: back in MxJobsMGR (key status re-read), Test Key
+    S->>K: read the service key
     T->>P: one call with the key
     P-->>T: status, body (rate-limit notices reported)
     T-->>S: OK or the error

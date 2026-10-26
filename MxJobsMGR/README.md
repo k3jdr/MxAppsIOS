@@ -47,15 +47,25 @@ results back.
 | **Palette** (left) | Node kinds grouped by layer. Drag one onto the canvas, or double-click it to add it at the end of its lane. |
 | **Canvas** | Drag nodes to move them (10-point grid). Drag a node's ● handle onto another node to link them. Click to select, ⇧-click to add, drag on empty space to rubber-band select. Click a link to select it. Delete removes the selection, arrow keys nudge (⇧ = 100 pt), ⌘D duplicates, Escape deselects. Pinch, ⌘+ / ⌘− / ⌘0 or the toolbar zoom. |
 | **Inspector** (right, ⌥⌘I) | Properties of the selection. **Node**: title, notes, enabled; the kind's own settings (schedule, agent / assembly instructions and inputs, approver and expiry, execution target and mode, report recipients, API call, field mappings); **Arguments** (usable as `{{name}}`, plus `{{today}}` / `{{yesterday}}`); **Expected Outcome** (output name, success HTTP status, required JSON fields, value checks); **Exception Handling** (retry / skip / fallback / ask the user / abort, retries, backoff, timeout, notify). **Link**: its label. **Nothing selected**: the jobspace name, description, layer counts, subscriptions and checks. |
-| **API Subscriptions** (⌥⌘K) | Layer 3 configuration dialog: name, provider, base URL, plan, rate limit, docs link, how the key is sent (query parameter, header, bearer, local service with optional token, none), headers sent with every call, notes, the **API key**, and an optional **Source Project** folder and IDE for **Open Project**. **+** adds a subscription or a **Local Python Service** preset. |
-| **Problems** (⇧⌘K) | Checks: an execution without a User Approval upstream, API reads without a subscription, path or stored key, required arguments without a value, unlinked nodes, links that skip the agent layer, invalid base URLs. Click a problem to jump to it. |
+| **API Subscriptions** (⌥⌘K) | Layer 3 configuration dialog: name, provider, base URL, plan, rate limit, docs link, how the key is sent (query parameter, header, bearer, local service with optional token, none), headers sent with every call, notes, the **secure account** whose service key is sent (keys are kept by MxAcctMGR ▸ Secure Accounts), and an optional **Source Project** folder and IDE for **Open Project**. **+** adds a subscription or a **Local Python Service** preset. |
+| **Problems** (⇧⌘K) | Checks: an execution without a User Approval upstream, API reads without a subscription, path, secure account or service key, required arguments without a value, unlinked nodes, links that skip the agent layer, invalid base URLs. Click a problem to jump to it. |
 
-**Adding a key:** in API Subscriptions select the subscription, paste the key under **API Key**, press **Save Key** —
-MxJobsMGR then runs **Test Key** (one call to the provider). **?** next to API Key shows that provider's steps (Alpha
-Vantage, Finnhub, SEC EDGAR, Frankfurter, local services, others), **Get a Key…** opens its sign-up page, and
-**Help ▸ Adding API Keys** has the whole guide. A key belongs to the subscription of the jobspace it was saved in
-(Save As keeps it). Alpha Vantage does not reject unknown keys, so for it Test Key confirms that calls work rather
-than that the key is yours; it does report its rate-limit notices.
+**Adding a key:** API keys are kept by **MxAcctMGR ▸ Banking ▸ Secure Accounts** — MxJobsMGR has no place to type one.
+In API Subscriptions select the subscription and choose its **Secure account** (listed through the accounts service,
+127.0.0.1:8774), or press **New in MxAcctMGR…** to make one there, filled in with the subscription's name, base URL and
+documentation (back here the subscription links to it by name). Put the key in that account's **Service key** in
+MxAcctMGR (**Open in MxAcctMGR** goes straight to its Edit Service Details), then press **Test Key** here (one call to the
+provider). **?** next to API Key shows that provider's steps (Alpha Vantage, Finnhub, SEC EDGAR, Frankfurter, local
+services, others), **Get a Key…** opens its sign-up page, and **Help ▸ Adding API Keys** has the whole guide. Every
+jobspace that names the same secure account sends the same key. Alpha Vantage does not reject unknown keys, so for it
+Test Key confirms that calls work rather than that the key is yours; it does report its rate-limit notices.
+
+**Moving the old keys:** keys MxJobsMGR kept itself before (Keychain service `com.k3jdr.MxJobsMGR`, or
+`com.k3jdr.MxJobsWMS` from before the rename) are moved by **Move Keys to Secure Accounts** — offered when a jobspace with
+such keys opens, and in API Subscriptions. Each becomes the service key of the secure account with the subscription's
+name (made through the accounts service when there is none) and the subscription is linked to it. macOS may ask once
+for each old item; those MxJobsWMS made can't be deleted by MxJobsMGR, so remove them in Keychain Access when you like
+(they are no longer used). See [ADR-0018](c4/adr/0018-api-keys-kept-by-mxacctmgr-secure-accounts.md).
 
 **Test Call** (inspector of an API Data Read) sends the request once with the stored key and shows the status,
 time, the checks of the expected outcome, and the response (the key is masked in the URL shown).
@@ -214,9 +224,11 @@ Open in IDE on the subscription opens `MxDataHUB/SRM`.
   `nodes` (position, kind, arguments, outcome, exceptions and kind-specific settings) and `links`.
   Missing keys fall back to defaults, so files from earlier versions keep opening. Plain `.json` files
   holding a jobspace open too.
-- **API keys are never written to the jobspace.** They are kept in the login Keychain
-  (service `com.k3jdr.MxJobsMGR`, account `subscription-<id>`), so a jobspace can be shared without its keys;
-  on another Mac, enter the keys again under API Subscriptions.
+- **API keys are never written to the jobspace.** A subscription keeps only the id and name of its MxAcctMGR secure
+  account (`secureAccountID`, `secureAccountName`); the key is that account's service key in the login Keychain
+  (service `com.k3jdr.MxAcctMGR.secure-accounts`, account `<id> service key`), saved trusting both apps so MxJobsMGR
+  reads it without a password prompt. A jobspace can be shared without its keys; on another Mac, enter them in
+  MxAcctMGR ▸ Secure Accounts.
 - The app is sandboxed with outgoing network access and user-selected file access.
 
 ## Next

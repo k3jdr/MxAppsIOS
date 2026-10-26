@@ -37,7 +37,8 @@ BEGIN
 
     FOR s IN SELECT e, i FROM jsonb_array_elements(coalesce(p_doc -> 'subscriptions', '[]')) WITH ORDINALITY AS t (e, i) LOOP
         INSERT INTO wms.api_subscription (jobspace_id, subscription_id, ordinal, name, provider, base_url, auth, key_name,
-                                          rate_limit_per_minute, plan, docs_url, notes, project_folder, ide, service_id)
+                                          rate_limit_per_minute, plan, docs_url, notes, project_folder, ide, service_id,
+                                          secure_account_id, secure_account_name)
         VALUES (v_id, coalesce((s.e ->> 'id')::uuid, gen_random_uuid()), s.i,
                 coalesce(s.e ->> 'name', 'New Subscription'), coalesce(s.e ->> 'provider', ''),
                 coalesce(s.e ->> 'baseURL', 'https://'), coalesce(s.e ->> 'auth', 'queryParameter'),
@@ -45,7 +46,8 @@ BEGIN
                 coalesce(s.e ->> 'plan', ''), coalesce(s.e ->> 'docsURL', ''), coalesce(s.e ->> 'notes', ''),
                 coalesce(s.e ->> 'projectFolder', ''), coalesce(s.e ->> 'ide', 'vscode'),
                 (SELECT ls.service_id FROM wms.layer3_service ls
-                  WHERE s.e ->> 'baseURL' ~ ('^http://(127\.0\.0\.1|localhost):' || ls.port || '(/|$)')));
+                  WHERE s.e ->> 'baseURL' ~ ('^http://(127\.0\.0\.1|localhost):' || ls.port || '(/|$)')),
+                (s.e ->> 'secureAccountID')::int, coalesce(s.e ->> 'secureAccountName', ''));
         INSERT INTO wms.subscription_header (jobspace_id, subscription_id, ordinal, item_id, key, value)
         SELECT v_id, (s.e ->> 'id')::uuid, h.i, coalesce((h.e ->> 'id')::uuid, gen_random_uuid()),
                coalesce(h.e ->> 'key', ''), coalesce(h.e ->> 'value', '')
@@ -171,6 +173,7 @@ LANGUAGE sql STABLE AS $$
                        'baseURL', s.base_url, 'auth', s.auth, 'keyName', s.key_name,
                        'rateLimitPerMinute', s.rate_limit_per_minute, 'plan', s.plan, 'docsURL', s.docs_url,
                        'notes', s.notes, 'projectFolder', s.project_folder, 'ide', s.ide,
+                       'secureAccountID', s.secure_account_id, 'secureAccountName', s.secure_account_name,
                        'defaultHeaders', wms.key_values((
                            SELECT jsonb_agg(jsonb_build_object('id', wms.uuid_text(h.item_id), 'key', h.key, 'value', h.value)
                                             ORDER BY h.ordinal)

@@ -11,7 +11,7 @@
 //  Layer 3  Data reads           – API calls (with keys) against subscriptions
 //
 //  Every decoder tolerates missing keys so files saved by earlier versions keep opening.
-//  API keys are never written to the file; they live in the Keychain (Keychain.swift).
+//  API keys are never written to the file; they live in MxAcctMGR ▸ Secure Accounts (SecureKeys.swift).
 //
 
 import Foundation
@@ -578,7 +578,7 @@ nonisolated enum AuthStyle: String, Codable, CaseIterable, Identifiable, Sendabl
         }
     }
 
-    /// Calls fail without a stored key. A local service sends its token only when one is stored.
+    /// Calls fail without a key. A local service sends its token only when its secure account has one.
     var requiresKey: Bool { self == .queryParameter || self == .header || self == .bearer }
 }
 
@@ -594,7 +594,7 @@ nonisolated extension ApiSubscription {
         sub.auth = .localService
         sub.keyName = ""
         sub.notes = "Start it with: python3 Services/mxservices.py start (or python3 Services/market-sample/mxjobs_service.py --port \(port)). "
-            + "Store a token here only if the service is started with --token."
+            + "Choose a secure account for it only if the service is started with --token (its service key is the token)."
         return sub
     }
 }
@@ -617,8 +617,11 @@ nonisolated struct ApiSubscription: Codable, Identifiable, Equatable, Sendable {
     var projectFolder = ""
     var ide = IDEChoice.vscode
 
-    /// Keychain account under which this subscription's API key is stored.
-    var keychainAccount: String { "subscription-\(id.uuidString)" }
+    /// The MxAcctMGR secure account (srm.secure_account id) whose service key the calls send — chosen in API
+    /// Subscriptions; nil until one is. Its name as last seen: shown when MxAcctMGR's list can't be read, and, with no id,
+    /// the account to link to once it exists (a sample's, or one New in MxAcctMGR… was asked to make).
+    var secureAccountID: Int?
+    var secureAccountName = ""
 
     init() {}
 
@@ -638,6 +641,8 @@ nonisolated struct ApiSubscription: Codable, Identifiable, Equatable, Sendable {
         notes = c.value(.notes, "")
         projectFolder = c.value(.projectFolder, "")
         ide = c.value(.ide, .vscode)
+        secureAccountID = try? c.decodeIfPresent(Int.self, forKey: .secureAccountID)
+        secureAccountName = c.value(.secureAccountName, "")
     }
 }
 

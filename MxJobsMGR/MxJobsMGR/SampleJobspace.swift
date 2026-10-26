@@ -25,6 +25,7 @@ nonisolated extension Jobspace {
         alpha.rateLimitPerMinute = 5
         alpha.plan = "Free (25 requests a day)"
         alpha.docsURL = "https://www.alphavantage.co/documentation/"
+        alpha.secureAccountName = "Alpha Vantage"   // linked once Secure Accounts has one of that name
 
         var finnhub = ApiSubscription()
         finnhub.name = "Finnhub"
@@ -35,6 +36,7 @@ nonisolated extension Jobspace {
         finnhub.rateLimitPerMinute = 60
         finnhub.plan = "Free"
         finnhub.docsURL = "https://finnhub.io/docs/api"
+        finnhub.secureAccountName = "Finnhub"
 
         var frankfurter = ApiSubscription()
         frankfurter.name = "Frankfurter FX"

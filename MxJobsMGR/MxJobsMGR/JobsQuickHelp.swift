@@ -27,8 +27,8 @@ enum JobsHelp {
     static let subscriptions = QuickHelpItem(
         title: "API Subscriptions",
         detail: "The data services this jobspace's Layer 3 steps call: base URL, plan, rate limit, how the key is sent, and headers sent "
-            + "with every call. Keys are saved in your Keychain, never in the jobspace file. + adds a subscription or the local Python "
-            + "service; Get a Key… and ? show how to get one, Save Key or Paste & Save stores it, Test Key tries it.",
+            + "with every call. Each sends the service key of its MxAcctMGR secure account; keys are never in the jobspace file. + adds a subscription or the local Python "
+            + "service; Get a Key… and ? show how to get one, Secure account picks the MxAcctMGR account that holds it, Test Key tries it.",
         shortcut: "⌥⌘K", symbol: "key.horizontal")
 
     /// What's selected on the canvas.
@@ -105,7 +105,7 @@ enum JobsHelp {
         .agentTask: "An agent that gathers data points by calling the Layer 3 steps linked below it, following its instructions (simulated: it passes its inputs on).",
         .aggregate: "Combines the outputs of the steps linked into it into one result.",
         .decision: "Routes the run on its inputs' decision context (the first of its Inputs that has one, else the most confident); with none, it escalates to you.",
-        .apiRead: "Calls one endpoint of an API subscription — method, path, query parameters, headers — sending the subscription's key from your Keychain. Test Call in the inspector tries it now.",
+        .apiRead: "Calls one endpoint of an API subscription — method, path, query parameters, headers — sending the service key of the subscription's secure account (MxAcctMGR ▸ Secure Accounts). Test Call in the inspector tries it now.",
         .pythonScript: "Runs Python: arguments and linked inputs arrive as JSON on stdin and it prints JSON. Layer 3 service steps call the shared services (Services/). Run Script in the inspector tries it.",
         .dataNormalize: "Maps fields of a raw response to named data points: each output field takes the value at a dotted JSON path.",
     ]
@@ -173,7 +173,7 @@ enum JobsHelp {
         "About This Service": "The shared Layer 3 service behind this step (Services/): what it's for, its endpoints, and the Layer 3 Services window.",
         // API Subscriptions
         "Service": "The subscription's name, provider, base URL, plan, rate limit and documentation link.",
-        "API Key": "How the key is sent (query parameter, header, bearer token, local service, none) and the key itself, kept in your Keychain. Save Key or Paste & Save stores it; Test Key tries it.",
+        "API Key": "How the key is sent (query parameter, header, bearer token, local service, none) and the MxAcctMGR secure account whose service key is sent. Keys are entered and changed in MxAcctMGR ▸ Banking ▸ Secure Accounts: Open in MxAcctMGR shows the account, New in MxAcctMGR… makes one. Test Key tries it.",
         "Headers Sent With Every Call": "Headers every step using this subscription sends.",
         "Source Project": "For services you develop (Services/portfolio-java, portfolio-cpp): the project folder and the IDE its steps' Open Project button opens.",
         "Notes": "Anything worth remembering about the subscription.",
@@ -217,6 +217,6 @@ enum JobsHelp {
                                        shortcut: "⌥⌘N", symbol: "doc.on.doc")
 
     static let keys = QuickHelpItem(title: "Adding API Keys",
-                                    detail: "How to get a key for each data provider and add it to a subscription. Keys go in your Keychain, never in the jobspace file.",
+                                    detail: "How to get a key for each data provider, put it in MxAcctMGR ▸ Secure Accounts, and choose that secure account for a subscription. Keys are never in the jobspace file.",
                                     symbol: "key")
 }

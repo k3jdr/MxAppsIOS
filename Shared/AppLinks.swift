@@ -6,12 +6,15 @@
 //
 //    MxDataHUB  — the data: securities, benchmarks, portfolios, and refreshing each category of market data.
 //    MxJobsMGR  — the processes: repeatable, scheduled, approved workflows over that data.
-//    MxAcctMGR  — the personal accounts: My Portfolio, kept in the security master with its tax lots.
+//    MxAcctMGR  — the personal accounts: My Portfolio, kept in the security master with its tax lots; and Secure
+//                 Accounts, which keeps the API keys MxJobsMGR's subscriptions send.
 //
 //    mxjobsmgr://sample/<sample id>?portfolio=CODE&benchmark=CODE   new jobspace from a sample, for a portfolio
 //    (mxjobswms:// — the app's scheme before it was renamed from MxJobsWMS — still opens it.)
 //    mxdatahub://portfolio/<CODE>    mxdatahub://benchmark/<CODE>    mxdatahub://data-refresh    mxdatahub://services
 //    mxacctmgr://my-portfolio/<CODE>   My Portfolio, opened from the security-master account CODE (no code: as it is)
+//    mxacctmgr://secure-accounts/<id>   Banking ▸ Secure Accounts, with that account's Edit Service Details open
+//    mxacctmgr://secure-accounts/new?name=…&api=…&url=…   New Secure Account, filled in (MxJobsMGR's API Subscriptions)
 //    (mxportmgr:// — the app's scheme before it was renamed from MxPortMGR — still opens it.)
 //
 
@@ -27,6 +30,10 @@ nonisolated enum AppLink: Equatable, Sendable {
     case services
     /// MxAcctMGR: My Portfolio, optionally the security-master account with this code.
     case myPortfolio(String?)
+    /// MxAcctMGR: Secure Accounts, optionally with this account open.
+    case secureAccount(Int?)
+    /// MxAcctMGR: New Secure Account, filled in with a product name, service API and service URL.
+    case newSecureAccount(name: String, api: String?, url: String?)
 
     static let jobsScheme = "mxjobsmgr"
     static let hubScheme = "mxdatahub"
@@ -61,6 +68,13 @@ nonisolated enum AppLink: Equatable, Sendable {
         case let .myPortfolio(code):
             c.scheme = Self.acctScheme; c.host = "my-portfolio"
             if let code, !code.isEmpty { c.path = "/" + code }
+        case let .secureAccount(id):
+            c.scheme = Self.acctScheme; c.host = "secure-accounts"
+            if let id { c.path = "/\(id)" }
+        case let .newSecureAccount(name, api, url):
+            c.scheme = Self.acctScheme; c.host = "secure-accounts"; c.path = "/new"
+            c.queryItems = [URLQueryItem(name: "name", value: name)]
+                + [("api", api), ("url", url)].compactMap { k, v in v.flatMap { $0.isEmpty ? nil : URLQueryItem(name: k, value: $0) } }
         }
         return c.url!
     }
@@ -77,6 +91,9 @@ nonisolated enum AppLink: Equatable, Sendable {
         case (Self.hubScheme, "data-refresh"): self = .dataRefresh
         case (Self.hubScheme, "services"): self = .services
         case (Self.acctScheme, "my-portfolio"), (Self.legacyAcctScheme, "my-portfolio"): self = .myPortfolio(value.isEmpty ? nil : value)
+        case (Self.acctScheme, "secure-accounts") where value == "new":
+            self = .newSecureAccount(name: query("name") ?? "", api: query("api"), url: query("url"))
+        case (Self.acctScheme, "secure-accounts"): self = .secureAccount(Int(value))
         default: return nil
         }
     }
@@ -85,7 +102,7 @@ nonisolated enum AppLink: Equatable, Sendable {
     var appName: String {
         switch self {
         case .sample: "MxJobsMGR"
-        case .myPortfolio: "MxAcctMGR"
+        case .myPortfolio, .secureAccount, .newSecureAccount: "MxAcctMGR"
         default: "MxDataHUB"
         }
     }

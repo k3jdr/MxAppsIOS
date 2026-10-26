@@ -484,10 +484,21 @@ kept in the security master (`srm.secure_account`, V035; the accounts service's 
 
 The product key, service key and password are kept in this Mac's Keychain (service `com.k3jdr.MxAcctMGR.secure-accounts`),
 never in the security master: other Macs don't see them; the editor masks them unless *Show the keys and password* is
-on, and each has a copy button. The **Service Product Table** lists each one's product, status, service and user name,
+on, and each has a copy button. The **Service Product Table** lists each one's product, status, service, user name and
+**Keys** (which of its service key, product key and password the Keychain holds),
 read-only with Excel-style sorting and filters on every column; right-click a row for *Edit Service Name…* (refused
 when another service has the name, whatever its case; Save closes it) or *Edit Service Details…* (also a double-click).
 *New Secure Account…* adds one.
+
+**API keys for MxJobsMGR.** A service key is also an API key: each of MxJobsMGR's API subscriptions names a secure
+account and its calls send that account's service key, so Secure Accounts is the one place API keys are entered and
+changed (MxJobsMGR has no key entry of its own). The keys are saved trusting both apps (`Shared/SharedKeys.swift`: each
+by bundle id and signing certificate, MxJobsMGR as installed in /Applications), so MxJobsMGR reads them without a
+password prompt. MxJobsMGR's API Subscriptions opens `mxacctmgr://secure-accounts/<id>` (*Open in MxAcctMGR*: that
+account's Edit Service Details) or `mxacctmgr://secure-accounts/new?name=…&api=…&url=…` (*New in MxAcctMGR…*: New
+Secure Account filled in with the subscription's name, base URL and documentation, or the account of that name if
+there is one). Its *Move Keys to Secure Accounts* moved the keys it used to keep itself into the secure accounts of
+the subscriptions' names, making the missing ones through the accounts service (ADR-0018 in `MxJobsMGR/c4/adr`).
 
 **Import Passwords and Keys…** reads a credentials worksheet from the workbook **open in Microsoft Excel** (Apple
 Events: macOS asks once whether MxAcctMGR may control Excel; an encrypted workbook can't be read from its file, and no

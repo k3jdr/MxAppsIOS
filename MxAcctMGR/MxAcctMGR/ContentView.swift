@@ -84,9 +84,16 @@ struct ContentView: View {
             if !PortSettings.shared.shows(store.screen) { store.go(.myPortfolio) }
         }
         .onOpenURL { url in
-            // mxacctmgr://my-portfolio/CODE from MxDataHUB or MxJobsMGR (Shared/AppLinks.swift).
-            if case let .myPortfolio(code)? = AppLink(url: url) {
+            // mxacctmgr://my-portfolio/CODE from MxDataHUB or MxJobsMGR, mxacctmgr://secure-accounts/… from MxJobsMGR's
+            // API Subscriptions (Shared/AppLinks.swift).
+            switch AppLink(url: url) {
+            case let .myPortfolio(code)?:
                 if let code { store.requestOpen(code) } else { store.go(.myPortfolio) }
+            case let link? where link.appName == "MxAcctMGR":
+                store.secureRequest = link
+                store.go(.secureAccounts)
+            default:
+                break
             }
         }
         .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }

@@ -65,7 +65,8 @@ erDiagram
         text project_folder
         text ide
         text service_id FK
-        text keychain_account "generated: subscription-UUID"
+        int secure_account_id "MxAcctMGR srm.secure_account"
+        text secure_account_name
     }
     SUBSCRIPTION_HEADER {
         uuid jobspace_id PK, FK
@@ -339,5 +340,5 @@ erDiagram
 | From                                            | To                                                    | How                                                                          |
 | ------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `wms.job_run.portfolio_code` / `benchmark_code` | MxDataHUB `srm.portfolio.code` / `srm.benchmark.code` | by code, as passed in `mxjobsmgr://sample/<id>?portfolio=&benchmark=`        |
-| `wms.api_subscription.keychain_account`         | login Keychain, service `com.k3jdr.MxJobsMGR`         | API keys are never stored in the database                                    |
+| `wms.api_subscription.secure_account_id`        | MxAcctMGR ▸ Secure Accounts: Keychain service `com.k3jdr.MxAcctMGR.secure-accounts`, account `<id> service key` | API keys are never stored in the database (ADR-0018) |
 | `wms.layer3_service`                            | `MxAppsIOS/Services/<folder>`                         | the service code; MxAcctMGR's `pmg.engine_run.service_id` names the same ids |

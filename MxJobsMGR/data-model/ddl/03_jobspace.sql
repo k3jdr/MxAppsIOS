@@ -28,9 +28,10 @@ CREATE TRIGGER jobspace_touch BEFORE UPDATE ON wms.jobspace FOR EACH ROW EXECUTE
 COMMENT ON TABLE wms.jobspace IS 'A workflow document (format mxjobspace): subscriptions, steps in three layers, links and run settings';
 
 -- ---------------------------------------------------------------------------
--- API subscriptions (Layer 3 configuration). The key itself is never stored: it lives in the
--- login Keychain under service com.k3jdr.MxJobsMGR, account subscription-<id> (shared by the
--- copies of a document, which is why Save As keeps the key).
+-- API subscriptions (Layer 3 configuration). The key itself is never stored: it is the service key
+-- of the MxAcctMGR secure account the subscription names (srm.secure_account, Banking ▸ Secure
+-- Accounts), kept in the login Keychain under service com.k3jdr.MxAcctMGR.secure-accounts,
+-- account "<secure_account_id> service key" (ADR-0018).
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE wms.api_subscription (
@@ -50,13 +51,15 @@ CREATE TABLE wms.api_subscription (
     project_folder  text NOT NULL DEFAULT '',            -- source of a local service, for Open Project
     ide             text NOT NULL DEFAULT 'vscode' CHECK (ide IN ('vscode', 'intellij', 'clion', 'xcode', 'finder')),
     service_id      text REFERENCES wms.layer3_service ON DELETE SET NULL,   -- the Layer 3 service it calls, if local
-    keychain_account text GENERATED ALWAYS AS ('subscription-' || upper(subscription_id::text)) STORED,
+    secure_account_id integer,                           -- srm.secure_account whose service key is sent (another database)
+    secure_account_name text NOT NULL DEFAULT '',        -- its name as last seen; with no id, the account to link by name
     PRIMARY KEY (jobspace_id, subscription_id),
     UNIQUE (jobspace_id, ordinal) DEFERRABLE
 );
 CREATE INDEX api_subscription_service_idx ON wms.api_subscription (service_id);
-COMMENT ON TABLE wms.api_subscription IS 'A data provider or local service a jobspace calls; the API key stays in the Keychain';
-COMMENT ON COLUMN wms.api_subscription.keychain_account IS 'Keychain account holding the key (service com.k3jdr.MxJobsMGR)';
+COMMENT ON TABLE wms.api_subscription IS 'A data provider or local service a jobspace calls; the API key stays in MxAcctMGR Secure Accounts (Keychain)';
+COMMENT ON COLUMN wms.api_subscription.secure_account_id IS 'MxAcctMGR secure account (srm.secure_account) whose service key is sent: Keychain service com.k3jdr.MxAcctMGR.secure-accounts, account "<id> service key"';
+COMMENT ON COLUMN wms.api_subscription.secure_account_name IS 'The secure account''s name as last seen; with no id, the account linked by name once it exists';
 COMMENT ON COLUMN wms.api_subscription.service_id IS 'Set when base_url is a Layer 3 service on 127.0.0.1 (matched by port on import)';
 
 CREATE TABLE wms.subscription_header (

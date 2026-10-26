@@ -131,10 +131,10 @@ enum ApiTester {
 
     /// Sends the step's request once; `inputs` are the outputs of the steps linked into it ({{in:…}}).
     static func run(node: JobNode, subscription sub: ApiSubscription, inputs: [String: Any] = [:]) async -> ApiTestResult {
-        let key = sub.auth == .none ? nil : Keychain.secret(for: sub.keychainAccount)
+        let key = sub.auth == .none ? nil : SecureKeys.key(for: sub)
         let request: URLRequest
         do {
-            if sub.auth.requiresKey, key == nil { throw TestError("No API key stored for “\(sub.name)”. Add one under API Subscriptions.") }
+            if sub.auth.requiresKey, key == nil { throw TestError(Validator.missingKey(sub)) }
             request = try buildRequest(node: node, subscription: sub, key: key, inputs: inputs)
         } catch {
             return ApiTestResult(url: "", status: nil, elapsed: 0, body: "", checks: [], error: error.localizedDescription)

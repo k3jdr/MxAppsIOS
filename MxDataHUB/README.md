@@ -112,7 +112,7 @@ in a small window of its own; closing that window docks it again. Both choices a
 | `ServicesWorkflowsView.swift` | Services & Workflows, and the Workflows menu of Portfolios |
 | `HubQuickHelp.swift` | What Quick Help says about each screen, the selection and the controls |
 | `Info.plist` | The `mxdatahub` URL scheme (merged into the generated Info.plist) |
-| `../Shared/` | Compiled into both apps: `ServiceCatalog.swift` (services, use cases, samples), `ServicesView.swift` (the services and workflows views), `AppLinks.swift` (the `mxdatahub://` / `mxjobsmgr://` hand-offs), `QuickHelp/` (the Quick Help panel, also in MxDataSQL) |
+| `../Shared/` | Compiled into both apps: `ServiceCatalog.swift` (services, use cases, samples), `ServicesView.swift` (the services and workflows views), `AppLinks.swift` (the `mxdatahub://` / `mxjobsmgr://` / `mxacctmgr://` hand-offs), `SharedKeys.swift` (Keychain items MxAcctMGR and MxJobsMGR both read: Secure Accounts' service keys), `QuickHelp/` (the Quick Help panel, also in MxDataSQL) |
 | `Formatting.swift` | Number formatting shared by the screens |
 | `SRM/` | PostgreSQL migrations and the Python loaders |
 

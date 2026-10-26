@@ -8,7 +8,8 @@
 
 A change keeps the saved value of each field it doesn't send, so Edit Name sends only the name. Names are unique
 whatever their case. The product key, the service key and the password are never sent here: MxAcctMGR keeps them in
-the Keychain of the Mac they are entered on.
+the Keychain of the Mac they are entered on. A service key is also the API key MxJobsMGR's subscriptions send: MxJobsMGR
+lists these accounts so a subscription can name one, and its Move Keys to Secure Accounts creates them (by MxJobsMGR).
 """
 
 from bank import Conflict, fetch, _date, _num

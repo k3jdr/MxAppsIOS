@@ -18,7 +18,7 @@ is the relational form of both: every field of the file format has a column (see
 | Order | `ordinal` = position in the document's array, so a document exports in its own order. Unique per parent, deferrable (reordering in one transaction). |
 | Same-document integrity | Composite foreign keys `(jobspace_id, node_id)` / `(jobspace_id, subscription_id)` make it impossible for a link, a settings row or an API call to point into another jobspace. |
 | Kind subtypes | A step's kind fixes its layer (`(kind, layer)` → Node Kind) and the one settings table it may use (§3.3). |
-| Secrets | API keys are never stored: they live in the login Keychain under `com.k3jdr.MxJobsMGR` / `subscription-<UUID>`; the model keeps only that account name (generated column). |
+| Secrets | API keys are never stored: a subscription names an MxAcctMGR secure account (`secure_account_id`, `secure_account_name`) whose service key MxAcctMGR keeps in the login Keychain (`com.k3jdr.MxAcctMGR.secure-accounts` / `<id> service key`). |
 | Defaults | Every column defaults to the app's own default, so a document missing keys (older versions) imports as the app would open it. |
 | Codes | Small closed enumerations are `CHECK`-constrained text with the app's raw values (`autoApprove`, `escalateToUser`, …); lists that carry descriptions are tables (Layer, Node Kind, Service Use Case). |
 
@@ -70,7 +70,8 @@ from, file path; run settings — Layer 1 `interactive | autoApprove | skip`, La
 
 **API Subscription** — a data provider or local service the jobspace calls: name, provider, base URL, how the key is
 sent (`none`, `queryParameter`, `header`, `bearer`, `localService`), key name, rate limit / minute, plan, docs URL,
-notes, project folder and IDE for Open Project, the Layer 3 Service it reaches (matched by port), Keychain account.
+notes, project folder and IDE for Open Project, the Layer 3 Service it reaches (matched by port), and the MxAcctMGR secure
+account whose service key it sends (id and name as last seen).
 Has ordered **Subscription Headers** sent with every call.
 
 **Job Node** (step) — kind, layer, title, notes, canvas position (x, y; 10-pt grid), enabled, breakpoint.
@@ -143,7 +144,7 @@ message, detail, options, when asked / expires, the answer (one of the options),
 | error | An API Data Read needs a subscription; a Python Script needs code; a subscription needs a valid base URL. |
 | warning | A step with no links (when the jobspace has more than one step); a required argument without a value; an API read without a path; a link that skips the agent layer (Layer 1 ↔ 3). |
 | info | An execution in `live` mode; an approval without a named approver. |
-| app only | Key stored in the Keychain; a Python interpreter found — these depend on the Mac, not the data. |
+| app only | A secure account chosen and its service key in the Keychain; a Python interpreter found — these depend on the Mac, not the data. |
 
 ## 6. Mapping to the `.jobspace` file
 
