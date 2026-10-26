@@ -566,10 +566,20 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   (`srm.v_spending_entry`). Each gets a **spending category** (Food, Housing, Transportation, Education, Activities,
   Technology, Healthcare, Clothing, Travel, Other) and a **primary driver** (Inflation, Family Growth, New Activity,
   Lifecycle Transition, Preference Change, One-Time Event), and optionally a family member. They come from **rules**:
-  an expense account's (V037 seeds the categories from the expense accounts' names) and, overriding it, a target
-  account's. A **tag** on a single entry overrides both, and can name an event ("Philmont 2026"). Rules are set on
-  *Rules*; tags on *Entries* (double-click, or select several and right-click). The *Entries* context menu also opens
-  the rule for an entry's target or expense account.
+  an expense account's (V037 seeds the categories from the expense accounts' names); overriding it, a **statement
+  text** rule (V042: every entry whose payee, statement name or description contains the text, ignoring case — the
+  longest text wins when several match); and overriding both, a target account's. A **tag** on a single entry
+  overrides them all, and can name an event ("Philmont 2026"). Rules are set on *Rules*; tags on *Entries*
+  (double-click, or select several and right-click). The *Entries* context menu also opens the rule for an entry's
+  target account, statement text or expense account.
+* **Rules.** *Expense Account Rules*: one row per expense account. *Target Account Rules*: the target accounts with a
+  rule first (bold, ✕ removes it), then every target account with spending in either year, most spent this year first;
+  *Only rules* hides the rest. Picking a category, driver or member on a row gives it a rule. Only entries linked to a
+  target account (the check register, Chase) have one — Discover's charges and the expense-ledger lines carry only the
+  statement's words — so *Statement Text Rules* covers those: *Add Statement Text Rule…* (the sheet shows what the
+  text matches as you type), ✎ to change a rule's text, ✕ to remove it, and *Largest statement names no rule reaches*
+  with *Add Rule…* for each. Every row shows both years' spending. A family member can be picked once the family is
+  set up on *Family & Lifecycle*.
 * **Overview (the attribution).** For each category, `change = inflation + usage + lifecycle + behavior + one-time`. Inflation is
   the earlier year's spending times the category's CPI change, plus whatever spending tagged Inflation grew beyond it.
   Each other driver's effect is what its spending grew beyond inflation: Family Growth and New Activity (and spending
@@ -585,7 +595,8 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - its spending month by month in both years;
   - **By Driver**: each driver's spending in both years and what it grew beyond prices, adding up to the change with
     the price change on last year's spending;
-  - **How Entries Got Here**: which expense-account rules, target-account rules and entry tags put its entries in it,
+  - **How Entries Got Here**: which expense-account, statement-text and target-account rules and entry tags put its
+    entries in it,
     each with the rule's category, driver and member, both years' spending and *Rule…* to change it;
   - **Where It Went**: by expense account, with the target accounts whose spending changed most;
   - the ten largest entries this year, and spending by family member;

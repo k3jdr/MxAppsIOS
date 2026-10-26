@@ -46,13 +46,15 @@ struct HouseholdMember: Decodable, Identifiable, Hashable {
     func age(in year: Int) -> Int { year - birthYear }
 }
 
-/// An expense account's or a target account's category, driver and member.
+/// An expense account's, a target account's or a piece of statement text's category, driver and member.
 struct SpendingRule: Decodable, Identifiable, Hashable {
     var id: Int
     var expenseAccountId: Int?
     var expenseAccount: String?
     var payeeId: Int?
     var payee: String?
+    /// Statement text (V042): entries whose payee, statement name or description contains it, ignoring case.
+    var pattern: String?
     var category: String?
     var driver: String?
     var memberId: Int?
@@ -103,6 +105,8 @@ struct SpendingSetup: Decodable {
     var children: [HouseholdMember] { members.filter { $0.isChild && $0.active } }
     func rule(expenseAccount id: Int) -> SpendingRule? { rules.first { $0.expenseAccountId == id } }
     func rule(payee id: Int) -> SpendingRule? { rules.first { $0.payeeId == id } }
+    func rule(pattern: String) -> SpendingRule? { rules.first { $0.pattern?.lowercased() == pattern.lowercased() } }
+    var textRules: [SpendingRule] { rules.filter { $0.pattern != nil } }
 }
 
 /// One spending dollar's entry: a check, a card charge or credit, or an expense-ledger item, positive when spent.
@@ -118,7 +122,7 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     var expenseAccount: String?
     var amount: Double
     var category: String?
-    /// Where the category came from: entry, target account or expense account.
+    /// Where the category came from: entry, target account, statement text or expense account.
     var categoryFrom: String?
     var driver: String?
     var driverFrom: String?
@@ -126,8 +130,31 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     var event: String?
     var notes: String?
     var tagged: Bool
+    /// The statement text rule it matches (V042), the longest when several do.
+    var rulePattern: String?
     var id: String { "\(source)-\(entryId)" }
     var sourceTitle: String { source == "bank" ? "Checking" : source == "card" ? "Card" : "Expense ledger" }
+
+    /// Statement text to start a rule from: the payee's first words, without a card processor's prefix ("SQ *",
+    /// "IN *") and stopping at store numbers, phone numbers and "#": "APPLE.COM/BILL 866-712-7753 CA" → "APPLE.COM/BILL".
+    var statementKey: String {
+        var text = (payee ?? description ?? "").trimmingCharacters(in: .whitespaces)
+        if let r = text.range(of: #"^[A-Za-z]{1,4} ?\* ?"#, options: .regularExpression) { text = String(text[r.upperBound...]) }
+        var words: [Substring] = []
+        for w in text.split(separator: " ") {
+            if w.contains(where: { $0.isNumber || $0 == "#" || $0 == "*" }) || words.count == 3 { break }
+            words.append(w)
+        }
+        while let last = words.last, ["AND", "&", "OF", "THE", "-", "/"].contains(last.uppercased()) { words.removeLast() }
+        let key = words.joined(separator: " ")
+        return key.count >= 3 ? key : String(text.prefix(30))
+    }
+
+    /// Its payee or description contains the text, ignoring case, as a statement text rule matches.
+    func contains(statement text: String) -> Bool {
+        let t = text.lowercased()
+        return !t.isEmpty && [payee, description].contains { ($0 ?? "").lowercased().contains(t) }
+    }
 }
 
 /// A category's price change between the periods: CPI months, else its assumption.

@@ -7,8 +7,9 @@
                                                    birthYear, birthMonth, notes, active, by}
     DELETE /spending/members/<id>                  take one off (their rules and tags keep no member)
     PUT    /spending/categories/<code>             a category's {cpiSeries, assumedInflation}
-    PUT    /spending/rules                         an expense account's or target account's rule {expenseAccountId |
-                                                   payeeId, category, driver, memberId, notes, by}; nothing set removes it
+    PUT    /spending/rules                         an expense account's, target account's or statement text's rule
+                                                   {expenseAccountId | payeeId | pattern, id (to change a statement
+                                                   text), category, driver, memberId, notes, by}; nothing set removes it
     PUT    /spending/triggers/<id>                 a lifecycle trigger, created (id 0) or changed {name, category, kind,
                                                    ageFrom, ageTo, everyYears, annualCost, notes, active, by}
     DELETE /spending/triggers/<id>                 take one off
@@ -109,12 +110,13 @@ def setup(conn):
          ORDER BY c.sort_order""")
     rules = fetch(conn, """
         SELECT r.rule_id AS id, r.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount",
-               r.payee_id AS "payeeId", p.name AS payee, r.category_code AS category, r.driver,
+               r.payee_id AS "payeeId", p.name AS payee, r.pattern, r.category_code AS category, r.driver,
                r.member_id AS "memberId", r.notes, r.updated_by AS "updatedBy", r.updated_at AS "updatedAt"
           FROM srm.spending_rule r
           LEFT JOIN srm.expense_account e USING (expense_account_id)
           LEFT JOIN srm.payee p USING (payee_id)
-         ORDER BY r.payee_id IS NOT NULL, coalesce(e.sort_order, 0), lower(coalesce(e.name, p.name))""")
+         ORDER BY r.payee_id IS NOT NULL, r.pattern IS NOT NULL, coalesce(e.sort_order, 0),
+                  lower(coalesce(e.name, p.name, r.pattern))""")
     triggers = fetch(conn, """
         SELECT trigger_id AS id, name, category_code AS category, kind, age_from AS "ageFrom", age_to AS "ageTo",
                every_years AS "everyYears", annual_cost AS "annualCost", notes, active
@@ -188,8 +190,11 @@ def save_category(conn, code, body):
 
 def save_rule(conn, body):
     account, payee = _opt_int(body, "expenseAccountId"), _opt_int(body, "payeeId")
-    if (account is None) == (payee is None):
-        raise ValueError("a rule is for an expenseAccountId or a payeeId")
+    pattern = " ".join(str(body.get("pattern") or "").split())[:200] or None
+    if [account, payee, pattern].count(None) != 2:
+        raise ValueError("a rule is for an expenseAccountId, a payeeId or a pattern")
+    if pattern is not None:
+        return _save_text_rule(conn, body, pattern)
     key, value = ("expense_account_id", account) if account is not None else ("payee_id", payee)
     category, driver, member = _category(conn, body), _driver(body), _opt_int(body, "memberId")
     notes = _text(body, "notes", 1000)
@@ -202,6 +207,37 @@ def save_rule(conn, body):
                               member_id = excluded.member_id, notes = excluded.notes,
                               updated_by = excluded.updated_by, updated_at = now()""" % (key, key),
               (value, category, driver, member, notes, _by(body)))
+    conn.commit()
+    return setup(conn)
+
+
+def _save_text_rule(conn, body, pattern):
+    """A statement text's rule (V042): every entry whose payee, statement name or description contains the text,
+    ignoring case. With an id it changes that rule, its text included."""
+    if len(pattern) < 3:
+        raise ValueError("statement text is at least 3 characters")
+    category, driver, member = _category(conn, body), _driver(body), _opt_int(body, "memberId")
+    notes = _text(body, "notes", 1000)
+    rid = _opt_int(body, "id")
+    if rid:
+        found = fetch(conn, "SELECT rule_id FROM srm.spending_rule WHERE rule_id = %s AND pattern IS NOT NULL", (rid,))
+        if not found:
+            raise LookupError("no statement text rule %s" % rid)
+    else:
+        found = fetch(conn, "SELECT rule_id FROM srm.spending_rule WHERE lower(pattern) = lower(%s)", (pattern,))
+    rid = found[0]["rule_id"] if found else None
+    if fetch(conn, "SELECT 1 FROM srm.spending_rule WHERE lower(pattern) = lower(%s) AND rule_id <> %s", (pattern, rid or 0)):
+        raise ValueError('there is already a rule for "%s"' % pattern)
+    if not (category or driver or member or notes):
+        if rid:
+            fetch(conn, "DELETE FROM srm.spending_rule WHERE rule_id = %s", (rid,))
+    elif rid:
+        fetch(conn, """UPDATE srm.spending_rule SET pattern = %s, category_code = %s, driver = %s, member_id = %s,
+                              notes = %s, updated_by = %s, updated_at = now() WHERE rule_id = %s""",
+              (pattern, category, driver, member, notes, _by(body), rid))
+    else:
+        fetch(conn, """INSERT INTO srm.spending_rule (pattern, category_code, driver, member_id, notes, updated_by)
+                       VALUES (%s, %s, %s, %s, %s, %s)""", (pattern, category, driver, member, notes, _by(body)))
     conn.commit()
     return setup(conn)
 
@@ -270,7 +306,7 @@ ENTRY_SQL = """
     SELECT source, entry_id AS "entryId", txn_date AS date, register, payee_id AS "payeeId", payee, description,
            expense_account_id AS "expenseAccountId", expense_account AS "expenseAccount", amount,
            category_code AS category, category_from AS "categoryFrom", driver, driver_from AS "driverFrom",
-           member_id AS "memberId", event, notes, tagged
+           member_id AS "memberId", event, notes, tagged, rule_pattern AS "rulePattern"
       FROM srm.v_spending_entry"""
 
 
@@ -424,7 +460,7 @@ TABLES = [
      "SELECT count(*) AS rows, NULL::date AS newest, NULL::timestamptz AS changed FROM srm.expense_account WHERE kind = 'expense'"),
     ("srm.payee", "table", "The target accounts: an entry's expense account when it has none of its own, and the target-account rules",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.payee"),
-    ("srm.spending_rule", "table", "Category, driver and member of an expense account's or target account's spending",
+    ("srm.spending_rule", "table", "Category, driver and member of an expense account's, target account's or statement text's spending",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.spending_rule"),
     ("srm.spending_tag", "table", "One entry's own category, driver, member or event, overriding the rules",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.spending_tag"),
