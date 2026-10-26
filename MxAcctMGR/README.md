@@ -613,6 +613,23 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
     rows, its newest data and its last change.
   - **Last Loads:** the latest `pnc-bank`, `card-downloads` and `fred-yields` runs.
+* **Year-End Tax.** A tax year's tax-applicable expenses, tax payments, real estate taxes, refunds and tax savings
+  account, built from **tax items** (V040). A tax item is a target account (Peco, H Federal Taxes …), an
+  expense-ledger line (Home Office Desk Buildout) or a name the card companies use (TURBOTAX). V040 seeds them from
+  the target accounts there are. Most of these payments are checking entries with no expense account, so they aren't
+  spending: the report reads the registers for them directly. The tab shows:
+  - the expenses by category, each with what it cost and its deductible share (type a percent, e.g. 15% of
+    utilities for a home office) and the deductible amount;
+  - estimated and local tax payments by jurisdiction and quarter. Estimated payments follow their quarter: January
+    counts as Q4 of the year before. *Move…* puts a payment in another year or quarter, e.g. an April payment that
+    settles last year's return;
+  - real estate taxes; refunds, each counted toward the year before the one it arrives in; and the tax savings
+    account, set aside against taken out;
+  - a warning when a register the items draw on starts after January 1 (PNC Checking starts 12/26/2025, so 2025 is
+    incomplete).
+
+  *Copy Summary* copies the year as text. *Export CSV…* saves every payment, then each item's totals, the payments by
+  quarter and the summary, for whoever prepares the return. *Tax Items* adds, edits and removes items.
 * **The family's web page and Feedback.** The same page, read-only, is on the home network for the rest of the
   family (`Services/spending-web` on K3JDR-DSKTOP-11; see its README for the link and how it is kept private). Notes
   sent from it (💬 on a section, ⚑ on a purchase, *Suggest a change* on a rule) come to the **Feedback** tab. The tab
@@ -747,5 +764,5 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, its sheets, and the charts' Deep Dive menu |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

@@ -18,6 +18,7 @@ shows and add notes, nothing else. Pages and data are never cached, and links ar
     GET  /s/<key>/api/setup              categories, family, rules and lifecycle triggers
     GET  /s/<key>/api/analysis?start=&end=&priorStart=&priorEnd=   every spending dollar of both periods
     GET  /s/<key>/api/sources?…          the sources, the SRM tables read and the last loads
+    GET  /s/<key>/api/tax?year=          Year-End Tax: tax items, the year's payments and summary (V040)
     GET  /s/<key>/api/feedback?author=   someone's notes with their status and replies
     POST /s/<key>/api/feedback           a note {author, kind, tab, section, category, entrySource, entryId,
                                          suggestion, message, context}
@@ -136,6 +137,8 @@ class Handler(BaseHTTPRequestHandler):
                     out = spending.analysis(conn, q)
                 elif method == "GET" and name == "sources":
                     out = spending.sources(conn, q)
+                elif method == "GET" and name == "tax":
+                    out = spending.tax(conn, q)
                 elif method == "GET" and name == "feedback":
                     out = spending.feedback(conn, {"author": q.get("author") or "-"})
                 elif method == "POST" and name == "feedback":

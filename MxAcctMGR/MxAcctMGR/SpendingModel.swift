@@ -464,6 +464,119 @@ struct SpendingFeedback: Decodable, Identifiable, Hashable {
     var open: Bool { status == "new" || status == "seen" || status == "planned" }
 }
 
+/// Year-End Tax (V040): the year's tax items with what they paid, every payment that counts toward the year (with its
+/// tax year and quarter), and the summary.
+struct TaxReport: Decodable {
+    struct Item: Decodable, Identifiable, Hashable {
+        var id: Int
+        var payeeId: Int?
+        var payee: String?
+        var ledgerLineId: Int?
+        var ledgerLine: String?
+        var ledger: String?
+        var namePattern: String?
+        var label: String
+        var section: String
+        var taxCategory: String
+        var jurisdiction: String?
+        var deductibleShare: Double
+        var quarterly: Bool
+        var notes: String?
+        var sortOrder: Int
+        var active: Bool
+        var paid: Double
+        var entries: Int
+        var deductible: Double?
+
+        /// Where its payments come from, in words.
+        var origin: String {
+            if let payee { return "Target account \(payee)" }
+            if let ledgerLine { return "Ledger \(ledger ?? "") line \(ledgerLine)" }
+            if let namePattern { return "Card names containing \(namePattern)" }
+            return ""
+        }
+    }
+    struct Entry: Decodable, Identifiable, Hashable {
+        var source: String
+        var entryId: Int
+        var date: String
+        var payee: String?
+        var description: String?
+        var register: String?
+        var amount: Double
+        var itemId: Int
+        var taxYear: Int
+        var quarter: Int?
+        var moved: Bool
+        var note: String?
+        var id: String { "\(source)-\(entryId)" }
+        var period: String { quarter.map { "\(taxYear) Q\($0)" } ?? String(taxYear) }
+    }
+    struct Quarters: Decodable, Hashable {
+        var q1: Double, q2: Double, q3: Double, q4: Double, other: Double, total: Double
+        var all: [Double] { [q1, q2, q3, q4, other, total] }
+    }
+    struct Summary: Decodable, Hashable {
+        var expensesPaid: Double
+        var expensesDeductible: Double
+        var payments: [String: Quarters]
+        var paymentsTotal: Double
+        var realEstate: Double
+        var refunds: Double
+        var savingsSetAside: Double
+        var savingsTakenOut: Double
+    }
+    struct Register: Decodable, Hashable { var source: String; var register: String; var name: String; var first: String? }
+    struct Line: Decodable, Hashable, Identifiable { var id: Int; var name: String; var ledger: String }
+
+    var year: Int
+    var items: [Item]
+    var entries: [Entry]
+    var summary: Summary
+    var partialRegisters: [Register]
+    var ledgerLines: [Line]
+
+    static let sections = [("expense", "Tax-applicable expense"), ("payment", "Tax payment"), ("real_estate", "Real estate tax"),
+                           ("refund", "Refund received"), ("savings", "Tax savings account")]
+    static let jurisdictions = [("federal", "Federal"), ("state", "State (PA)"), ("local", "Local")]
+    func item(_ id: Int) -> Item? { items.first { $0.id == id } }
+    func entries(of section: String) -> [Entry] { entries.filter { item($0.itemId)?.section == section } }
+
+    /// The year as CSV for the accountant: every payment with its item, then each item's totals and the estimated
+    /// payments by quarter.
+    var csv: String {
+        func f(_ s: String?) -> String {
+            let s = s ?? ""
+            return s.contains(where: { ",\"\n".contains($0) }) ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+        }
+        let n = { (x: Double) in String(format: "%.2f", x) }
+        var rows = ["Year-End Tax \(year)", "",
+                    "Section,Item,Category,Jurisdiction,Date,Payee,Register,Amount,Deductible share,Deductible,Tax year,Quarter,Note"]
+        for e in entries {
+            guard let i = item(e.itemId) else { continue }
+            let deductible = ["expense", "real_estate"].contains(i.section)
+            rows.append([f(Self.sections.first { $0.0 == i.section }?.1), f(i.label), f(i.taxCategory), f(i.jurisdiction), e.date,
+                         f(e.payee ?? e.description), f(e.register), n(e.amount), deductible ? String(format: "%.0f%%", i.deductibleShare * 100) : "",
+                         deductible ? n(e.amount * i.deductibleShare) : "", String(e.taxYear), e.quarter.map { "Q\($0)" } ?? "", f(e.note)].joined(separator: ","))
+        }
+        rows += ["", "Totals", "Section,Item,Category,Paid,Deductible share,Deductible,Payments"]
+        for i in items where i.entries > 0 {
+            rows.append([f(Self.sections.first { $0.0 == i.section }?.1), f(i.label), f(i.taxCategory), n(i.paid),
+                         i.deductible == nil ? "" : String(format: "%.0f%%", i.deductibleShare * 100), i.deductible.map(n) ?? "", String(i.entries)].joined(separator: ","))
+        }
+        rows += ["", "Estimated and local tax payments", "Jurisdiction,Q1,Q2,Q3,Q4,Other,Total"]
+        for (j, title) in Self.jurisdictions {
+            if let q = summary.payments[j] { rows.append(([title] + q.all.map(n)).joined(separator: ",")) }
+        }
+        rows += ["", "Summary",
+                 "Tax-applicable expenses paid,\(n(summary.expensesPaid))", "Deductible,\(n(summary.expensesDeductible))",
+                 "Tax payments,\(n(summary.paymentsTotal))", "Real estate taxes,\(n(summary.realEstate))",
+                 "Refunds received,\(n(summary.refunds))", "Tax savings set aside,\(n(summary.savingsSetAside))",
+                 "Tax savings taken out,\(n(summary.savingsTakenOut))"]
+        return rows.joined(separator: "\n") + "\n"
+    }
+}
+
 /// How old a date or time is, for the freshness of the analysis's data.
 enum Freshness {
     /// Registers older than this (days) are flagged: a download is due.
@@ -554,6 +667,19 @@ nonisolated enum SpendingClient {
     }
     static func answer(_ id: Int, status: String, reply: String) async throws -> [SpendingFeedback] {
         try await AccountsClient.request("PUT", "/spending/feedback/\(id)", body: signed(["status": status, "reply": reply]), as: Notes.self).feedback
+    }
+    static func tax(year: Int) async throws -> TaxReport {
+        try await AccountsClient.request("GET", "/spending/tax?year=\(year)", as: TaxReport.self)
+    }
+    static func saveTaxItem(_ id: Int, _ body: [String: Any], year: Int) async throws -> TaxReport {
+        try await AccountsClient.request("PUT", "/spending/tax/items/\(id)?year=\(year)", body: signed(body), as: TaxReport.self)
+    }
+    static func deleteTaxItem(_ id: Int, year: Int) async throws -> TaxReport {
+        try await AccountsClient.request("DELETE", "/spending/tax/items/\(id)?year=\(year)", as: TaxReport.self)
+    }
+    static func move(_ e: TaxReport.Entry, toYear: Int?, quarter: Int?, note: String, year: Int) async throws -> TaxReport {
+        try await AccountsClient.request("PUT", "/spending/tax/assign/\(e.source)/\(e.entryId)?year=\(year)",
+                                         body: signed(["taxYear": toYear ?? NSNull(), "quarter": quarter ?? NSNull(), "note": note]), as: TaxReport.self)
     }
     static func tag(_ entry: SpendingEntry, _ body: [String: Any]) async throws -> SpendingEntry? {
         try await AccountsClient.request("PUT", "/spending/tags/\(entry.source)/\(entry.entryId)", body: signed(body), as: TagAnswer.self).entry

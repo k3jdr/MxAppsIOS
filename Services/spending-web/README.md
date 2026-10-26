@@ -21,12 +21,16 @@ whether or not the Mac is on.
 - **Read-only login.** The server signs in as `spending_web` (V039). That login can read what the page shows and add
   notes, and nothing else. It sees target accounts by name only: their logons and addresses are not readable. Its
   password exists only in the PC's config file, readable by the PC account, SYSTEM and Administrators.
-- To revoke the link, put a new key in the config (`python spending_web.py --new-key`) and restart the task. The old
-  link then stops working.
+- **The link doesn't change, key included.** Publishing (`publish-to-pc.sh`), releases, restarts, reboots and
+  re-running the installer all keep it. Nothing expires or rotates it. The publish script never copies the PC's
+  `spending_web.local.json`, and checks after every run that the file is unchanged.
+- **Only John changes it**, when he chooses and after telling the family. To do that, put a new key in
+  `spending_web.local.json` on the PC (`python spending_web.py --new-key` prints one), restart the task, and send
+  the new link. The old link then stops working.
 
 ## What the page has
 
-The tabs are Attribution, Deep Dive, Forward Curve, Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
+The tabs are Attribution, Deep Dive, Forward Curve, Year-End Tax (read-only, with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
 the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine (`SpendingModel.swift`). They read the
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, and the entry filters. Nothing that
@@ -48,25 +52,34 @@ payee, amount, category and driver, so John can find it without asking. **My Not
 
 | File | Contents |
 | --- | --- |
-| `spending_web.py` | The server: Python standard library and psycopg2. IPv4 and IPv6 on one socket; address and key checks; static files and the API (`/api/setup`, `/api/analysis`, `/api/sources`, `GET` and `POST /api/feedback`). It writes its log to a file when it runs without a console. |
+| `spending_web.py` | The server: Python standard library and psycopg2. IPv4 and IPv6 on one socket; address and key checks; static files and the API (`/api/setup`, `/api/analysis`, `/api/sources`, `/api/tax`, `GET` and `POST /api/feedback`). It writes its log to a file when it runs without a console. |
 | `static/index.html`, `app.css`, `app.js` | The page: no outside libraries; charts drawn as SVG at each box's width; light and dark; usable at phone width |
 | `spending_web.example.json` | The config's shape: copy it to `spending_web.local.json` (not in git) and fill in the key and password |
+| `publish-to-pc.sh` | Publishes the committed page and service files to the PC: only the files that differ, the task restarted when server code changed, then a check that the page answers (see below) |
 | `install-on-windows.ps1` | Run once, in an administrator PowerShell: adds the firewall rule, then registers and starts the task *Spending Analysis web page*. The task runs at boot as the PC's account (S4U, no stored password), with `pythonw` and `--log spending_web.log` |
 
 ## On the PC
 
 It's installed at `C:\Users\calla\MxServices\Services\` with the repository's layout: `spending-web\` plus
-`accounts\spending.py` and `accounts\bank.py`. Those are copies, not a git clone. To update the page, copy the
-changed files over the same paths from the Mac, then restart the task:
+`accounts\spending.py` and `accounts\bank.py`. Those are copies, not a git clone. **Publishing is part of releasing
+MxAcctMGR:**
 
 ```bash
-scp Services/spending-web/static/* "k3jdr-dsktop-11:C:/Users/calla/MxServices/Services/spending-web/static/"
-scp Services/spending-web/spending_web.py "k3jdr-dsktop-11:C:/Users/calla/MxServices/Services/spending-web/"
-scp Services/accounts/spending.py Services/accounts/bank.py "k3jdr-dsktop-11:C:/Users/calla/MxServices/Services/accounts/"
-ssh k3jdr-dsktop-11 'Stop-ScheduledTask "Spending Analysis web page"; Start-ScheduledTask "Spending Analysis web page"'
+Services/spending-web/publish-to-pc.sh             # publish what is committed (HEAD)
+Services/spending-web/publish-to-pc.sh --dry-run   # only list what would change
 ```
 
-A page-only change (`static/`) needs no restart: a reload in the browser picks it up. The log is
+The script works like this:
+1. It exports the page's files and `accounts/spending.py` / `bank.py` from git, so uncommitted edits never go out (it
+   says when there are some).
+2. It compares them with the PC's copies by SHA-256 and copies only the ones that differ.
+3. It restarts the task *Spending Analysis web page* when server code (`.py`) changed. Page files (`static/`) need
+   only a reload in the browser.
+4. It asks the server on the PC for `/api/setup` with the PC's own key, so the key never leaves the PC. If the page
+   doesn't answer, it exits with an error.
+5. It writes the commit it published to `spending-web\published.txt` on the PC; the next run shows it.
+
+It never touches `spending_web.local.json`. The link stays the same. The log is
 `C:\Users\calla\MxServices\Services\spending-web\spending_web.log`.
 
 To set it up on another machine:

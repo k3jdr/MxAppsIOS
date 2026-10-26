@@ -9,6 +9,7 @@
 
 import Charts
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SpendingAnalysisView: View {
     @Bindable var store: PortStore
@@ -26,7 +27,7 @@ struct SpendingAnalysisView: View {
     @State private var problem: String?
     @State private var busy = false
 
-    static let tabs = [("attribution", "Attribution"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("entries", "Entries"), ("rules", "Rules"),
+    static let tabs = [("attribution", "Attribution"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Rules"),
                        ("family", "Family & Lifecycle"), ("sources", "Sources")]
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
@@ -55,6 +56,7 @@ struct SpendingAnalysisView: View {
                 case "rules":
                     if let data { SpendingRulesTab(setup: setup, entries: shownEntries(data).filter { inCurrent($0, data) }) { applied($0) } }
                 case "family": SpendingFamilyTab(setup: setup, data: data) { applied($0) }
+                case "tax": SpendingTaxTab(setup: setup)
                 case "feedback":
                     SpendingFeedbackTab(setup: setup, data: data, notes: notes, changed: { notes = $0 }, entryChanged: { replace($0) },
                                         openDeepDive: { openDeepDive($0) })
@@ -1904,5 +1906,410 @@ private struct FeedbackCard: View {
             }
         }
         .onAppear { status = note.status; reply = note.reply ?? "" }
+    }
+}
+
+// MARK: - Year-End Tax
+
+/// The tax year's tax-applicable expenses (paid and deductible), tax payments by jurisdiction and quarter, real estate
+/// taxes, refunds and the tax savings account, from the tax items (V040) — with the CSV the accountant gets.
+private struct SpendingTaxTab: View {
+    var setup: SpendingSetup
+    @AppStorage("taxYear") private var year = Calendar.current.component(.year, from: .now) - (Calendar.current.component(.month, from: .now) <= 4 ? 1 : 0)
+    @State private var report: TaxReport?
+    @State private var problem: String?
+    @State private var busy = false
+    @State private var editing: TaxReport.Item??
+    @State private var moving: TaxReport.Entry?
+    @State private var removing: TaxReport.Item?
+    @State private var message: String?
+    private static let thisYear = Calendar.current.component(.year, from: .now)
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Picker("Tax year", selection: $year) {
+                ForEach((Self.thisYear - 5)...Self.thisYear, id: \.self) { y in Text(verbatim: "\(y)").tag(y) }
+            }
+            .fixedSize()
+            Spacer()
+            if busy { ProgressView().controlSize(.small) }
+            if let message { Text(message).font(.callout).foregroundStyle(.secondary) }
+            Button("Copy Summary") { copySummary() }.disabled(report == nil)
+                .help("Copy the year's summary as text")
+            Button("Export CSV…") { export() }.disabled(report == nil)
+                .help("Save every payment and the year's totals as a CSV file for whoever prepares the return")
+            Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }.help("Read the registers again")
+        }
+        .task(id: year) { await load() }
+        if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+        if let r = report {
+            if !r.partialRegisters.isEmpty {
+                Label("Incomplete for \(String(r.year)): " + r.partialRegisters.map { "\($0.name) starts \(shortDay($0.first))" }.joined(separator: "; ")
+                      + ". Payments before then aren't in the registers, so the totals below miss them.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+            }
+            tiles(r)
+            expenses(r)
+            payments(r)
+            HStack(alignment: .top, spacing: 14) {
+                simpleBox(r, section: "real_estate", title: "Real Estate Taxes", symbol: "house", help: "Property taxes paid in the year (deductible, with state and local taxes, up to the SALT limit).")
+                simpleBox(r, section: "refund", title: "Refunds Received", symbol: "arrow.down.circle", help: "Refunds deposited in the year after: a refund that arrives in \(r.year + 1) belongs to \(r.year)'s return.")
+            }
+            savings(r)
+            itemsBox(r)
+        } else if busy {
+            ProgressView("Reading the registers…").frame(maxWidth: .infinity)
+        }
+        EmptyView()
+            .sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+                TaxItemSheet(item: editing ?? nil, setup: setup, lines: report?.ledgerLines ?? []) { id, body in
+                    await run { try await SpendingClient.saveTaxItem(id, body, year: year) }
+                }
+            }
+            .sheet(item: $moving) { e in
+                TaxMoveSheet(entry: e, item: report?.item(e.itemId)) { toYear, quarter, note in
+                    await run { try await SpendingClient.move(e, toYear: toYear, quarter: quarter, note: note, year: year) }
+                }
+            }
+            .confirmationDialog("Remove the tax item \(removing?.label ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                                presenting: removing) { i in
+                Button("Remove", role: .destructive) { Task { _ = await run { try await SpendingClient.deleteTaxItem(i.id, year: year) } } }
+            } message: { _ in
+                Text("Its payments stay in the registers; the Year-End Tax report stops listing them. To keep it but leave it out, edit it and turn Active off.")
+            }
+    }
+
+    private func load() async {
+        busy = true
+        defer { busy = false }
+        do { report = try await SpendingClient.tax(year: year); problem = nil } catch { problem = describe(error) }
+    }
+
+    @discardableResult
+    private func run(_ action: () async throws -> TaxReport) async -> String? {
+        do { report = try await action(); problem = nil; return nil } catch { return describe(error) }
+    }
+
+    // MARK: Summary
+
+    private func tiles(_ r: TaxReport) -> some View {
+        let s = r.summary
+        return HStack(spacing: 10) {
+            MetricTile(title: "Tax-applicable expenses", value: money(s.expensesPaid), caption: "\(money(s.expensesDeductible)) deductible",
+                       help: "What the tax-applicable expenses cost in the year, and the deductible part (each item's share).")
+            MetricTile(title: "Tax payments", value: money(s.paymentsTotal),
+                       caption: TaxReport.jurisdictions.compactMap { j, t in s.payments[j].flatMap { $0.total > 0 ? "\(t) \(money($0.total))" : nil } }.joined(separator: " · "),
+                       help: "Estimated and local tax payments that count toward the year, by quarter below.")
+            MetricTile(title: "Real estate taxes", value: money(s.realEstate), help: "Property taxes paid in the year.")
+            MetricTile(title: "Refunds received", value: money(s.refunds), caption: "for \(String(r.year))", help: "Refunds for this year's return, received the year after.")
+            MetricTile(title: "Tax savings", value: money(s.savingsSetAside - s.savingsTakenOut),
+                       caption: "\(money(s.savingsSetAside)) in, \(money(s.savingsTakenOut)) out", help: "Transfers to and from the tax savings account in the year: set aside less taken out.")
+        }
+    }
+
+    private func copySummary() {
+        guard let r = report else { return }
+        let s = r.summary
+        var lines = ["Year-End Tax \(r.year)", "",
+                     "Tax-applicable expenses: \(money2(s.expensesPaid)) paid, \(money2(s.expensesDeductible)) deductible"]
+        for i in r.items where i.section == "expense" && i.entries > 0 {
+            lines.append("  \(i.label) (\(i.taxCategory)): \(money2(i.paid))" + (i.deductibleShare < 1 ? ", \(pct(i.deductibleShare, 0)) deductible = \(money2(i.deductible ?? 0))" : ""))
+        }
+        lines.append("Tax payments: \(money2(s.paymentsTotal))")
+        for (j, t) in TaxReport.jurisdictions { if let q = s.payments[j], q.total > 0 {
+            lines.append("  \(t): Q1 \(money2(q.q1)), Q2 \(money2(q.q2)), Q3 \(money2(q.q3)), Q4 \(money2(q.q4))" + (q.other > 0 ? ", other \(money2(q.other))" : "") + " = \(money2(q.total))")
+        } }
+        lines += ["Real estate taxes: \(money2(s.realEstate))", "Refunds received: \(money2(s.refunds))",
+                  "Tax savings: \(money2(s.savingsSetAside)) set aside, \(money2(s.savingsTakenOut)) taken out"]
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+        message = "Summary copied"
+    }
+
+    private func export() {
+        guard let r = report else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "Year-End Tax \(r.year).csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try r.csv.write(to: url, atomically: true, encoding: .utf8); message = "Saved \(url.lastPathComponent)" }
+        catch { problem = describe(error) }
+    }
+
+    // MARK: Sections
+
+    private func expenses(_ r: TaxReport) -> some View {
+        let items = r.items.filter { $0.section == "expense" && $0.active }
+        let byCategory = Dictionary(grouping: items, by: \.taxCategory)
+        return Box(title: "Tax-Applicable Expenses", symbol: "doc.text", help: "What each tax-applicable item cost in the year and its deductible part: the share is the business or home-office part (15% for utilities when the office is 15% of the home). Type a share and press Return to save it.") {
+            Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
+                GridRow {
+                    Text("Item").gridColumnAlignment(.leading); Text("Comes from").gridColumnAlignment(.leading)
+                    Text("Payments"); Text("Paid"); Text("Share"); Text("Deductible")
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(byCategory.keys.sorted(), id: \.self) { c in
+                    let list = byCategory[c]!
+                    GridRow {
+                        Text(c).fontWeight(.semibold).gridCellColumns(3).gridColumnAlignment(.leading)
+                        Text(money(list.map(\.paid).reduce(0, +))).fontWeight(.semibold); Text("")
+                        Text(money(list.compactMap(\.deductible).reduce(0, +))).fontWeight(.semibold)
+                    }
+                    ForEach(list) { i in
+                        GridRow {
+                            Text(i.label).padding(.leading, 14).help(i.notes ?? "")
+                            Text(i.origin).foregroundStyle(.secondary).lineLimit(1)
+                            Text("\(i.entries)").foregroundStyle(.secondary)
+                            Text(money(i.paid))
+                            ShareField(share: i.deductibleShare) { v in
+                                Task { _ = await run { try await SpendingClient.saveTaxItem(i.id, body(i, share: v), year: year) } }
+                            }
+                            Text(money(i.deductible ?? 0))
+                        }
+                    }
+                }
+                Divider()
+                GridRow {
+                    Text("All tax-applicable expenses").fontWeight(.semibold).gridCellColumns(3).gridColumnAlignment(.leading)
+                    Text(money(r.summary.expensesPaid)).fontWeight(.semibold); Text("")
+                    Text(money(r.summary.expensesDeductible)).fontWeight(.semibold)
+                }
+            }
+            .monospacedDigit().font(.callout)
+        }
+    }
+
+    private func payments(_ r: TaxReport) -> some View {
+        let list = r.entries(of: "payment")
+        return Box(title: "Tax Payments Through the Year", symbol: "building.columns", help: "Estimated and local tax payments that count toward the year, by jurisdiction and quarter. Estimated payments follow their quarter (January counts as Q4 of the year before); Move… puts a payment in another year or quarter (an April payment that settles last year's return).") {
+            Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 4) {
+                GridRow {
+                    Text("Jurisdiction").gridColumnAlignment(.leading); Text("Q1"); Text("Q2"); Text("Q3"); Text("Q4"); Text("Other"); Text("Total")
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(TaxReport.jurisdictions, id: \.0) { j, title in
+                    let q = r.summary.payments[j]
+                    GridRow {
+                        Text(title)
+                        ForEach(Array((q?.all ?? Array(repeating: 0, count: 6)).enumerated()), id: \.offset) { k, v in
+                            Text(v == 0 ? "—" : money(v)).fontWeight(k == 5 ? .semibold : .regular).foregroundStyle(v == 0 ? .secondary : .primary)
+                        }
+                    }
+                }
+                Divider()
+                GridRow { Text("All").fontWeight(.semibold); Text(""); Text(""); Text(""); Text(""); Text(""); Text(money(r.summary.paymentsTotal)).fontWeight(.semibold) }
+            }
+            .monospacedDigit().font(.callout)
+            entryRows(r, list)
+        }
+    }
+
+    private func simpleBox(_ r: TaxReport, section: String, title: String, symbol: String, help: String) -> some View {
+        let list = r.entries(of: section)
+        return Box(title: title, symbol: symbol, help: help) {
+            if list.isEmpty { Text("None in \(String(r.year)).").foregroundStyle(.secondary).font(.callout) } else { entryRows(r, list, sign: section == "refund" ? -1 : 1) }
+        }
+    }
+
+    private func savings(_ r: TaxReport) -> some View {
+        let list = r.entries(of: "savings")
+        return Box(title: "Tax Savings Account", symbol: "banknote", help: "Transfers to the tax savings account (set aside) and from it (taken out to pay taxes) during the year.") {
+            Text("\(money(r.summary.savingsSetAside)) set aside, \(money(r.summary.savingsTakenOut)) taken out: \(money(r.summary.savingsSetAside - r.summary.savingsTakenOut)) net.")
+                .font(.callout)
+            if !list.isEmpty { entryRows(r, list) }
+        }
+    }
+
+    private func entryRows(_ r: TaxReport, _ list: [TaxReport.Entry], sign: Double = 1) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+            ForEach(list) { e in
+                GridRow {
+                    Text(shortDay(e.date)).monospacedDigit().foregroundStyle(.secondary)
+                    // Tax savings by direction: the registers' names don't always say which way the money went.
+                    Text(r.item(e.itemId)?.section == "savings" ? (e.amount >= 0 ? "Set aside" : "Taken out") : r.item(e.itemId)?.label ?? "").lineLimit(1)
+                    Text(e.payee ?? e.description ?? "").foregroundStyle(.secondary).lineLimit(1)
+                    Text(money2(sign * e.amount)).monospacedDigit().gridColumnAlignment(.trailing)
+                    Text(e.moved ? "\(e.period) (moved)" : e.period).foregroundStyle(e.moved ? Color.accentColor : .secondary).help(e.note ?? "")
+                    Button("Move…") { moving = e }.controlSize(.small)
+                }
+            }
+        }
+        .font(.callout)
+    }
+
+    private func itemsBox(_ r: TaxReport) -> some View {
+        Box(title: "Tax Items", symbol: "list.bullet.rectangle", help: "What makes a payment a tax item: a target account, an expense-ledger line, or a name the card companies use (when the charge has no target account). Each has its section, category, jurisdiction, deductible share and whether it follows estimated-tax quarters.") {
+            HStack { Button("Add Tax Item…") { editing = .some(nil) }; Spacer() }
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+                GridRow { Text("Item"); Text("Section"); Text("Category"); Text("Comes from"); Text("Share").gridColumnAlignment(.trailing); Text("") }
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(r.items) { i in
+                    GridRow {
+                        Text(i.label).foregroundStyle(i.active ? .primary : .secondary)
+                        Text(TaxReport.sections.first { $0.0 == i.section }?.1 ?? i.section).foregroundStyle(.secondary)
+                        Text(i.taxCategory + (i.jurisdiction.map { " · \($0)" } ?? "") + (i.quarterly ? " · quarterly" : "")).foregroundStyle(.secondary)
+                        Text(i.origin).foregroundStyle(.secondary).lineLimit(1)
+                        Text(["expense", "real_estate"].contains(i.section) ? pct(i.deductibleShare, 0) : "").monospacedDigit()
+                        HStack {
+                            Button("Edit…") { editing = .some(i) }
+                            Button("Remove…") { removing = i }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+            .font(.callout)
+        }
+    }
+
+    private func body(_ i: TaxReport.Item, share: Double) -> [String: Any] {
+        ["payeeId": i.payeeId ?? NSNull(), "ledgerLineId": i.ledgerLineId ?? NSNull(), "namePattern": i.namePattern ?? NSNull(),
+         "label": i.label, "section": i.section, "taxCategory": i.taxCategory, "jurisdiction": i.jurisdiction ?? NSNull(),
+         "deductibleShare": share, "quarterly": i.quarterly, "notes": i.notes ?? NSNull(), "active": i.active]
+    }
+}
+
+/// A deductible share as a percent; saved when the field is submitted.
+private struct ShareField: View {
+    var share: Double
+    var save: (Double) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        TextField("", text: $text)
+            .frame(width: 56).multilineTextAlignment(.trailing)
+            .onAppear { text = String(format: "%.0f%%", share * 100) }
+            .onChange(of: share) { text = String(format: "%.0f%%", share * 100) }
+            .onSubmit {
+                if let v = Double(text.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)), (0...100).contains(v) { save(v / 100) }
+            }
+            .help("The deductible part, in percent: type it and press Return")
+    }
+}
+
+private struct TaxItemSheet: View {
+    var item: TaxReport.Item?
+    var setup: SpendingSetup
+    var lines: [TaxReport.Line]
+    var save: (Int, [String: Any]) async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var origin = "payee"
+    @State private var payeeId = 0
+    @State private var lineId = 0
+    @State private var pattern = ""
+    @State private var label = ""
+    @State private var section = "expense"
+    @State private var category = ""
+    @State private var jurisdiction = ""
+    @State private var share = 100.0
+    @State private var quarterly = false
+    @State private var notes = ""
+    @State private var active = true
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(item == nil ? "Add Tax Item" : "Edit \(item!.label)").heading(.heading)
+            Form {
+                Picker("Payments from", selection: $origin) {
+                    Text("A target account").tag("payee"); Text("An expense-ledger line").tag("line"); Text("Card names containing").tag("pattern")
+                }
+                switch origin {
+                case "line":
+                    Picker("Ledger line", selection: $lineId) {
+                        Text("—").tag(0)
+                        ForEach(lines) { l in Text("\(l.ledger): \(l.name)").tag(l.id) }
+                    }
+                case "pattern":
+                    TextField("Name contains", text: $pattern, prompt: Text("TURBOTAX"))
+                default:
+                    Picker("Target account", selection: $payeeId) {
+                        Text("—").tag(0)
+                        ForEach(setup.payees) { p in Text(p.name).tag(p.id) }
+                    }
+                }
+                TextField("Label", text: $label, prompt: Text("Peco"))
+                Picker("Section", selection: $section) { ForEach(TaxReport.sections, id: \.0) { Text($0.1).tag($0.0) } }
+                TextField("Category", text: $category, prompt: Text("Utilities, Phone & internet, Home office …"))
+                Picker("Jurisdiction", selection: $jurisdiction) {
+                    Text("—").tag("")
+                    ForEach(TaxReport.jurisdictions, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                if section == "expense" || section == "real_estate" {
+                    TextField("Deductible share (%)", value: $share, format: .number.precision(.fractionLength(0...1)))
+                }
+                if section == "payment" { Toggle("Estimated payments: count toward their quarter", isOn: $quarterly) }
+                TextField("Notes", text: $notes)
+                Toggle("Active", isOn: $active)
+            }
+            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    Task {
+                        error = await save(item?.id ?? 0, [
+                            "payeeId": origin == "payee" && payeeId != 0 ? payeeId : NSNull(),
+                            "ledgerLineId": origin == "line" && lineId != 0 ? lineId : NSNull(),
+                            "namePattern": origin == "pattern" ? pattern : NSNull(),
+                            "label": label, "section": section, "taxCategory": category, "jurisdiction": jurisdiction.isEmpty ? NSNull() : jurisdiction,
+                            "deductibleShare": min(max(share, 0), 100) / 100, "quarterly": section == "payment" && quarterly, "notes": notes, "active": active])
+                        if error == nil { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(label.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(18)
+        .frame(width: 480)
+        .onAppear {
+            guard let i = item else { return }
+            origin = i.payeeId != nil ? "payee" : i.ledgerLineId != nil ? "line" : "pattern"
+            payeeId = i.payeeId ?? 0; lineId = i.ledgerLineId ?? 0; pattern = i.namePattern ?? ""
+            label = i.label; section = i.section; category = i.taxCategory; jurisdiction = i.jurisdiction ?? ""
+            share = i.deductibleShare * 100; quarterly = i.quarterly; notes = i.notes ?? ""; active = i.active
+        }
+    }
+}
+
+private struct TaxMoveSheet: View {
+    var entry: TaxReport.Entry
+    var item: TaxReport.Item?
+    var save: (Int?, Int?, String) async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var year = 2026
+    @State private var quarter = 0
+    @State private var note = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Move a Payment").heading(.heading)
+            Text("\(shortDay(entry.date)) \(entry.payee ?? "") \(money2(entry.amount)) — now counts toward \(entry.period)\(entry.moved ? " (moved)" : "")")
+                .foregroundStyle(.secondary)
+            Form {
+                Stepper("Tax year \(String(year))", value: $year, in: 1990...2100)
+                Picker("Quarter", selection: $quarter) {
+                    Text("None").tag(0)
+                    ForEach(1...4, id: \.self) { Text("Q\($0)").tag($0) }
+                }
+                TextField("Why", text: $note, prompt: Text("Balance due with the 2025 return"))
+            }
+            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            HStack {
+                if entry.moved {
+                    Button("Back to Its Own Period") { Task { error = await save(nil, nil, ""); if error == nil { dismiss() } } }
+                }
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Move") { Task { error = await save(year, quarter == 0 ? nil : quarter, note); if error == nil { dismiss() } } }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 440)
+        .onAppear { year = entry.taxYear; quarter = entry.quarter ?? 0; note = entry.note ?? "" }
     }
 }

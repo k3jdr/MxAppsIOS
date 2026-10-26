@@ -22,7 +22,7 @@ const DRIVERS = {
 };
 const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#16a085", "#a0a0a0"];
 const CHILD_COLORS = ["#2e86de", "#e67e22", "#8e44ad", "#16a085", "#d6336c", "#b9770e"];
-const TABS = [["attribution", "Attribution"], ["deepdive", "Deep Dive"], ["curve", "Forward Curve"], ["entries", "Entries"],
+const TABS = [["attribution", "Attribution"], ["deepdive", "Deep Dive"], ["curve", "Forward Curve"], ["tax", "Year-End Tax"], ["entries", "Entries"],
               ["rules", "Rules"], ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
 const STALE_DAYS = 14, STALE_CPI_DAYS = 75;
 
@@ -34,6 +34,7 @@ const thisYear = new Date().getFullYear();
 const S = {
   tab: saved("tab", "attribution"), year: saved("year", thisYear), ytd: saved("ytd", true), full: saved("full", true),
   dive: saved("dive", "HEALTHCARE"), stackBy: saved("stackBy", "child"), inflate: saved("inflate", true),
+  taxYear: saved("taxYear", new Date().getMonth() < 4 ? thisYear - 1 : thisYear), tax: null, taxProblem: null,
   period: "current", unassignedOnly: false, cat: "", search: "", shown: 200,
   setup: null, data: null, sources: null, notes: [], problem: null, busy: false,
 };
@@ -531,12 +532,84 @@ function notesTab() {
     ${n.reply ? `<div class="reply"><b>John</b>${n.repliedAt ? ` · ${when(n.repliedAt)}` : ""}<br>${esc(n.reply)}</div>` : ""}</div>`).join("")}</div>`;
 }
 
+// ---------------------------------------------------------------------------------------------------------- tax
+
+const TAX_SECTIONS = { expense: "Tax-applicable expense", payment: "Tax payment", real_estate: "Real estate tax", refund: "Refund received", savings: "Tax savings account" };
+const JURISDICTIONS = [["federal", "Federal"], ["state", "State (PA)"], ["local", "Local"]];
+
+async function loadTax() {
+  S.taxProblem = null;
+  try { S.tax = await api("tax?year=" + S.taxYear); } catch (e) { S.taxProblem = e.message; }
+  render();
+}
+
+function taxTab() {
+  const years = []; for (let y = thisYear; y >= thisYear - 5; y--) years.push(y);
+  let h = `<div class="bar"><label>Tax year <select data-set="taxYear">${years.map(y => `<option value="${y}"${y === S.taxYear ? " selected" : ""}>${y}</option>`).join("")}</select></label>
+    <span class="spacer"></span><button data-action="taxcsv"${S.tax ? "" : " disabled"}>⬇︎ Download CSV</button></div>`;
+  if (S.taxProblem) return h + `<p class="notice warn">${esc(S.taxProblem)}</p>`;
+  const r = S.tax;
+  if (!r || r.year !== S.taxYear) { if (!S.taxLoading) { S.taxLoading = true; loadTax().finally(() => S.taxLoading = false); } return h + `<div class="loading">Reading the registers…</div>`; }
+  const item = id => r.items.find(i => i.id === id), s = r.summary;
+  const of = section => r.entries.filter(e => item(e.itemId)?.section === section);
+  if (r.partialRegisters.length) h += `<p class="notice warn">Incomplete for ${r.year}: ${esc(r.partialRegisters.map(p => `${p.name} starts ${day(p.first)}`).join("; "))}. Payments before then aren't in the registers, so the totals miss them.</p>`;
+  h += `<div class="tiles">${tile("Tax-applicable expenses", money(s.expensesPaid), `${money(s.expensesDeductible)} deductible`)}
+    ${tile("Tax payments", money(s.paymentsTotal), JURISDICTIONS.filter(([j]) => s.payments[j]?.total > 0).map(([j, t]) => `${t} ${money(s.payments[j].total)}`).join(" · "))}
+    ${tile("Real estate taxes", money(s.realEstate))}${tile("Refunds received", money(s.refunds), `for ${r.year}`)}
+    ${tile("Tax savings", money(s.savingsSetAside - s.savingsTakenOut), `${money(s.savingsSetAside)} in, ${money(s.savingsTakenOut)} out`)}</div>`;
+  // Expenses by category.
+  const exp = r.items.filter(i => i.section === "expense" && i.active), cats = [...new Set(exp.map(i => i.taxCategory))].sort();
+  h += box("Tax-Applicable Expenses", `<div class="scroll"><table><tr><th class="l">Item</th><th class="l">Comes from</th><th>Payments</th><th>Paid</th><th>Share</th><th>Deductible</th></tr>
+    ${cats.map(c => { const list = exp.filter(i => i.taxCategory === c); return `<tr class="total"><td class="l" colspan="3">${esc(c)}</td><td>${money(list.reduce((a, i) => a + i.paid, 0))}</td><td></td><td>${money(list.reduce((a, i) => a + (i.deductible ?? 0), 0))}</td></tr>`
+      + list.map(i => `<tr><td class="l" style="padding-left:22px">${esc(i.label)}</td><td class="l muted">${esc(origin(i))}</td><td class="muted">${i.entries}</td><td>${money(i.paid)}</td><td>${pct(i.deductibleShare)}</td><td>${money(i.deductible ?? 0)}</td></tr>`).join(""); }).join("")}
+    <tr class="total"><td class="l" colspan="3">All tax-applicable expenses</td><td>${money(s.expensesPaid)}</td><td></td><td>${money(s.expensesDeductible)}</td></tr></table></div>`,
+    { section: "Year-End Tax: expenses", help: "What each item cost in the year and its deductible part (the business or home-office share)" });
+  const rows = (list, sign = 1) => list.length ? `<div class="scroll"><table>${list.map(e => `<tr><td class="l muted">${day(e.date)}</td><td class="l">${esc(item(e.itemId)?.section === "savings" ? (e.amount >= 0 ? "Set aside" : "Taken out") : item(e.itemId)?.label)}</td><td class="l muted">${esc(e.payee ?? e.description ?? "")}</td><td>${money2(sign * e.amount)}</td><td class="l muted">${e.quarter ? `${e.taxYear} Q${e.quarter}` : e.taxYear}${e.moved ? " (moved)" : ""}</td></tr>`).join("")}</table></div>` : `<p class="muted">None in ${r.year}.</p>`;
+  h += box("Tax Payments Through the Year", `<div class="scroll"><table><tr><th class="l">Jurisdiction</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Other</th><th>Total</th></tr>
+    ${JURISDICTIONS.map(([j, t]) => { const q = s.payments[j] ?? {}; return `<tr><td class="l">${t}</td>${["q1", "q2", "q3", "q4", "other", "total"].map(k => `<td${k === "total" ? ' style="font-weight:650"' : ""}>${q[k] ? money(q[k]) : "—"}</td>`).join("")}</tr>`; }).join("")}
+    <tr class="total"><td class="l">All</td><td></td><td></td><td></td><td></td><td></td><td>${money(s.paymentsTotal)}</td></tr></table></div>${rows(of("payment"))}`,
+    { section: "Year-End Tax: payments", help: "Estimated payments count toward their quarter; January counts as Q4 of the year before" });
+  h += `<div class="row">${box("Real Estate Taxes", rows(of("real_estate")), { section: "Year-End Tax: real estate" })}${box("Refunds Received", rows(of("refund"), -1), { section: "Year-End Tax: refunds", help: "Refunds for this year's return, received the year after" })}</div>`;
+  h += box("Tax Savings Account", `<p>${money(s.savingsSetAside)} set aside, ${money(s.savingsTakenOut)} taken out: ${money(s.savingsSetAside - s.savingsTakenOut)} net.</p>${rows(of("savings"))}`, { section: "Year-End Tax: savings" });
+  h += box("Tax Items", `<div class="scroll"><table><tr><th class="l">Item</th><th class="l">Section</th><th class="l">Category</th><th class="l">Comes from</th><th>Share</th><th></th></tr>
+    ${r.items.map(i => `<tr><td class="l">${esc(i.label)}</td><td class="l muted">${esc(TAX_SECTIONS[i.section])}</td><td class="l muted">${esc(i.taxCategory)}${i.jurisdiction ? " · " + esc(i.jurisdiction) : ""}${i.quarterly ? " · quarterly" : ""}</td><td class="l muted">${esc(origin(i))}</td><td>${["expense", "real_estate"].includes(i.section) ? pct(i.deductibleShare) : ""}</td>
+      <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Tax item: ${esc(i.label)}">Suggest a change</button></td></tr>`).join("")}</table></div>`,
+    { section: "Year-End Tax: items", help: "What makes a payment a tax item" });
+  return h;
+}
+const origin = i => i.payee ? `Target account ${i.payee}` : i.ledgerLine ? `Ledger ${i.ledger ?? ""} line ${i.ledgerLine}` : i.namePattern ? `Card names containing ${i.namePattern}` : "";
+
+// As TaxReport.csv (SpendingModel.swift): every payment, then each item's totals and the payments by quarter.
+function taxCsv(r) {
+  const f = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+  const n = x => x.toFixed(2), item = id => r.items.find(i => i.id === id);
+  const rows = [`Year-End Tax ${r.year}`, "", "Section,Item,Category,Jurisdiction,Date,Payee,Register,Amount,Deductible share,Deductible,Tax year,Quarter,Note"];
+  for (const e of r.entries) {
+    const i = item(e.itemId); if (!i) continue;
+    const d = ["expense", "real_estate"].includes(i.section);
+    rows.push([TAX_SECTIONS[i.section], i.label, i.taxCategory, i.jurisdiction, e.date, e.payee ?? e.description, e.register, n(e.amount), d ? pct(i.deductibleShare) : "", d ? n(e.amount * i.deductibleShare) : "", e.taxYear, e.quarter ? "Q" + e.quarter : "", e.note].map(f).join(","));
+  }
+  rows.push("", "Totals", "Section,Item,Category,Paid,Deductible share,Deductible,Payments");
+  for (const i of r.items.filter(i => i.entries > 0)) rows.push([TAX_SECTIONS[i.section], i.label, i.taxCategory, n(i.paid), i.deductible == null ? "" : pct(i.deductibleShare), i.deductible == null ? "" : n(i.deductible), i.entries].map(f).join(","));
+  rows.push("", "Estimated and local tax payments", "Jurisdiction,Q1,Q2,Q3,Q4,Other,Total");
+  for (const [j, t] of JURISDICTIONS) { const q = r.summary.payments[j]; if (q) rows.push([t, ...["q1", "q2", "q3", "q4", "other", "total"].map(k => n(q[k]))].join(",")); }
+  const s = r.summary;
+  rows.push("", "Summary", `Tax-applicable expenses paid,${n(s.expensesPaid)}`, `Deductible,${n(s.expensesDeductible)}`, `Tax payments,${n(s.paymentsTotal)}`,
+    `Real estate taxes,${n(s.realEstate)}`, `Refunds received,${n(s.refunds)}`, `Tax savings set aside,${n(s.savingsSetAside)}`, `Tax savings taken out,${n(s.savingsTakenOut)}`);
+  return rows.join("\n") + "\n";
+}
+function downloadTaxCsv() {
+  const url = URL.createObjectURL(new Blob([taxCsv(S.tax)], { type: "text/csv" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `Year-End Tax ${S.tax.year}.csv` });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // ---------------------------------------------------------------------------------------------------------- render
 
 function render() {
   const app = document.getElementById("app");
   if (!S.setup || !S.data) { app.innerHTML = S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : `<div class="loading">Reading the registers…</div>`; return; }
-  const body = { deepdive: diveTab, curve: curveTab, entries: () => entriesBox(entries(), "Spending Entries", false), rules: rulesTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
+  const body = { deepdive: diveTab, curve: curveTab, tax: taxTab, entries: () => entriesBox(entries(), "Spending Entries", false), rules: rulesTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
   let inner;
   try { inner = body(); } catch (e) { inner = `<p class="notice warn">This part of the page failed: ${esc(e.message)}</p>`; console.error(e); }
   app.innerHTML = controls() + strip() + (S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : "") + tabsBar() + inner;
@@ -602,6 +675,7 @@ document.addEventListener("click", ev => {
   const a = el.dataset.action;
   if (a === "reload") load();
   else if (a === "more") { S.shown += 200; render(); }
+  else if (a === "taxcsv" && S.tax) downloadTaxCsv();
   else if (a === "feedback") {
     let entry = null;
     if (el.dataset.entry) { const [src, id] = el.dataset.entry.split(":"); entry = S.data.entries.find(e => e.source === src && String(e.entryId) === id); }
@@ -613,6 +687,7 @@ document.addEventListener("change", ev => {
   const v = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
   if (k === "year") { S.year = +v; keep("year", S.year); return load(); }
   if (k === "ytd") { S.ytd = v; keep("ytd", v); return load(); }
+  if (k === "taxYear") { S.taxYear = +v; keep("taxYear", S.taxYear); S.tax = null; return render(); }
   if (["full", "stackBy", "inflate", "dive"].includes(k)) { S[k] = v; keep(k, v); }
   else S[k] = v;
   if (k !== "search") S.shown = 200;

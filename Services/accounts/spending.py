@@ -31,6 +31,15 @@
     POST   /spending/feedback                      add one {author, kind, tab, section, category, entrySource, entryId,
                                                    suggestion, message, context}
     PUT    /spending/feedback/<id>                 answer one {status, reply, by}
+    GET    /spending/tax?year=                     Year-End Tax (V040): the tax items, every payment of theirs that
+                                                   counts toward the year (with its tax year and quarter), and the
+                                                   year's summary — expenses paid and deductible, estimated payments
+                                                   by jurisdiction and quarter, real estate taxes, refunds, savings
+    PUT    /spending/tax/items/<id>                a tax item, created (id 0) or changed {payeeId | ledgerLineId |
+                                                   namePattern, label, section, taxCategory, jurisdiction,
+                                                   deductibleShare, quarterly, notes, active, by}
+    DELETE /spending/tax/items/<id>                take one off
+    PUT    /spending/tax/assign/<source>/<entryId> move a payment to {taxYear, quarter, note}; no taxYear undoes it
 
 Every setup change answers with the setup. Drivers: inflation, family_growth, new_activity, lifecycle, preference,
 one_time.
@@ -586,6 +595,205 @@ def answer_feedback(conn, fid, body):
     return feedback(conn)
 
 
+# ------------------------------------------------------------------------------------------------------------ tax
+
+TAX_SECTIONS = ("expense", "payment", "real_estate", "refund", "savings")
+JURISDICTIONS = ("federal", "state", "local")
+
+
+def tax_period(section, quarterly, day):
+    """The tax year (and estimated-tax quarter) a payment counts toward: a refund toward the year before the one it
+    arrives in; an estimated payment toward its quarter (January → Q4 of the year before, February–April → Q1,
+    May–June → Q2, July–September → Q3, October–December → Q4); anything else toward the year it was paid."""
+    if section == "refund":
+        return day.year - 1, None
+    if not quarterly:
+        return day.year, None
+    if day.month == 1:
+        return day.year - 1, 4
+    return day.year, 1 if day.month <= 4 else 2 if day.month <= 6 else 3 if day.month <= 9 else 4
+
+
+def _like(pattern):
+    return "%" + pattern.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def tax(conn, q):
+    today = dt.date.today()
+    year = int(q.get("year") or (today.year - 1 if today.month <= 4 else today.year))
+    items = fetch(conn, """
+        SELECT i.item_id AS id, i.payee_id AS "payeeId", p.name AS payee, i.ledger_line_id AS "ledgerLineId",
+               ln.name AS "ledgerLine", l.code AS ledger, i.name_pattern AS "namePattern", i.label, i.section,
+               i.tax_category AS "taxCategory", i.jurisdiction, i.deductible_share AS "deductibleShare", i.quarterly,
+               i.notes, i.sort_order AS "sortOrder", i.active
+          FROM srm.tax_item i
+          LEFT JOIN srm.payee p ON p.payee_id = i.payee_id
+          LEFT JOIN srm.expense_line ln ON ln.line_id = i.ledger_line_id
+          LEFT JOIN srm.expense_ledger l ON l.ledger_id = ln.ledger_id
+         ORDER BY i.sort_order, i.label""")
+    live = [i for i in items if i["active"]]
+    payees = [i["payeeId"] for i in live if i["payeeId"]]
+    lines = [i["ledgerLineId"] for i in live if i["ledgerLineId"]]
+    likes = [_like(i["namePattern"]) for i in live if i["namePattern"]]
+    # Three years of candidates: a payment can count toward the year before (January, refunds) or be moved by hand.
+    lo, hi = dt.date(year - 1, 1, 1), dt.date(year + 1, 12, 31)
+    rows = []
+    if payees or likes:
+        rows += fetch(conn, """
+            SELECT 'bank' AS source, b.txn_id AS "entryId", b.txn_date AS date, coalesce(p.name, b.payee_name) AS payee,
+                   b.payee_id AS "payeeId", b.memo AS description, -b.amount AS amount, a.code AS register,
+                   NULL::bigint AS "lineId"
+              FROM srm.bank_txn b JOIN srm.bank_account a USING (bank_account_id)
+              LEFT JOIN srm.payee p ON p.payee_id = b.payee_id
+             WHERE b.status <> 'void' AND b.txn_date BETWEEN %s AND %s
+               AND (b.payee_id = ANY(%s) OR coalesce(p.name, b.payee_name, '') ILIKE ANY(%s))""", (lo, hi, payees, likes))
+        rows += fetch(conn, """
+            SELECT 'card' AS source, c.txn_id AS "entryId", c.txn_date AS date, coalesce(p.name, c.payee_name) AS payee,
+                   c.payee_id AS "payeeId", c.memo AS description, c.amount, a.code AS register, NULL::bigint AS "lineId"
+              FROM srm.card_txn c JOIN srm.card_account a USING (card_account_id)
+              LEFT JOIN srm.payee p ON p.payee_id = c.payee_id
+             WHERE c.status <> 'void' AND c.kind <> 'payment' AND c.txn_date BETWEEN %s AND %s
+               AND (c.payee_id = ANY(%s) OR coalesce(p.name, c.payee_name, '') ILIKE ANY(%s))""", (lo, hi, payees, likes))
+    ledger = []
+    if lines:
+        ledger = fetch(conn, """
+            SELECT 'ledger' AS source, e.entry_id AS "entryId", e.entry_date AS date, coalesce(e.vendor, e.description) AS payee,
+                   NULL::integer AS "payeeId", e.description, e.amount, l.code AS register, e.line_id AS "lineId",
+                   e.card_txn_id AS "cardTxnId", e.bank_txn_id AS "bankTxnId"
+              FROM srm.expense_entry e JOIN srm.expense_ledger l USING (ledger_id)
+             WHERE e.status = 'actual' AND e.kind IN ('expense', 'refund') AND e.line_id = ANY(%s)
+               AND e.entry_date BETWEEN %s AND %s""", (lines, lo, hi))
+    # A ledger item that is also a card or check entry counts once, as the ledger's.
+    claimed = {("card", e["cardTxnId"]) for e in ledger if e.get("cardTxnId")} | {("bank", e["bankTxnId"]) for e in ledger if e.get("bankTxnId")}
+    moved = {(r["source"], r["entry_id"]): r for r in fetch(conn, "SELECT source, entry_id, tax_year, quarter, note FROM srm.tax_assignment")}
+    by_line = {i["ledgerLineId"]: i for i in live if i["ledgerLineId"]}
+    by_payee = {}
+    for i in live:
+        if i["payeeId"]:
+            by_payee.setdefault(i["payeeId"], i)
+    patterns = [i for i in live if i["namePattern"]]
+    entries = []
+    for e in ledger + [r for r in rows if (r["source"], r["entryId"]) not in claimed]:
+        item = by_line.get(e["lineId"]) if e["source"] == "ledger" else by_payee.get(e["payeeId"]) or next(
+            (i for i in patterns if i["namePattern"].lower() in (e["payee"] or "").lower()), None)
+        if not item:
+            continue
+        ty, qtr = tax_period(item["section"], item["quarterly"], e["date"])
+        m = moved.get((e["source"], e["entryId"]))
+        if m:
+            ty, qtr = m["tax_year"], m["quarter"]
+        if ty != year:
+            continue
+        entries.append({"source": e["source"], "entryId": e["entryId"], "date": e["date"], "payee": e["payee"],
+                        "description": e["description"], "register": e["register"], "amount": float(e["amount"]),
+                        "itemId": item["id"], "taxYear": ty, "quarter": qtr, "moved": bool(m),
+                        "note": m["note"] if m else None})
+    entries.sort(key=lambda e: (e["date"], e["source"], e["entryId"]))
+    # The year's summary, per item and per section.
+    totals = {}
+    for e in entries:
+        totals[e["itemId"]] = totals.get(e["itemId"], 0) + e["amount"]
+    for i in items:
+        i["paid"] = round(totals.get(i["id"], 0), 2)
+        i["entries"] = sum(1 for e in entries if e["itemId"] == i["id"])
+        i["deductible"] = round(i["paid"] * float(i["deductibleShare"]), 2) if i["section"] in ("expense", "real_estate") else None
+    payments = {j: {"q1": 0.0, "q2": 0.0, "q3": 0.0, "q4": 0.0, "other": 0.0, "total": 0.0} for j in JURISDICTIONS}
+    section_of = {i["id"]: i for i in items}
+    for e in entries:
+        i = section_of[e["itemId"]]
+        if i["section"] == "payment" and i["jurisdiction"]:
+            p = payments[i["jurisdiction"]]
+            p["q%d" % e["quarter"] if e["quarter"] else "other"] += e["amount"]
+            p["total"] += e["amount"]
+    expense = [i for i in items if i["section"] == "expense"]
+    savings = [e for e in entries if section_of[e["itemId"]]["section"] == "savings"]
+    summary = {
+        "expensesPaid": round(sum(i["paid"] for i in expense), 2),
+        "expensesDeductible": round(sum(i["deductible"] or 0 for i in expense), 2),
+        "payments": {j: {k: round(v, 2) for k, v in p.items()} for j, p in payments.items()},
+        "paymentsTotal": round(sum(p["total"] for p in payments.values()), 2),
+        "realEstate": round(sum(i["paid"] for i in items if i["section"] == "real_estate"), 2),
+        "refunds": round(-sum(i["paid"] for i in items if i["section"] == "refund"), 2),
+        "savingsSetAside": round(sum(e["amount"] for e in savings if e["amount"] > 0), 2),
+        "savingsTakenOut": round(-sum(e["amount"] for e in savings if e["amount"] < 0), 2),
+    }
+    # Registers the tax items draw on whose entries start after the year does: the year is incomplete there.
+    used = {(r["source"], r["register"]) for r in rows + ledger}
+    starts = fetch(conn, """
+        SELECT 'bank' AS source, a.code AS register, a.name, min(b.txn_date) AS first
+          FROM srm.bank_account a LEFT JOIN srm.bank_txn b ON b.bank_account_id = a.bank_account_id AND b.status <> 'void'
+         GROUP BY a.code, a.name
+        UNION ALL
+        SELECT 'card', a.code, a.name, min(c.txn_date)
+          FROM srm.card_account a LEFT JOIN srm.card_txn c ON c.card_account_id = a.card_account_id AND c.status <> 'void'
+         GROUP BY a.code, a.name
+        UNION ALL
+        SELECT 'ledger', l.code, l.name, min(e.entry_date)
+          FROM srm.expense_ledger l LEFT JOIN srm.expense_entry e ON e.ledger_id = l.ledger_id AND e.status = 'actual'
+         GROUP BY l.code, l.name""")
+    partial = [r for r in starts if (r["source"], r["register"]) in used and r["first"] and r["first"] > dt.date(year, 1, 7)]
+    lines_all = fetch(conn, """
+        SELECT ln.line_id AS id, ln.name, l.code AS ledger FROM srm.expense_line ln JOIN srm.expense_ledger l USING (ledger_id)
+         WHERE ln.active ORDER BY l.code, ln.sort_order, ln.name""")
+    return {"year": year, "items": items, "entries": entries, "summary": summary, "partialRegisters": partial,
+            "ledgerLines": lines_all}
+
+
+def save_tax_item(conn, iid, body):
+    iid = int(iid)
+    payee, line = _opt_int(body, "payeeId"), _opt_int(body, "ledgerLineId")
+    pattern = _text(body, "namePattern", 80)
+    if sum(x is not None for x in (payee, line, pattern)) != 1:
+        raise ValueError("a tax item is for one payeeId, ledgerLineId or namePattern")
+    label = _text(body, "label", 120)
+    if not label:
+        raise ValueError("label is required")
+    section = body.get("section") or "expense"
+    if section not in TAX_SECTIONS:
+        raise ValueError("section must be one of " + ", ".join(TAX_SECTIONS))
+    jurisdiction = body.get("jurisdiction") or None
+    if jurisdiction and jurisdiction not in JURISDICTIONS:
+        raise ValueError("jurisdiction must be federal, state or local")
+    share = float(body.get("deductibleShare") if body.get("deductibleShare") not in (None, "") else 1)
+    if not 0 <= share <= 1:
+        raise ValueError("deductibleShare is a fraction from 0 to 1 (0.15 for 15%)")
+    values = (payee, line, pattern, label, section, _text(body, "taxCategory", 60) or "Other", jurisdiction, share,
+              bool(body.get("quarterly", False)), _text(body, "notes", 1000), bool(body.get("active", True)), _by(body))
+    if iid == 0:
+        fetch(conn, """INSERT INTO srm.tax_item (payee_id, ledger_line_id, name_pattern, label, section, tax_category,
+                              jurisdiction, deductible_share, quarterly, notes, active, updated_by, sort_order)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                               (SELECT coalesce(max(sort_order), 0) + 1 FROM srm.tax_item))""", values)
+    elif not fetch(conn, """UPDATE srm.tax_item SET payee_id = %s, ledger_line_id = %s, name_pattern = %s, label = %s,
+                                   section = %s, tax_category = %s, jurisdiction = %s, deductible_share = %s,
+                                   quarterly = %s, notes = %s, active = %s, updated_by = %s, updated_at = now()
+                             WHERE item_id = %s RETURNING item_id""", values + (iid,)):
+        raise LookupError("no tax item %s" % iid)
+    conn.commit()
+
+
+def delete_tax_item(conn, iid):
+    fetch(conn, "DELETE FROM srm.tax_item WHERE item_id = %s", (int(iid),))
+    conn.commit()
+
+
+def assign_tax(conn, source, entry_id, body):
+    if source not in SOURCES:
+        raise ValueError("source must be bank, card or ledger")
+    year, quarter = _opt_int(body, "taxYear"), _opt_int(body, "quarter")
+    if year is None:
+        fetch(conn, "DELETE FROM srm.tax_assignment WHERE source = %s AND entry_id = %s", (source, int(entry_id)))
+    else:
+        if quarter is not None and not 1 <= quarter <= 4:
+            raise ValueError("quarter must be 1–4")
+        fetch(conn, """INSERT INTO srm.tax_assignment (source, entry_id, tax_year, quarter, note, updated_by)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (source, entry_id) DO UPDATE SET tax_year = excluded.tax_year, quarter = excluded.quarter,
+                              note = excluded.note, updated_by = excluded.updated_by, updated_at = now()""",
+              (source, int(entry_id), year, quarter, _text(body, "note", 400), _by(body)))
+    conn.commit()
+
+
 def route(conn, method, parts, body, q):
     """The spending endpoints' answer, or None when the path isn't one of them."""
     if parts == ["spending", "setup"] and method == "GET":
@@ -603,6 +811,19 @@ def route(conn, method, parts, body, q):
             return add_feedback(conn, body)
     if len(parts) == 3 and parts[1] == "feedback" and method == "PUT":
         return answer_feedback(conn, parts[2], body)
+    if parts == ["spending", "tax"] and method == "GET":
+        return tax(conn, q)
+    if len(parts) == 4 and parts[1:3] == ["tax", "items"]:
+        if method == "PUT":
+            save_tax_item(conn, parts[3], body)
+        elif method == "DELETE":
+            delete_tax_item(conn, parts[3])
+        else:
+            return None
+        return tax(conn, {"year": body.get("year") or q.get("year")})
+    if len(parts) == 5 and parts[1:3] == ["tax", "assign"] and method == "PUT":
+        assign_tax(conn, parts[3], parts[4], body)
+        return tax(conn, {"year": body.get("year") or q.get("year")})
     if parts == ["spending", "rules"] and method == "PUT":
         return save_rule(conn, body)
     if len(parts) == 3 and parts[1] == "members":
