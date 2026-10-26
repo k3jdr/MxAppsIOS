@@ -38,8 +38,8 @@ Forward Curve stays in MxAcctMGR only; the Deep Dive lists a category's lifecycl
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, the entry filters, and the
 entries tables' Payee width (drag the grip at its header's right edge, with a mouse or a finger; double-click it for the
-standard width; longer names end in "…" and show in full on hover). It can change two things (V041), each applied at once and
-signed with her name (asked once, the same as for notes):
+standard width; longer names end in "…" and show in full on hover). It can change two things (V041), each applied at once, with
+nothing to fill in: signed with the name she gave for notes, else "Family page":
 
 - **An entry's Category and Driver**, in the entries tables on Entries and in the Deep Dive. A change gives the entry a
   tag of its own, as MxAcctMGR's Tag Entry does. *By the rules* clears her choice, so the rules decide again.

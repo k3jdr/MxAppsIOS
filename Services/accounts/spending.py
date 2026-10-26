@@ -809,6 +809,11 @@ KIND_TITLES = {"recurring": "Recurring", "replacement": "Replacement", "peak": "
 TAG_COLUMN = {"category": "category_code", "driver": "driver"}
 
 
+def _signed(author):
+    """Who a family-page change is from, as the tables record it ("Ann (family page)"; unnamed: "Family page")."""
+    return author if "family page" in author.lower() else author + " (family page)"
+
+
 def _names(conn):
     return {r["code"]: r["name"] for r in fetch(conn, "SELECT code, name FROM srm.spending_category")}
 
@@ -856,7 +861,7 @@ def change_entry(conn, source, entry_id, body, client=None):
         values["category_code"] = _category(conn, body)            # empty: follow the rules again
     if "driver" in fields:
         values["driver"] = _driver(body)
-    _write_tag(conn, column, entry_id, values, author + " (family page)")
+    _write_tag(conn, column, entry_id, values, _signed(author))
     after = fetch(conn, ENTRY_SQL + " WHERE source = %s AND entry_id = %s", (source, entry_id))[0]
     names = _names(conn)
     show = {"category": lambda v: names.get(v, "Not assigned") if v else "Not assigned",
@@ -895,7 +900,7 @@ def change_trigger(conn, tid, body, client=None):
     changes = {k: v for k, v in changes.items() if v != t[k]}
     if changes:
         fetch(conn, "UPDATE srm.lifecycle_trigger SET %s, updated_by = %%s, updated_at = now() WHERE trigger_id = %%s"
-              % ", ".join("%s = %%s" % k for k in changes), tuple(changes.values()) + (author + " (family page)", t["trigger_id"]))
+              % ", ".join("%s = %%s" % k for k in changes), tuple(changes.values()) + (_signed(author), t["trigger_id"]))
         names = _names(conn)
         for k, v in changes.items():
             field, old, new = ("category", names.get(t[k], t[k]), names.get(v, v)) if k == "category_code" else ("kind", KIND_TITLES.get(t[k], t[k]), KIND_TITLES.get(v, v))

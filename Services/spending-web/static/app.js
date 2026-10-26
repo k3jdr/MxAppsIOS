@@ -87,9 +87,9 @@ async function load() {
   S.busy = false; render();
 }
 
+// Her notes and changes: under the name given for notes, else the changes signed "Family page".
 async function loadNotes() {
-  const author = saved("author", "");
-  S.notes = author ? (await api("feedback?author=" + encodeURIComponent(author))).feedback : [];
+  S.notes = (await api("feedback?author=" + encodeURIComponent(whoAmI()))).feedback;
 }
 
 // ---------------------------------------------------------------------------------------------------------- engine
@@ -473,12 +473,10 @@ const unreadReplies = () => S.notes.filter(n => n.repliedAt && n.repliedAt > sav
 function notesTab() {
   const latest = S.notes.map(n => n.repliedAt).filter(Boolean).sort().at(-1);
   if (latest && latest > saved("repliesRead", "")) { keep("repliesRead", latest); setTimeout(render, 0); }
-  const author = saved("author", "");
   const statusText = { new: "New", seen: "Seen", planned: "Planned", done: "Done", declined: "Not planned" };
   const changeStatus = { new: "Made", seen: "Seen", planned: "Kept", done: "Kept", declined: "Undone" };
   let h = `<div class="bar"><span>Your notes to John, with what he did about them.</span><span class="spacer"></span><button class="primary" data-action="feedback">💬 New note</button></div>`;
-  if (!author) return h + `<p class="muted">Send a note (💬 on any section, ⚑ on any entry) and it will show here with John's answer.</p>`;
-  if (!S.notes.length) return h + `<p class="muted">No notes from ${esc(author)} yet.</p>`;
+  if (!S.notes.length) return h + `<p class="muted">Send a note (💬 on any section, ⚑ on any entry) and it will show here with John's answer.</p>`;
   return h + `<div class="notes">${S.notes.map(n => `<div class="note"><div class="meta"><span class="badge ${esc(n.status)}">${esc((n.kind === "change" ? changeStatus : statusText)[n.status] ?? n.status)}</span><span>${when(n.createdAt)}</span><span>${esc({ layout: "How the page looks", number: "A number", rule: "A category or rule", entry: "One purchase", idea: "An idea", question: "A question", change: "A change you made" }[n.kind] ?? n.kind)}</span>${n.section ? `<span>· ${esc(n.section)}</span>` : ""}</div>
     <p class="msg">${esc(n.message)}</p>${n.suggestion ? `<p class="hint">Suggested: ${esc(n.suggestion)}</p>` : ""}
     ${n.reply ? `<div class="reply"><b>John</b>${n.repliedAt ? ` · ${when(n.repliedAt)}` : ""}<br>${esc(n.reply)}</div>` : ""}</div>`).join("")}</div>`;
@@ -618,19 +616,13 @@ async function sendNote() {
 function toast(t) { const el = document.getElementById("toast"); el.textContent = t; el.classList.add("on"); setTimeout(() => el.classList.remove("on"), 3500); }
 
 // ---------------------------------------------------------------------------------------------------------- changes
-// Applied at once and signed with her name; each one shows in John's Feedback tab, where he can undo it.
+// Applied at once, without asking anything: signed with the name given for notes, else "Family page". Each one shows
+// in John's Feedback tab, where he can undo it.
 
-function whoAmI() {
-  let author = saved("author", "");
-  if (!author) {
-    author = (window.prompt("Your name, so John knows who made the change:") || "").trim();
-    if (author) keep("author", author);
-  }
-  return author;
-}
+const whoAmI = () => saved("author", "") || "Family page";
 
 async function changeEntry(sel) {
-  const author = whoAmI(); if (!author) { render(); return; }
+  const author = whoAmI();
   const [source, id] = sel.dataset.editEntry.split(":");
   try {
     const { entry } = await api(`entry/${source}/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" },
@@ -644,7 +636,7 @@ async function changeEntry(sel) {
 }
 
 async function changeTrigger(sel) {
-  const author = whoAmI(); if (!author) { render(); return; }
+  const author = whoAmI();
   try {
     const { triggers } = await api(`trigger/${sel.dataset.editTrigger}`, { method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ author, tab: S.tab, [sel.dataset.field]: sel.value }) });
