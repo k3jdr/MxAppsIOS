@@ -31,6 +31,11 @@
     POST   /spending/feedback                      add one {author, kind, tab, section, category, entrySource, entryId,
                                                    suggestion, message, context}
     PUT    /spending/feedback/<id>                 answer one {status, reply, by}
+    POST   /spending/feedback/<id>/undo            undo a change made on the family page (V041) {by}
+    PUT    /spending/change/entry/<source>/<id>    the family page's change to an entry {author, category, driver}:
+                                                   the entry's tag, and a 'change' note with what it was before
+    PUT    /spending/change/trigger/<id>           the family page's change to a lifecycle trigger {author, category,
+                                                   kind}, and a 'change' note
     GET    /spending/tax?year=                     Year-End Tax (V040): the tax items, every payment of theirs that
                                                    counts toward the year (with its tax year and quarter), and the
                                                    year's summary — expenses paid and deductible, estimated payments
@@ -537,7 +542,7 @@ def set_source(conn, source, code, body, q):
 
 # ------------------------------------------------------------------------------------------------------------ feedback
 
-FEEDBACK_KINDS = ("layout", "number", "rule", "entry", "idea", "question")
+FEEDBACK_KINDS = ("layout", "number", "rule", "entry", "idea", "question")   # 'change' notes come from change_*
 FEEDBACK_STATUSES = ("new", "seen", "planned", "done", "declined")
 
 
@@ -794,6 +799,143 @@ def assign_tax(conn, source, entry_id, body):
     conn.commit()
 
 
+# ------------------------------------------------------------------------------------------------------------ changes
+# The family page's own changes (V041): an entry's category or driver (its tag) and a lifecycle trigger's category or
+# kind. Each is applied at once and listed for John as a 'change' note that MxAcctMGR can undo.
+
+DRIVER_TITLES = {"inflation": "Inflation", "family_growth": "Family Growth", "new_activity": "New Activity",
+                 "lifecycle": "Lifecycle Transition", "preference": "Preference Change", "one_time": "One-Time Event"}
+KIND_TITLES = {"recurring": "Recurring", "replacement": "Replacement", "peak": "Peak event", "transition": "Transition"}
+TAG_COLUMN = {"category": "category_code", "driver": "driver"}
+
+
+def _names(conn):
+    return {r["code"]: r["name"] for r in fetch(conn, "SELECT code, name FROM srm.spending_category")}
+
+
+def _change_note(conn, author, tab, section, message, context, category=None, source=None, entry_id=None, client=None):
+    fetch(conn, """INSERT INTO srm.spending_feedback (author, kind, tab, section, category_code, entry_source, entry_id,
+                          message, context, client)
+                   VALUES (%s, 'change', %s, %s, %s, %s, %s, %s, %s::jsonb, %s)""",
+          (author, tab, section, category, source, entry_id, message, json.dumps(context, default=str), (client or "")[:60] or None))
+
+
+def _write_tag(conn, column, entry_id, values, by):
+    """An entry's tag with these values (category_code, driver, member_id, event, notes); none set removes it."""
+    if not any(values.get(k) for k in ("category_code", "driver", "member_id", "event", "notes")):
+        fetch(conn, "DELETE FROM srm.spending_tag WHERE %s = %%s" % column, (entry_id,))
+        return
+    fetch(conn, """INSERT INTO srm.spending_tag (%s, category_code, driver, member_id, event, notes, updated_by)
+                   VALUES (%%s, %%s, %%s, %%s, %%s, %%s, %%s)
+                   ON CONFLICT (%s) DO UPDATE SET category_code = excluded.category_code, driver = excluded.driver,
+                          member_id = excluded.member_id, event = excluded.event, notes = excluded.notes,
+                          updated_by = excluded.updated_by, updated_at = now()""" % (column, column),
+          (entry_id, values.get("category_code"), values.get("driver"), values.get("member_id"), values.get("event"),
+           values.get("notes"), by))
+
+
+def change_entry(conn, source, entry_id, body, client=None):
+    column = SOURCES.get(source)
+    if not column:
+        raise ValueError("source must be bank, card or ledger")
+    author = _text(body, "author", 80)
+    if not author:
+        raise ValueError("author is required: who is making the change")
+    fields = [f for f in ("category", "driver") if f in body]
+    if not fields:
+        raise ValueError("a change sets category or driver")
+    entry_id = int(entry_id)
+    rows = fetch(conn, ENTRY_SQL + " WHERE source = %s AND entry_id = %s", (source, entry_id))
+    if not rows:
+        raise LookupError("no spending entry %s %s" % (source, entry_id))
+    entry = rows[0]
+    tag = fetch(conn, "SELECT category_code, driver, member_id, event, notes FROM srm.spending_tag WHERE %s = %%s" % column, (entry_id,))
+    before = tag[0] if tag else {}
+    values = dict(before)
+    if "category" in fields:
+        values["category_code"] = _category(conn, body)            # empty: follow the rules again
+    if "driver" in fields:
+        values["driver"] = _driver(body)
+    _write_tag(conn, column, entry_id, values, author + " (family page)")
+    after = fetch(conn, ENTRY_SQL + " WHERE source = %s AND entry_id = %s", (source, entry_id))[0]
+    names = _names(conn)
+    show = {"category": lambda v: names.get(v, "Not assigned") if v else "Not assigned",
+            "driver": lambda v: DRIVER_TITLES.get(v, "no driver") if v else "no driver"}
+    what = "%s %s %s" % (entry["date"].strftime("%m/%d/%Y"), entry["payee"] or entry["description"] or "", "${:,.2f}".format(float(entry["amount"])))
+    for f in fields:
+        old, new = entry[f], after[f]
+        if old == new:
+            continue
+        _change_note(conn, author, body.get("tab") or "entries", "Entry: " + what,
+                     "Changed the %s of %s from %s to %s." % (f, what, show[f](old), show[f](new)),
+                     {"change": "entry", "source": source, "entryId": entry_id, "field": f, "from": old, "to": new,
+                      "tagBefore": before.get(TAG_COLUMN[f]), "date": entry["date"], "payee": entry["payee"],
+                      "amount": float(entry["amount"]), "category": old if f == "category" else entry["category"],
+                      "driver": old if f == "driver" else entry["driver"]},
+                     category=after["category"], source=source, entry_id=entry_id, client=client)
+    conn.commit()
+    return {"entry": after}
+
+
+def change_trigger(conn, tid, body, client=None):
+    author = _text(body, "author", 80)
+    if not author:
+        raise ValueError("author is required: who is making the change")
+    rows = fetch(conn, "SELECT trigger_id, name, category_code, kind FROM srm.lifecycle_trigger WHERE trigger_id = %s", (int(tid),))
+    if not rows:
+        raise LookupError("no lifecycle trigger %s" % tid)
+    t = rows[0]
+    changes = {}
+    if "category" in body:
+        changes["category_code"] = _category(conn, body, required=True)
+    if "kind" in body:
+        if body["kind"] not in KINDS:
+            raise ValueError("kind must be one of " + ", ".join(KINDS))
+        changes["kind"] = body["kind"]
+    changes = {k: v for k, v in changes.items() if v != t[k]}
+    if changes:
+        fetch(conn, "UPDATE srm.lifecycle_trigger SET %s, updated_by = %%s, updated_at = now() WHERE trigger_id = %%s"
+              % ", ".join("%s = %%s" % k for k in changes), tuple(changes.values()) + (author + " (family page)", t["trigger_id"]))
+        names = _names(conn)
+        for k, v in changes.items():
+            field, old, new = ("category", names.get(t[k], t[k]), names.get(v, v)) if k == "category_code" else ("kind", KIND_TITLES.get(t[k], t[k]), KIND_TITLES.get(v, v))
+            _change_note(conn, author, body.get("tab") or "family", "Lifecycle trigger: " + t["name"],
+                         "Changed the %s of the lifecycle trigger %s from %s to %s." % (field, t["name"], old, new),
+                         {"change": "trigger", "triggerId": t["trigger_id"], "field": field, "column": k,
+                          "from": t[k], "to": v, "name": t["name"]},
+                         category=changes.get("category_code") or t["category_code"], client=client)
+    conn.commit()
+    return {"triggers": fetch(conn, """
+        SELECT trigger_id AS id, name, category_code AS category, kind, age_from AS "ageFrom", age_to AS "ageTo",
+               every_years AS "everyYears", annual_cost AS "annualCost", notes, active
+          FROM srm.lifecycle_trigger ORDER BY sort_order, age_from, name""")}
+
+
+def undo_change(conn, fid, body):
+    """Puts back what a family-page change replaced, and marks its note Not planned with the reply Undone."""
+    rows = fetch(conn, "SELECT kind, status, context FROM srm.spending_feedback WHERE feedback_id = %s FOR UPDATE", (int(fid),))
+    if not rows or rows[0]["kind"] != "change":
+        raise LookupError("no change %s" % fid)
+    if rows[0]["status"] == "declined":
+        raise ValueError("this change has been undone already")
+    c = rows[0]["context"] or {}
+    if c.get("change") == "entry":
+        column = SOURCES[c["source"]]
+        tag = fetch(conn, "SELECT category_code, driver, member_id, event, notes FROM srm.spending_tag WHERE %s = %%s" % column, (c["entryId"],))
+        values = dict(tag[0]) if tag else {}
+        values[TAG_COLUMN[c["field"]]] = c.get("tagBefore")
+        _write_tag(conn, column, c["entryId"], values, _by(body))
+    elif c.get("change") == "trigger":
+        fetch(conn, "UPDATE srm.lifecycle_trigger SET %s = %%s, updated_by = %%s, updated_at = now() WHERE trigger_id = %%s"
+              % ("category_code" if c["column"] == "category_code" else "kind"), (c["from"], _by(body), c["triggerId"]))
+    else:
+        raise ValueError("this change can't be undone here")
+    fetch(conn, """UPDATE srm.spending_feedback SET status = 'declined', reply = coalesce(reply, 'Undone.'), replied_by = %s,
+                          replied_at = now() WHERE feedback_id = %s""", (_by(body), int(fid)))
+    conn.commit()
+    return feedback(conn)
+
+
 def route(conn, method, parts, body, q):
     """The spending endpoints' answer, or None when the path isn't one of them."""
     if parts == ["spending", "setup"] and method == "GET":
@@ -811,6 +953,12 @@ def route(conn, method, parts, body, q):
             return add_feedback(conn, body)
     if len(parts) == 3 and parts[1] == "feedback" and method == "PUT":
         return answer_feedback(conn, parts[2], body)
+    if len(parts) == 4 and parts[1] == "feedback" and parts[3] == "undo" and method == "POST":
+        return undo_change(conn, parts[2], body)
+    if len(parts) == 5 and parts[1:3] == ["change", "entry"] and method == "PUT":
+        return change_entry(conn, parts[3], parts[4], body)
+    if len(parts) == 4 and parts[1:3] == ["change", "trigger"] and method == "PUT":
+        return change_trigger(conn, parts[3], body)
     if parts == ["spending", "tax"] and method == "GET":
         return tax(conn, q)
     if len(parts) == 4 and parts[1:3] == ["tax", "items"]:

@@ -117,3 +117,6 @@ th.payee { position: relative; padding-right: 14px; }
 .grip { position: absolute; top: 0; right: 0; width: 10px; height: 100%; cursor: col-resize; touch-action: none; }
 .grip::after { content: ""; position: absolute; top: 20%; bottom: 20%; right: 4px; border-right: 2px solid var(--line); }
 .grip:hover::after { border-color: var(--accent); }
+
+/* Choices in table cells: an entry's category and driver, a trigger's category and kind. */
+select.cell { font-size: 13px; padding: 2px 4px; border-radius: 6px; max-width: 190px; }

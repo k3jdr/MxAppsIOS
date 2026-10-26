@@ -1,6 +1,6 @@
 # spending-web — Spending Analysis on the home network
 
-MxAcctMGR's **Reporting ▸ Spending Analysis** as a read-only web page for the rest of the family. It shows the same
+MxAcctMGR's **Reporting ▸ Spending Analysis** as a web page for the rest of the family. It shows the same
 numbers and tabs, but nothing on it can change the data. Each section, purchase and rule has a way to send John a note.
 The notes land in the security master (`srm.spending_feedback`, V039). MxAcctMGR's **Feedback** tab shows them, with
 a status and a reply that the page shows back under **My Notes**.
@@ -20,8 +20,8 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
   `*.local`).
 - **Secret path.** Without the key, every path is a bare 404, so the page gives no hint that it exists. The key never
   goes to the server's log, and pages are sent with `Referrer-Policy: no-referrer`.
-- **Read-only login.** The server signs in as `spending_web` (V039). That login can read what the page shows and add
-  notes, and nothing else. It sees target accounts by name only: their logons and addresses are not readable. Its
+- **Limited login.** The server signs in as `spending_web` (V039, V041). That login can read what the page shows, add
+  notes, write entries' tags, and change a lifecycle trigger's category and kind, and nothing else. It sees target accounts by name only: their logons and addresses are not readable. Its
   password exists only in the PC's config file, readable by the PC account, SYSTEM and Administrators.
 - **The link doesn't change, key included.** Publishing (`publish-to-pc.sh`), releases, restarts, reboots and
   re-running the installer all keep it. Nothing expires or rotates it. The publish script never copies the PC's
@@ -32,14 +32,22 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
 
 ## What the page has
 
-The tabs are Overview (the attribution), Deep Dive, Year-End Tax (read-only, with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
+The tabs are Overview (the attribution), Deep Dive, Year-End Tax (with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Family & Lifecycle, Sources and My Notes. Rules are MxAcctMGR's only. They show
 the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution (`SpendingModel.swift`). The
 Forward Curve stays in MxAcctMGR only; the Deep Dive lists a category's lifecycle triggers without it. They read the
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, the entry filters, and the
 entries tables' Payee width (drag the grip at its header's right edge, with a mouse or a finger; double-click it for the
-standard width; longer names end in "…" and show in full on hover). Nothing that
-edits anything is on the page: no tags, rules, sources, family or triggers.
+standard width; longer names end in "…" and show in full on hover). It can change two things (V041), each applied at once and
+signed with her name (asked once, the same as for notes):
+
+- **An entry's Category and Driver**, in the entries tables on Entries and in the Deep Dive. A change gives the entry a
+  tag of its own, as MxAcctMGR's Tag Entry does. *By the rules* clears her choice, so the rules decide again.
+- **A lifecycle trigger's Category and Kind**, on Family & Lifecycle.
+
+Each change is also a note: MxAcctMGR's Feedback tab lists it as "A change on the family page", with what it was
+before, and **Undo** puts that back. Under My Notes she sees her changes, Made or Undone. Nothing else can be changed
+from the page: not rules, sources, the family, triggers' ages or costs, or tax items.
 
 **Feedback.** The 💬 Feedback button at the top, the 💬 Note on every section, ⚑ on every purchase, and *Suggest a
 change* on every rule and lifecycle trigger all open one short form:

@@ -75,7 +75,7 @@ struct SpendingAnalysisView: View {
                 case "tax": SpendingTaxTab(setup: setup)
                 case "feedback":
                     SpendingFeedbackTab(setup: setup, data: data, notes: notes, changed: { notes = $0 }, entryChanged: { replace($0) },
-                                        openDeepDive: { openDeepDive($0) })
+                                        openDeepDive: { openDeepDive($0) }, reload: { Task { await reload() } })
                 case "sources":
                     if let sources {
                         SpendingSourcesTab(sources: sources, data: data, yearToDate: yearToDate, fullCoverage: fullCoverage) { updated in
@@ -1843,6 +1843,8 @@ private struct SpendingFeedbackTab: View {
     var changed: ([SpendingFeedback]) -> Void
     var entryChanged: (SpendingEntry) -> Void
     var openDeepDive: (String) -> Void
+    /// After an undo: the entries and triggers are read again.
+    var reload: () -> Void
     @AppStorage("spendingFeedbackShow") private var show = "open"
     @State private var tagging: SpendingEntry?
 
@@ -1851,7 +1853,7 @@ private struct SpendingFeedbackTab: View {
     }
 
     var body: some View {
-        Box(title: "Feedback from the Web Page", symbol: "bubble.left.and.text.bubble.right", help: "Notes sent from Spending Analysis's read-only web page on the home network (Services/spending-web on K3JDR-DSKTOP-11): about the layout, a number, a rule or category, one purchase, an idea or a question, each with where on the page it was made. Set a status and reply: the page shows both next to the note, under My Notes. A note about one purchase can tag it here.") {
+        Box(title: "Feedback from the Web Page", symbol: "bubble.left.and.text.bubble.right", help: "Notes sent from Spending Analysis's web page on the home network, and the changes made there (an entry's category or driver, a lifecycle trigger's category or kind: applied at once, Undo puts them back) (Services/spending-web on K3JDR-DSKTOP-11): about the layout, a number, a rule or category, one purchase, an idea or a question, each with where on the page it was made. Set a status and reply: the page shows both next to the note, under My Notes. A note about one purchase can tag it here.") {
             HStack {
                 Picker("", selection: $show) {
                     Text("Open").tag("open"); Text("New").tag("new"); Text("Done").tag("done"); Text("Not planned").tag("declined"); Text("All").tag("all")
@@ -1870,7 +1872,10 @@ private struct SpendingFeedbackTab: View {
                              save: { status, reply in
                                  do { changed(try await SpendingClient.answer(n.id, status: status, reply: reply)); return nil } catch { return describe(error) }
                              },
-                             tag: { tagging = entry(for: n) }, dive: openDeepDive)
+                             tag: { tagging = entry(for: n) }, dive: openDeepDive,
+                             undo: {
+                                 do { changed(try await SpendingClient.undo(n.id)); reload(); return nil } catch { return describe(error) }
+                             })
                     .id("\(n.id)-\(n.status)-\(n.reply ?? "")")
             }
         }
@@ -1895,6 +1900,7 @@ private struct FeedbackCard: View {
     var save: (String, String) async -> String?
     var tag: () -> Void
     var dive: (String) -> Void
+    var undo: () async -> String?
     @State private var status = ""
     @State private var reply = ""
     @State private var saving = false
@@ -1927,6 +1933,11 @@ private struct FeedbackCard: View {
                     .textFieldStyle(.roundedBorder).lineLimit(1...4)
                 Button("Save") { Task { saving = true; error = await save(status, reply); saving = false } }
                     .disabled(saving || (status == note.status && reply == (note.reply ?? "")))
+                if note.kind == "change" && note.status != "declined" {
+                    Button("Undo") { Task { saving = true; error = await undo(); saving = false } }
+                        .disabled(saving)
+                        .help("Put back what this change replaced; the note becomes Not planned, \"Undone.\"")
+                }
                 if entry != nil { Button("Tag Entry…") { tag() }.help("Tag the purchase this note is about") }
                 if let c = note.category { Button("Deep Dive") { dive(c) }.help("Open \(setup.category(c)?.name ?? c) on the Deep Dive tab") }
             }

@@ -459,7 +459,7 @@ struct SpendingFeedback: Decodable, Identifiable, Hashable {
     static let statuses = [("new", "New"), ("seen", "Seen"), ("planned", "Planned"), ("done", "Done"), ("declined", "Not planned")]
     var kindTitle: String {
         ["layout": "How the page looks", "number": "A number looks wrong", "rule": "A category or rule", "entry": "One purchase",
-         "idea": "An idea", "question": "A question"][kind] ?? kind
+         "idea": "An idea", "question": "A question", "change": "A change on the family page"][kind] ?? kind
     }
     var open: Bool { status == "new" || status == "seen" || status == "planned" }
 }
@@ -664,6 +664,10 @@ nonisolated enum SpendingClient {
     private struct Notes: Decodable { var feedback: [SpendingFeedback] }
     static func feedback() async throws -> [SpendingFeedback] {
         try await AccountsClient.request("GET", "/spending/feedback", as: Notes.self).feedback
+    }
+    /// Puts back what a family-page change replaced (V041); its note becomes Not planned, "Undone."
+    static func undo(_ id: Int) async throws -> [SpendingFeedback] {
+        try await AccountsClient.request("POST", "/spending/feedback/\(id)/undo", body: signed([:]), as: Notes.self).feedback
     }
     static func answer(_ id: Int, status: String, reply: String) async throws -> [SpendingFeedback] {
         try await AccountsClient.request("PUT", "/spending/feedback/\(id)", body: signed(["status": status, "reply": reply]), as: Notes.self).feedback

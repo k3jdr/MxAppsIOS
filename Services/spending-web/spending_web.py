@@ -11,8 +11,10 @@ Config: spending_web.local.json next to this file (not in git; copy spending_web
      "database": {"host": "127.0.0.1", "port": 5432, "dbname": "srm", "user": "spending_web", "password": "…"}}
 
 Only addresses in `allow` (the home network) are answered, and only on paths that carry the key; anything else gets
-a bare 404, so the page gives no hint it exists. The database login (role spending_web, V039) can read what the page
-shows and add notes, nothing else. Pages and data are never cached, and links aren't sent as referrers.
+a bare 404, so the page gives no hint it exists. The database login (role spending_web, V039, V041) can read what the
+page shows, add notes, and change two things: an entry's category or driver (its tag) and a lifecycle trigger's
+category or kind, each listed in MxAcctMGR's Feedback, which can undo it. Nothing else. Pages and data are never
+cached, and links aren't sent as referrers.
 
     GET  /s/<key>/                       the page (static/index.html, app.js, app.css)
     GET  /s/<key>/api/setup              categories, family, rules and lifecycle triggers
@@ -22,6 +24,10 @@ shows and add notes, nothing else. Pages and data are never cached, and links ar
     GET  /s/<key>/api/feedback?author=   someone's notes with their status and replies
     POST /s/<key>/api/feedback           a note {author, kind, tab, section, category, entrySource, entryId,
                                          suggestion, message, context}
+    PUT  /s/<key>/api/entry/<source>/<id>   change an entry's {category, driver} (its tag; V041), with {author, tab}
+    PUT  /s/<key>/api/trigger/<id>       change a lifecycle trigger's {category, kind}, with {author, tab}
+                                         (each change is applied at once and listed in MxAcctMGR's Feedback, which can
+                                         undo it)
 
 Uses the accounts service's queries (Services/accounts/spending.py and bank.py, which need only the standard library)
 and psycopg2.
@@ -92,6 +98,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.route("POST")
 
+    def do_PUT(self):
+        self.route("PUT")
+
     def allowed(self):
         try:
             ip = ipaddress.ip_address(self.client_address[0].split("%")[0])   # fe80::…%12: without its zone
@@ -122,12 +131,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, f.read(), kind)
         if len(rest) == 2 and rest[0] == "api":
             return self.api(method, rest[1], {k: v[-1] for k, v in parse_qs(url.query).items()})
+        if len(rest) >= 3 and rest[0] == "api" and method == "PUT" and rest[1] in ("entry", "trigger"):
+            return self.api(method, rest[1], {}, rest[2:])
         return self.send(404, b"Not found", "text/plain")
 
-    def api(self, method, name, q):
+    def api(self, method, name, q, ids=()):
         started = time.time()
         try:
-            body = self.read_json() if method == "POST" else {}
+            body = self.read_json() if method in ("POST", "PUT") else {}
             conn = psycopg2.connect(connect_timeout=10, application_name="spending-web", **Handler.conf["database"])
             try:
                 if method == "GET" and name == "setup":
@@ -143,6 +154,10 @@ class Handler(BaseHTTPRequestHandler):
                     out = spending.feedback(conn, {"author": q.get("author") or "-"})
                 elif method == "POST" and name == "feedback":
                     out = spending.add_feedback(conn, body, client=self.client_address[0])
+                elif method == "PUT" and name == "entry" and len(ids) == 2:
+                    out = spending.change_entry(conn, ids[0], ids[1], body, client=self.client_address[0])
+                elif method == "PUT" and name == "trigger" and len(ids) == 1:
+                    out = spending.change_trigger(conn, ids[0], body, client=self.client_address[0])
                 else:
                     return self.send_json(404, {"error": "no such endpoint"})
             except Exception:

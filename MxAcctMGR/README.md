@@ -643,7 +643,9 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - for a purchase, its date, payee, amount and category at the time, and the change she suggests.
 
   Set its status (New, Seen, Planned, Done, Not planned) and a reply, then Save: the page shows both under her
-  *My Notes*. *Tag Entry…* tags the purchase a note is about, and *Deep Dive* opens its category.
+  *My Notes*. The page can also change an entry's category or driver, and a lifecycle trigger's category or kind
+  (V041). Each change applies at once and is listed here as *A change on the family page*, saying what it was before;
+  **Undo** puts it back. *Tag Entry…* tags the purchase a note is about, and *Deep Dive* opens its category.
 * **Layout.** The tabs are a row of buttons, each as wide as its name. When the window is too narrow for the page, the page scrolls sideways from its left edge instead of growing under the sidebar (`StepPage(scrollsHorizontally:)`, available to any page). The year controls and the Entries filters wrap to a second line when narrow.
 * **Periods.** A year against the year before, year to date by default (January 1 to today's date in both).
   *Only registers covering both years* leaves out a register whose entries start after the earlier year does, so

@@ -22,7 +22,7 @@ const DRIVERS = {
 };
 const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#16a085", "#a0a0a0"];
 const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["tax", "Year-End Tax"], ["entries", "Entries"],
-              ["rules", "Rules"], ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
+              ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
 const STALE_DAYS = 14, STALE_CPI_DAYS = 75;
 
 // ---------------------------------------------------------------------------------------------------------- state
@@ -31,8 +31,8 @@ const saved = (k, d) => { try { const v = localStorage.getItem("spending." + k);
 const keep = (k, v) => { try { localStorage.setItem("spending." + k, JSON.stringify(v)); } catch { /* private window */ } };
 const thisYear = new Date().getFullYear();
 const S = {
-  // A tab saved before the Forward Curve left this page opens the Overview.
-  tab: saved("tab", "attribution") === "curve" ? "attribution" : saved("tab", "attribution"), year: saved("year", thisYear), ytd: saved("ytd", true), full: saved("full", true),
+  // A tab saved before the Forward Curve or Rules left this page opens the Overview.
+  tab: ["curve", "rules"].includes(saved("tab", "attribution")) ? "attribution" : saved("tab", "attribution"), year: saved("year", thisYear), ytd: saved("ytd", true), full: saved("full", true),
   dive: saved("dive", "HEALTHCARE"),
   taxYear: saved("taxYear", new Date().getMonth() < 4 ? thisYear - 1 : thisYear), tax: null, taxProblem: null,
   period: "current", unassignedOnly: false, cat: "", search: "", shown: 200,
@@ -399,7 +399,17 @@ function lifecycleBox(code) {
     ? `<table>${triggers.map(t => `<tr><td class="l">${esc(t.name)}</td><td class="l muted">ages ${ages(t)}</td><td class="l muted">${esc(t.kind)}</td><td>${money(t.annualCost)} a year</td></tr>`).join("")}</table>`
     : `<p class="muted">No lifecycle trigger is in ${esc(catName(code))}.</p>`, { section: `Deep Dive ${catName(code)}: lifecycle` });
 }
+const KINDS = { recurring: "Recurring", replacement: "Replacement", peak: "Peak event", transition: "Transition" };
 const ages = t => (t.ageFrom === t.ageTo ? `${t.ageFrom}` : `${t.ageFrom}–${t.ageTo}`) + (t.everyYears > 1 ? `, every ${t.everyYears} years` : "");
+
+// An entry's category or driver as a choice: changing it gives the entry a tag of its own (V041), listed for John.
+function pick(field, e) {
+  const now = field === "category" ? e.category : e.driver;
+  const choices = field === "category" ? S.setup.categories.map(c => [c.code, c.name]) : Object.entries(DRIVERS).map(([k, d]) => [k, d.title]);
+  return `<select class="cell" data-edit-entry="${esc(e.source)}:${e.entryId}" data-field="${field}">
+    <option value=""${now ? "" : " selected"}>${now ? "By the rules" : field === "category" ? "Not assigned" : "No driver"}</option>
+    ${choices.map(([v, t]) => `<option value="${esc(v)}"${v === now ? " selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
+}
 
 function flag(e) {
   return `<button class="icon" data-action="feedback" data-kind="entry" data-entry="${esc(e.source)}:${e.entryId}" title="Something's off with this entry? Tell John">⚑</button>`;
@@ -419,30 +429,18 @@ function entriesBox(list, title, locked) {
       <span class="spacer"></span><span class="muted">${rows.length.toLocaleString()} entries, ${money(rows.reduce((a, e) => a + e.amount, 0))}</span></div>
     <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l">Expense account</th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Member</th><th class="l">Event</th><th></th></tr>
     ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td><td class="l muted">${esc(e.expenseAccount ?? "")}</td>
-      <td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "From the " + e.categoryFrom : "No rule or tag")}">${esc(catName(e.category))}</td><td class="l" title="${esc(e.driverFrom ? "From the " + e.driverFrom : "No rule or tag: counts as usage")}">${esc(driverTitle(e.driver))}</td>
+      <td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "No rule or tag")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "No rule or tag: counts as usage")}">${pick("driver", e)}</td>
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
     ${rows.length > S.shown ? `<p><button data-action="more">Show ${Math.min(200, rows.length - S.shown)} more</button></p>` : ""}`;
   return box(title, body, { section: title, help: "Every spending dollar: its category and driver and where they came from. ⚑ tells John something about one entry." });
 }
 
-function rulesTab() {
-  const now = entries().filter(inNow);
-  const spentBy = key => now.reduce((m, e) => { const k = key(e); if (k != null) m[k] = (m[k] ?? 0) + e.amount; return m; }, {});
-  const byAccount = spentBy(e => e.expenseAccountId), byPayee = spentBy(e => e.payeeId);
-  const row = (name, spent, r, kind) => `<tr><td class="l">${esc(name)}</td><td>${money(spent ?? 0)}</td><td class="l">${esc(r?.category ? catName(r.category) : kind === "target" ? "Account's" : "None")}</td><td class="l">${esc(r?.driver ? driverTitle(r.driver) : "—")}</td><td class="l muted">${esc(memberName(r?.memberId) ?? "")}</td>
-    <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Rule: ${kind === "target" ? "target account" : "expense account"} ${esc(name)}" data-category="${esc(r?.category ?? "")}">Suggest a change</button></td></tr>`;
-  const head = `<tr><th class="l">Account</th><th>This year</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Member</th><th></th></tr>`;
-  const targets = S.setup.rules.filter(r => r.payeeId);
-  return box("Expense Account Rules", `<div class="scroll"><table>${head}${S.setup.expenseAccounts.map(a => row(a.name, byAccount[a.id], S.setup.rules.find(r => r.expenseAccountId === a.id), "expense")).join("")}</table></div>`,
-      { help: "The category, driver and member of each expense account's spending. Suggest a change to tell John." })
-    + box("Target Account Rules", targets.length ? `<div class="scroll"><table>${head}${targets.map(r => row(r.payee, byPayee[r.payeeId], r, "target")).join("")}</table></div>` : `<p class="muted">No target account has a rule of its own.</p>`,
-      { help: "Rules for single payees, overriding their expense account's" });
-}
-
 function familyTab() {
   const grade = a => a < 5 ? "Preschool" : a === 5 ? "Kindergarten" : a <= 17 ? `Grade ${a - 5}` : a <= 21 ? `College year ${a - 17}` : "";
   return box("Family", S.setup.members.length ? `<table><tr><th class="l">Name</th><th class="l">Relation</th><th>Born</th><th>Age</th><th class="l">Grade</th></tr>${S.setup.members.map(m => `<tr><td class="l">${esc(m.name)}</td><td class="l">${esc(m.relation)}</td><td>${m.birthMonth ? m.birthMonth + "/" : ""}${m.birthYear}</td><td>${thisYear - m.birthYear}</td><td class="l muted">${m.relation === "child" ? grade(thisYear - m.birthYear) : ""}</td></tr>`).join("")}</table>` : `<p class="muted">No one is set up yet.</p>`)
-    + box("Lifecycle Triggers", `<div class="scroll"><table><tr><th class="l">Trigger</th><th class="l">Category</th><th class="l">Kind</th><th class="l">Ages</th><th>A year</th><th></th></tr>${S.setup.triggers.map(t => `<tr><td class="l" title="${esc(t.notes ?? "")}">${esc(t.name)}</td><td class="l">${esc(catName(t.category))}</td><td class="l muted">${esc(t.kind)}</td><td class="l">${ages(t)}</td><td>${money(t.annualCost)}</td><td><button class="icon" data-action="feedback" data-kind="rule" data-section="Lifecycle trigger: ${esc(t.name)}" data-category="${esc(t.category)}">Suggest a change</button></td></tr>`).join("")}</table></div>`,
+    + box("Lifecycle Triggers", `<div class="scroll"><table><tr><th class="l">Trigger</th><th class="l">Category</th><th class="l">Kind</th><th class="l">Ages</th><th>A year</th><th></th></tr>${S.setup.triggers.map(t => `<tr><td class="l" title="${esc(t.notes ?? "")}">${esc(t.name)}</td>
+        <td class="l"><select class="cell" data-edit-trigger="${t.id}" data-field="category">${S.setup.categories.map(c => `<option value="${c.code}"${c.code === t.category ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select></td>
+        <td class="l"><select class="cell" data-edit-trigger="${t.id}" data-field="kind">${Object.entries(KINDS).map(([k, n]) => `<option value="${k}"${k === t.kind ? " selected" : ""}>${n}</option>`).join("")}</select></td><td class="l">${ages(t)}</td><td>${money(t.annualCost)}</td><td><button class="icon" data-action="feedback" data-kind="rule" data-section="Lifecycle trigger: ${esc(t.name)}" data-category="${esc(t.category)}">Suggest a change</button></td></tr>`).join("")}</table></div>`,
       { help: "What a child's age brings and costs a year in today's dollars" })
     + box("Categories and Inflation", `<table><tr><th class="l">Category</th><th class="l">CPI series</th><th>Assumed a year</th><th>This year</th></tr>${S.setup.categories.map(c => { const i = S.data.inflation.find(x => x.category === c.code); return `<tr><td class="l">${esc(c.name)}</td><td class="l muted">${esc(c.cpiName ?? "None")}</td><td>${pct(c.assumedInflation, 1)}</td><td>${i ? `${signedPct(i.rate)} (${i.basis})` : "—"}</td></tr>`; }).join("")}</table>`);
 }
@@ -477,10 +475,11 @@ function notesTab() {
   if (latest && latest > saved("repliesRead", "")) { keep("repliesRead", latest); setTimeout(render, 0); }
   const author = saved("author", "");
   const statusText = { new: "New", seen: "Seen", planned: "Planned", done: "Done", declined: "Not planned" };
+  const changeStatus = { new: "Made", seen: "Seen", planned: "Kept", done: "Kept", declined: "Undone" };
   let h = `<div class="bar"><span>Your notes to John, with what he did about them.</span><span class="spacer"></span><button class="primary" data-action="feedback">💬 New note</button></div>`;
   if (!author) return h + `<p class="muted">Send a note (💬 on any section, ⚑ on any entry) and it will show here with John's answer.</p>`;
   if (!S.notes.length) return h + `<p class="muted">No notes from ${esc(author)} yet.</p>`;
-  return h + `<div class="notes">${S.notes.map(n => `<div class="note"><div class="meta"><span class="badge ${esc(n.status)}">${esc(statusText[n.status] ?? n.status)}</span><span>${when(n.createdAt)}</span><span>${esc({ layout: "How the page looks", number: "A number", rule: "A category or rule", entry: "One purchase", idea: "An idea", question: "A question" }[n.kind] ?? n.kind)}</span>${n.section ? `<span>· ${esc(n.section)}</span>` : ""}</div>
+  return h + `<div class="notes">${S.notes.map(n => `<div class="note"><div class="meta"><span class="badge ${esc(n.status)}">${esc((n.kind === "change" ? changeStatus : statusText)[n.status] ?? n.status)}</span><span>${when(n.createdAt)}</span><span>${esc({ layout: "How the page looks", number: "A number", rule: "A category or rule", entry: "One purchase", idea: "An idea", question: "A question", change: "A change you made" }[n.kind] ?? n.kind)}</span>${n.section ? `<span>· ${esc(n.section)}</span>` : ""}</div>
     <p class="msg">${esc(n.message)}</p>${n.suggestion ? `<p class="hint">Suggested: ${esc(n.suggestion)}</p>` : ""}
     ${n.reply ? `<div class="reply"><b>John</b>${n.repliedAt ? ` · ${when(n.repliedAt)}` : ""}<br>${esc(n.reply)}</div>` : ""}</div>`).join("")}</div>`;
 }
@@ -562,7 +561,7 @@ function downloadTaxCsv() {
 function render() {
   const app = document.getElementById("app");
   if (!S.setup || !S.data) { app.innerHTML = S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : `<div class="loading">Reading the registers…</div>`; return; }
-  const body = { deepdive: diveTab, tax: taxTab, entries: () => entriesBox(entries(), "Spending Entries", false), rules: rulesTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
+  const body = { deepdive: diveTab, tax: taxTab, entries: () => entriesBox(entries(), "Spending Entries", false), family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
   let inner;
   try { inner = body(); } catch (e) { inner = `<p class="notice warn">This part of the page failed: ${esc(e.message)}</p>`; console.error(e); }
   app.innerHTML = controls() + strip() + (S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : "") + tabsBar() + inner;
@@ -618,6 +617,44 @@ async function sendNote() {
 }
 function toast(t) { const el = document.getElementById("toast"); el.textContent = t; el.classList.add("on"); setTimeout(() => el.classList.remove("on"), 3500); }
 
+// ---------------------------------------------------------------------------------------------------------- changes
+// Applied at once and signed with her name; each one shows in John's Feedback tab, where he can undo it.
+
+function whoAmI() {
+  let author = saved("author", "");
+  if (!author) {
+    author = (window.prompt("Your name, so John knows who made the change:") || "").trim();
+    if (author) keep("author", author);
+  }
+  return author;
+}
+
+async function changeEntry(sel) {
+  const author = whoAmI(); if (!author) { render(); return; }
+  const [source, id] = sel.dataset.editEntry.split(":");
+  try {
+    const { entry } = await api(`entry/${source}/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author, tab: S.tab, [sel.dataset.field]: sel.value }) });
+    const i = S.data.entries.findIndex(e => e.source === entry.source && e.entryId === entry.entryId);
+    if (i >= 0) S.data.entries[i] = entry;
+    await loadNotes();
+    toast(`Changed: ${sel.dataset.field} ${sel.dataset.field === "category" ? catName(entry.category) : driverTitle(entry.driver)}. John sees it in MxAcctMGR.`);
+  } catch (ex) { toast("Not changed: " + ex.message); }
+  render();
+}
+
+async function changeTrigger(sel) {
+  const author = whoAmI(); if (!author) { render(); return; }
+  try {
+    const { triggers } = await api(`trigger/${sel.dataset.editTrigger}`, { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author, tab: S.tab, [sel.dataset.field]: sel.value }) });
+    S.setup.triggers = triggers;
+    await loadNotes();
+    toast("Changed. John sees it in MxAcctMGR.");
+  } catch (ex) { toast("Not changed: " + ex.message); }
+  render();
+}
+
 // ---------------------------------------------------------------------------------------------------------- events
 
 document.addEventListener("click", ev => {
@@ -636,6 +673,8 @@ document.addEventListener("click", ev => {
   }
 });
 document.addEventListener("change", ev => {
+  if (ev.target.dataset?.editEntry) return changeEntry(ev.target);
+  if (ev.target.dataset?.editTrigger) return changeTrigger(ev.target);
   const k = ev.target.dataset?.set; if (!k) return;
   const v = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
   if (k === "year") { S.year = +v; keep("year", S.year); return load(); }
