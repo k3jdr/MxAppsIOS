@@ -1,7 +1,7 @@
 :root {
   --bg: #f6f6f4; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e2e2e0; --soft: #f0f0ee;
   --accent: #0a66d8; --accent-ink: #ffffff; --up: #c0392b; --down: #1e8449; --warn: #b9770e;
-  --inflation: #e67e22; --usage: #2e86de; --lifecycle: #8e44ad; --behavior: #d6336c; --onetime: #16a085;
+  --inflation: #e67e22; --usage: #2e86de; --lifecycle: #8e44ad; --behavior: #d6336c; --onetime: #16a085; --taxes: #8d6e63;
   --gray: #a0a0a0;
   color-scheme: light;
 }

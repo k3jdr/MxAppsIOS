@@ -51,7 +51,7 @@
     PUT    /spending/tax/assign/<source>/<entryId> move a payment to {taxYear, quarter, note}; no taxYear undoes it
 
 Every setup change answers with the setup. Drivers: inflation, family_growth, new_activity, lifecycle, preference,
-one_time.
+one_time, taxes (V044).
 """
 
 import datetime as dt
@@ -60,7 +60,7 @@ import os
 
 from bank import fetch, nest_link, _date, _num, Conflict
 
-DRIVERS = ("inflation", "family_growth", "new_activity", "lifecycle", "preference", "one_time")
+DRIVERS = ("inflation", "family_growth", "new_activity", "lifecycle", "preference", "one_time", "taxes")
 KINDS = ("recurring", "replacement", "peak", "transition")
 SOURCES = {"bank": "bank_txn_id", "card": "card_txn_id", "ledger": "expense_entry_id"}
 
@@ -891,7 +891,8 @@ def assign_tax(conn, source, entry_id, body):
 # kind. Each is applied at once and listed for John as a 'change' note that MxAcctMGR can undo.
 
 DRIVER_TITLES = {"inflation": "Inflation", "family_growth": "Family Growth", "new_activity": "New Activity",
-                 "lifecycle": "Lifecycle Transition", "preference": "Preference Change", "one_time": "One-Time Event"}
+                 "lifecycle": "Lifecycle Transition", "preference": "Preference Change", "one_time": "One-Time Event",
+                 "taxes": "Taxes"}
 KIND_TITLES = {"recurring": "Recurring", "replacement": "Replacement", "peak": "Peak event", "transition": "Transition"}
 TAG_COLUMN = {"category": "category_code", "driver": "driver"}
 

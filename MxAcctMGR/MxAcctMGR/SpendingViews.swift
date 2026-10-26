@@ -36,7 +36,7 @@ struct SpendingAnalysisView: View {
     var body: some View {
         StepPage(store: store, subtitle: "Household spending attribution: like portfolio attribution, for the family's spending — why it changed from last year (prices, more of the same, the children's ages, habits, one-time events) and what the children's ages bring in the next ten years.", lesson: [
             "Every dollar the check register, the credit cards and the expense ledgers spend has two dimensions: a spending category (Food, Housing, Transportation, Education, Activities, Technology, Healthcare, Clothing, Travel) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event). Rules on expense and target accounts set them; tag a single entry (Philmont as a one-time event) on Entries.",
-            "Each category's change splits as in performance attribution: change = inflation + usage + lifecycle + behavior + one-time. Inflation is last year's spending times the category's CPI change (FRED, in the security master); each driver's effect is what its spending grew beyond inflation. Inflation and lifecycle are the unavoidable part; behavior is habit.",
+            "Each category's change splits as in performance attribution: change = inflation + usage + lifecycle + behavior + one-time + taxes. Inflation is last year's spending times the category's CPI change (FRED, in the security master); each driver's effect is what its spending grew beyond inflation. Inflation and lifecycle are the unavoidable part; behavior is habit.",
             "The forward curve stacks each child's lifecycle costs — club sports at 10, a phone at 12, a laptop at 13, tutors at 14, driving at 16, college visits and applications at 16–17, college at 18 — so the waves show three to five years ahead.",
         ], scrollsHorizontally: true) {
             periodBar
@@ -267,11 +267,16 @@ struct SpendingAnalysisView: View {
                        help: SpendingEffect.lifecycle.help)
             MetricTile(title: "Behavior", value: money(t.effect(.behavior)), caption: t.share(.behavior).map { "\(pct($0, 0)) of the change" } ?? "",
                        help: SpendingEffect.behavior.help)
+            // Once something is tagged Taxes.
+            if abs(t.effect(.taxes)) >= 0.5 {
+                MetricTile(title: "Taxes", value: money(t.effect(.taxes)), caption: t.share(.taxes).map { "\(pct($0, 0)) of the change" } ?? "",
+                           help: SpendingEffect.taxes.help)
+            }
         }
     }
 
     private func metricsTable(_ rows: [CategoryAttribution], _ total: CategoryAttribution) -> some View {
-        Box(title: "Key Metrics by Category", symbol: "tablecells", help: "Each category's spending growth and how much of its change each effect explains (the contributions add to 100% of the change). Inflation and lifecycle are the unavoidable, age-related part; behavior is habit; one-time won't repeat. Usage is more or less of the same things, including spending with no driver assigned.") {
+        Box(title: "Key Metrics by Category", symbol: "tablecells", help: "Each category's spending growth and how much of its change each effect explains (the contributions add to 100% of the change). Inflation and lifecycle are the unavoidable, age-related part; behavior is habit; one-time won't repeat; taxes is what changed with taxes. Usage is more or less of the same things, including spending with no driver assigned.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 5) {
                 GridRow {
                     Text("Category").gridColumnAlignment(.leading)
@@ -355,7 +360,7 @@ struct SpendingAnalysisView: View {
                     .foregroundStyle(by: .value("Driver", s.driver))
             }
             .chartXScale(domain: order.filter { n in slices.contains { $0.category == n } })
-            .chartForegroundStyleScale(domain: drivers, range: [Color.orange, .blue, .cyan, .purple, .pink, .teal, .gray.opacity(0.5)])
+            .chartForegroundStyleScale(domain: drivers, range: [Color.orange, .blue, .cyan, .purple, .pink, .teal, .brown, .gray.opacity(0.5)])
             .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
             .chartOverlay { proxy in CategoryChartMenu(proxy: proxy, axis: .horizontal) { openDeepDive($0) } }
             .frame(height: 260)

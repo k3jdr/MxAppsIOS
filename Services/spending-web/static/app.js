@@ -11,6 +11,7 @@ const EFFECTS = [
   { id: "lifecycle", name: "Lifecycle", color: "var(--lifecycle)", help: "Expected age-related costs: what spending tagged Lifecycle Transition grew beyond inflation" },
   { id: "behavior", name: "Behavior", color: "var(--behavior)", help: "Habits and tastes: what spending tagged Preference Change grew beyond inflation" },
   { id: "oneTime", name: "One-Time", color: "var(--onetime)", help: "Events that won't repeat: what spending tagged One-Time Event grew beyond inflation" },
+  { id: "taxes", name: "Taxes", color: "var(--taxes)", help: "Taxes: what spending tagged Taxes grew beyond inflation" },
 ];
 const DRIVERS = {
   inflation: { title: "Inflation", effect: "inflation", help: "The same thing costs more" },
@@ -19,8 +20,9 @@ const DRIVERS = {
   lifecycle: { title: "Lifecycle Transition", effect: "lifecycle", help: "Expected age-related spending: tutors, driving, college" },
   preference: { title: "Preference Change", effect: "behavior", help: "A habit or taste changed" },
   one_time: { title: "One-Time Event", effect: "oneTime", help: "An event that won't repeat" },
+  taxes: { title: "Taxes", effect: "taxes", help: "Taxes changed: real estate, income, local or sales taxes and their fees" },
 };
-const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#16a085", "#a0a0a0"];
+const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#16a085", "#8d6e63", "#a0a0a0"];
 const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["tax", "Year-End Tax"], ["entries", "Entries"],
               ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
 const STALE_DAYS = 14, STALE_CPI_DAYS = 75;
@@ -93,7 +95,7 @@ async function loadNotes() {
 }
 
 // ---------------------------------------------------------------------------------------------------------- engine
-// As SpendingEngine (SpendingModel.swift): change = inflation + usage + lifecycle + behavior + one-time.
+// As SpendingEngine (SpendingModel.swift): change = inflation + usage + lifecycle + behavior + one-time + taxes.
 
 const inNow = e => e.date >= S.data.start && e.date <= S.data.end;
 const inBefore = e => e.date >= S.data.priorStart && e.date <= S.data.priorEnd;
@@ -149,6 +151,7 @@ function makeRow(code, name, prior, current, rate, basis, effects) {
     if (unavoidable >= 0.6) return (r.share("lifecycle") ?? 0) > (r.share("inflation") ?? 0) ? "Unavoidable: age-related" : "Unavoidable: prices";
     if ((r.share("behavior") ?? 0) >= 0.5) return "Habit change";
     if ((r.share("oneTime") ?? 0) >= 0.5) return "One-time";
+    if ((r.share("taxes") ?? 0) >= 0.5) return "Taxes";
     if ((r.share("usage") ?? 0) >= 0.5) return "More of the same";
     return "Mixed";
   })();
@@ -315,7 +318,7 @@ function attributionTab() {
   let h = "";
   if (partial.length) h += `<p class="notice${S.full ? "" : " warn"}">${esc(partial.map(c => `${c.register ?? c.source} starts ${day(c.first)}`).join("; "))}${S.full ? ": left out, as it doesn't cover the earlier year." : ": its earlier-year spending is missing, so its whole spending counts as growth."}</p>`;
   h += `<div class="tiles">${tile("Earlier year", money(t.prior))}${tile("This year", money(t.current))}${tile("Change", money(t.change), t.growth === null ? "" : signedPct(t.growth), "This year less the earlier year", t.change > 0 ? "var(--up)" : "var(--down)")}
-    ${["inflation", "lifecycle", "behavior"].map(id => { const e = EFFECTS.find(x => x.id === id); return tile(e.name, money(t.effect(id)), t.share(id) === null ? "" : `${pct(t.share(id))} of the change`, e.help); }).join("")}</div>`;
+    ${["inflation", "lifecycle", "behavior"].concat(Math.abs(t.effect("taxes")) >= 0.5 ? ["taxes"] : []).map(id => { const e = EFFECTS.find(x => x.id === id); return tile(e.name, money(t.effect(id)), t.share(id) === null ? "" : `${pct(t.share(id))} of the change`, e.help); }).join("")}</div>`;
   if (!rows.length) return h + `<p class="muted">No spending in these periods.</p>`;
   const tr = r => `<tr${r.code === "TOTAL" ? ' class="total"' : ""}>
       <td class="l">${r.code === "TOTAL" ? esc(r.name) : `<button class="link" data-dive="${esc(r.code)}" title="Deep dive into ${esc(r.name)}">${esc(r.name)}</button>`}</td>

@@ -8,7 +8,7 @@
 //  transition, a preference change, a one-time event) — set by rules on expense and target accounts and by tags on
 //  single entries. Like portfolio attribution, a category's change from one year to the next splits into effects:
 //
-//      change = inflation + usage + lifecycle + behavior + one-time
+//      change = inflation + usage + lifecycle + behavior + one-time + taxes
 //
 //  Inflation is the prior year's spending times the category's CPI change (FRED, in the security master; else the
 //  category's assumption) plus whatever spending tagged "inflation" grew beyond it; each other driver's effect is what
@@ -202,7 +202,7 @@ struct SpendingAnalysisData: Decodable {
 }
 
 enum SpendingDriver: String, CaseIterable, Identifiable {
-    case inflation, familyGrowth = "family_growth", newActivity = "new_activity", lifecycle, preference, oneTime = "one_time"
+    case inflation, familyGrowth = "family_growth", newActivity = "new_activity", lifecycle, preference, oneTime = "one_time", taxes
     var id: String { rawValue }
 
     var title: String {
@@ -213,6 +213,7 @@ enum SpendingDriver: String, CaseIterable, Identifiable {
         case .lifecycle: "Lifecycle Transition"
         case .preference: "Preference Change"
         case .oneTime: "One-Time Event"
+        case .taxes: "Taxes"
         }
     }
 
@@ -224,6 +225,7 @@ enum SpendingDriver: String, CaseIterable, Identifiable {
         case .lifecycle: "Expected age-related spending: tutors, driving, college"
         case .preference: "A habit or taste changed: eating out more, a better brand"
         case .oneTime: "An event that won't repeat: Philmont, a wedding, a repair"
+        case .taxes: "Taxes changed: real estate, income, local or sales taxes and their fees"
         }
     }
 
@@ -235,15 +237,16 @@ enum SpendingDriver: String, CaseIterable, Identifiable {
         case .lifecycle: .lifecycle
         case .preference: .behavior
         case .oneTime: .oneTime
+        case .taxes: .taxes
         }
     }
 
     static func title(_ raw: String?) -> String { raw.flatMap(SpendingDriver.init(rawValue:))?.title ?? "Not assigned" }
 }
 
-/// The attribution formula's terms: change = inflation + usage + lifecycle + behavior + one-time.
+/// The attribution formula's terms: change = inflation + usage + lifecycle + behavior + one-time + taxes.
 enum SpendingEffect: String, CaseIterable, Identifiable {
-    case inflation = "Inflation", usage = "Usage", lifecycle = "Lifecycle", behavior = "Behavior", oneTime = "One-Time"
+    case inflation = "Inflation", usage = "Usage", lifecycle = "Lifecycle", behavior = "Behavior", oneTime = "One-Time", taxes = "Taxes"
     var id: String { rawValue }
 
     var color: Color {
@@ -253,6 +256,7 @@ enum SpendingEffect: String, CaseIterable, Identifiable {
         case .lifecycle: .purple
         case .behavior: .pink
         case .oneTime: .teal
+        case .taxes: .brown
         }
     }
 
@@ -263,6 +267,7 @@ enum SpendingEffect: String, CaseIterable, Identifiable {
         case .lifecycle: "Expected age-related costs: the growth of spending tagged Lifecycle Transition, beyond inflation"
         case .behavior: "Habits and tastes: the growth of spending tagged Preference Change, beyond inflation"
         case .oneTime: "Events that won't repeat: the growth of spending tagged One-Time Event, beyond inflation"
+        case .taxes: "Taxes: the growth of spending tagged Taxes, beyond inflation"
         }
     }
 }
@@ -293,6 +298,7 @@ struct CategoryAttribution: Identifiable, Hashable {
         if unavoidable >= 0.6 { return (share(.lifecycle) ?? 0) > (share(.inflation) ?? 0) ? "Unavoidable: age-related" : "Unavoidable: prices" }
         if (share(.behavior) ?? 0) >= 0.5 { return "Habit change" }
         if (share(.oneTime) ?? 0) >= 0.5 { return "One-time" }
+        if (share(.taxes) ?? 0) >= 0.5 { return "Taxes" }
         if (share(.usage) ?? 0) >= 0.5 { return "More of the same" }
         return "Mixed"
     }
