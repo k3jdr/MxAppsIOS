@@ -85,6 +85,8 @@ struct DiagramCanvas: View {
     /// The lane under the pointer, for Quick Help.
     @State private var hoverLane: Layer?
     @FocusState private var focused: Bool
+    /// Edit Step… or the Link dialog, open for a step (StepLinks.swift).
+    @State private var stepSheet: StepSheet?
 
     var body: some View {
         let size = Metrics.canvasSize(for: space)
@@ -95,7 +97,7 @@ struct DiagramCanvas: View {
                            size: size, position: position,
                            dropTargetLayer: dropTargetLayer, pendingLink: pendingLink, rubberBand: rubberBand,
                            nodeGesture: nodeGesture, handleGesture: handleGesture, onNodeTap: tapNode,
-                           nodeMenu: nodeMenu)
+                           nodeMenu: nodeMenu, editLink: editLink, removeLink: removeLink)
                 .background {
                     // Background interactions: click to select links / clear, drag to rubber-band.
                     Color.clear
@@ -158,6 +160,23 @@ struct DiagramCanvas: View {
             editor.zoom = min(2, max(0.4, (editor.zoom * value.magnification).rounded(toPlaces: 1)))
         })
         .onAppear { focused = true }
+        .sheet(item: $stepSheet) { sheet in
+            switch sheet.kind {
+            case .edit: StepEditSheet(space: $space, id: sheet.node)
+            case .link: StepLinkSheet(space: $space, id: sheet.node)
+            }
+        }
+    }
+
+    /// Edit Link… on a step's hover card: its own link, or its palette element's when it has none.
+    private func editLink(_ node: JobNode) {
+        LinkHover.shared.close()
+        stepSheet = StepSheet(node: node.id, kind: .link)
+    }
+
+    private func removeLink(_ node: JobNode) {
+        if node.link != nil, let i = space.index(of: node.id) { space.nodes[i].link = nil }
+        else { PaletteEdits.shared.setLink(nil, for: .kind(node.kind)) }
     }
 
     private func nodeMenu(_ node: JobNode) -> AnyView {
@@ -168,6 +187,15 @@ struct DiagramCanvas: View {
             }
             Button(node.enabled ? "Disable Step" : "Enable Step") {
                 if let i = space.index(of: node.id) { space.nodes[i].enabled.toggle() }
+            }
+            Divider()
+            Button("Edit Step…") { stepSheet = StepSheet(node: node.id, kind: .edit) }
+            Button(node.link == nil ? "Add Link…" : "Edit Link…") { editLink(node) }
+            if let url = node.shownLink?.url {
+                Button("Open Link") { LinkInfo.follow(url) }
+            }
+            if node.link != nil {
+                Button("Remove Link") { if let i = space.index(of: node.id) { space.nodes[i].link = nil } }
             }
             Divider()
             Button("Duplicate") {
@@ -299,6 +327,9 @@ struct DiagramContent<NG: Gesture, HG: Gesture>: View {
     var interactive = true
     /// Right-click menu of a node (canvas only).
     var nodeMenu: ((JobNode) -> AnyView)?
+    /// The hover card's Edit Link… and Remove Link on a step (canvas only, StepLinks.swift).
+    var editLink: ((JobNode) -> Void)?
+    var removeLink: ((JobNode) -> Void)?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -317,6 +348,11 @@ struct DiagramContent<NG: Gesture, HG: Gesture>: View {
                          breakpointsEnabled: breakpointsEnabled,
                          interactive: interactive,
                          handleGesture: handleGesture(node))
+                    .background {
+                        if let editLink, let removeLink {
+                            StepLinkAnchor(node: node, edit: { editLink(node) }, remove: { removeLink(node) })
+                        }
+                    }
                     .position(position(node))
                     .onTapGesture { onNodeTap(node) }
                     .gesture(nodeGesture(node))

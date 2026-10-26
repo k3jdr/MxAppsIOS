@@ -31,6 +31,8 @@ struct NodeView<HG: Gesture>: View {
                     .font(.system(size: 9, weight: .bold))
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                // The link it shows (its own or its palette element's, StepLinks.swift).
+                if interactive { StepLinkMark(node: node) }
                 if let runState, runState != .pending {
                     Image(systemName: runState.symbol)
                         .foregroundStyle(runState.color)

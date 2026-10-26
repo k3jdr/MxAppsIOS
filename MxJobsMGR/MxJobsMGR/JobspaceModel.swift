@@ -494,6 +494,8 @@ nonisolated struct JobNode: Codable, Identifiable, Equatable, Sendable {
     var api: ApiCallSpec?
     var transform: TransformSpec?
     var script: ScriptSpec?
+    /// The step's own link and hover text (right-click the step); without one it shows its palette element's.
+    var link: SecurityLink?
 
     var layer: Layer { kind.layer }
 
@@ -539,6 +541,7 @@ nonisolated struct JobNode: Codable, Identifiable, Equatable, Sendable {
         api = c.value(.api, nil)
         transform = c.value(.transform, nil)
         script = c.value(.script, nil)
+        link = c.value(.link, nil)
     }
 }
 

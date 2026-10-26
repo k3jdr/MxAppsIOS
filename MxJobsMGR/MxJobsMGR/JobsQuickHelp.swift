@@ -81,9 +81,12 @@ enum JobsHelp {
         if let issue { facts.append(issue == .error ? "has an error (see Checks)" : "has a warning (see Checks)") }
         let how = selected
             ? "The inspector on the right sets it up. ⌘\\ toggles a breakpoint, ⌘D duplicates, Delete removes it."
-            : "Click to select it and set it up in the inspector; drag to move it; drag its ● handle onto another step to link them. Right-click for breakpoint, disable, duplicate, delete."
+            : "Click to select it and set it up in the inspector; drag to move it; drag its ● handle onto another step to link them. Right-click for breakpoint, disable, Edit Step…, its link and hover text, duplicate, delete."
+        if node.link != nil { facts.append("has a link (rest the pointer for its hover card)") }
+        else if node.shownLink != nil { facts.append("shows its palette element's link") }
+        let notes = node.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         return QuickHelpItem(title: "\(node.kind.title): \(node.title)",
-                             detail: (kindDetail[node.kind] ?? node.kind.summary) + "\n" + facts.joined(separator: " · ") + ". " + how,
+                             detail: (notes.isEmpty ? "" : notes + "\n") + (kindDetail[node.kind] ?? node.kind.summary) + "\n" + facts.joined(separator: " · ") + ". " + how,
                              symbol: node.kind.symbol)
     }
 
