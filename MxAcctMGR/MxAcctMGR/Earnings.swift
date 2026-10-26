@@ -355,13 +355,13 @@ nonisolated enum EarningsDates {
         return (0..<count).map { add(first, days: $0) }
     }
 
-    /// Monday to Sunday of `s`'s week.
+    /// Sunday to Saturday of `s`'s week, as a U.S. calendar shows it.
     static func week(_ s: String) -> [String] {
-        let monday = add(s, days: -((weekday(s) + 5) % 7))
-        return (0..<7).map { add(monday, days: $0) }
+        let sunday = add(s, days: -(weekday(s) - 1))
+        return (0..<7).map { add(sunday, days: $0) }
     }
 
-    /// The month grid: whole weeks, Monday first, covering `s`'s month.
+    /// The month grid: whole weeks, Sunday first, covering `s`'s month.
     static func monthGrid(_ s: String) -> [String] {
         let days = month(s)
         let start = week(days[0])[0]

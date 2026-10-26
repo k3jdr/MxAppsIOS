@@ -80,7 +80,7 @@ struct MxAcctMGRApp: App {
                         ForEach([Screen.whyOptimize, .whyAttribution, .activeVsPassive]) { s in Button(s.title) { store.go(s) } }
                     }
                 }
-                Button("Securities") { store.go(.securities) }
+                Button("SRM Table") { store.go(.securities) }
                 Button("Sample Portfolios") { store.go(.samples) }
                     .keyboardShortcut("l", modifiers: [.command, .shift])
                 Button("Layer 3 Services") { store.go(.services) }

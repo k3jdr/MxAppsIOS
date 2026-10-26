@@ -249,7 +249,7 @@ struct CheckingView: View {
     @AppStorage("registerFocusOn") private var focusOn = false
     @AppStorage("registerFocusFrom") private var focusFrom = ""
     /// How many of the register's rows show at once (more scroll inside it): fewer leave room for the rest of the page.
-    @AppStorage("checkingRegisterRows") private var registerRows = 22
+    @AppStorage(RowsStepper.key) private var registerRows = RowsStepper.standard
 
     var body: some View {
         StepPage(store: store, subtitle: "The check book register, shared: everyone who writes checks enters them here, and the bank's own lines (PNC downloads) clear them.", lesson: [
@@ -1214,7 +1214,7 @@ struct TargetAccountsView: View {
     @State private var newAccount = false
     @State private var showInactive = false
     /// How many of the table's rows show at once.
-    @AppStorage("targetAccountsRows") private var tableRows = 22
+    @AppStorage(RowsStepper.key) private var tableRows = RowsStepper.standard
     /// The table's rows are read-only: their context menu edits the account's details and its link.
     @State private var selected: Payee.ID?
 

@@ -130,7 +130,7 @@ struct SecureAccountsView: View {
     @State private var renaming: SecureAccount?
     @State private var showInactive = false
     /// How many of the table's rows show at once.
-    @AppStorage("secureAccountsRows") private var tableRows = 22
+    @AppStorage(RowsStepper.key) private var tableRows = RowsStepper.standard
     /// Import Passwords and Keys… is open.
     @State private var importing = false
     /// The table's rows are read-only: their context menu edits the account.

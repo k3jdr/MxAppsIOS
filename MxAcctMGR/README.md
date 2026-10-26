@@ -32,9 +32,9 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Data Library (Securities, Layer 3 Services). Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Data Library (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
-| **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Built-in (Swift)* or *Layer 3 services*. |
+| **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
 | **Status bar** | The account, its type, value and benchmark; the last action (e.g. "Optimized with Built-in (Swift) in 134 ms"); the educational-use banner. |
 
@@ -70,7 +70,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 | **MxAcctMGR** | **Settings…** ⌘, — **Text**: a font name, size and style for each kind of text that takes room — **Headings** (page titles, page introductions, headings, subheadings, names, figures) and **Numbers and Tables** (registers and tables, whose rows follow their text's height; the earnings calendar, whose day cells shrink or grow with it; IDs and codes; calculation results) — each section with **Step Down** / **Step Up** (every kind a point smaller or larger) and **Restore Defaults**; **Banking**: what the checking register's New entry starts with (kind — Debit at first —, check number, date); **Guidance**: the instruction level — **Full** (everything), **Brief** (no "Why this step" lessons) or **Minimal** (also no line under the titles, and the lesson-only pages — Welcome, Choose Your Path, Why Optimize?, Why Attribution?, Active vs Passive — leave the sidebar, the Guide menu and Previous / Next Step) |
 | **Edit** | (the standard items) · **Copy Page Text** ⌥⇧⌘C — the whole page as text · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
-| **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
+| **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · SRM Table · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
 | **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report, and Compute Hyperscalers Tracking ⌥⌘U in Tier 6 below Semiconductor Sales · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
@@ -237,11 +237,12 @@ markets within seconds, others shape positioning over weeks or months.
   says no source is loaded yet — with what the selected account would be worth if it opened with the futures (each
   holding's real market and rate betas). Each panel says what it measures and how a long-term investor
   might use it. Its earnings panel links to today's real list (Earnings by Day).
-* **Earnings Calendar** — real earnings reports by **month** or **week** (◀ ▶ and Today step through them). A month
+* **Earnings Calendar** — real earnings reports by **month** or **week** (◀ ▶ and Today step through them), weeks Sunday to Saturday as on a
+  U.S. calendar. A month
   cell shows the number of U.S.-listed companies reporting, for past days a bar and count of how many beat (green),
   were in line (grey) or missed (red) the consensus EPS, and the largest names — coloured by result, or with a
   sunrise / moon for before the open / after the close — with the companies you hold first. The week view lists each
-  weekday's 16 largest reports with the actual EPS (coloured) or the consensus. Under the grid, **This month / This
+  day's 16 largest reports with the actual EPS (coloured) or the consensus. Under the grid, **This month / This
   week**: reports listed, the share that beat on EPS and on revenue, how many are still to come, and the largest
   reports still to come and already reported. Click a day (or a company) to open it in Earnings by Day.
 * **Earnings by Day** — every company reporting on the day picked (date field, ◀ ▶ weekdays, Today): symbol, company,
@@ -392,8 +393,8 @@ are sent there the same way, unless the security master already has one for that
 The register's bar has **Hide entries before** a date (or **Recent** ▸ the last 7, 30 or 90 days, this month, this
 year) and **Rows**: how many of the register's rows show at once (6–40, 22 at first; the rest scroll inside it). Fewer
 rows leave room for the rest of the page, so it needs less scrolling. The same **Rows** control sits above the Credit Card
-Accounts register (22 at first) and its Statements (3–30, 12), the Expense Accounts register (8–40, 26), and the
-Target Accounts and Secure Accounts tables (22); each is remembered on its own. Rows are as tall as Settings ▸ Text ▸ Registers
+Accounts register and its Statements, the Expense Accounts register, and the Target Accounts and Secure Accounts
+tables: one choice for all of them, remembered — changing it in one table changes every one. Rows are as tall as Settings ▸ Text ▸ Registers
 and tables makes them. Its columns: Line, Date, Num, Target, Payment, Deposit, ✓ (cleared) and Balance; an entry's
 category and memo are in *Edit Entry…* (double-click) and in *Copy Entry*. The **New entry** line above it takes
 the date, the kind (or check number), the target and the amount; picking a known target fills in its usual amount and
@@ -450,6 +451,13 @@ sources**.
   item each per account), never in the security master: other Macs, and others using the registers, don't see them,
   and they don't move to another Mac (the app can't use iCloud Keychain without a provisioning profile). Everything
   else is in the security master with the account (V033), shared like the registers.
+
+### Links on sidebar pages
+
+Right-click a page in the sidebar for *Add Link to … / Edit Link on …*, *Open Link* and *Remove Link*: the same Link
+dialog as for securities and target accounts (Text to display, Address — a web page, an email address or a page in
+MxNoteONE — and formatted Hover text). Kept on this Mac with MxAcctMGR's preferences, one per page: the pointer resting
+on the page's row shows its hover card, and the row's link mark opens it; a click on the row still opens the page.
 
 ### Links on target accounts
 
@@ -519,7 +527,7 @@ user ID that is a token (an API key's id) as its service key, never its user nam
   as you move the weights and returns.
 * **Active vs Passive** — what fees compound to over 30 years (fee and pre-fee alpha sliders) and a comparison table.
 
-## Securities (Library ▸ Securities)
+## SRM Table (Data Library ▸ SRM Table)
 
 MxDataHUB's Securities page in MxAcctMGR: the security master's securities, searched by name or any identifier
 (ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI — current or past), filtered by **Type**, **In** (a benchmark's members
@@ -564,7 +572,7 @@ weights throughout and says *review*.
 
 ## Engines — built-in and Layer 3 services
 
-The built-in engines follow the Layer 3 contracts (`../Services/contracts/README.md`) so their answers match:
+The toolbar's Engine starts at *Layer 3 services*; *Built-in (Swift)* runs without them. The built-in engines follow the Layer 3 contracts (`../Services/contracts/README.md`) so their answers match:
 
 | Step | Built-in (`Optimizer.swift`, `Attribution.swift`) | Layer 3 service (Engine ▸ Layer 3 services) |
 | --- | --- | --- |

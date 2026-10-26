@@ -66,7 +66,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .vix: "CBOE Volatility Index (VIX)"
         case .compute: "Compute Hyperscalers Tracking"
         case .reportWalkthrough: "Report Walkthrough"
-        case .securities: "Securities"
+        case .securities: "SRM Table"
         case .samples: "Sample Portfolios"
         case .services: "Layer 3 Services"
         }
@@ -201,7 +201,8 @@ final class PortStore {
             clearResults()
         }
     }
-    var engine: EngineChoice = .builtIn {
+    /// The Layer 3 services by default; Built-in when they aren't running (the toolbar's Engine).
+    var engine: EngineChoice = .services {
         didSet { clearResults() }
     }
 

@@ -621,7 +621,7 @@ struct EarningsCalendarView: View {
             i < 5 ? GridItem(.flexible(minimum: 110), spacing: 5, alignment: .top) : GridItem(.flexible(minimum: 56, maximum: 90), spacing: 5, alignment: .top)
         }
         return LazyVGrid(columns: columns, spacing: 5) {
-            ForEach(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], id: \.self) { d in
+            ForEach(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], id: \.self) { d in
                 Text(d).font(.caption.weight(.semibold)).foregroundStyle(.secondary).frame(maxWidth: .infinity)
             }
             ForEach(grid, id: \.self) { d in

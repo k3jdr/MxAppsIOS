@@ -28,6 +28,8 @@ struct ContentView: View {
                   systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                // Right-click for the page's link and its hover text (PageLinks.swift).
+                .pageLink(screen, title: sidebarTitle(screen))
                 .quickHelpArea(PortHelp.about(screen))
                 .tag(screen)
         }
@@ -79,6 +81,9 @@ struct ContentView: View {
         .task { start() }
         // Each place visited joins the history (Back and Forward, Navigation.swift).
         .onChange(of: store.place, initial: true) { store.recordPlace() }
+        .sheet(item: Binding(get: { PageLinks.shared.editing }, set: { PageLinks.shared.editing = $0 })) { s in
+            PageLinkSheet(screen: s, title: store.title(s, full: false))
+        }
         // Settings ▸ Guidance ▸ Minimal closes a lesson-only page that is open.
         .onChange(of: PortSettings.shared.guidance) {
             if !PortSettings.shared.shows(store.screen) { store.go(.myPortfolio) }

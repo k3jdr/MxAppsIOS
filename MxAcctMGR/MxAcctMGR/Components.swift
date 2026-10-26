@@ -104,9 +104,12 @@ extension View {
     }
 }
 
-/// How many of a table's rows show at once — the rest scroll inside it — kept per table (an @AppStorage key): fewer
-/// leave room for the rest of the page, so it needs less scrolling.
+/// How many of a table's rows show at once — the rest scroll inside it: fewer leave room for the rest of the page, so
+/// it needs less scrolling. One choice for every table (the registers, statements, Target and Secure Accounts), kept
+/// under `key`: changing it in one changes them all.
 struct RowsStepper: View {
+    static let key = "tableRows"
+    static let standard = 22
     @Binding var rows: Int
     var range: ClosedRange<Int> = 6...40
     var what = "table"
@@ -115,7 +118,7 @@ struct RowsStepper: View {
         Stepper("Rows: \(rows)", value: $rows, in: range)
             .monospacedDigit()
             .fixedSize()
-            .help("How many of the \(what)'s rows show at once; the rest scroll inside it. Fewer leave room for the rest of the page.")
+            .help("How many of the \(what)'s rows show at once — the same for every table; the rest scroll inside it. Fewer leave room for the rest of the page.")
     }
 }
 

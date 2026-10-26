@@ -181,8 +181,7 @@ struct CardsView: View {
     /// The statement period the register shows (its closing date), or all of it.
     @AppStorage("cardStatementShown") private var period = ""
     /// How many of the register's and the statements' rows show at once.
-    @AppStorage("cardRegisterRows") private var registerRows = 22
-    @AppStorage("cardStatementRows") private var statementRows = 12
+    @AppStorage(RowsStepper.key) private var registerRows = RowsStepper.standard
     @State private var accounts: [CardAccount] = []
     @State private var register: CardRegister?
     @State private var book: ExpenseBook?
@@ -445,7 +444,7 @@ struct CardsView: View {
             } else {
                 HStack {
                     Spacer()
-                    RowsStepper(rows: $statementRows, range: 3...30, what: "statements table")
+                    RowsStepper(rows: $registerRows, what: "statements table")
                 }
                 Table(r.statements) {
                     TableColumn("Closed") { s in Text(shortDay(s.closingDate)).monospacedDigit().help("\(shortDay(s.periodStart)) – \(shortDay(s.closingDate)), \(s.entries) entries") }.width(min: 70, ideal: 84)
@@ -475,7 +474,7 @@ struct CardsView: View {
                 } primaryAction: { ids in
                     if let s = r.statements.first(where: { ids.contains($0.id) }) { statement = s }
                 }
-                .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(r.statements.count, 3), statementRows)))
+                .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(r.statements.count, 3), registerRows)))
             }
         }
     }
