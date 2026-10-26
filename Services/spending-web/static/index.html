@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Spending Analysis</title>
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <h1>Spending Analysis</h1>
+      <p class="sub">The family's spending, explained: why it changed from last year and what the children's ages bring. A read-only view of MxAcctMGR — tell John what would make it better with <b>Feedback</b>.</p>
+    </div>
+    <button class="primary big" data-action="feedback" title="Send John a note about this page">💬 Feedback</button>
+  </div>
+</header>
+<main id="app">
+  <div class="loading">Reading the registers…</div>
+</main>
+
+<dialog id="note">
+  <form method="dialog" id="note-form">
+    <h2>Send John a note</h2>
+    <p class="hint" id="note-about"></p>
+    <label class="field">Your name
+      <input name="author" autocomplete="name" required placeholder="So John knows who it's from">
+    </label>
+    <fieldset class="kinds">
+      <legend>What is it about?</legend>
+      <label><input type="radio" name="kind" value="layout"> How the page looks</label>
+      <label><input type="radio" name="kind" value="number"> A number looks wrong</label>
+      <label><input type="radio" name="kind" value="rule"> A category or rule</label>
+      <label><input type="radio" name="kind" value="entry"> One purchase</label>
+      <label><input type="radio" name="kind" value="idea" checked> An idea</label>
+      <label><input type="radio" name="kind" value="question"> A question</label>
+    </fieldset>
+    <div class="suggest" id="note-suggest">
+      <label class="field">It should be in
+        <select name="category"><option value="">— no change —</option></select>
+      </label>
+      <label class="field">because it's mostly
+        <select name="driver"><option value="">— no change —</option></select>
+      </label>
+    </div>
+    <label class="field">Your note
+      <textarea name="message" rows="5" required placeholder="What would you change, what's confusing, what would you like to see?"></textarea>
+    </label>
+    <p class="error" id="note-error"></p>
+    <div class="buttons">
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button class="primary" id="note-send" value="send">Send</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" role="status"></div>
+</body>
+</html>

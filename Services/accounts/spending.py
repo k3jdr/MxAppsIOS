@@ -27,6 +27,10 @@
                                                    newest data and last change
     PUT    /spending/sources/<source>/<code>       include or leave out a register {included, by} (source bank, card
                                                    or ledger); answers with the sources
+    GET    /spending/feedback?author=&status=      notes on the page from its read-only web page (V039), newest first
+    POST   /spending/feedback                      add one {author, kind, tab, section, category, entrySource, entryId,
+                                                   suggestion, message, context}
+    PUT    /spending/feedback/<id>                 answer one {status, reply, by}
 
 Every setup change answers with the setup. Drivers: inflation, family_growth, new_activity, lifecycle, preference,
 one_time.
@@ -467,8 +471,11 @@ LOADER = {"bank": ("pnc-bank", "pnc_bank"), "card": ("card-downloads", "card_dow
 
 def sources(conn, q):
     start, end, prior_start, prior_end = _window(q)
-    from srmlib.loaders import card_downloads, pnc_bank   # SRM's folder is on sys.path (accounts_service.SRM)
-    folders = {"bank": _drop_folders(pnc_bank), "card": _drop_folders(card_downloads)}
+    try:
+        from srmlib.loaders import card_downloads, pnc_bank   # SRM's folder is on sys.path (accounts_service.SRM)
+        folders = {"bank": _drop_folders(pnc_bank), "card": _drop_folders(card_downloads)}
+    except ImportError:
+        folders = {}    # a machine without the loaders (the web page's server): no drop folders to list
     choice = {(r["source"], r["register"]): r for r in fetch(conn, """
         SELECT source, register, included, updated_by AS "updatedBy", updated_at AS "updatedAt" FROM srm.spending_source""")}
     spent = {(r["source"], r["register"]): r for r in fetch(conn, """
@@ -490,6 +497,7 @@ def sources(conn, q):
                 linesTable=lines_table, registerTable=register_table,
                 loader=LOADER.get(kind, (None,))[0], dropFolders=folders.get(kind, []),
                 downloads=_downloads(folders[kind], r["code"], r["last4"]) if kind in folders else [],
+                foldersListed=kind in folders,
                 lastImport=_run(conn, load_id=r["load_id"]) if r["load_id"] else None,
                 spendingFirst=s.get("first"), spendingLast=s.get("last"),
                 entriesNow=s.get("entriesNow", 0), spentNow=s.get("spentNow", 0),
@@ -518,6 +526,66 @@ def set_source(conn, source, code, body, q):
     return sources(conn, q)
 
 
+# ------------------------------------------------------------------------------------------------------------ feedback
+
+FEEDBACK_KINDS = ("layout", "number", "rule", "entry", "idea", "question")
+FEEDBACK_STATUSES = ("new", "seen", "planned", "done", "declined")
+
+
+def feedback(conn, q=None):
+    q = q or {}
+    where, params = [], []
+    if q.get("author"):
+        where.append("lower(author) = lower(%s)")
+        params.append(q["author"])
+    if q.get("status"):
+        where.append("status = %s")
+        params.append(q["status"])
+    rows = fetch(conn, """
+        SELECT feedback_id AS id, created_at AS "createdAt", author, kind, tab, section, category_code AS category,
+               entry_source AS "entrySource", entry_id AS "entryId", suggestion, message, context, status, reply,
+               replied_by AS "repliedBy", replied_at AS "repliedAt"
+          FROM srm.spending_feedback""" + (" WHERE " + " AND ".join(where) if where else "") + """
+         ORDER BY created_at DESC LIMIT 500""", params)
+    return {"feedback": rows}
+
+
+def add_feedback(conn, body, client=None):
+    author, message = _text(body, "author", 80), _text(body, "message", 4000)
+    if not author:
+        raise ValueError("author is required")
+    if not message:
+        raise ValueError("message is required")
+    kind = body.get("kind") or "idea"
+    if kind not in FEEDBACK_KINDS:
+        raise ValueError("kind must be one of " + ", ".join(FEEDBACK_KINDS))
+    source = body.get("entrySource") or None
+    if source and source not in SOURCES:
+        raise ValueError("entrySource must be bank, card or ledger")
+    context = body.get("context") if isinstance(body.get("context"), dict) else None
+    fetch(conn, """INSERT INTO srm.spending_feedback (author, kind, tab, section, category_code, entry_source, entry_id,
+                          suggestion, message, context, client)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)""",
+          (author, kind, _text(body, "tab", 40), _text(body, "section", 120), _category(conn, body),
+           source, _opt_int(body, "entryId") if source else None, _text(body, "suggestion", 400), message,
+           json.dumps(context, default=str) if context else None, (client or "")[:60] or None))
+    conn.commit()
+    return feedback(conn, {"author": author})
+
+
+def answer_feedback(conn, fid, body):
+    status = body.get("status") or "seen"
+    if status not in FEEDBACK_STATUSES:
+        raise ValueError("status must be one of " + ", ".join(FEEDBACK_STATUSES))
+    if not fetch(conn, """UPDATE srm.spending_feedback SET status = %s, reply = %s, replied_by = %s,
+                                 replied_at = CASE WHEN %s IS NULL THEN replied_at ELSE now() END
+                           WHERE feedback_id = %s RETURNING feedback_id""",
+                 (status, _text(body, "reply", 4000), _by(body), _text(body, "reply", 4000), int(fid))):
+        raise LookupError("no feedback %s" % fid)
+    conn.commit()
+    return feedback(conn)
+
+
 def route(conn, method, parts, body, q):
     """The spending endpoints' answer, or None when the path isn't one of them."""
     if parts == ["spending", "setup"] and method == "GET":
@@ -528,6 +596,13 @@ def route(conn, method, parts, body, q):
         return sources(conn, q)
     if len(parts) == 4 and parts[1] == "sources" and method == "PUT":
         return set_source(conn, parts[2], parts[3], body, q)
+    if parts == ["spending", "feedback"]:
+        if method == "GET":
+            return feedback(conn, q)
+        if method == "POST":
+            return add_feedback(conn, body)
+    if len(parts) == 3 and parts[1] == "feedback" and method == "PUT":
+        return answer_feedback(conn, parts[2], body)
     if parts == ["spending", "rules"] and method == "PUT":
         return save_rule(conn, body)
     if len(parts) == 3 and parts[1] == "members":

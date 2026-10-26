@@ -1,0 +1,6 @@
+{
+  "port": 8780,
+  "key": "run: python spending_web.py --new-key",
+  "allow": ["192.168.0.0/24", "127.0.0.1/32", "::1/128", "fe80::/10"],
+  "database": {"host": "127.0.0.1", "port": 5432, "dbname": "srm", "user": "spending_web", "password": "the spending_web role's password"}
+}

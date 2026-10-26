@@ -427,6 +427,43 @@ struct SpendingSources: Decodable {
     func run(_ loader: String) -> Run? { loaders.first { $0.loader == loader } }
 }
 
+/// A note on the page from its read-only web page on the home network (Services/spending-web, V039), and the answer.
+struct SpendingFeedback: Decodable, Identifiable, Hashable {
+    /// The page's state when the note was sent, and the entry it is about.
+    struct Context: Decodable, Hashable {
+        var year: Int?
+        var yearToDate: Bool?
+        var date: String?
+        var payee: String?
+        var amount: Double?
+        var category: String?
+        var driver: String?
+    }
+    var id: Int
+    var createdAt: String
+    var author: String
+    var kind: String
+    var tab: String?
+    var section: String?
+    var category: String?
+    var entrySource: String?
+    var entryId: Int?
+    var suggestion: String?
+    var message: String
+    var context: Context?
+    var status: String
+    var reply: String?
+    var repliedBy: String?
+    var repliedAt: String?
+
+    static let statuses = [("new", "New"), ("seen", "Seen"), ("planned", "Planned"), ("done", "Done"), ("declined", "Not planned")]
+    var kindTitle: String {
+        ["layout": "How the page looks", "number": "A number looks wrong", "rule": "A category or rule", "entry": "One purchase",
+         "idea": "An idea", "question": "A question"][kind] ?? kind
+    }
+    var open: Bool { status == "new" || status == "seen" || status == "planned" }
+}
+
 /// How old a date or time is, for the freshness of the analysis's data.
 enum Freshness {
     /// Registers older than this (days) are flagged: a download is due.
@@ -510,6 +547,13 @@ nonisolated enum SpendingClient {
     static func include(_ s: SpendingSources.Source, _ included: Bool, window: SpendingSources) async throws -> SpendingSources {
         try await AccountsClient.request("PUT", "/spending/sources/\(s.source)/\(s.code)?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          body: signed(["included": included]), as: SpendingSources.self)
+    }
+    private struct Notes: Decodable { var feedback: [SpendingFeedback] }
+    static func feedback() async throws -> [SpendingFeedback] {
+        try await AccountsClient.request("GET", "/spending/feedback", as: Notes.self).feedback
+    }
+    static func answer(_ id: Int, status: String, reply: String) async throws -> [SpendingFeedback] {
+        try await AccountsClient.request("PUT", "/spending/feedback/\(id)", body: signed(["status": status, "reply": reply]), as: Notes.self).feedback
     }
     static func tag(_ entry: SpendingEntry, _ body: [String: Any]) async throws -> SpendingEntry? {
         try await AccountsClient.request("PUT", "/spending/tags/\(entry.source)/\(entry.entryId)", body: signed(body), as: TagAnswer.self).entry

@@ -613,6 +613,15 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
     rows, its newest data and its last change.
   - **Last Loads:** the latest `pnc-bank`, `card-downloads` and `fred-yields` runs.
+* **The family's web page and Feedback.** The same page, read-only, is on the home network for the rest of the
+  family (`Services/spending-web` on K3JDR-DSKTOP-11; see its README for the link and how it is kept private). Notes
+  sent from it (💬 on a section, ⚑ on a purchase, *Suggest a change* on a rule) come to the **Feedback** tab. The tab
+  name counts the new ones. Each note shows:
+  - who sent it and when, what it is about and where on the page it came from;
+  - for a purchase, its date, payee, amount and category at the time, and the change she suggests.
+
+  Set its status (New, Seen, Planned, Done, Not planned) and a reply, then Save: the page shows both under her
+  *My Notes*. *Tag Entry…* tags the purchase a note is about, and *Deep Dive* opens its category.
 * **Layout.** The tabs are a row of buttons, each as wide as its name. When the window is too narrow for the page, the page scrolls sideways from its left edge instead of growing under the sidebar (`StepPage(scrollsHorizontally:)`, available to any page). The year controls and the Entries filters wrap to a second line when narrow.
 * **Periods.** A year against the year before, year to date by default (January 1 to today's date in both).
   *Only registers covering both years* leaves out a register whose entries start after the earlier year does, so
@@ -738,5 +747,5 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Entries, Rules, Family & Lifecycle and Sources tabs, its sheets, and the charts' Deep Dive menu |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

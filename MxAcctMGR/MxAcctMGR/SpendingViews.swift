@@ -21,6 +21,8 @@ struct SpendingAnalysisView: View {
     @State private var setup: SpendingSetup?
     @State private var data: SpendingAnalysisData?
     @State private var sources: SpendingSources?
+    /// Notes from the read-only web page (Feedback tab).
+    @State private var notes: [SpendingFeedback] = []
     @State private var problem: String?
     @State private var busy = false
 
@@ -39,7 +41,7 @@ struct SpendingAnalysisView: View {
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
-            SpendingTabBar(tabs: Self.tabs, selection: $tab)
+            SpendingTabBar(tabs: Self.tabs + [("feedback", newNotes > 0 ? "Feedback (\(newNotes))" : "Feedback")], selection: $tab)
             if let setup {
                 switch tab {
                 case "curve": SpendingCurveTab(setup: setup, data: data) { tab = "family" }
@@ -53,6 +55,9 @@ struct SpendingAnalysisView: View {
                 case "rules":
                     if let data { SpendingRulesTab(setup: setup, entries: shownEntries(data).filter { inCurrent($0, data) }) { applied($0) } }
                 case "family": SpendingFamilyTab(setup: setup, data: data) { applied($0) }
+                case "feedback":
+                    SpendingFeedbackTab(setup: setup, data: data, notes: notes, changed: { notes = $0 }, entryChanged: { replace($0) },
+                                        openDeepDive: { openDeepDive($0) })
                 case "sources":
                     if let sources {
                         SpendingSourcesTab(sources: sources, data: data, yearToDate: yearToDate, fullCoverage: fullCoverage) { updated in
@@ -127,6 +132,8 @@ struct SpendingAnalysisView: View {
             async let o = SpendingClient.sources(start: p.start, end: p.end, priorStart: p.priorStart, priorEnd: p.priorEnd)
             (setup, data, sources) = try await (s, d, o)
             problem = nil
+            // An accounts service from before V039 has no feedback: the rest of the page works without it.
+            notes = (try? await SpendingClient.feedback()) ?? notes
         } catch {
             problem = describe(error)
         }
@@ -180,6 +187,8 @@ struct SpendingAnalysisView: View {
         guard let i = data?.entries.firstIndex(where: { $0.id == e.id }) else { return }
         data?.entries[i] = e
     }
+
+    private var newNotes: Int { notes.filter { $0.status == "new" }.count }
 
     /// Opens the Deep Dive tab on a category, by its code or by its name as the charts show it.
     private func openDeepDive(_ nameOrCode: String) {
@@ -1788,5 +1797,112 @@ private struct SpendingDeepDiveTab: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Feedback
+
+/// Notes from the read-only web page on the home network (Services/spending-web): set each one's status and reply —
+/// the page shows them to whoever sent it — and act on it: tag the entry it is about, or open its category.
+private struct SpendingFeedbackTab: View {
+    var setup: SpendingSetup
+    var data: SpendingAnalysisData?
+    var notes: [SpendingFeedback]
+    var changed: ([SpendingFeedback]) -> Void
+    var entryChanged: (SpendingEntry) -> Void
+    var openDeepDive: (String) -> Void
+    @AppStorage("spendingFeedbackShow") private var show = "open"
+    @State private var tagging: SpendingEntry?
+
+    private var shown: [SpendingFeedback] {
+        notes.filter { show == "all" || (show == "open" ? $0.open : $0.status == show) }
+    }
+
+    var body: some View {
+        Box(title: "Feedback from the Web Page", symbol: "bubble.left.and.text.bubble.right", help: "Notes sent from Spending Analysis's read-only web page on the home network (Services/spending-web on K3JDR-DSKTOP-11): about the layout, a number, a rule or category, one purchase, an idea or a question, each with where on the page it was made. Set a status and reply: the page shows both next to the note, under My Notes. A note about one purchase can tag it here.") {
+            HStack {
+                Picker("", selection: $show) {
+                    Text("Open").tag("open"); Text("New").tag("new"); Text("Done").tag("done"); Text("Not planned").tag("declined"); Text("All").tag("all")
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                Spacer()
+                Text("\(notes.count) note\(notes.count == 1 ? "" : "s"), \(notes.filter { $0.status == "new" }.count) new").foregroundStyle(.secondary)
+            }
+            if shown.isEmpty {
+                Text(notes.isEmpty ? "No notes yet. They come from the web page's 💬 Note and ⚑ buttons." : "No notes here.")
+                    .foregroundStyle(.secondary).padding(.vertical, 6)
+            }
+            ForEach(Array(shown.enumerated()), id: \.element.id) { i, n in
+                if i > 0 { Divider() }
+                FeedbackCard(note: n, setup: setup, entry: entry(for: n),
+                             save: { status, reply in
+                                 do { changed(try await SpendingClient.answer(n.id, status: status, reply: reply)); return nil } catch { return describe(error) }
+                             },
+                             tag: { tagging = entry(for: n) }, dive: openDeepDive)
+                    .id("\(n.id)-\(n.status)-\(n.reply ?? "")")
+            }
+        }
+        .sheet(item: $tagging) { e in
+            SpendingTagSheet(setup: setup, entries: [e]) { body in
+                do { if let updated = try await SpendingClient.tag(e, body) { entryChanged(updated) }; return nil } catch { return describe(error) }
+            }
+        }
+    }
+
+    private func entry(for n: SpendingFeedback) -> SpendingEntry? {
+        guard let source = n.entrySource, let id = n.entryId else { return nil }
+        return data?.entries.first { $0.source == source && $0.entryId == id }
+    }
+}
+
+private struct FeedbackCard: View {
+    var note: SpendingFeedback
+    var setup: SpendingSetup
+    /// The entry the note is about, when it is in the periods loaded.
+    var entry: SpendingEntry?
+    var save: (String, String) async -> String?
+    var tag: () -> Void
+    var dive: (String) -> Void
+    @State private var status = ""
+    @State private var reply = ""
+    @State private var saving = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(SpendingFeedback.statuses.first { $0.0 == note.status }?.1 ?? note.status)
+                    .font(.caption.weight(.semibold)).padding(.horizontal, 7).padding(.vertical, 1)
+                    .background(note.status == "new" ? Color.accentColor.opacity(0.25) : Color.secondary.opacity(0.15), in: Capsule())
+                Text(note.author).fontWeight(.semibold)
+                Text(Freshness.when(note.createdAt)).foregroundStyle(.secondary)
+                Text(note.kindTitle).foregroundStyle(.secondary)
+                if let section = note.section { Text("· \(section)").foregroundStyle(.secondary).lineLimit(1) }
+                Spacer()
+            }
+            Text(note.message).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            if let c = note.context, c.payee != nil || c.amount != nil {
+                Text("Entry: \(shortDay(c.date)) \(c.payee ?? "") \(c.amount.map(money2) ?? "") — then \(setup.category(c.category)?.name ?? "Not assigned"), \(SpendingDriver.title(c.driver))")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            if let s = note.suggestion { Text("Suggests: \(s)").font(.callout) }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Picker("Status", selection: $status) {
+                    ForEach(SpendingFeedback.statuses, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                .fixedSize()
+                TextField("Reply (shown to \(note.author) on the web page)", text: $reply, axis: .vertical)
+                    .textFieldStyle(.roundedBorder).lineLimit(1...4)
+                Button("Save") { Task { saving = true; error = await save(status, reply); saving = false } }
+                    .disabled(saving || (status == note.status && reply == (note.reply ?? "")))
+                if entry != nil { Button("Tag Entry…") { tag() }.help("Tag the purchase this note is about") }
+                if let c = note.category { Button("Deep Dive") { dive(c) }.help("Open \(setup.category(c)?.name ?? c) on the Deep Dive tab") }
+            }
+            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            if let by = note.repliedBy, let at = note.repliedAt {
+                Text("Answered by \(by), \(Freshness.when(at))").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { status = note.status; reply = note.reply ?? "" }
     }
 }
