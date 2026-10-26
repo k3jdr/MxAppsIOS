@@ -55,6 +55,8 @@ struct SpendingRule: Decodable, Identifiable, Hashable {
     var payee: String?
     /// Statement text (V042): entries whose payee, statement name or description contains it, ignoring case.
     var pattern: String?
+    /// A statement text rule's link (V043), shown on its text as target accounts' links are (TargetAccountLinks.swift).
+    var link: TargetLink?
     var category: String?
     var driver: String?
     var memberId: Int?
@@ -90,7 +92,18 @@ struct LifecycleTrigger: Decodable, Identifiable, Hashable {
 }
 
 struct SpendingSetup: Decodable {
-    struct Named: Decodable, Identifiable, Hashable { var id: Int; var name: String; var expenseAccountId: Int? }
+    struct Named: Decodable, Identifiable, Hashable {
+        var id: Int
+        var name: String
+        var expenseAccountId: Int?
+        // A target account's details and link (srm.payee_link, V032), for the Rules tab's names and hover text.
+        var institution: String?
+        var last4: String?
+        var logonUrl: String?
+        var nickname: String?
+        var notes: String?
+        var link: TargetLink?
+    }
     struct Series: Decodable, Identifiable, Hashable { var code: String; var name: String; var id: String { code } }
     var members: [HouseholdMember]
     var categories: [SpendingCategory]
@@ -673,6 +686,13 @@ nonisolated enum SpendingClient {
     }
     static func saveRule(_ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/rules", body: signed(body), as: SpendingSetup.self)
+    }
+    /// A statement text rule's link (V043), saved or with nil taken off, as BankClient.savePayeeLink does a target's.
+    static func saveRuleLink(_ id: Int, _ link: SecurityLink?) async throws -> SpendingSetup {
+        guard let link else { return try await AccountsClient.request("DELETE", "/spending/rules/\(id)/link", as: SpendingSetup.self) }
+        let body: [String: Any] = ["address": link.address, "text": link.text ?? "", "hoverText": link.tipPlain ?? "",
+                                   "hoverRtf": link.tip.flatMap { String(data: $0, encoding: .utf8) } ?? "", "title": link.title ?? ""]
+        return try await AccountsClient.request("PUT", "/spending/rules/\(id)/link", body: signed(body), as: SpendingSetup.self)
     }
     static func saveTrigger(_ id: Int, _ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/triggers/\(id)", body: signed(body), as: SpendingSetup.self)

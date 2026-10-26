@@ -578,7 +578,12 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   target account (the check register, Chase) have one — Discover's charges and the expense-ledger lines carry only the
   statement's words — so *Statement Text Rules* covers those: *Add Statement Text Rule…* (the sheet shows what the
   text matches as you type), ✎ to change a rule's text, ✕ to remove it, and *Largest statement names no rule reaches*
-  with *Add Rule…* for each. Every row shows both years' spending. A family member can be picked once the family is
+  with *Add Rule…* for each. Every row shows both years' spending. Target account and statement text names carry
+  links as Banking's target accounts do (the Link dialog: Text to display, Address, Hover text): right-click a name
+  for *Add Link…* / *Edit Link…*, *Open Link*, and its rule; a linked name opens on a click and shows its hover card,
+  and an unlinked one shows its details (bank, last four digits, category, notes, what its rule says) or what the text
+  matches. A target account's link is the one Banking shows (`srm.payee_link`); a statement text's is kept with its
+  rule (`srm.spending_rule_link`, V043). A family member can be picked once the family is
   set up on *Family & Lifecycle*.
 * **Overview (the attribution).** For each category, `change = inflation + usage + lifecycle + behavior + one-time`. Inflation is
   the earlier year's spending times the category's CPI change, plus whatever spending tagged Inflation grew beyond it.

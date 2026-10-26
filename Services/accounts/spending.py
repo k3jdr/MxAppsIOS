@@ -10,6 +10,9 @@
     PUT    /spending/rules                         an expense account's, target account's or statement text's rule
                                                    {expenseAccountId | payeeId | pattern, id (to change a statement
                                                    text), category, driver, memberId, notes, by}; nothing set removes it
+    PUT    /spending/rules/<id>/link               a statement text rule's link (V043) {address, text, hoverText,
+                                                   hoverRtf, title, by}, as a target account's (PUT /payees/<id>/link)
+    DELETE /spending/rules/<id>/link               take it off
     PUT    /spending/triggers/<id>                 a lifecycle trigger, created (id 0) or changed {name, category, kind,
                                                    ageFrom, ageTo, everyYears, annualCost, notes, active, by}
     DELETE /spending/triggers/<id>                 take one off
@@ -55,7 +58,7 @@ import datetime as dt
 import json
 import os
 
-from bank import fetch, _date, _num, Conflict
+from bank import fetch, nest_link, _date, _num, Conflict
 
 DRIVERS = ("inflation", "family_growth", "new_activity", "lifecycle", "preference", "one_time")
 KINDS = ("recurring", "replacement", "peak", "transition")
@@ -98,7 +101,10 @@ def _driver(body):
 
 # ------------------------------------------------------------------------------------------------------------ setup
 
-def setup(conn):
+def setup(conn, details=False):
+    """The family, categories, rules, triggers and what rules can be set on. With details (MxAcctMGR's, not the
+    family page's login): each target account's bank, last four digits, logon page, nickname, notes and link
+    (srm.payee_link, V032), and each statement text rule's link (V043)."""
     members = fetch(conn, """
         SELECT member_id AS id, name, relation, birth_year AS "birthYear", birth_month AS "birthMonth", notes, active,
                version FROM srm.household_member ORDER BY relation DESC, birth_year, name""")
@@ -108,24 +114,40 @@ def setup(conn):
                (SELECT max(v.obs_date) FROM srm.market_series_value v WHERE v.series_code = c.cpi_series) AS "cpiThrough"
           FROM srm.spending_category c LEFT JOIN srm.market_series s ON s.series_code = c.cpi_series
          ORDER BY c.sort_order""")
+    link_columns, link_join = ("", "")
+    if details:
+        link_columns = ', rl.address AS "linkAddress", rl.display_text AS "linkText", rl.hover_rtf AS "linkTip", ' \
+                       'rl.link_title AS "linkTitle"'
+        link_join = " LEFT JOIN srm.spending_rule_link rl USING (rule_id)"
     rules = fetch(conn, """
         SELECT r.rule_id AS id, r.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount",
                r.payee_id AS "payeeId", p.name AS payee, r.pattern, r.category_code AS category, r.driver,
-               r.member_id AS "memberId", r.notes, r.updated_by AS "updatedBy", r.updated_at AS "updatedAt"
+               r.member_id AS "memberId", r.notes, r.updated_by AS "updatedBy", r.updated_at AS "updatedAt"%s
           FROM srm.spending_rule r
           LEFT JOIN srm.expense_account e USING (expense_account_id)
-          LEFT JOIN srm.payee p USING (payee_id)
+          LEFT JOIN srm.payee p USING (payee_id)%s
          ORDER BY r.payee_id IS NOT NULL, r.pattern IS NOT NULL, coalesce(e.sort_order, 0),
-                  lower(coalesce(e.name, p.name, r.pattern))""")
+                  lower(coalesce(e.name, p.name, r.pattern))""" % (link_columns, link_join))
+    if details:
+        rules = [nest_link(r, "link") for r in rules]
     triggers = fetch(conn, """
         SELECT trigger_id AS id, name, category_code AS category, kind, age_from AS "ageFrom", age_to AS "ageTo",
                every_years AS "everyYears", annual_cost AS "annualCost", notes, active
           FROM srm.lifecycle_trigger ORDER BY sort_order, age_from, name""")
     accounts = fetch(conn, """
         SELECT expense_account_id AS id, name FROM srm.expense_account WHERE kind = 'expense' ORDER BY sort_order, name""")
-    payees = fetch(conn, """
-        SELECT payee_id AS id, name, expense_account_id AS "expenseAccountId" FROM srm.payee
-         WHERE status <> 'closed' ORDER BY lower(name)""")
+    if details:
+        payees = [nest_link(p, "link") for p in fetch(conn, """
+            SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.institution,
+                   p.account_last4 AS last4, p.logon_url AS "logonUrl", p.nickname, p.notes,
+                   pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip",
+                   pl.link_title AS "linkTitle"
+              FROM srm.payee p LEFT JOIN srm.payee_link pl USING (payee_id)
+             WHERE p.status <> 'closed' ORDER BY lower(p.name)""")]
+    else:
+        payees = fetch(conn, """
+            SELECT payee_id AS id, name, expense_account_id AS "expenseAccountId" FROM srm.payee
+             WHERE status <> 'closed' ORDER BY lower(name)""")
     series = fetch(conn, """
         SELECT series_code AS code, name FROM srm.market_series WHERE family = 'INFLATION' ORDER BY sort_order""")
     return {"members": members, "categories": categories, "rules": rules, "triggers": triggers,
@@ -163,13 +185,13 @@ def save_member(conn, mid, body):
                               notes = %s, active = %s, updated_by = %s, version = version + 1, updated_at = now()
                         WHERE member_id = %s""", values + (mid,))
     conn.commit()
-    return setup(conn)
+    return setup(conn, details=True)
 
 
 def delete_member(conn, mid):
     fetch(conn, "DELETE FROM srm.household_member WHERE member_id = %s", (int(mid),))
     conn.commit()
-    return setup(conn)
+    return setup(conn, details=True)
 
 
 def save_category(conn, code, body):
@@ -185,7 +207,7 @@ def save_category(conn, code, body):
     fetch(conn, "UPDATE srm.spending_category SET cpi_series = %s, assumed_inflation = %s WHERE code = %s",
           (series, rate, code))
     conn.commit()
-    return setup(conn)
+    return setup(conn, details=True)
 
 
 def save_rule(conn, body):
@@ -208,7 +230,7 @@ def save_rule(conn, body):
                               updated_by = excluded.updated_by, updated_at = now()""" % (key, key),
               (value, category, driver, member, notes, _by(body)))
     conn.commit()
-    return setup(conn)
+    return setup(conn, details=True)
 
 
 def _save_text_rule(conn, body, pattern):
@@ -239,7 +261,36 @@ def _save_text_rule(conn, body, pattern):
         fetch(conn, """INSERT INTO srm.spending_rule (pattern, category_code, driver, member_id, notes, updated_by)
                        VALUES (%s, %s, %s, %s, %s, %s)""", (pattern, category, driver, member, notes, _by(body)))
     conn.commit()
-    return setup(conn)
+    return setup(conn, details=True)
+
+
+def save_rule_link(conn, rid, body):
+    """A statement text rule's link (srm.spending_rule_link, V043), made or changed, as a target account's is
+    (bank.save_payee_link); answers with the setup."""
+    address = (body.get("address") or "").strip()
+    if not address:
+        raise ValueError("the link needs an address")
+    blank = lambda k, n: (body.get(k) or "").strip()[:n] or None
+    rows = fetch(conn, """
+        INSERT INTO srm.spending_rule_link (rule_id, address, display_text, hover_text, hover_rtf, link_title, updated_at,
+                                            updated_by)
+        SELECT rule_id, %s, %s, %s, %s, %s, now(), %s FROM srm.spending_rule WHERE rule_id = %s AND pattern IS NOT NULL
+        ON CONFLICT (rule_id) DO UPDATE SET address = excluded.address, display_text = excluded.display_text,
+            hover_text = excluded.hover_text, hover_rtf = excluded.hover_rtf, link_title = excluded.link_title,
+            updated_at = now(), updated_by = excluded.updated_by
+        RETURNING rule_id""",
+                 (address[:2000], blank("text", 200), blank("hoverText", 4000), body.get("hoverRtf") or None,
+                  blank("title", 300), _by(body), int(rid)))
+    if not rows:
+        raise LookupError("no statement text rule %s" % rid)
+    conn.commit()
+    return setup(conn, details=True)
+
+
+def delete_rule_link(conn, rid):
+    fetch(conn, "DELETE FROM srm.spending_rule_link WHERE rule_id = %s", (int(rid),))
+    conn.commit()
+    return setup(conn, details=True)
 
 
 def save_trigger(conn, tid, body):
@@ -270,13 +321,13 @@ def save_trigger(conn, tid, body):
                                WHERE trigger_id = %s RETURNING trigger_id""", values + (tid,)):
             raise LookupError("no lifecycle trigger %s" % tid)
     conn.commit()
-    return setup(conn)
+    return setup(conn, details=True)
 
 
 def delete_trigger(conn, tid):
     fetch(conn, "DELETE FROM srm.lifecycle_trigger WHERE trigger_id = %s", (int(tid),))
     conn.commit()
-    return setup(conn)
+    return setup(conn, details=True)
 
 
 def save_tag(conn, source, entry_id, body):
@@ -980,7 +1031,7 @@ def undo_change(conn, fid, body):
 def route(conn, method, parts, body, q):
     """The spending endpoints' answer, or None when the path isn't one of them."""
     if parts == ["spending", "setup"] and method == "GET":
-        return setup(conn)
+        return setup(conn, details=True)
     if parts == ["spending", "analysis"] and method == "GET":
         return analysis(conn, q)
     if parts == ["spending", "sources"] and method == "GET":
@@ -1015,6 +1066,11 @@ def route(conn, method, parts, body, q):
         return tax(conn, {"year": body.get("year") or q.get("year")})
     if parts == ["spending", "rules"] and method == "PUT":
         return save_rule(conn, body)
+    if len(parts) == 4 and parts[1] == "rules" and parts[3] == "link":
+        if method == "PUT":
+            return save_rule_link(conn, parts[2], body)
+        if method == "DELETE":
+            return delete_rule_link(conn, parts[2])
     if len(parts) == 3 and parts[1] == "members":
         if method == "PUT":
             return save_member(conn, parts[2], body)

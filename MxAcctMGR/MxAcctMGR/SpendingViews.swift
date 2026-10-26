@@ -91,6 +91,8 @@ struct SpendingAnalysisView: View {
             }
         }
         .task { await reload() }
+        // A target account's link saved here (the Rules tab) or on Banking: the setup brings it.
+        .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .quickHelpArea(PortHelp.about(.spending))
     }
 
@@ -673,6 +675,13 @@ struct RuleTarget: Identifiable {
     var id: String { "\(expenseAccountId ?? -1)-\(payeeId ?? -1)-\(ruleId ?? -1)-\(pattern ?? "")" }
 }
 
+extension PayeeLinkTarget {
+    /// A target account on the Rules tab, for its link and the Link dialog.
+    init(_ p: SpendingSetup.Named) {
+        payeeId = p.id; name = p.name; last4 = p.last4; institution = p.institution; website = p.logonUrl; link = p.link?.link
+    }
+}
+
 private func null(_ v: Any?) -> Any { v ?? NSNull() }
 
 /// The category, driver and member pickers every rule and tag sheet shows.
@@ -877,6 +886,8 @@ private struct SpendingRulesTab: View {
     @State private var showAll = false
     @AppStorage("spendingOnlyRules") private var onlyRules = false
     @State private var editing: RuleTarget?
+    /// The statement text rule whose Link dialog is open.
+    @State private var linking: SpendingRule?
     @State private var problem: String?
 
     private var year: String { String(data.start.prefix(4)) }
@@ -886,6 +897,8 @@ private struct SpendingRulesTab: View {
     private struct Spent {
         var before = 0.0
         var now = 0.0
+        /// Entries in either period.
+        var count = 0
         var any: Bool { abs(before) >= 0.005 || abs(now) >= 0.005 }
     }
 
@@ -893,8 +906,8 @@ private struct SpendingRulesTab: View {
         var out: [K: Spent] = [:]
         for e in entries {
             guard let k = key(e) else { continue }
-            if e.date >= data.start && e.date <= data.end { out[k, default: Spent()].now += e.amount }
-            else if e.date >= data.priorStart && e.date <= data.priorEnd { out[k, default: Spent()].before += e.amount }
+            if e.date >= data.start && e.date <= data.end { out[k, default: Spent()].now += e.amount; out[k]!.count += 1 }
+            else if e.date >= data.priorStart && e.date <= data.priorEnd { out[k, default: Spent()].before += e.amount; out[k]!.count += 1 }
         }
         return out
     }
@@ -906,12 +919,18 @@ private struct SpendingRulesTab: View {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 header("Expense account", trailing: false)
                 ForEach(setup.expenseAccounts) { a in
-                    ruleRow(name: a.name, spent: byAccount[a.id] ?? Spent(), rule: setup.rule(expenseAccount: a.id),
+                    ruleRow(label: Text(a.name).lineLimit(1), spent: byAccount[a.id] ?? Spent(), rule: setup.rule(expenseAccount: a.id),
                             target: ["expenseAccountId": a.id], blank: "None")
                 }
             }
         }
         targetBox(spent { $0.payeeId })
+            .sheet(item: $linking) { r in
+                LinkSheet(subject: r.pattern ?? "", detail: "Statement text rule", initial: r.link?.link, words: r.pattern ?? "",
+                          whereKept: "Kept in the security master with the statement text rule: it shows on its text on Spending Analysis's Rules tab.") { link in
+                    await saveLink(link, for: r)
+                }
+            }
         textBox(spent { $0.rulePattern?.lowercased() })
             .sheet(item: $editing) { t in SpendingRuleSheet(setup: setup, target: t, entries: entries) { saved($0) } }
     }
@@ -931,7 +950,7 @@ private struct SpendingRulesTab: View {
             return sa.now != sb.now ? sa.now > sb.now : sa.before > sb.before
         }
         let ruled = payees.filter { setup.rule(payee: $0.id) != nil }.count
-        return Box(title: "Target Account Rules", symbol: "arrow.left.arrow.right.square", help: "Rules for single target accounts — a tutoring service as Education, Lifecycle Transition, for one child; a scout council as Activities — overriding their expense account's rule and any statement text rule. Listed: the target accounts with a rule first (✕ removes one), then those with spending in either year, most spent this year first. Pick a category, driver or member on a row to give it a rule; \"Account's\" leaves the expense account's rule in charge. Only entries linked to a target account have one: Discover's charges and expense-ledger lines don't, so they take Statement Text Rules.") {
+        return Box(title: "Target Account Rules", symbol: "arrow.left.arrow.right.square", help: "Rules for single target accounts — a tutoring service as Education, Lifecycle Transition, for one child; a scout council as Activities — overriding their expense account's rule and any statement text rule. Listed: the target accounts with a rule first (✕ removes one), then those with spending in either year, most spent this year first. Pick a category, driver or member on a row to give it a rule; \"Account's\" leaves the expense account's rule in charge. Only entries linked to a target account have one: Discover's charges and expense-ledger lines don't, so they take Statement Text Rules. A name with a link (made here or on Banking) opens it, and the pointer resting on it shows its hover card; on other names it shows the account's details. Right-click a name to add or edit its link or its rule.") {
             HStack {
                 TextField("Search target accounts", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 260)
                 Toggle("Only rules", isOn: $onlyRules).toggleStyle(.checkbox)
@@ -945,7 +964,8 @@ private struct SpendingRulesTab: View {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                     header("Target account", trailing: true)
                     ForEach(showAll ? payees : Array(payees.prefix(40))) { p in
-                        ruleRow(name: p.name, spent: byPayee[p.id] ?? Spent(), rule: setup.rule(payee: p.id), target: ["payeeId": p.id],
+                        let rule = setup.rule(payee: p.id)
+                        ruleRow(label: targetLabel(p, rule: rule), spent: byPayee[p.id] ?? Spent(), rule: rule, target: ["payeeId": p.id],
                                 blank: "Account's", trailing: true)
                     }
                 }
@@ -970,7 +990,7 @@ private struct SpendingRulesTab: View {
             else if e.date >= data.priorStart && e.date <= data.priorEnd { open[e.statementKey, default: Spent()].before += e.amount }
         }
         let names = open.sorted { $0.value.now + $0.value.before > $1.value.now + $1.value.before }.prefix(15)
-        return Box(title: "Statement Text Rules", symbol: "text.magnifyingglass", help: "Rules for a piece of statement text, for the entries with no target account: Discover's charges and expense-ledger lines carry only the statement's words. Every entry whose payee, statement name or description contains the text (ignoring case) takes the rule, unless its target account's rule or its own tag says otherwise; when several texts match, the longest wins. Listed: the rules, most spent this year first (✎ changes the text, ✕ removes the rule), and the largest statement names no rule reaches yet.") {
+        return Box(title: "Statement Text Rules", symbol: "text.magnifyingglass", help: "Rules for a piece of statement text, for the entries with no target account: Discover's charges and expense-ledger lines carry only the statement's words. Every entry whose payee, statement name or description contains the text (ignoring case) takes the rule, unless its target account's rule or its own tag says otherwise; when several texts match, the longest wins. Listed: the rules, most spent this year first (✎ changes the text, ✕ removes the rule), and the largest statement names no rule reaches yet. Right-click a text to add or edit its link (a web page, an email address or a page in MxNoteONE, with hover text of its own) or its rule; with a link, a click opens it and the pointer resting on it shows its hover card.") {
             HStack {
                 Button("Add Statement Text Rule…") { editing = RuleTarget(pattern: "", name: "") }
                 Spacer()
@@ -983,8 +1003,8 @@ private struct SpendingRulesTab: View {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                     header("Statement text", trailing: true)
                     ForEach(rules) { r in
-                        let text = r.pattern ?? ""
-                        ruleRow(name: text, spent: byText[text.lowercased()] ?? Spent(), rule: r, target: ["pattern": text, "id": r.id],
+                        let text = r.pattern ?? "", s = byText[text.lowercased()] ?? Spent()
+                        ruleRow(label: textLabel(r, spent: s), spent: s, rule: r, target: ["pattern": text, "id": r.id],
                                 blank: "Account's", trailing: true, edit: RuleTarget(pattern: text, ruleId: r.id, name: text))
                     }
                 }
@@ -1011,6 +1031,85 @@ private struct SpendingRulesTab: View {
         }
     }
 
+    // MARK: Names: links, hover text, right-click
+
+    /// A target account's name: its link when it has one (a click opens it, the pointer resting on it shows the hover
+    /// card), else its details on hover; right-click adds or edits the link and the rule.
+    private func targetLabel(_ p: SpendingSetup.Named, rule: SpendingRule?) -> some View {
+        let t = PayeeLinkTarget(p)
+        return Group {
+            if let link = t.link {
+                PayeeLinks.shared.words(t, link: link, testID: "rules-payee:\(p.id)")
+            } else {
+                Text(p.name).lineLimit(1).fontWeight(rule != nil ? .semibold : .regular).help(targetTip(p, rule: rule))
+            }
+        }
+        .contextMenu {
+            payeeLinkMenu(t)
+            Divider()
+            Button(rule == nil ? "Add Rule for \(p.name)…" : "Edit Rule for \(p.name)…") { editing = RuleTarget(payeeId: p.id, name: p.name) }
+            if rule != nil { Button("Remove Rule") { remove(["payeeId": p.id]) } }
+        }
+    }
+
+    private func targetTip(_ p: SpendingSetup.Named, rule: SpendingRule?) -> String {
+        var lines = [p.name]
+        let bank = [p.institution, p.last4.map { "account ending \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }
+        if !bank.isEmpty { lines.append(bank.joined(separator: " · ")) }
+        if let n = p.nickname, !n.isEmpty { lines.append("Known as \(n)") }
+        if let a = setup.expenseAccounts.first(where: { $0.id == p.expenseAccountId }) { lines.append("Filed under \(a.name)") }
+        if let n = p.notes, !n.isEmpty { lines.append(n) }
+        lines.append(ruleTip(rule))
+        lines.append("Right-click to add a link, with hover text of its own.")
+        return lines.joined(separator: "\n")
+    }
+
+    /// A statement text: its link when it has one, else what it matches on hover; right-click adds or edits the link
+    /// and the rule.
+    private func textLabel(_ r: SpendingRule, spent: Spent) -> some View {
+        let text = r.pattern ?? ""
+        return Group {
+            if let link = r.link?.link {
+                LinkedWords(link: link, words: text, testID: "rules-text:\(r.id)",
+                            edit: { LinkHover.shared.close(); linking = r },
+                            remove: { Task { _ = await saveLink(nil, for: r) } })
+            } else {
+                Text(text).lineLimit(1).fontWeight(.semibold)
+                    .help("Every entry whose payee, statement name or description contains \u{201C}\(text)\u{201D}, ignoring case: \(spent.count) \(spent.count == 1 ? "entry" : "entries") in the two years.\n\(ruleTip(r))\nRight-click to add a link, with hover text of its own.")
+            }
+        }
+        .contextMenu {
+            Button(r.link == nil ? "Add Link to \(text)…" : "Edit Link on \(text)…") { linking = r }
+            if let url = r.link?.link.url { Button("Open Link") { LinkInfo.follow(url) } }
+            Divider()
+            Button("Edit Rule…") { editing = RuleTarget(pattern: text, ruleId: r.id, name: text) }
+            Button("Remove Rule") { remove(["pattern": text, "id": r.id]) }
+        }
+    }
+
+    /// What a rule says and who changed it last.
+    private func ruleTip(_ rule: SpendingRule?) -> String {
+        guard let r = rule else { return "No rule: its expense account's rule decides." }
+        let says = [setup.category(r.category)?.name, r.driver.map { SpendingDriver.title($0) }, setup.member(r.memberId)?.name].compactMap { $0 }
+        return "Rule: " + (says.isEmpty ? "nothing set" : says.joined(separator: " · ")) + (r.updatedBy.map { ", last changed by \($0)" } ?? "")
+    }
+
+    private func saveLink(_ link: SecurityLink?, for r: SpendingRule) async -> String? {
+        do {
+            saved(try await SpendingClient.saveRuleLink(r.id, link))
+            return nil
+        } catch { return describe(error) }
+    }
+
+    /// Takes a rule off: nothing set removes it.
+    private func remove(_ target: [String: Any]) {
+        var body = target
+        body["category"] = ""; body["driver"] = ""; body["memberId"] = NSNull(); body["notes"] = NSNull()
+        Task {
+            do { saved(try await SpendingClient.saveRule(body)); problem = nil } catch { problem = describe(error) }
+        }
+    }
+
     // MARK: Rows
 
     private func header(_ title: String, trailing: Bool) -> some View {
@@ -1023,20 +1122,20 @@ private struct SpendingRulesTab: View {
     }
 
     /// One account's or text's rule, changed as its pickers are; `trailing` adds ✎ (with `edit`) and ✕ (with a rule).
-    private func ruleRow(name: String, spent: Spent, rule: SpendingRule?, target: [String: Any], blank: String,
-                         trailing: Bool = false, edit: RuleTarget? = nil) -> some View {
-        func save(category: String? = nil, driver: String? = nil, member: Int?? = nil, remove: Bool = false) {
+    private func ruleRow<Label: View>(label: Label, spent: Spent, rule: SpendingRule?, target: [String: Any], blank: String,
+                                      trailing: Bool = false, edit: RuleTarget? = nil) -> some View {
+        func save(category: String? = nil, driver: String? = nil, member: Int?? = nil) {
             var body = target
-            body["category"] = remove ? "" : category ?? rule?.category ?? ""
-            body["driver"] = remove ? "" : driver ?? rule?.driver ?? ""
-            body["memberId"] = remove ? NSNull() : null(member ?? rule?.memberId)
-            body["notes"] = remove ? NSNull() : null(rule?.notes)
+            body["category"] = category ?? rule?.category ?? ""
+            body["driver"] = driver ?? rule?.driver ?? ""
+            body["memberId"] = null(member ?? rule?.memberId)
+            body["notes"] = null(rule?.notes)
             Task {
                 do { saved(try await SpendingClient.saveRule(body)); problem = nil } catch { problem = describe(error) }
             }
         }
         return GridRow {
-            Text(name).lineLimit(1).fontWeight(trailing && rule != nil ? .semibold : .regular)
+            label
             Text(money(spent.before)).monospacedDigit().foregroundStyle(.secondary)
             Text(money(spent.now)).monospacedDigit().foregroundStyle(.secondary)
             Picker("", selection: Binding(get: { rule?.category ?? "" }, set: { save(category: $0) })) {
@@ -1062,7 +1161,7 @@ private struct SpendingRulesTab: View {
                             .buttonStyle(.borderless).help("Change the text, see what it matches")
                     }
                     if rule != nil {
-                        Button { save(remove: true) } label: { Image(systemName: "xmark.circle.fill") }
+                        Button { remove(target) } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.borderless).foregroundStyle(.secondary)
                             .help(edit == nil ? "Remove this rule: its entries follow their statement text and expense account's rules again"
                                   : "Remove this rule: its entries follow their expense account's rule again")
