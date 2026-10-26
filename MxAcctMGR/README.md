@@ -578,6 +578,19 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   current spending, change, growth %, and each effect's share of the change, with a reading: unavoidable (prices or
   age), habit change, one-time, or more of the same. Charts: a waterfall from last year to this year, each category's
   change by effect, and this year's spending by category and driver.
+* **Deep Dive.** Take one category apart: right-click (or double-click) its bar or its name in *This Year by
+  Category and Driver* or *What Changed Each Category*, or click its name in Key Metrics. The **Deep Dive** tab (with
+  a category picker and a way back to Attribution) shows:
+  - its earlier and current spending with each effect and the CPI change, as tiles and a waterfall;
+  - its spending month by month in both years;
+  - **By Driver**: each driver's spending in both years and what it grew beyond prices, adding up to the change with
+    the price change on last year's spending;
+  - **How Entries Got Here**: which expense-account rules, target-account rules and entry tags put its entries in it,
+    each with the rule's category, driver and member, both years' spending and *Rule…* to change it;
+  - **Where It Went**: by expense account, with the target accounts whose spending changed most;
+  - the ten largest entries this year, and spending by family member;
+  - its lifecycle triggers and what they bring each child in the next ten years;
+  - its entries, to tag.
 * **Sources.** A strip above every tab names the sources included and how fresh they are: the newest spending date,
   when the card and checking downloads were last read, and the CPI's latest month. It turns orange when a register's
   newest spending is more than 14 days old or the CPI more than 75. Its *Sources…* button opens the **Sources** tab,
@@ -724,5 +737,5 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Forward Curve, Entries, Rules, Family & Lifecycle and Sources tabs and their sheets |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Entries, Rules, Family & Lifecycle and Sources tabs, its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

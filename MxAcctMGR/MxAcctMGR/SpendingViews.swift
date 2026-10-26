@@ -13,6 +13,8 @@ import SwiftUI
 struct SpendingAnalysisView: View {
     @Bindable var store: PortStore
     @AppStorage("spendingTab") private var tab = "attribution"
+    /// The category the Deep Dive tab shows.
+    @AppStorage("spendingDeepDive") private var deepDive = "HEALTHCARE"
     @AppStorage("spendingYear") private var year = Calendar.current.component(.year, from: .now)
     @AppStorage("spendingYTD") private var yearToDate = true
     @AppStorage("spendingFullCoverage") private var fullCoverage = true
@@ -22,7 +24,7 @@ struct SpendingAnalysisView: View {
     @State private var problem: String?
     @State private var busy = false
 
-    static let tabs = [("attribution", "Attribution"), ("curve", "Forward Curve"), ("entries", "Entries"), ("rules", "Rules"),
+    static let tabs = [("attribution", "Attribution"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("entries", "Entries"), ("rules", "Rules"),
                        ("family", "Family & Lifecycle"), ("sources", "Sources")]
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
@@ -42,6 +44,11 @@ struct SpendingAnalysisView: View {
             if let setup {
                 switch tab {
                 case "curve": SpendingCurveTab(setup: setup, data: data) { tab = "family" }
+                case "deepdive":
+                    if let data {
+                        SpendingDeepDiveTab(setup: setup, data: data, entries: shownEntries(data), code: $deepDive,
+                                            changed: { replace($0) }, ruleSaved: { applied($0) }, back: { tab = "attribution" })
+                    }
                 case "entries":
                     if let data { SpendingEntriesTab(setup: setup, data: data, entries: shownEntries(data), changed: { replace($0) }, ruleSaved: { applied($0) }) }
                 case "rules":
@@ -162,6 +169,16 @@ struct SpendingAnalysisView: View {
         data?.entries[i] = e
     }
 
+    /// Opens the Deep Dive tab on a category, by its code or by its name as the charts show it.
+    private func openDeepDive(_ nameOrCode: String) {
+        guard let setup else { return }
+        let code = setup.categories.first { $0.name == nameOrCode || $0.code == nameOrCode }?.code
+            ?? (nameOrCode == "Not assigned" || nameOrCode == SpendingEngine.unassigned ? SpendingEngine.unassigned : nil)
+        guard let code else { return }
+        deepDive = code
+        tab = "deepdive"
+    }
+
     // MARK: Attribution
 
     @ViewBuilder
@@ -228,7 +245,18 @@ struct SpendingAnalysisView: View {
 
     private func metricsRow(_ r: CategoryAttribution) -> some View {
         GridRow {
-            Text(r.name).gridColumnAlignment(.leading).foregroundStyle(r.code == SpendingEngine.unassigned ? .secondary : .primary)
+            Group {
+                if r.code == "TOTAL" {
+                    Text(r.name)
+                } else {
+                    Button(r.name) { openDeepDive(r.code) }
+                        .buttonStyle(.link)
+                        .foregroundStyle(r.code == SpendingEngine.unassigned ? .secondary : .primary)
+                        .help("Deep dive into \(r.name): its entries, the rules and tags that put them here, and what changed")
+                        .contextMenu { Button("Deep Dive into \(r.name)") { openDeepDive(r.code) } }
+                }
+            }
+            .gridColumnAlignment(.leading)
             Text(money(r.prior)); Text(money(r.current))
             Text(money(r.change)).foregroundStyle(r.change > 0.5 ? .red : r.change < -0.5 ? .green : .secondary)
             Text(r.growth.map { signedPct($0, 0) } ?? (r.prior.magnitude < 0.005 && r.current > 0 ? "new" : "—"))
@@ -239,32 +267,12 @@ struct SpendingAnalysisView: View {
         }
     }
 
-    private struct Step: Identifiable { var label: String; var from: Double; var to: Double; var color: Color; var id: String { label } }
-
     private func waterfall(_ t: CategoryAttribution) -> some View {
-        var steps = [Step(label: "Earlier", from: 0, to: t.prior, color: .gray)]
-        var level = t.prior
-        for e in SpendingEffect.allCases {
-            steps.append(Step(label: e.rawValue, from: level, to: level + t.effect(e), color: e.color))
-            level += t.effect(e)
-        }
-        steps.append(Step(label: "This year", from: 0, to: t.current, color: .gray))
-        return Box(title: "From Last Year to This Year", symbol: "chart.bar.xaxis", help: "The attribution formula as a waterfall: the earlier year's spending, each effect added (or taken off), and this year's spending.") {
-            Chart(steps) { s in
-                BarMark(x: .value("Step", s.label), yStart: .value("From", s.from), yEnd: .value("To", s.to))
-                    .foregroundStyle(s.color.opacity(0.8))
-                    .annotation(position: s.to >= s.from ? .top : .bottom) {
-                        Text(s.label == "Earlier" || s.label == "This year" ? money(s.to) : (s.to >= s.from ? "+" : "") + money(s.to - s.from))
-                            .font(.caption2).foregroundStyle(.secondary)
-                    }
-            }
-            .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
-            .frame(height: 260)
-        }
+        AttributionWaterfall(t: t, title: "From Last Year to This Year")
     }
 
     private func effectsChart(_ rows: [CategoryAttribution]) -> some View {
-        Box(title: "What Changed Each Category", symbol: "chart.bar.doc.horizontal", help: "Each category's change in dollars, split into its effects: bars to the right added spending, to the left took it off.") {
+        Box(title: "What Changed Each Category", symbol: "chart.bar.doc.horizontal", help: "Each category's change in dollars, split into its effects: bars to the right added spending, to the left took it off. Right-click (or double-click) a category's bars or name for a deep dive into it.") {
             Chart {
                 ForEach(rows) { r in
                     ForEach(SpendingEffect.allCases) { e in
@@ -275,6 +283,7 @@ struct SpendingAnalysisView: View {
             }
             .chartForegroundStyleScale(domain: SpendingEffect.allCases.map(\.rawValue), range: SpendingEffect.allCases.map(\.color))
             .chartXAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
+            .chartOverlay { proxy in CategoryChartMenu(proxy: proxy, axis: .vertical) { openDeepDive($0) } }
             .frame(height: max(220, CGFloat(rows.count) * 26 + 40))
         }
     }
@@ -292,7 +301,7 @@ struct SpendingAnalysisView: View {
         }
         let order = setup.categories.map(\.name) + ["Not assigned"]
         let drivers = SpendingDriver.allCases.map(\.title) + ["Not assigned"]
-        return Box(title: "This Year by Category and Driver", symbol: "square.stack.3d.up", help: "Both dimensions of every dollar this year: the category it was spent on and its primary driver. Assign drivers with rules (Rules) and tags on single entries (Entries).") {
+        return Box(title: "This Year by Category and Driver", symbol: "square.stack.3d.up", help: "Both dimensions of every dollar this year: the category it was spent on and its primary driver. Assign drivers with rules (Rules) and tags on single entries (Entries). Right-click (or double-click) a category's bar or its name under the chart for a deep dive into it.") {
             Chart(slices) { s in
                 BarMark(x: .value("Category", s.category), y: .value("Dollars", s.amount))
                     .foregroundStyle(by: .value("Driver", s.driver))
@@ -300,6 +309,7 @@ struct SpendingAnalysisView: View {
             .chartXScale(domain: order.filter { n in slices.contains { $0.category == n } })
             .chartForegroundStyleScale(domain: drivers, range: [Color.orange, .blue, .cyan, .purple, .pink, .teal, .gray.opacity(0.5)])
             .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
+            .chartOverlay { proxy in CategoryChartMenu(proxy: proxy, axis: .horizontal) { openDeepDive($0) } }
             .frame(height: 260)
         }
     }
@@ -465,6 +475,9 @@ private struct SpendingEntriesTab: View {
     var entries: [SpendingEntry]
     var changed: (SpendingEntry) -> Void
     var ruleSaved: (SpendingSetup) -> Void
+    /// The one category shown (Deep Dive), without the category picker.
+    var lockedCategory: String? = nil
+    var title = "Spending Entries"
     @AppStorage("spendingEntriesPeriod") private var period = "current"
     @AppStorage(RowsStepper.key) private var tableRows = RowsStepper.standard
     @State private var onlyUnassigned = false
@@ -479,7 +492,7 @@ private struct SpendingEntriesTab: View {
         return entries.filter { e in
             (period == "both" || (period == "current") == (e.date >= data.start && e.date <= data.end))
                 && (!onlyUnassigned || e.driver == nil)
-                && (category.isEmpty || (e.category ?? SpendingEngine.unassigned) == category)
+                && ((lockedCategory ?? category).isEmpty || (e.category ?? SpendingEngine.unassigned) == (lockedCategory ?? category))
                 && (q.isEmpty || [e.payee, e.description, e.expenseAccount, e.event, e.register].contains { ($0 ?? "").lowercased().contains(q) })
         }
         .sorted { $0.date > $1.date }
@@ -492,18 +505,20 @@ private struct SpendingEntriesTab: View {
 
     var body: some View {
         let rows = shown
-        Box(title: "Spending Entries", symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, its expense account's rule). Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — or to set the rule for their target or expense account.") {
+        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, its expense account's rule). Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — or to set the rule for their target or expense account.") {
             HStack(spacing: 10) {
                 Picker("", selection: $period) {
                     Text("This year").tag("current"); Text("Earlier year").tag("prior"); Text("Both").tag("both")
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 280)
-                Picker("Category", selection: $category) {
-                    Text("All").tag("")
-                    ForEach(setup.categories) { c in Text(c.name).tag(c.code) }
-                    Text("Not assigned").tag(SpendingEngine.unassigned)
+                if lockedCategory == nil {
+                    Picker("Category", selection: $category) {
+                        Text("All").tag("")
+                        ForEach(setup.categories) { c in Text(c.name).tag(c.code) }
+                        Text("Not assigned").tag(SpendingEngine.unassigned)
+                    }
+                    .frame(maxWidth: 220)
                 }
-                .frame(maxWidth: 220)
                 Toggle("No driver yet", isOn: $onlyUnassigned).toggleStyle(.checkbox)
                 TextField("Search payee, description, event", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
                 Spacer()
@@ -1297,6 +1312,423 @@ private struct SpendingSourcesTab: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .font(.callout)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Charts shared by Attribution and Deep Dive
+
+/// The attribution formula as a waterfall: the earlier period's spending, each effect, and this period's.
+private struct AttributionWaterfall: View {
+    var t: CategoryAttribution
+    var title: String
+
+    private struct Step: Identifiable { var label: String; var from: Double; var to: Double; var color: Color; var id: String { label } }
+
+    var body: some View {
+        var steps = [Step(label: "Earlier", from: 0, to: t.prior, color: .gray)]
+        var level = t.prior
+        for e in SpendingEffect.allCases {
+            steps.append(Step(label: e.rawValue, from: level, to: level + t.effect(e), color: e.color))
+            level += t.effect(e)
+        }
+        steps.append(Step(label: "This year", from: 0, to: t.current, color: .gray))
+        return Box(title: title, symbol: "chart.bar.xaxis", help: "The attribution formula as a waterfall: the earlier year's spending, each effect added (or taken off), and this year's spending.") {
+            Chart(steps) { s in
+                BarMark(x: .value("Step", s.label), yStart: .value("From", s.from), yEnd: .value("To", s.to))
+                    .foregroundStyle(s.color.opacity(0.8))
+                    .annotation(position: s.to >= s.from ? .top : .bottom) {
+                        Text(s.label == "Earlier" || s.label == "This year" ? money(s.to) : (s.to >= s.from ? "+" : "") + money(s.to - s.from))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+            }
+            .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
+            .frame(height: 260)
+        }
+    }
+}
+
+/// Over a chart whose bars are categories: the category under the pointer (its bar, or its name on the axis) gets a
+/// right-click menu with Deep Dive into it, and a double-click opens it. The pointer's category is this view's own
+/// state, so following the pointer redraws only the overlay.
+private struct CategoryChartMenu: View {
+    var proxy: ChartProxy
+    /// .horizontal: categories along x (bars stand on them); .vertical: along y (bars lie beside them).
+    var axis: Axis
+    var open: (String) -> Void
+    @State private var hovered: String?
+
+    var body: some View {
+        GeometryReader { geo in
+            Rectangle().fill(.clear).contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    guard case .active(let p) = phase else { return }
+                    hovered = category(at: p, geo)
+                }
+                .gesture(SpatialTapGesture(count: 2).onEnded { tap in
+                    if let c = category(at: tap.location, geo) { open(c) }
+                })
+                .contextMenu {
+                    if let hovered {
+                        Button("Deep Dive into \(hovered)") { open(hovered) }
+                    } else {
+                        Text("Point at a category's bar or name")
+                    }
+                }
+                .help(hovered.map { "Right-click or double-click for a deep dive into \($0)" } ?? "")
+        }
+    }
+
+    /// The category whose band holds the point — over its bar or its name on the axis.
+    private func category(at p: CGPoint, _ geo: GeometryProxy) -> String? {
+        guard let plot = proxy.plotFrame else { return nil }
+        let origin = geo[plot].origin
+        return axis == .horizontal ? proxy.value(atX: p.x - origin.x, as: String.self)
+                                   : proxy.value(atY: p.y - origin.y, as: String.self)
+    }
+}
+
+// MARK: - Deep dive
+
+/// One category taken apart: what it spent in both periods and why it changed (effects, months, drivers), how its
+/// entries got into it (the rules and tags), where the money went (expense and target accounts, the largest entries,
+/// family members), what the lifecycle model brings to it, and its entries to tag.
+private struct SpendingDeepDiveTab: View {
+    var setup: SpendingSetup
+    var data: SpendingAnalysisData
+    /// The entries of every category (Only registers covering both years applied).
+    var entries: [SpendingEntry]
+    @Binding var code: String
+    var changed: (SpendingEntry) -> Void
+    var ruleSaved: (SpendingSetup) -> Void
+    var back: () -> Void
+    @AppStorage("spendingCurveInflate") private var inflate = true
+    @State private var ruleFor: RuleTarget?
+
+    private var name: String { code == SpendingEngine.unassigned ? "Not assigned" : setup.category(code)?.name ?? code }
+    private var year: String { String(data.start.prefix(4)) }
+    private var priorYear: String { String(data.priorStart.prefix(4)) }
+    private func isNow(_ e: SpendingEntry) -> Bool { e.date >= data.start && e.date <= data.end }
+    private func isBefore(_ e: SpendingEntry) -> Bool { e.date >= data.priorStart && e.date <= data.priorEnd }
+
+    /// Earlier, this year and how many entries this year, for a group of entries.
+    private struct Sums { var before = 0.0; var now = 0.0; var count = 0; var countBefore = 0; var change: Double { now - before } }
+    private func sums(_ list: [SpendingEntry]) -> Sums {
+        var s = Sums()
+        for e in list {
+            if isNow(e) { s.now += e.amount; s.count += 1 } else if isBefore(e) { s.before += e.amount; s.countBefore += 1 }
+        }
+        return s
+    }
+
+    var body: some View {
+        let rows = SpendingEngine.attribute(data, entries: entries, categories: setup.categories)
+        let row = rows.first { $0.code == code }
+        let mine = entries.filter { ($0.category ?? SpendingEngine.unassigned) == code }
+        header(rows, row)
+        if let row {
+            tiles(row)
+            HStack(alignment: .top, spacing: 14) {
+                AttributionWaterfall(t: row, title: "\(name): From Last Year to This Year")
+                monthly(mine)
+            }
+            driversBox(mine, row)
+            originBox(mine)
+                .sheet(item: $ruleFor) { target in SpendingRuleSheet(setup: setup, target: target) { ruleSaved($0) } }
+            accountsBox(mine)
+            HStack(alignment: .top, spacing: 14) {
+                largestBox(mine)
+                membersBox(mine)
+            }
+        } else {
+            ContentUnavailableView("No \(name) spending in either period", systemImage: "magnifyingglass",
+                                   description: Text("Nothing in \(priorYear) or \(year) is in \(name). Rules (Rules tab) and tags (Entries) put spending in a category."))
+        }
+        lifecycleBox
+        SpendingEntriesTab(setup: setup, data: data, entries: entries, changed: changed, ruleSaved: ruleSaved,
+                           lockedCategory: code, title: "\(name) Entries")
+            .id(code)
+    }
+
+    // MARK: Header and tiles
+
+    private func header(_ rows: [CategoryAttribution], _ row: CategoryAttribution?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Picker("Deep dive into", selection: $code) {
+                ForEach(setup.categories) { c in Text(c.name).tag(c.code) }
+                Text("Not assigned").tag(SpendingEngine.unassigned)
+            }
+            .frame(maxWidth: 300)
+            if let row {
+                Text("\(money(row.prior)) in \(priorYear) → \(money(row.current)) in \(year): \(row.change >= 0 ? "+" : "")\(money(row.change))\(row.growth.map { " (\(signedPct($0, 1)))" } ?? "")")
+                    .font(.title3.weight(.semibold)).monospacedDigit()
+                Text(row.reading).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { back() } label: { Label("Attribution", systemImage: "chevron.backward") }
+                .help("Back to every category's attribution")
+        }
+    }
+
+    private func tiles(_ r: CategoryAttribution) -> some View {
+        HStack(spacing: 10) {
+            ForEach(SpendingEffect.allCases) { e in
+                MetricTile(title: e.rawValue, value: (r.effect(e) >= 0 ? "+" : "") + money(r.effect(e)),
+                           caption: r.share(e).map { "\(pct($0, 0)) of the change" } ?? "", tint: e.color, help: e.help)
+            }
+            MetricTile(title: "Prices (CPI)", value: signedPct(r.inflationRate, 1),
+                       caption: r.basis == "CPI" ? (setup.category(code)?.cpiName ?? "CPI") : "assumed: no CPI values",
+                       help: "The category's price change between the periods: its CPI series' months in this period over the same months a year earlier, else its assumed rate.")
+        }
+    }
+
+    // MARK: When
+
+    private struct MonthBar: Identifiable { var month: Int; var year: String; var amount: Double; var id: String { "\(year)-\(month)" } }
+
+    private func monthly(_ mine: [SpendingEntry]) -> some View {
+        var sums: [String: Double] = [:]
+        for e in mine {
+            guard let m = Int(e.date.dropFirst(5).prefix(2)) else { continue }
+            if isNow(e) { sums["\(year)|\(m)", default: 0] += e.amount } else if isBefore(e) { sums["\(priorYear)|\(m)", default: 0] += e.amount }
+        }
+        let bars = sums.map { k, v in
+            let p = k.split(separator: "|")
+            return MonthBar(month: Int(p[1]) ?? 1, year: String(p[0]), amount: v)
+        }
+        let symbols = Calendar.current.shortMonthSymbols
+        let months = Set(bars.map(\.month)).sorted().map { symbols[$0 - 1] }
+        return Box(title: "Month by Month", symbol: "calendar", help: "\(name) spending in each month of both periods, side by side: when the change happened.") {
+            Chart(bars) { b in
+                BarMark(x: .value("Month", symbols[b.month - 1]), y: .value("Dollars", b.amount))
+                    .foregroundStyle(by: .value("Year", b.year))
+                    .position(by: .value("Year", b.year))
+            }
+            .chartXScale(domain: months)
+            .chartForegroundStyleScale(domain: [priorYear, year], range: [Color.gray.opacity(0.6), Color.accentColor])
+            .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
+            .frame(height: 260)
+        }
+    }
+
+    // MARK: Why: drivers
+
+    private func driversBox(_ mine: [SpendingEntry], _ row: CategoryAttribution) -> some View {
+        let groups = Dictionary(grouping: mine, by: { $0.driver ?? "" })
+        let order = SpendingDriver.allCases.map(\.rawValue) + [""]
+        let rate = row.inflationRate
+        return Box(title: "By Driver", symbol: "arrow.triangle.branch", help: "\(name) spending by primary driver in both periods. A driver's effect is what its spending grew beyond prices (this year less last year's grown by the category's CPI change); with the price change on last year's spending they add up to the change. Spending with no driver counts as usage.") {
+            Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
+                GridRow {
+                    Text("Driver").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change"); Text("Beyond prices"); Text("Counts as").gridColumnAlignment(.leading)
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                GridRow {
+                    Text("Prices on \(priorYear)'s spending (\(signedPct(rate, 1)))")
+                    Text(""); Text(""); Text("")
+                    Text(money(row.prior * rate)).foregroundStyle(SpendingEffect.inflation.color)
+                    Text("Inflation")
+                }
+                ForEach(order.filter { groups[$0] != nil }, id: \.self) { d in
+                    let s = sums(groups[d] ?? [])
+                    let driver = SpendingDriver(rawValue: d)
+                    GridRow {
+                        Text(driver?.title ?? "No driver yet").foregroundStyle(driver == nil ? .secondary : .primary).help(driver?.help ?? "No rule or tag gives it a driver: it counts as usage")
+                        Text(money(s.before)); Text(money(s.now))
+                        Text(money(s.change)).foregroundStyle(s.change > 0.5 ? .red : s.change < -0.5 ? .green : .secondary)
+                        Text(money(s.now - s.before * (1 + rate))).foregroundStyle((driver?.effect ?? .usage).color)
+                        Text((driver?.effect ?? .usage).rawValue)
+                    }
+                }
+                Divider()
+                GridRow {
+                    Text("Change").fontWeight(.semibold)
+                    Text(money(row.prior)); Text(money(row.current)); Text(money(row.change)).fontWeight(.semibold)
+                    Text(money(row.change)).fontWeight(.semibold); Text("")
+                }
+            }
+            .font(.callout).monospacedDigit()
+        }
+    }
+
+    // MARK: How entries got here: rules and tags
+
+    private struct Origin: Identifiable {
+        var kind: String          // expense account, target account, entry
+        var label: String
+        var target: RuleTarget?
+        var rule: SpendingRule?
+        var entries: [SpendingEntry]
+        var id: String { kind + label }
+    }
+
+    private func originBox(_ mine: [SpendingEntry]) -> some View {
+        var groups: [String: Origin] = [:]
+        for e in mine {
+            let kind = e.categoryFrom ?? "none"
+            var label = "", target: RuleTarget?, rule: SpendingRule?
+            switch kind {
+            case "expense account":
+                label = e.expenseAccount ?? "—"
+                if let id = e.expenseAccountId { target = RuleTarget(expenseAccountId: id, name: label); rule = setup.rule(expenseAccount: id) }
+            case "target account":
+                label = e.payee ?? "—"
+                if let id = e.payeeId { target = RuleTarget(payeeId: id, name: label); rule = setup.rule(payee: id) }
+            case "entry": label = "Tagged on the entry"
+            default: label = e.expenseAccount.map { "\($0) (no rule)" } ?? "No expense account, rule or tag"
+            }
+            groups[kind + label, default: Origin(kind: kind, label: label, target: target, rule: rule, entries: [])].entries.append(e)
+        }
+        let list = groups.values.sorted { abs(sums($0.entries).now) + abs(sums($0.entries).before) > abs(sums($1.entries).now) + abs(sums($1.entries).before) }
+        return Box(title: "How Entries Got Here", symbol: "point.3.connected.trianglepath.dotted", help: "What put each entry in \(name): an expense account's rule (every entry filed in that expense account), a target account's rule (every entry with that target, overriding its expense account's), or the entry's own tag. Rule… changes a rule; tag single entries in the table below.") {
+            Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
+                GridRow {
+                    Text("Put here by").gridColumnAlignment(.leading); Text("Rule says").gridColumnAlignment(.leading)
+                    Text(priorYear); Text(year); Text("Change"); Text("Entries"); Text("")
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(list) { o in
+                    let s = sums(o.entries)
+                    GridRow {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(o.label)
+                            Text(o.kind == "none" ? "not assigned" : o.kind == "entry" ? "entry tags" : "\(o.kind) rule").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text(o.rule.map { r in
+                            [setup.category(r.category)?.name, r.driver.map { SpendingDriver.title($0) }, setup.member(r.memberId)?.name].compactMap { $0 }.joined(separator: " · ")
+                        } ?? "").foregroundStyle(.secondary)
+                        Text(money(s.before)); Text(money(s.now))
+                        Text(money(s.change)).foregroundStyle(s.change > 0.5 ? .red : s.change < -0.5 ? .green : .secondary)
+                        Text("\(s.countBefore) → \(s.count)")
+                        Group {
+                            if let t = o.target { Button("Rule…") { ruleFor = t }.controlSize(.small) } else { Text("") }
+                        }
+                    }
+                }
+            }
+            .font(.callout).monospacedDigit()
+        }
+    }
+
+    // MARK: Where the money went
+
+    private func accountsBox(_ mine: [SpendingEntry]) -> some View {
+        let byAccount = Dictionary(grouping: mine, by: { $0.expenseAccount ?? "No expense account" })
+        let accounts = byAccount.keys.sorted { sums(byAccount[$0]!).now > sums(byAccount[$1]!).now }
+        return Box(title: "Where It Went", symbol: "building.2", help: "\(name) spending by expense account, and within each the target accounts (payees) whose spending changed most between the periods.") {
+            Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 3) {
+                GridRow {
+                    Text("Expense account / target account").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change"); Text("Entries")
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(accounts, id: \.self) { a in
+                    let list = byAccount[a]!
+                    let s = sums(list)
+                    GridRow {
+                        Text(a).fontWeight(.semibold)
+                        Text(money(s.before)); Text(money(s.now))
+                        Text(money(s.change)).foregroundStyle(s.change > 0.5 ? .red : s.change < -0.5 ? .green : .secondary)
+                        Text("\(s.countBefore) → \(s.count)")
+                    }
+                    let byPayee = Dictionary(grouping: list, by: { $0.payee ?? $0.description ?? "—" })
+                    let payees = byPayee.keys.sorted { abs(sums(byPayee[$0]!).change) > abs(sums(byPayee[$1]!).change) }
+                    ForEach(payees.prefix(6), id: \.self) { p in
+                        let ps = sums(byPayee[p]!)
+                        GridRow {
+                            Text(p).padding(.leading, 16).lineLimit(1).foregroundStyle(.secondary)
+                            Text(money(ps.before)); Text(money(ps.now))
+                            Text(money(ps.change)).foregroundStyle(ps.change > 0.5 ? .red : ps.change < -0.5 ? .green : .secondary)
+                            Text("\(ps.countBefore) → \(ps.count)").foregroundStyle(.secondary)
+                        }
+                    }
+                    if payees.count > 6 {
+                        let rest = sums(payees.dropFirst(6).flatMap { byPayee[$0]! })
+                        GridRow {
+                            Text("\(payees.count - 6) more").padding(.leading, 16).foregroundStyle(.secondary)
+                            Text(money(rest.before)); Text(money(rest.now)); Text(money(rest.change)); Text("\(rest.countBefore) → \(rest.count)")
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .font(.callout).monospacedDigit()
+        }
+    }
+
+    private func largestBox(_ mine: [SpendingEntry]) -> some View {
+        let top = mine.filter(isNow).sorted { $0.amount > $1.amount }.prefix(10)
+        return Box(title: "Largest This Year", symbol: "arrow.up.right", help: "The ten largest \(name) entries this year, with their driver and any event.") {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
+                ForEach(Array(top)) { e in
+                    GridRow {
+                        Text(shortDay(e.date)).monospacedDigit().foregroundStyle(.secondary)
+                        Text(e.payee ?? e.description ?? "—").lineLimit(1)
+                        Text(money2(e.amount)).monospacedDigit().gridColumnAlignment(.trailing)
+                        Text(e.event ?? SpendingDriver.title(e.driver)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+            }
+            .font(.callout)
+        }
+    }
+
+    private func membersBox(_ mine: [SpendingEntry]) -> some View {
+        let byMember = Dictionary(grouping: mine, by: { $0.memberId ?? 0 })
+        return Box(title: "By Family Member", symbol: "person.2", help: "\(name) spending by the family member its rules or tags name.") {
+            if byMember.keys.allSatisfy({ $0 == 0 }) {
+                Text("None of it names a family member yet: give a rule or a tag a member.").foregroundStyle(.secondary).font(.callout)
+            } else {
+                Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 3) {
+                    GridRow { Text("Member").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change") }
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(byMember.keys.sorted(), id: \.self) { m in
+                        let s = sums(byMember[m]!)
+                        GridRow {
+                            Text(setup.member(m)?.name ?? "No one named").foregroundStyle(m == 0 ? .secondary : .primary)
+                            Text(money(s.before)); Text(money(s.now)); Text(money(s.change))
+                        }
+                    }
+                }
+                .font(.callout).monospacedDigit()
+            }
+        }
+    }
+
+    // MARK: What's coming
+
+    private var lifecycleBox: some View {
+        let triggers = setup.triggers.filter { $0.category == code && $0.active }
+        let rates = Dictionary(uniqueKeysWithValues: data.inflation.map { ($0.category, $0.rate) })
+        let start = Calendar.current.component(.year, from: .now)
+        let points = SpendingEngine.forwardCurve(children: setup.children, triggers: triggers, rates: rates, start: start, inflate: inflate)
+        return Box(title: "Lifecycle Triggers and What's Coming", symbol: "figure.and.child.holdinghands", help: "The lifecycle triggers in \(name) and what they bring each child in the next ten years (Family & Lifecycle sets them; Forward Curve shows every category).") {
+            if triggers.isEmpty {
+                Text("No lifecycle trigger is in \(name).").foregroundStyle(.secondary).font(.callout)
+            } else {
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+                    ForEach(triggers) { t in
+                        GridRow {
+                            Text(t.name).help(t.notes ?? "")
+                            Text("ages \(t.ages)").foregroundStyle(.secondary)
+                            Text(t.kind.capitalized).foregroundStyle(.secondary)
+                            Text("\(money(t.annualCost)) a year").monospacedDigit().gridColumnAlignment(.trailing)
+                        }
+                    }
+                }
+                .font(.callout)
+                if setup.children.isEmpty {
+                    Text("Add the children on Family & Lifecycle to see what these bring.").foregroundStyle(.secondary).font(.callout)
+                } else if points.isEmpty {
+                    Text("None of them applies to the children in the next ten years.").foregroundStyle(.secondary).font(.callout)
+                } else {
+                    Chart(points) { p in
+                        BarMark(x: .value("Year", String(p.year)), y: .value("Dollars", p.amount))
+                            .foregroundStyle(by: .value("Child", p.member))
+                    }
+                    .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
+                    .frame(height: 200)
                 }
             }
         }
