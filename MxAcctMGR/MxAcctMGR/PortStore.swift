@@ -24,7 +24,7 @@ enum Screen: String, CaseIterable, Identifiable {
 
     enum Group: String, CaseIterable {
         case accounts = "Banking", start = "Start Here", mine = "Investments", reports = "Knowledge Library",
-             library = "Data Library"
+             library = "Reporting"
 
         /// The sidebar's sections (Start Here's screens are in the Guide menu only).
         static let sidebar: [Group] = [.accounts, .mine, .reports, .library]

@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Data Library (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -555,7 +555,7 @@ user ID that is a token (an API key's id) as its service key, never its user nam
   as you move the weights and returns.
 * **Active vs Passive** — what fees compound to over 30 years (fee and pre-fee alpha sliders) and a comparison table.
 
-## SRM Table (Data Library ▸ SRM Table)
+## SRM Table (Reporting ▸ SRM Table)
 
 MxDataHUB's Securities page in MxAcctMGR: the security master's securities, searched by name or any identifier
 (ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI — current or past), filtered by **Type**, **In** (a benchmark's members

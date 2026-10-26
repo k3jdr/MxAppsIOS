@@ -2,7 +2,7 @@
 //  Securities.swift
 //  MxAcctMGR
 //
-//  Data Library ▸ SRM Table: MxDataHUB's Securities page in MxAcctMGR — the security master's securities, searched by
+//  Reporting ▸ SRM Table: MxDataHUB's Securities page in MxAcctMGR — the security master's securities, searched by
 //  name or any identifier (ticker, ISIN, CUSIP, SEDOL, FIGI, CIK, LEI), filtered by type, benchmark and activity and by
 //  any column (its header: sort, values, conditions), a thousand at a time; and the selected one's year of prices,
 //  identifiers, issuer and security facts, listings, classification, benchmark membership and corporate actions.
