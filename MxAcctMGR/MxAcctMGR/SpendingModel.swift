@@ -170,6 +170,29 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     }
 }
 
+/// An expense-ledger entry that looks like a card charge or check it isn't linked to (Admin): counted twice while its
+/// ledger is in the analysis, once when linked.
+struct SpendingOverlap: Decodable, Identifiable, Hashable {
+    struct Match: Decodable, Hashable {
+        var source: String
+        var txnId: Int
+        var register: String
+        var txnDate: String
+        var payee: String?
+        var days: Int
+    }
+    var entryId: Int
+    var version: Int
+    var ledger: String
+    var date: String
+    var vendor: String?
+    var description: String
+    var amount: Double
+    /// Nearest date first.
+    var matches: [Match]
+    var id: Int { entryId }
+}
+
 /// A category's price change between the periods: CPI months, else its assumption.
 struct CategoryInflation: Decodable, Hashable {
     var category: String
@@ -694,6 +717,17 @@ nonisolated enum SpendingClient {
     }
     static func saveRule(_ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/rules", body: signed(body), as: SpendingSetup.self)
+    }
+    /// Expense-ledger entries that match an unlinked card charge or check (Admin).
+    static func overlaps() async throws -> [SpendingOverlap] {
+        struct Answer: Decodable { var overlaps: [SpendingOverlap] }
+        return try await AccountsClient.request("GET", "/spending/overlaps", as: Answer.self).overlaps
+    }
+    /// Links a ledger entry to the card charge or check that paid it: the purchase then counts once.
+    static func link(_ o: SpendingOverlap, to m: SpendingOverlap.Match) async throws {
+        struct Ignored: Decodable {}
+        _ = try await AccountsClient.request("POST", "/expense-entries/\(o.entryId)/link",
+                                             body: signed(["version": o.version, "source": m.source, "txnId": m.txnId]), as: Ignored.self)
     }
     /// A statement text rule's link (V043), saved or with nil taken off, as BankClient.savePayeeLink does a target's.
     static func saveRuleLink(_ id: Int, _ link: SecurityLink?) async throws -> SpendingSetup {

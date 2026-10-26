@@ -40,6 +40,9 @@
                                                    the entry's tag, and a 'change' note with what it was before
     PUT    /spending/change/trigger/<id>           the family page's change to a lifecycle trigger {author, category,
                                                    kind}, and a 'change' note
+    GET    /spending/overlaps                      Admin: expense-ledger entries not linked to a card charge or check that
+                                                   match one (same amount within a week, the charge or check linked to
+                                                   no entry): counted twice while the ledger is included
     GET    /spending/tax?year=                     Year-End Tax (V040): the tax items, every payment of theirs that
                                                    counts toward the year (with its tax year and quarter), and the
                                                    year's summary — expenses paid and deductible, estimated payments
@@ -1029,12 +1032,54 @@ def undo_change(conn, fid, body):
     return feedback(conn)
 
 
+# ------------------------------------------------------------------------------------------------------------ admin
+
+def overlaps(conn):
+    """Expense-ledger entries that look like a card charge or check they aren't linked to: the same amount within a
+    week, the charge or check linked to no entry yet. Until linked, both count as spending. Up to three candidates
+    each, nearest date first."""
+    rows = fetch(conn, """
+        SELECT e.entry_id AS "entryId", e.version, l.code AS ledger, e.entry_date AS date, e.vendor, e.description,
+               e.amount, c.source, c.txn_id AS "txnId", c.register, c.txn_date AS "txnDate", c.payee,
+               abs(c.txn_date - e.entry_date) AS days
+          FROM srm.expense_entry e
+          JOIN srm.expense_ledger l USING (ledger_id)
+          JOIN LATERAL (
+              SELECT * FROM (
+                  SELECT 'card'::text AS source, t.txn_id, a.code AS register, t.txn_date,
+                         coalesce(p.name, t.payee_name) AS payee
+                    FROM srm.card_txn t
+                    JOIN srm.card_account a USING (card_account_id)
+                    LEFT JOIN srm.payee p ON p.payee_id = t.payee_id
+                   WHERE t.status <> 'void' AND t.kind <> 'payment' AND t.amount = e.amount
+                     AND abs(t.txn_date - e.entry_date) <= 7
+                     AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.card_txn_id = t.txn_id)
+                  UNION ALL
+                  SELECT 'bank', b.txn_id, a.code, b.txn_date, coalesce(p.name, b.payee_name)
+                    FROM srm.bank_txn b
+                    JOIN srm.bank_account a USING (bank_account_id)
+                    LEFT JOIN srm.payee p ON p.payee_id = b.payee_id
+                   WHERE b.status <> 'void' AND -b.amount = e.amount AND abs(b.txn_date - e.entry_date) <= 7
+                     AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.bank_txn_id = b.txn_id)
+              ) m ORDER BY abs(m.txn_date - e.entry_date), m.txn_id LIMIT 3) c ON true
+         WHERE e.status = 'actual' AND e.kind IN ('expense', 'refund') AND e.card_txn_id IS NULL AND e.bank_txn_id IS NULL
+         ORDER BY e.entry_date, e.entry_id, days, c.txn_id""")
+    out = {}
+    for r in rows:
+        o = out.setdefault(r["entryId"], dict({k: r[k] for k in ("entryId", "version", "ledger", "date", "vendor",
+                                                                  "description", "amount")}, matches=[]))
+        o["matches"].append({k: r[k] for k in ("source", "txnId", "register", "txnDate", "payee", "days")})
+    return {"overlaps": list(out.values())}
+
+
 def route(conn, method, parts, body, q):
     """The spending endpoints' answer, or None when the path isn't one of them."""
     if parts == ["spending", "setup"] and method == "GET":
         return setup(conn, details=True)
     if parts == ["spending", "analysis"] and method == "GET":
         return analysis(conn, q)
+    if parts == ["spending", "overlaps"] and method == "GET":
+        return overlaps(conn)
     if parts == ["spending", "sources"] and method == "GET":
         return sources(conn, q)
     if len(parts) == 4 and parts[1] == "sources" and method == "PUT":

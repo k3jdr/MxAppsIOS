@@ -11,6 +11,8 @@ spending, with their budget lines, subscriptions, equipment, training and trips 
     PUT  /expense-entries/<id>                      change one {version, …}: refused (409) when someone changed it since
     POST /expense-entries/<id>/approve              {approval: pending | approved | rejected}
     POST /expense-entries/<id>/renew                a subscription's next charge (a month or a year on)
+    POST /expense-entries/<id>/link                 link an entry to the card charge or check that paid it {version,
+                                                    source: card | bank, txnId, by}: the purchase then counts once
     POST /expense-ledgers/<code>/entries/delete     delete entries for good {entries: [{id, version}], by}: all or none,
                                                     refused (409) when someone changed one since
     POST /expense-ledgers/<code>/fund               funding transfers {date, amount, payeeId, months, description}:
@@ -399,6 +401,33 @@ def delete_entries(conn, code, body):
     return book(conn, led["code"])
 
 
+def link_entry(conn, eid, body):
+    """Links an entry to the card charge or check that paid it (Spending Analysis ▸ Admin's overlap finder), as Add
+    from Card Charges does a new one: Spending Analysis then counts the purchase once, as the charge. Answers with the
+    book."""
+    row = _locked_entry(conn, eid)
+    _check_version(conn, row, body)
+    source, txn = body.get("source"), int(body.get("txnId") or 0)
+    if source not in ("card", "bank"):
+        raise ValueError("source must be card or bank")
+    if row["status"] == "void":
+        raise ValueError("a void entry can't be linked")
+    if row["card_txn_id"] or row["bank_txn_id"]:
+        raise ValueError("this entry is already linked to a card charge or check")
+    table, column = ("srm.card_txn", "card_txn_id") if source == "card" else ("srm.bank_txn", "bank_txn_id")
+    if not fetch(conn, "SELECT 1 FROM %s WHERE txn_id = %%s AND status <> 'void'" % table, (txn,)):
+        raise LookupError("no %s entry %s" % ("card" if source == "card" else "checking", txn))
+    taken = fetch(conn, """SELECT e.description, l.code FROM srm.expense_entry e JOIN srm.expense_ledger l USING (ledger_id)
+                            WHERE e.%s = %%s""" % column, (txn,))
+    if taken:
+        raise ValueError("that %s is already linked to %s in %s" % ("charge" if source == "card" else "check",
+                                                                    taken[0]["description"], taken[0]["code"]))
+    fetch(conn, """UPDATE srm.expense_entry SET %s = %%s, version = version + 1, updated_by = %%s, updated_at = now()
+                    WHERE entry_id = %%s""" % column, (txn, _by(body), eid))
+    conn.commit()
+    return book(conn, row["code"])
+
+
 def approve_entry(conn, eid, body):
     row = _locked_entry(conn, eid)
     approval = body.get("approval")
@@ -592,4 +621,6 @@ def route(conn, method, parts, body, q):
             return approve_entry(conn, int(parts[1]), body)
         if parts[2] == "renew":
             return renew_entry(conn, int(parts[1]), body)
+        if parts[2] == "link":
+            return link_entry(conn, int(parts[1]), body)
     return None

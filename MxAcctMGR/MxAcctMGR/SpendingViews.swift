@@ -30,7 +30,7 @@ struct SpendingAnalysisView: View {
     @State private var linkSettings = false
 
     static let tabs = [("attribution", "Overview"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Rules"),
-                       ("family", "Family & Lifecycle"), ("sources", "Sources")]
+                       ("family", "Family & Lifecycle"), ("sources", "Sources"), ("admin", "Admin")]
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
     var body: some View {
@@ -72,6 +72,11 @@ struct SpendingAnalysisView: View {
                 case "rules":
                     if let data { SpendingRulesTab(setup: setup, data: data, entries: shownEntries(data)) { applied($0) } }
                 case "family": SpendingFamilyTab(setup: setup, data: data) { applied($0) }
+                case "admin":
+                    if let data {
+                        SpendingAdminTab(setup: setup, data: data, entries: shownEntries(data), openTab: { tab = $0 }, go: { store.go($0) },
+                                         ruleSaved: { applied($0) }, linked: { Task { await reload() } })
+                    }
                 case "tax": SpendingTaxTab(setup: setup)
                 case "feedback":
                     SpendingFeedbackTab(setup: setup, data: data, notes: notes, changed: { notes = $0 }, entryChanged: { replace($0) },
@@ -767,7 +772,7 @@ private struct SpendingTagSheet: View {
     }
 }
 
-private struct SpendingRuleSheet: View {
+struct SpendingRuleSheet: View {
     var setup: SpendingSetup
     var target: RuleTarget
     /// Both periods' entries, to show what a statement text matches.
