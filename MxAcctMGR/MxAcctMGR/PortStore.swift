@@ -45,7 +45,7 @@ enum Screen: String, CaseIterable, Identifiable {
         switch self {
         case .checking: "Checking Accounts"
         case .cards: "Credit Card Accounts"
-        case .expenseLedgers: "Expense Accounts"
+        case .expenseLedgers: "Expense Ledgers"
         case .expenses: "Target Accounts"
         case .secureAccounts: "Secure Accounts"
         case .welcome: "Welcome"

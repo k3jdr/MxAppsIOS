@@ -2,7 +2,7 @@
 //  ExpenseViews.swift
 //  MxAcctMGR
 //
-//  Banking ▸ Expense Accounts: funded ledgers of purpose spending kept in the security master (accounts service
+//  Banking ▸ Expense Ledgers: funded ledgers of purpose spending kept in the security master (accounts service
 //  /expense-ledgers, V030) — a Mac and its software, a home office build-out, subscriptions, training, travel. Each
 //  item is entered on a budget line (with its kind, budget and colour); transfers from a funding account (an external
 //  account of the check register) fund it, and the balance is what was spent and not funded yet. What the spending
@@ -246,7 +246,7 @@ extension Color {
 private func day(_ s: String?) -> Date? { s.flatMap { isoDay.date(from: String($0.prefix(10))) } }
 private func iso(_ d: Date?) -> Any { d.map { isoDay.string(from: $0) } ?? NSNull() }
 
-// MARK: - Expense Accounts
+// MARK: - Expense Ledgers
 
 struct ExpenseLedgersView: View {
     @Bindable var store: PortStore
@@ -304,11 +304,11 @@ struct ExpenseLedgersView: View {
                 }
             } else if ledgers.isEmpty && problem == nil && !busy {
                 ContentUnavailableView {
-                    Label("No expense account yet", systemImage: "briefcase")
+                    Label("No expense ledger yet", systemImage: "briefcase")
                 } description: {
                     Text("Add one for a purpose — a computer and its software, a home office, training, travel — with the account that funds it.")
                 } actions: {
-                    Button("New Expense Account…") { ledgerSheet = .some(nil) }
+                    Button("New Expense Ledger…") { ledgerSheet = .some(nil) }
                 }
             }
         }
@@ -370,7 +370,7 @@ struct ExpenseLedgersView: View {
 
     private var accountBar: some View {
         HStack(spacing: 10) {
-            Picker("Expense account", selection: $selected) {
+            Picker("Expense ledger", selection: $selected) {
                 ForEach(ledgers) { l in Text(l.name).tag(l.code) }
             }
             .frame(maxWidth: 380)
@@ -382,7 +382,7 @@ struct ExpenseLedgersView: View {
             if let message { Text(message).font(.callout).foregroundStyle(.secondary).lineLimit(2) }
             Button { fromCard = true } label: { Label("From Card…", systemImage: "creditcard") }
                 .disabled(data == nil || busy)
-                .help("Add charges from Credit Card Accounts to this expense account (each charge once, in one expense account)")
+                .help("Add charges from Credit Card Accounts to this expense ledger (each charge once, in one expense ledger)")
             Button { funding = true } label: { Label("Fund…", systemImage: "arrow.down.circle") }
                 .disabled(data == nil || busy)
                 .help("Enter funding transfers: one, or one a month (those still to come are scheduled)")
@@ -790,12 +790,12 @@ struct ExpenseLedgersView: View {
     }
 
     private func savePart(_ part: String, _ id: Int, _ body: [String: Any]) async -> String? {
-        guard let code = data?.ledger.code else { return "Choose an expense account" }
+        guard let code = data?.ledger.code else { return "Choose an expense ledger" }
         return await run { try await ExpenseClient.save(code, part, id, body) }
     }
 
     private func add() async -> String? {
-        guard let code = data?.ledger.code else { return "Choose an expense account" }
+        guard let code = data?.ledger.code else { return "Choose an expense ledger" }
         let error = await run { try await ExpenseClient.add(code, draft.body) }
         if error == nil {
             let keep = (draft.date, draft.lineId, draft.tripId)
@@ -993,7 +993,7 @@ struct LedgerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(ledger == nil ? "New Expense Account" : "Edit \(ledger!.name)").heading(.heading)
+            Text(ledger == nil ? "New Expense Ledger" : "Edit \(ledger!.name)").heading(.heading)
             Form {
                 TextField("Code", text: $code).disabled(ledger != nil).help("A short name for it: letters, digits, _ or - (TECH_2026)")
                 TextField("Name", text: $name)
@@ -1115,7 +1115,7 @@ struct CardChargesSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Add Card Charges").heading(.heading)
-            Text("Charges from Credit Card Accounts in the last year that no expense account has yet. Each is added once, linked to its charge.")
+            Text("Charges from Credit Card Accounts in the last year that no expense ledger has yet. Each is added once, linked to its charge.")
                 .font(.callout).foregroundStyle(.secondary)
             if loading { ProgressView() }
             Table(charges, selection: $chosen) {

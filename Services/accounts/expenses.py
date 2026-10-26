@@ -1,7 +1,7 @@
-"""Expense accounts for the accounts service: funded ledgers of purpose spending, with their budget lines,
-subscriptions, equipment, training and trips (V030).
+"""Expense ledgers for the accounts service (MxAcctMGR's Banking ▸ Expense Ledgers): funded ledgers of purpose
+spending, with their budget lines, subscriptions, equipment, training and trips (V030).
 
-    GET  /expense-ledgers                           the expense accounts with spent, funded and balance
+    GET  /expense-ledgers                           the expense ledgers with spent, funded and balance
     PUT  /expense-ledgers/<code>                    create or change one {name, purpose, owner, costCenter, openingDate,
                                                     openingBalance, budget, fundingPayees, fundingAmount, fundingDay, closedDate}
     GET  /expense-ledgers/<code>                    its book: lines (budget against actual), entries (running balance),
@@ -17,7 +17,7 @@ subscriptions, equipment, training and trips (V030).
     PUT  /expense-ledgers/<code>/assets/<id>        an asset (id 0 adds one)
     PUT  /expense-ledgers/<code>/training/<id>      a training record (id 0 adds one)
     PUT  /expense-ledgers/<code>/trips/<id>         a trip (id 0 adds one)
-    GET  /expense-ledgers/<code>/card-charges       recent card charges in no expense account, to add from
+    GET  /expense-ledgers/<code>/card-charges       recent card charges in no expense ledger, to add from
 
 Amounts are signed as the balance reads them: positive is spent and not funded yet, negative lowers it (funding,
 refunds). An entry is never deleted: it is voided.
@@ -41,7 +41,7 @@ def _by(body):
 def _ledger(conn, code):
     rows = fetch(conn, "SELECT * FROM srm.expense_ledger WHERE upper(code) = upper(%s)", (code,))
     if not rows:
-        raise LookupError("no expense account %s" % code)
+        raise LookupError("no expense ledger %s" % code)
     return rows[0]
 
 
@@ -101,7 +101,7 @@ def save_ledger(conn, code, body):
     cur = fetch(conn, "SELECT ledger_id, version FROM srm.expense_ledger WHERE upper(code) = upper(%s) FOR UPDATE", (code,))
     if cur and "version" in body and int(body["version"]) != cur[0]["version"]:
         conn.rollback()
-        raise Conflict("someone changed this expense account since you opened it", version=cur[0]["version"])
+        raise Conflict("someone changed this expense ledger since you opened it", version=cur[0]["version"])
     rows = fetch(conn, """
         INSERT INTO srm.expense_ledger (code, name, purpose, owner, cost_center, opening_date, opening_balance, budget,
                                         funding_payees, funding_amount, funding_day, closed_date, updated_by)
@@ -303,10 +303,10 @@ def _entry_fields(conn, lid, body, cur=None):
         raise ValueError("approval must be none, pending, approved or rejected")
     line_id = get("lineId")
     if line_id and not fetch(conn, "SELECT 1 FROM srm.expense_line WHERE line_id = %s AND ledger_id = %s", (int(line_id), lid)):
-        raise ValueError("lineId must be a line of this expense account")
+        raise ValueError("lineId must be a line of this expense ledger")
     trip_id = get("tripId")
     if trip_id and not fetch(conn, "SELECT 1 FROM srm.expense_trip WHERE trip_id = %s AND ledger_id = %s", (int(trip_id), lid)):
-        raise ValueError("tripId must be a trip of this expense account")
+        raise ValueError("tripId must be a trip of this expense ledger")
     return {"entry_date": _date(get("date") or dt.date.today()), "kind": kind, "description": description,
             "vendor": (str(get("vendor") or "")).strip()[:120] or None,
             "line_id": int(line_id) if line_id and kind != "funding" else None, "trip_id": int(trip_id) if trip_id else None,
@@ -320,7 +320,7 @@ def add_entry(conn, code, body, commit=True):
     f = _entry_fields(conn, led["ledger_id"], body)
     for key, table in (("cardTxnId", "card_txn_id"), ("bankTxnId", "bank_txn_id")):
         if body.get(key) and fetch(conn, "SELECT 1 FROM srm.expense_entry WHERE %s = %%s" % table, (int(body[key]),)):
-            raise Conflict("that %s is already in an expense account" % ("card charge" if key == "cardTxnId" else "checking entry"))
+            raise Conflict("that %s is already in an expense ledger" % ("card charge" if key == "cardTxnId" else "checking entry"))
     rows = fetch(conn, """
         INSERT INTO srm.expense_entry (ledger_id, line_id, trip_id, entry_date, kind, description, vendor, payee_id, amount,
                                        recurrence, status, approval, url, notes, card_txn_id, bank_txn_id, entered_by, updated_by)
@@ -540,7 +540,7 @@ def card_charges(conn, code):
 
 
 def route(conn, method, parts, body, q):
-    """The expense account endpoints' answer, or None when the path isn't one of them."""
+    """The expense ledger endpoints' answer, or None when the path isn't one of them."""
     if parts == ["expense-ledgers"] and method == "GET":
         return ledgers(conn)
     if len(parts) == 2 and parts[0] == "expense-ledgers":

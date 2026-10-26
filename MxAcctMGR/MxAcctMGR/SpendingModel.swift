@@ -403,7 +403,7 @@ struct SpendingSources: Decodable {
         var id: String { source + code }
         var kindTitle: String { source == "bank" ? "Checking account" : source == "card" ? "Credit card" : "Expense ledger" }
         var symbol: String { source == "bank" ? "checkmark.rectangle.stack" : source == "card" ? "creditcard" : "briefcase" }
-        var screen: String { source == "bank" ? "Banking ▸ Checking Accounts" : source == "card" ? "Banking ▸ Credit Card Accounts" : "Banking ▸ Expense Accounts" }
+        var screen: String { source == "bank" ? "Banking ▸ Checking Accounts" : source == "card" ? "Banking ▸ Credit Card Accounts" : "Banking ▸ Expense Ledgers" }
     }
     struct Table: Decodable, Identifiable, Hashable {
         var name: String
