@@ -1,6 +1,6 @@
 // Spending Analysis, read-only, on the home network (Services/spending-web). The same numbers as MxAcctMGR's
-// Reporting ▸ Spending Analysis (SpendingModel.swift's attribution, ported here) without the Forward Curve and without
-// the controls that change anything, and with a note to John from every section, entry and rule.
+// Reporting ▸ Spending Analysis (SpendingModel.swift's attribution and forward curve, ported here), its rules shown
+// read-only, without the controls that change anything, and with a note to John from every section, entry and rule.
 "use strict";
 
 const BASE = location.pathname.replace(/\/[^/]*$/, "");   // /s/<key>
@@ -24,8 +24,9 @@ const DRIVERS = {
   taxes: { title: "Taxes", effect: "taxes", help: "Taxes changed: real estate, income, local or sales taxes and their fees" },
 };
 const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#5c6bc0", "#16a085", "#8d6e63", "#a0a0a0"];
-const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["tax", "Year-End Tax"], ["entries", "Entries"],
-              ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
+const CHILD_COLORS = ["#2e86de", "#e67e22", "#8e44ad", "#16a085", "#d6336c", "#b9770e"];
+const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["curve", "Forward Curve"], ["tax", "Year-End Tax"], ["entries", "Entries"],
+              ["rules", "Rules"], ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
 const STALE_DAYS = 14, STALE_CPI_DAYS = 75;
 
 // ---------------------------------------------------------------------------------------------------------- state
@@ -35,8 +36,8 @@ const keep = (k, v) => { try { localStorage.setItem("spending." + k, JSON.string
 const thisYear = new Date().getFullYear();
 const S = {
   // A tab saved before the Forward Curve or Rules left this page opens the Overview.
-  tab: ["curve", "rules"].includes(saved("tab", "attribution")) ? "attribution" : saved("tab", "attribution"), year: saved("year", thisYear), ytd: saved("ytd", true), full: saved("full", true),
-  dive: saved("dive", "HEALTHCARE"),
+  tab: saved("tab", "attribution"), year: saved("year", thisYear), ytd: saved("ytd", true), full: saved("full", true),
+  dive: saved("dive", "HEALTHCARE"), stackBy: saved("stackBy", "child"), inflate: saved("inflate", true),
   taxYear: saved("taxYear", new Date().getMonth() < 4 ? thisYear - 1 : thisYear), tax: null, taxProblem: null,
   period: "current", unassignedOnly: false, cat: "", search: "", shown: 200,
   setup: null, data: null, sources: null, notes: [], problem: null, busy: false,
@@ -164,6 +165,35 @@ function total(rows) {
   for (const r of rows) for (const [k, v] of Object.entries(r.effects)) effects[k] = (effects[k] ?? 0) + v;
   const prior = rows.reduce((a, r) => a + r.prior, 0);
   return makeRow("TOTAL", "All spending", prior, rows.reduce((a, r) => a + r.current, 0), prior > 0 ? (effects.inflation ?? 0) / prior : 0, "", effects);
+}
+
+// As SpendingEngine.forwardCurve and waves (SpendingModel.swift): each child's lifecycle costs, ten years ahead.
+const children = () => S.setup.members.filter(m => m.relation === "child" && m.active);
+function applies(t, ageNow) {
+  if (!t.active || ageNow < t.ageFrom || ageNow > t.ageTo) return false;
+  return t.everyYears > 1 ? (ageNow - t.ageFrom) % t.everyYears === 0 : true;
+}
+function forwardCurve(triggers, start, years = 10) {
+  const rates = Object.fromEntries(S.data.inflation.map(i => [i.category, i.rate]));
+  const out = [];
+  for (let y = start; y < start + years; y++) for (const k of children()) {
+    const a = y - k.birthYear;
+    for (const t of triggers) if (applies(t, a)) {
+      const grow = S.inflate && t.kind !== "peak" ? Math.pow(1 + (rates[t.category] ?? 0.03), y - start) : 1;
+      out.push({ year: y, member: k.name, age: a, category: t.category, trigger: t.name, kind: t.kind, amount: t.annualCost * grow });
+    }
+  }
+  return out;
+}
+function waves(points, start, years = 10) {
+  const out = [];
+  for (let y = start + 1; y < start + years; y++) {
+    const now = points.filter(p => p.year === y), before = points.filter(p => p.year === y - 1);
+    const sum = l => l.reduce((a, p) => a + p.amount, 0);
+    const had = new Set(before.map(p => p.member + "|" + p.trigger));
+    out.push({ year: y, total: sum(now), rise: sum(now) - sum(before), starting: now.filter(p => !had.has(p.member + "|" + p.trigger)).map(p => `${p.member}: ${p.trigger}`) });
+  }
+  return out.filter(w => w.rise > 0).sort((a, b) => b.rise - a.rise);
 }
 
 function sums(list) {
@@ -399,9 +429,11 @@ function diveTab() {
 
 function lifecycleBox(code) {
   const triggers = S.setup.triggers.filter(t => t.category === code && t.active);
-  return box("Lifecycle Triggers", triggers.length
-    ? `<table>${triggers.map(t => `<tr><td class="l">${esc(t.name)}</td><td class="l muted">ages ${ages(t)}</td><td class="l muted">${esc(t.kind)}</td><td>${money(t.annualCost)} a year</td></tr>`).join("")}</table>`
-    : `<p class="muted">No lifecycle trigger is in ${esc(catName(code))}.</p>`, { section: `Deep Dive ${catName(code)}: lifecycle` });
+  if (!triggers.length) return box("Lifecycle Triggers and What's Coming", `<p class="muted">No lifecycle trigger is in ${esc(catName(code))}.</p>`, { section: `Deep Dive ${catName(code)}: lifecycle` });
+  const start = thisYear, pts = forwardCurve(triggers, start), kids = [...new Set(pts.map(p => p.member))];
+  const cols = []; for (let yy = start; yy < start + 10; yy++) cols.push({ label: String(yy), segs: kids.map((k, i) => ({ name: k, value: pts.filter(p => p.year === yy && p.member === k).reduce((a, p) => a + p.amount, 0), color: CHILD_COLORS[i % CHILD_COLORS.length] })) });
+  return box("Lifecycle Triggers and What's Coming", `<table>${triggers.map(t => `<tr><td class="l">${esc(t.name)}</td><td class="l muted">ages ${ages(t)}</td><td class="l muted">${esc(t.kind)}</td><td>${money(t.annualCost)} a year</td></tr>`).join("")}</table>
+    ${children().length ? (pts.length ? columns({ cols, height: 200 }) + legend(kids.map((k, i) => [k, CHILD_COLORS[i % CHILD_COLORS.length]])) : `<p class="muted">None of them applies to the children in the next ten years.</p>`) : `<p class="muted">No children are set up yet.</p>`}`, { section: `Deep Dive ${catName(code)}: lifecycle` });
 }
 const KINDS = { recurring: "Recurring", replacement: "Replacement", peak: "Peak event", transition: "Transition" };
 const ages = t => (t.ageFrom === t.ageTo ? `${t.ageFrom}` : `${t.ageFrom}–${t.ageTo}`) + (t.everyYears > 1 ? `, every ${t.everyYears} years` : "");
@@ -437,6 +469,48 @@ function entriesBox(list, title, locked) {
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
     ${rows.length > S.shown ? `<p><button data-action="more">Show ${Math.min(200, rows.length - S.shown)} more</button></p>` : ""}`;
   return box(title, body, { section: title, help: "Every spending dollar: its category and driver and where they came from. ⚑ tells John something about one entry." });
+}
+
+function curveTab() {
+  if (!children().length) return box("Family Spending Forward Curve", `<p class="muted">No children are set up yet, so there is no forward curve.</p>`);
+  const start = thisYear, pts = forwardCurve(S.setup.triggers, start);
+  const keys = S.stackBy === "child" ? [...new Set(children().map(k => k.name))] : [...new Set(pts.map(p => p.category))];
+  const colors = S.stackBy === "child" ? CHILD_COLORS : ["#2e86de", "#e67e22", "#8e44ad", "#16a085", "#d6336c", "#b9770e", "#17a2b8", "#7f8c8d", "#c0392b", "#2c3e50"];
+  const cols = []; for (let y = start; y < start + 10; y++) cols.push({ label: String(y), segs: keys.map((k, i) => ({ name: S.stackBy === "child" ? k : catName(k), value: pts.filter(p => p.year === y && (S.stackBy === "child" ? p.member : p.category) === k).reduce((a, p) => a + p.amount, 0), color: colors[i % colors.length] })) });
+  let h = `<div class="bar"><label>Stack by <select data-set="stackBy"><option value="child"${S.stackBy === "child" ? " selected" : ""}>Child</option><option value="category"${S.stackBy === "category" ? " selected" : ""}>Category</option></select></label>
+    <label title="Grow each cost by its category's inflation; peak events stay in today's dollars"><input type="checkbox" data-set="inflate"${S.inflate ? " checked" : ""}> Grow with inflation</label></div>`;
+  h += box("Family Spending Forward Curve", columns({ cols, height: 280 }) + legend(keys.map((k, i) => [S.stackBy === "child" ? k : catName(k), colors[i % colors.length]])), { help: "Each child's lifecycle costs for the next ten years, stacked" });
+  const all = waves(pts, start), soon = all.filter(w => w.year >= start + 3 && w.year <= start + 5);
+  const wv = w => `<tr><td class="l"><b>${w.year}</b></td><td class="up">+${money(w.rise)}</td><td class="muted">to ${money(w.total)}</td><td class="l wrap">${esc(w.starting.join("; ") || "more of what's already under way")}</td></tr>`;
+  h += box("Waves Ahead", all.length ? `${soon.length ? `<p class="hint">Three to five years out</p><table>${soon.map(wv).join("")}</table>` : ""}<p class="hint">Largest rises in the next ten years</p><table>${all.slice(0, 3).map(wv).join("")}</table>` : `<p class="muted">No year's costs rise over the year before.</p>`);
+  const kids = children();
+  h += box("Year by Year", `<div class="scroll"><table><tr><th class="l">Year</th>${kids.map(k => `<th>${esc(k.name)}</th>`).join("")}<th>Total</th></tr>
+    ${cols.map(c => { const y = +c.label; return `<tr><td class="l">${y}</td>${kids.map(k => { const mine = pts.filter(p => p.year === y && p.member === k.name); return `<td title="${esc(mine.map(p => `${p.trigger}: ${money(p.amount)}`).join("\n"))}">${money(mine.reduce((a, p) => a + p.amount, 0))} (${y - k.birthYear})</td>`; }).join("")}<td><b>${money(pts.filter(p => p.year === y).reduce((a, p) => a + p.amount, 0))}</b></td></tr>`; }).join("")}</table></div>`);
+  return h;
+}
+
+// The rules, read-only (MxAcctMGR's Rules tab changes them): each with both years' spending and a note to John.
+function rulesTab() {
+  const spentBy = key => {
+    const m = {};
+    for (const e of entries()) { const k = key(e); if (k == null) continue; const s = m[k] ?? (m[k] = { before: 0, now: 0 }); if (inNow(e)) s.now += e.amount; else if (inBefore(e)) s.before += e.amount; }
+    return m;
+  };
+  const byAccount = spentBy(e => e.expenseAccountId), byPayee = spentBy(e => e.payeeId), byText = spentBy(e => e.rulePattern?.toLowerCase());
+  const py = S.data.priorStart.slice(0, 4), y = S.data.start.slice(0, 4);
+  const row = (name, spent, r, kind, blank) => `<tr><td class="l">${esc(name)}</td><td>${money(spent?.before ?? 0)}</td><td>${money(spent?.now ?? 0)}</td><td class="l">${esc(r?.category ? catName(r.category) : blank)}</td><td class="l">${esc(r?.driver ? driverTitle(r.driver) : blank === "None" ? "—" : blank)}</td><td class="l muted">${esc(memberName(r?.memberId) ?? "")}</td>
+    <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Rule: ${esc(kind)} ${esc(name)}" data-category="${esc(r?.category ?? "")}">Suggest a change</button></td></tr>`;
+  const head = first => `<tr><th class="l">${first}</th><th>${py}</th><th>${y}</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th></th></tr>`;
+  const rankBy = spent => (a, b) => ((spent[b]?.now ?? 0) - (spent[a]?.now ?? 0));
+  const targets = S.setup.rules.filter(r => r.payeeId).sort((a, b) => rankBy(byPayee)(a.payeeId, b.payeeId));
+  const texts = S.setup.rules.filter(r => r.pattern).sort((a, b) => rankBy(byText)(a.pattern.toLowerCase(), b.pattern.toLowerCase()));
+  return `<p class="hint">Each dollar's category and driver come from the first of these that sets them: the entry's own tag, its target account's rule, the longest statement text rule its payee or description contains, its expense account's rule. John changes the rules in MxAcctMGR; Suggest a change tells him.</p>`
+    + box("Expense Account Rules", `<div class="scroll"><table>${head("Expense account")}${S.setup.expenseAccounts.map(a => row(a.name, byAccount[a.id], S.setup.rules.find(r => r.expenseAccountId === a.id), "expense account", "None")).join("")}</table></div>`,
+      { help: "The category, driver and family member of each expense account's spending: the default for everything filed there" })
+    + box("Target Account Rules", targets.length ? `<div class="scroll"><table>${head("Target account")}${targets.map(r => row(r.payee, byPayee[r.payeeId], r, "target account", "Account's")).join("")}</table></div>` : `<p class="muted">No target account has a rule of its own.</p>`,
+      { help: "Rules for single target accounts, overriding their expense account's rule and any statement text rule" })
+    + box("Statement Text Rules", texts.length ? `<div class="scroll"><table>${head("Statement text")}${texts.map(r => row(r.pattern, byText[r.pattern.toLowerCase()], r, "statement text", "Account's")).join("")}</table></div>` : `<p class="muted">No statement text rule yet.</p>`,
+      { help: "Rules for a piece of statement text: every entry whose payee or description contains it, for the card charges with no target account" });
 }
 
 function familyTab() {
@@ -563,7 +637,7 @@ function downloadTaxCsv() {
 function render() {
   const app = document.getElementById("app");
   if (!S.setup || !S.data) { app.innerHTML = S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : `<div class="loading">Reading the registers…</div>`; return; }
-  const body = { deepdive: diveTab, tax: taxTab, entries: () => entriesBox(entries(), "Spending Entries", false), family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
+  const body = { deepdive: diveTab, curve: curveTab, tax: taxTab, entries: () => entriesBox(entries(), "Spending Entries", false), rules: rulesTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
   let inner;
   try { inner = body(); } catch (e) { inner = `<p class="notice warn">This part of the page failed: ${esc(e.message)}</p>`; console.error(e); }
   app.innerHTML = controls() + strip() + (S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : "") + tabsBar() + inner;
@@ -676,7 +750,7 @@ document.addEventListener("change", ev => {
   if (k === "year") { S.year = +v; keep("year", S.year); return load(); }
   if (k === "ytd") { S.ytd = v; keep("ytd", v); return load(); }
   if (k === "taxYear") { S.taxYear = +v; keep("taxYear", S.taxYear); S.tax = null; return render(); }
-  if (["full", "dive"].includes(k)) { S[k] = v; keep(k, v); }
+  if (["full", "stackBy", "inflate", "dive"].includes(k)) { S[k] = v; keep(k, v); }
   else S[k] = v;
   if (k !== "search") S.shown = 200;
   render();

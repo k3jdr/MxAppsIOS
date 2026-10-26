@@ -32,9 +32,11 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
 
 ## What the page has
 
-The tabs are Overview (the attribution), Deep Dive, Year-End Tax (with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Family & Lifecycle, Sources and My Notes. Rules are MxAcctMGR's only. They show
-the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution (`SpendingModel.swift`). The
-Forward Curve stays in MxAcctMGR only; the Deep Dive lists a category's lifecycle triggers without it. They read the
+The tabs are Overview (the attribution), Deep Dive, Forward Curve, Year-End Tax (with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
+the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution and forward curve
+(`SpendingModel.swift`), and the Deep Dive charts a category's lifecycle triggers ahead. Rules shows the expense
+account, target account and statement text rules read-only, with both years' spending and *Suggest a change* on each;
+MxAcctMGR's Admin tab stays MxAcctMGR's only. They read the
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, the entry filters, and the
 entries tables' Payee width (drag the grip at its header's right edge, with a mouse or a finger; double-click it for the
