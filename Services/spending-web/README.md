@@ -10,6 +10,8 @@ whether or not the Mac is on.
 
 ## The link
 
+MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Messages.
+
 `http://192.168.0.223:8780/s/<key>/`, or `http://k3jdr-dsktop-11.local:8780/s/<key>/`. The key is in
 `spending_web.local.json` on the PC. Anyone who has the link and is on the home network can open the page:
 
@@ -30,8 +32,9 @@ whether or not the Mac is on.
 
 ## What the page has
 
-The tabs are Attribution, Deep Dive, Forward Curve, Year-End Tax (read-only, with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
-the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine (`SpendingModel.swift`). They read the
+The tabs are Attribution, Deep Dive, Year-End Tax (read-only, with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
+the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution (`SpendingModel.swift`). The
+Forward Curve stays in MxAcctMGR only; the Deep Dive lists a category's lifecycle triggers without it. They read the
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, and the entry filters. Nothing that
 edits anything is on the page: no tags, rules, sources, family or triggers.

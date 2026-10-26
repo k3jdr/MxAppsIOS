@@ -26,6 +26,8 @@ struct SpendingAnalysisView: View {
     @State private var notes: [SpendingFeedback] = []
     @State private var problem: String?
     @State private var busy = false
+    /// Link and Recipients… (the family page's link and whom Email… and Message… address).
+    @State private var linkSettings = false
 
     static let tabs = [("attribution", "Attribution"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Rules"),
                        ("family", "Family & Lifecycle"), ("sources", "Sources")]
@@ -42,7 +44,21 @@ struct SpendingAnalysisView: View {
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
-            SpendingTabBar(tabs: Self.tabs + [("feedback", newNotes > 0 ? "Feedback (\(newNotes))" : "Feedback")], selection: $tab)
+            HStack(alignment: .center) {
+                SpendingTabBar(tabs: Self.tabs + [("feedback", newNotes > 0 ? "Feedback (\(newNotes))" : "Feedback")], selection: $tab)
+                Spacer(minLength: 12)
+                Menu {
+                    Button("Email…") { send(.composeEmail) }
+                    Button("Message…") { send(.composeMessage) }
+                    Divider()
+                    Button("Link and Recipients…") { linkSettings = true }
+                } label: {
+                    Label("Send Family Link", systemImage: "paperplane")
+                }
+                .fixedSize()
+                .help("Send the family's read-only web page (its link stays the same) by Mail or Messages")
+            }
+            .sheet(isPresented: $linkSettings) { FamilyLinkSheet() }
             if let setup {
                 switch tab {
                 case "curve": SpendingCurveTab(setup: setup, data: data) { tab = "family" }
@@ -191,6 +207,13 @@ struct SpendingAnalysisView: View {
     }
 
     private var newNotes: Int { notes.filter { $0.status == "new" }.count }
+
+    /// Opens Mail or Messages with the family page's link and a short note; asks for the link first when it isn't set.
+    private func send(_ service: NSSharingService.Name) {
+        if let problem = FamilyLink.send(service) {
+            if FamilyLink.url == nil { linkSettings = true } else { self.problem = problem }
+        }
+    }
 
     /// Opens the Deep Dive tab on a category, by its code or by its name as the charts show it.
     private func openDeepDive(_ nameOrCode: String) {
@@ -2311,5 +2334,110 @@ private struct TaxMoveSheet: View {
         .padding(18)
         .frame(width: 440)
         .onAppear { year = entry.taxYear; quarter = entry.quarter ?? 0; note = entry.note ?? "" }
+    }
+}
+
+// MARK: - Family link
+
+/// The family's read-only web page (Services/spending-web on K3JDR-DSKTOP-11): its link, kept in this Mac's Keychain
+/// (it carries the page's key), and the email address and phone number Send Family Link addresses. The link itself
+/// never changes unless John changes it on the PC.
+enum FamilyLink {
+    private static var match: [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrService as String: (Bundle.main.bundleIdentifier ?? "com.k3jdr.MxAcctMGR") + ".family-link",
+         kSecAttrAccount as String: "spending-web"]
+    }
+
+    static var url: String? {
+        var query = match
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Saves the link (empty removes it); answers whether the Keychain took it.
+    @discardableResult
+    static func save(_ link: String) -> Bool {
+        SecItemDelete(match as CFDictionary)
+        guard !link.isEmpty else { return true }
+        var add = match
+        add[kSecValueData as String] = Data(link.utf8)
+        add[kSecAttrLabel as String] = "MxAcctMGR: family Spending Analysis link"
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+    }
+
+    static var email: String {
+        get { UserDefaults.standard.string(forKey: "familyLinkEmail") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "familyLinkEmail") }
+    }
+    static var phone: String {
+        get { UserDefaults.standard.string(forKey: "familyLinkPhone") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "familyLinkPhone") }
+    }
+
+    static func note(_ link: String) -> String {
+        "Here's our family Spending Analysis page: why our spending changed from last year, and what counts at tax time.\n\n"
+            + "\(link)\n\nIt opens on our home Wi-Fi. Use 💬 Feedback on the page to tell me what you'd change."
+    }
+
+    /// Opens Mail (composeEmail) or Messages (composeMessage) with the link; answers why it couldn't.
+    static func send(_ name: NSSharingService.Name) -> String? {
+        guard let link = url else { return "Set the family page's link first (Link and Recipients…)." }
+        guard let service = NSSharingService(named: name) else { return "This Mac can't open \(name == .composeEmail ? "Mail" : "Messages")." }
+        let to = name == .composeEmail ? email : phone
+        if !to.isEmpty { service.recipients = [to] }
+        if name == .composeEmail { service.subject = "Our family Spending Analysis page" }
+        let items: [Any] = [note(link)]
+        guard service.canPerform(withItems: items) else { return "\(name == .composeEmail ? "Mail" : "Messages") can't send this from this Mac: set up an account there first." }
+        service.perform(withItems: items)
+        return nil
+    }
+}
+
+private struct FamilyLinkSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var link = ""
+    @State private var email = ""
+    @State private var phone = ""
+    @State private var error: String?
+
+    private var linkOK: Bool {
+        guard let u = URL(string: link.trimmingCharacters(in: .whitespaces)), let scheme = u.scheme else { return link.isEmpty }
+        return (scheme == "http" || scheme == "https") && u.path.hasPrefix("/s/")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Family Page Link and Recipients").heading(.heading)
+            Text("The family's read-only Spending Analysis page on the home network. Its link (with its key) is kept in this Mac's Keychain, and it stays the same through every release: it changes only when you change it on the PC.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Form {
+                TextField("Link", text: $link, prompt: Text("http://192.168.0.223:8780/s/…/"))
+                TextField("Email to", text: $email, prompt: Text("For Email…"))
+                TextField("Message to", text: $phone, prompt: Text("Phone number or iMessage address, for Message…"))
+            }
+            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            else if !linkOK { Text("The link is the page's address: http://…:8780/s/<key>/").font(.caption).foregroundStyle(.orange) }
+            HStack {
+                Button("Open in Browser") { if let u = URL(string: link.trimmingCharacters(in: .whitespaces)) { NSWorkspace.shared.open(u) } }
+                    .disabled(link.isEmpty || !linkOK)
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    guard FamilyLink.save(link.trimmingCharacters(in: .whitespaces)) else { error = "The Keychain didn't take the link."; return }
+                    FamilyLink.email = email.trimmingCharacters(in: .whitespaces)
+                    FamilyLink.phone = phone.trimmingCharacters(in: .whitespaces)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!linkOK)
+            }
+        }
+        .padding(18)
+        .frame(width: 520)
+        .onAppear { link = FamilyLink.url ?? ""; email = FamilyLink.email; phone = FamilyLink.phone }
     }
 }

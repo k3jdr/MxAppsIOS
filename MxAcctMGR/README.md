@@ -630,6 +630,10 @@ from one year to the next and forecasts what the children's ages bring. Everythi
 
   *Copy Summary* copies the year as text. *Export CSV…* saves every payment, then each item's totals, the payments by
   quarter and the summary, for whoever prepares the return. *Tax Items* adds, edits and removes items.
+* **Send Family Link.** The menu beside the tabs opens Mail (**Email…**) or Messages (**Message…**) with the family
+  page's link and a short note, addressed to the email and phone saved under **Link and Recipients…**. The link is
+  kept in this Mac's Keychain because it carries the page's key; it is the same link through every release and
+  changes only when John changes it on the PC. With no link saved, Email… and Message… open Link and Recipients first.
 * **The family's web page and Feedback.** The same page, read-only, is on the home network for the rest of the
   family (`Services/spending-web` on K3JDR-DSKTOP-11; see its README for the link and how it is kept private). Notes
   sent from it (💬 on a section, ⚑ on a purchase, *Suggest a change* on a rule) come to the **Feedback** tab. The tab
@@ -764,5 +768,5 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, its sheets, and the charts' Deep Dive menu |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |
