@@ -9,7 +9,7 @@ const EFFECTS = [
   { id: "inflation", name: "Inflation", color: "var(--inflation)", help: "Prices: last year's spending times the category's CPI change, plus what spending tagged Inflation grew beyond it" },
   { id: "usage", name: "Usage", color: "var(--usage)", help: "More (or less) of the same: family growth, new activities, and spending with no driver assigned" },
   { id: "lifecycle", name: "Lifecycle", color: "var(--lifecycle)", help: "Expected age-related costs: what spending tagged Lifecycle Transition grew beyond inflation" },
-  { id: "behavior", name: "Behavior", color: "var(--behavior)", help: "Habits and tastes: what spending tagged Preference Change grew beyond inflation" },
+  { id: "behavior", name: "Behavior", color: "var(--behavior)", help: "Habits, tastes and hobbies: what spending tagged Preference Change or Lifestyle & Hobbies grew beyond inflation" },
   { id: "oneTime", name: "One-Time", color: "var(--onetime)", help: "Events that won't repeat: what spending tagged One-Time Event grew beyond inflation" },
   { id: "taxes", name: "Taxes", color: "var(--taxes)", help: "Taxes: what spending tagged Taxes grew beyond inflation" },
 ];
@@ -19,10 +19,11 @@ const DRIVERS = {
   new_activity: { title: "New Activity", effect: "usage", help: "Something the family didn't do before" },
   lifecycle: { title: "Lifecycle Transition", effect: "lifecycle", help: "Expected age-related spending: tutors, driving, college" },
   preference: { title: "Preference Change", effect: "behavior", help: "A habit or taste changed" },
+  lifestyle: { title: "Lifestyle & Hobbies", effect: "behavior", help: "The family's hobbies and way of living: music gear and lessons, sports, crafts, clubs" },
   one_time: { title: "One-Time Event", effect: "oneTime", help: "An event that won't repeat" },
   taxes: { title: "Taxes", effect: "taxes", help: "Taxes changed: real estate, income, local or sales taxes and their fees" },
 };
-const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#16a085", "#8d6e63", "#a0a0a0"];
+const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#5c6bc0", "#16a085", "#8d6e63", "#a0a0a0"];
 const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["tax", "Year-End Tax"], ["entries", "Entries"],
               ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
 const STALE_DAYS = 14, STALE_CPI_DAYS = 75;

@@ -565,7 +565,8 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   credit cards' charges and credits, and the expense ledgers' items that aren't already a card or check entry
   (`srm.v_spending_entry`). Each gets a **spending category** (Food, Housing, Transportation, Education, Activities,
   Technology, Healthcare, Clothing, Travel, Other) and a **primary driver** (Inflation, Family Growth, New Activity,
-  Lifecycle Transition, Preference Change, One-Time Event, Taxes — V044), and optionally a family member. They come from **rules**:
+  Lifecycle Transition, Preference Change, Lifestyle & Hobbies — V045, One-Time Event, Taxes — V044), and optionally a
+  family member. They come from **rules**:
   an expense account's (V037 seeds the categories from the expense accounts' names); overriding it, a **statement
   text** rule (V042: every entry whose payee, statement name or description contains the text, ignoring case — the
   longest text wins when several match); and overriding both, a target account's. A **tag** on a single entry
@@ -588,7 +589,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
 * **Overview (the attribution).** For each category, `change = inflation + usage + lifecycle + behavior + one-time + taxes`. Inflation is
   the earlier year's spending times the category's CPI change, plus whatever spending tagged Inflation grew beyond it.
   Each other driver's effect is what its spending grew beyond inflation: Family Growth and New Activity (and spending
-  with no driver) count as usage, Lifecycle Transition as lifecycle, Preference Change as behavior, One-Time Event as
+  with no driver) count as usage, Lifecycle Transition as lifecycle, Preference Change and Lifestyle & Hobbies as behavior, One-Time Event as
   one-time, Taxes as taxes (its own effect: a Taxes column, bar and, once something is tagged Taxes, tile). The effects
   add up to the change exactly. The **Key Metrics** table gives each category's earlier and
   current spending, change, growth %, and each effect's share of the change, with a reading: unavoidable (prices or

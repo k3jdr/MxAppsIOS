@@ -360,7 +360,7 @@ struct SpendingAnalysisView: View {
                     .foregroundStyle(by: .value("Driver", s.driver))
             }
             .chartXScale(domain: order.filter { n in slices.contains { $0.category == n } })
-            .chartForegroundStyleScale(domain: drivers, range: [Color.orange, .blue, .cyan, .purple, .pink, .teal, .brown, .gray.opacity(0.5)])
+            .chartForegroundStyleScale(domain: drivers, range: [Color.orange, .blue, .cyan, .purple, .pink, .indigo, .teal, .brown, .gray.opacity(0.5)])
             .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
             .chartOverlay { proxy in CategoryChartMenu(proxy: proxy, axis: .horizontal) { openDeepDive($0) } }
             .frame(height: 260)

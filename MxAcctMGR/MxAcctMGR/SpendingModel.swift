@@ -202,7 +202,7 @@ struct SpendingAnalysisData: Decodable {
 }
 
 enum SpendingDriver: String, CaseIterable, Identifiable {
-    case inflation, familyGrowth = "family_growth", newActivity = "new_activity", lifecycle, preference, oneTime = "one_time", taxes
+    case inflation, familyGrowth = "family_growth", newActivity = "new_activity", lifecycle, preference, lifestyle, oneTime = "one_time", taxes
     var id: String { rawValue }
 
     var title: String {
@@ -212,6 +212,7 @@ enum SpendingDriver: String, CaseIterable, Identifiable {
         case .newActivity: "New Activity"
         case .lifecycle: "Lifecycle Transition"
         case .preference: "Preference Change"
+        case .lifestyle: "Lifestyle & Hobbies"
         case .oneTime: "One-Time Event"
         case .taxes: "Taxes"
         }
@@ -224,6 +225,7 @@ enum SpendingDriver: String, CaseIterable, Identifiable {
         case .newActivity: "Something the family didn't do before"
         case .lifecycle: "Expected age-related spending: tutors, driving, college"
         case .preference: "A habit or taste changed: eating out more, a better brand"
+        case .lifestyle: "The family's hobbies and way of living: music gear and lessons, sports, crafts, clubs"
         case .oneTime: "An event that won't repeat: Philmont, a wedding, a repair"
         case .taxes: "Taxes changed: real estate, income, local or sales taxes and their fees"
         }
@@ -235,7 +237,7 @@ enum SpendingDriver: String, CaseIterable, Identifiable {
         case .inflation: .inflation
         case .familyGrowth, .newActivity: .usage
         case .lifecycle: .lifecycle
-        case .preference: .behavior
+        case .preference, .lifestyle: .behavior
         case .oneTime: .oneTime
         case .taxes: .taxes
         }
@@ -265,7 +267,7 @@ enum SpendingEffect: String, CaseIterable, Identifiable {
         case .inflation: "Prices: last year's spending times the category's CPI change, plus what spending tagged Inflation grew beyond it"
         case .usage: "More (or less) of the same: family growth, new activities, and spending with no driver assigned"
         case .lifecycle: "Expected age-related costs: the growth of spending tagged Lifecycle Transition, beyond inflation"
-        case .behavior: "Habits and tastes: the growth of spending tagged Preference Change, beyond inflation"
+        case .behavior: "Habits, tastes and hobbies: the growth of spending tagged Preference Change or Lifestyle & Hobbies, beyond inflation"
         case .oneTime: "Events that won't repeat: the growth of spending tagged One-Time Event, beyond inflation"
         case .taxes: "Taxes: the growth of spending tagged Taxes, beyond inflation"
         }
