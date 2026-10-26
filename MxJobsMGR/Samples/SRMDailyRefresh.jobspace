@@ -287,6 +287,10 @@
       },
       "id" : "5AB7EED7-F8C2-4454-A1A9-A2AA6F0E1C22",
       "kind" : "trigger",
+      "link" : {
+        "address" : "mxnoteone://page/4F82E7D3-61F3-4F07-AA53-CCB6236B043C/D554E075-0DC6-44F3-92F1-DEC161DCCCDF?e=46034E32-1098-49EA-8D4D-AAA65316668C&p=0&c=1,0&t=Daily%20Refresh",
+        "tip" : "e1xydGYxXGFuc2lcYW5zaWNwZzEyNTJcY29jb2FydGYyOTA3Clxjb2NvYXRleHRzY2FsaW5nMFxjb2NvYXBsYXRmb3JtMHtcZm9udHRibFxmMFxmbmlsXGZjaGFyc2V0MCBIZWx2ZXRpY2FOZXVlO30Ke1xjb2xvcnRibDtccmVkMjU1XGdyZWVuMjU1XGJsdWUyNTU7XHJlZDBcZ3JlZW4wXGJsdWUwO30Ke1wqXGV4cGFuZGVkY29sb3J0Ymw7O1xjc3NyZ2JcYzBcYzBcYzBcYzg0NzA2XGNuYW1lIGxhYmVsQ29sb3I7fQpccGFyZFx0eDU2MFx0eDExMjBcdHgxNjgwXHR4MjI0MFx0eDI4MDBcdHgzMzYwXHR4MzkyMFx0eDQ0ODBcdHg1MDQwXHR4NTYwMFx0eDYxNjBcdHg2NzIwXHBhcmRpcm5hdHVyYWxccGFydGlnaHRlbmZhY3RvcjAKClxmMFxmczI0IFxjZjIgV2Vla2RheSBTUk0gUmVmcmVzaFwKRGF0YSBMb2FkZXIgQXV0b21hdGlvbiB9"
+      },
       "notes" : "After the close, once the SPDR holdings files and end-of-day prices are published.",
       "outcome" : {
         "assertions" : [
@@ -1665,7 +1669,9 @@
       "plan" : "Free",
       "projectFolder" : "~/MyCodeGIT/MxAppsIOS/MxDataHUB/SRM",
       "provider" : "https://api.openfigi.com/v3",
-      "rateLimitPerMinute" : 9
+      "rateLimitPerMinute" : 9,
+      "secureAccountID" : 102,
+      "secureAccountName" : "Open FIGI"
     },
     {
       "auth" : "header",
@@ -1682,7 +1688,9 @@
       "plan" : "Starter",
       "projectFolder" : "",
       "provider" : "",
-      "rateLimitPerMinute" : 300
+      "rateLimitPerMinute" : 300,
+      "secureAccountID" : 103,
+      "secureAccountName" : "FMP By Name"
     }
   ]
 }
