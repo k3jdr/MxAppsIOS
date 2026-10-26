@@ -718,6 +718,13 @@ nonisolated enum SpendingClient {
     static func saveRule(_ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/rules", body: signed(body), as: SpendingSetup.self)
     }
+    /// Files card and check entries under another expense account; with fileFuture, their target account (or a new
+    /// one named targetName, with their statement names) too, so future downloads land there.
+    static func changeExpenseAccount(_ entries: [SpendingEntry], to account: Int, fileFuture: Bool, targetName: String) async throws -> SpendingSetup {
+        try await AccountsClient.request("POST", "/spending/expense-account",
+                                         body: signed(["entries": entries.map { ["source": $0.source, "id": $0.entryId] }, "expenseAccountId": account,
+                                                       "fileFuture": fileFuture, "targetName": targetName]), as: SpendingSetup.self)
+    }
     /// Expense-ledger entries that match an unlinked card charge or check (Admin).
     static func overlaps() async throws -> [SpendingOverlap] {
         struct Answer: Decodable { var overlaps: [SpendingOverlap] }

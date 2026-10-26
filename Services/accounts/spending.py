@@ -40,6 +40,11 @@
                                                    the entry's tag, and a 'change' note with what it was before
     PUT    /spending/change/trigger/<id>           the family page's change to a lifecycle trigger {author, category,
                                                    kind}, and a 'change' note
+    POST   /spending/expense-account               file card and check entries under another expense account {entries:
+                                                   [{source, id}], expenseAccountId, fileFuture, targetName, by}: with
+                                                   fileFuture, their target account (or a new one named targetName,
+                                                   with their statement names) is filed under it too, so future
+                                                   downloads land there; answers with the setup and how many changed
     GET    /spending/overlaps                      Admin: expense-ledger entries not linked to a card charge or check that
                                                    match one (same amount within a week, the charge or check linked to
                                                    no entry): counted twice while the ledger is included
@@ -1032,6 +1037,82 @@ def undo_change(conn, fid, body):
     return feedback(conn)
 
 
+# ------------------------------------------------------------------------------------------------------------ entries
+
+ENTRY_TABLES = {"card": ("srm.card_txn", "srm.card_line", "card_line_id", "card"),
+             "bank": ("srm.bank_txn", "srm.bank_line", "bank_line_id", "checking")}
+
+
+def change_expense_account(conn, body):
+    """Files card and check entries under another expense account (Entries ▸ Change Expense Account…). With
+    fileFuture, what comes next lands there too: the entries' target accounts are filed under it, and entries with no
+    target account get one (found by targetName, or made) whose bank names are their statement names, as the card and
+    checking downloads match them. Expense-ledger entries take their budget line's expense account and can't change
+    here."""
+    account = _opt_int(body, "expenseAccountId")
+    if not account or not fetch(conn, "SELECT 1 FROM srm.expense_account WHERE expense_account_id = %s AND kind = 'expense'",
+                                (account,)):
+        raise ValueError("expenseAccountId must be an expense account")
+    chosen = body.get("entries") or []
+    if not isinstance(chosen, list) or not chosen:
+        raise ValueError("entries is a list of {source, id}")
+    by = _by(body)
+    rows = []
+    for c in chosen:
+        source = c.get("source")
+        if source == "ledger":
+            raise ValueError("an expense-ledger entry takes its budget line's expense account: change the line instead")
+        if source not in ENTRY_TABLES:
+            raise ValueError("source must be card or bank")
+        table, lines, line_key, _ = ENTRY_TABLES[source]
+        found = fetch(conn, """SELECT t.txn_id, t.payee_id, t.payee_name, l.name AS statement
+                                 FROM %s t LEFT JOIN %s l USING (%s) WHERE t.txn_id = %%s FOR UPDATE OF t"""
+                      % (table, lines, line_key), (int(c.get("id") or 0),))
+        if not found:
+            raise LookupError("no %s entry %s" % (source, c.get("id")))
+        rows.append(dict(found[0], source=source))
+    name = " ".join(str(body.get("targetName") or "").split())[:120]
+    if body.get("fileFuture") and not name and any(not r["payee_id"] for r in rows):
+        raise ValueError("targetName is required for entries with no target account")
+    for r in rows:
+        fetch(conn, """UPDATE %s SET expense_account_id = %%s, version = version + 1, updated_by = %%s, updated_at = now()
+                        WHERE txn_id = %%s""" % ENTRY_TABLES[r["source"]][0], (account, by, r["txn_id"]))
+    target = None
+    if body.get("fileFuture"):
+        # Their target accounts: filed under it from now on.
+        payees = sorted({r["payee_id"] for r in rows if r["payee_id"]})
+        if payees:
+            fetch(conn, """UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s,
+                                  updated_at = now() WHERE payee_id = ANY(%s)""", (account, by, payees))
+        loose = [r for r in rows if not r["payee_id"]]
+        if loose:
+            names = sorted({(r["statement"] or r["payee_name"] or "").strip() for r in loose} - {""})
+            sources = sorted({ENTRY_TABLES[r["source"]][3] for r in loose})
+            found = fetch(conn, "SELECT payee_id FROM srm.payee WHERE lower(name) = lower(%s)", (name,))
+            if found:
+                target = found[0]["payee_id"]
+                fetch(conn, """UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s,
+                                      updated_at = now() WHERE payee_id = %s""", (account, by, target))
+            else:
+                target = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, updated_by, funding_sources)
+                                        VALUES (%s, %s, %s, %s) RETURNING payee_id""", (name, account, by, sources))[0]["payee_id"]
+            # The card companies' and the bank's names for it, so their downloads post to it, and the registers
+            # that offer it.
+            fetch(conn, """UPDATE srm.payee SET
+                                  bank_names = ARRAY(SELECT DISTINCT x FROM unnest(coalesce(bank_names, '{}') || %s::text[]) x
+                                                      WHERE lower(x) <> lower(name)),
+                                  funding_sources = ARRAY(SELECT DISTINCT x FROM unnest(coalesce(funding_sources, '{}') || %s::text[]) x)
+                            WHERE payee_id = %s""", (names, sources, target))
+            for r in loose:
+                fetch(conn, """UPDATE %s SET payee_id = %%s, payee_name = %%s WHERE txn_id = %%s""" % ENTRY_TABLES[r["source"]][0],
+                      (target, name, r["txn_id"]))
+    conn.commit()
+    out = setup(conn, details=True)
+    out["changed"] = len(rows)
+    out["targetAccountId"] = target
+    return out
+
+
 # ------------------------------------------------------------------------------------------------------------ admin
 
 def overlaps(conn):
@@ -1080,6 +1161,8 @@ def route(conn, method, parts, body, q):
         return analysis(conn, q)
     if parts == ["spending", "overlaps"] and method == "GET":
         return overlaps(conn)
+    if parts == ["spending", "expense-account"] and method == "POST":
+        return change_expense_account(conn, body)
     if parts == ["spending", "sources"] and method == "GET":
         return sources(conn, q)
     if len(parts) == 4 and parts[1] == "sources" and method == "PUT":

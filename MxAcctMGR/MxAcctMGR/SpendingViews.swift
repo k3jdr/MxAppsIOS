@@ -544,6 +544,8 @@ private struct SpendingEntriesTab: View {
     @State private var selected = Set<SpendingEntry.ID>()
     @State private var tagging: [SpendingEntry]?
     @State private var ruleFor: RuleTarget?
+    /// The entries Change Expense Account… is open for.
+    @State private var refiling: [SpendingEntry]?
     /// The columns' widths (drag a header's edge), order and visibility, kept across reloads and launches: the Deep
     /// Dive builds a new table for each category, which would otherwise start from the standard widths.
     @AppStorage("spendingEntriesColumns") private var columnsStore = Data()
@@ -567,7 +569,7 @@ private struct SpendingEntriesTab: View {
 
     var body: some View {
         let rows = shown
-        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, a statement text rule, its expense account's rule). Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — or to set the rule for their target account, statement text or expense account.") {
+        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, a statement text rule, its expense account's rule). Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to set the rule for their target account, statement text or expense account, or to file them under another expense account (Change Expense Account…), with the charges to come.") {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) { entryFilters; Spacer(); entryCount(rows) }
                 VStack(alignment: .leading, spacing: 6) {
@@ -609,6 +611,8 @@ private struct SpendingEntriesTab: View {
                 if picked.contains(where: \.tagged) {
                     Button("Clear Tags") { Task { await clear(picked.filter(\.tagged)) } }
                 }
+                Button(picked.count > 1 ? "Change Expense Account of \(picked.count) Entries…" : "Change Expense Account…") { refiling = picked }
+                    .disabled(!picked.contains { $0.source != "ledger" })
                 if picked.count == 1, let e = picked.first {
                     Divider()
                     if let id = e.payeeId { Button("Rule for Target Account \(e.payee ?? "")…") { ruleFor = RuleTarget(payeeId: id, name: e.payee ?? "") } }
@@ -634,6 +638,9 @@ private struct SpendingEntriesTab: View {
         }
         .sheet(item: $ruleFor) { target in
             SpendingRuleSheet(setup: setup, target: target, entries: entries) { ruleSaved($0) }
+        }
+        .sheet(isPresented: Binding(get: { refiling != nil }, set: { if !$0 { refiling = nil } })) {
+            if let picked = refiling { RefileSheet(setup: setup, entries: picked) { ruleSaved($0) } }
         }
     }
 
@@ -881,6 +888,85 @@ struct SpendingRuleSheet: View {
                 dismiss()
             } catch { self.error = describe(error) }
         }
+    }
+}
+
+/// Change Expense Account…: files card and check entries under another expense account (the bookkeeping category the
+/// registers show) and, unless turned off, what comes next with the same target account or statement name too.
+private struct RefileSheet: View {
+    var setup: SpendingSetup
+    var entries: [SpendingEntry]
+    var saved: (SpendingSetup) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var account = 0
+    @State private var fileFuture = true
+    @State private var targetName = ""
+    @State private var error: String?
+    @State private var saving = false
+
+    private var changeable: [SpendingEntry] { entries.filter { $0.source != "ledger" } }
+    private var loose: [SpendingEntry] { changeable.filter { $0.payeeId == nil } }
+    private var targets: [String] { Array(Set(changeable.compactMap { $0.payeeId == nil ? nil : $0.payee })).sorted() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(changeable.count == 1 ? "Change Expense Account" : "Change Expense Account of \(changeable.count) Entries").heading(.heading)
+            Text(summary).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Form {
+                Picker("Expense account", selection: $account) {
+                    Text("Choose…").tag(0)
+                    ForEach(setup.expenseAccounts) { a in Text(a.name).tag(a.id) }
+                }
+                Toggle("Also file future charges under it", isOn: $fileFuture)
+                if fileFuture && !loose.isEmpty {
+                    TextField("Target account", text: $targetName, prompt: Text("NJM Insurance"))
+                }
+            }
+            Text(futureNote).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            HStack {
+                Spacer()
+                if saving { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Change") { Task { await save() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(saving || account == 0 || (fileFuture && !loose.isEmpty && targetName.trimmingCharacters(in: .whitespaces).isEmpty))
+            }
+        }
+        .padding(18)
+        .frame(width: 500)
+        .onAppear {
+            // Start from the most common statement words of the entries without a target account.
+            targetName = loose.first.map { $0.statementKey.capitalized } ?? ""
+        }
+    }
+
+    private var summary: String {
+        let names = Array(Set(changeable.map { $0.payee ?? $0.description ?? "" })).sorted()
+        var s = "\(changeable.count) \(changeable.count == 1 ? "entry" : "entries"), \(money2(changeable.map(\.amount).reduce(0, +))): "
+            + names.prefix(3).joined(separator: "; ") + (names.count > 3 ? "; …" : "")
+        let now = Set(changeable.compactMap(\.expenseAccount))
+        if !now.isEmpty { s += ". Filed under \(now.sorted().joined(separator: ", ")) now." }
+        let ledger = entries.count - changeable.count
+        if ledger > 0 { s += " \(ledger) expense-ledger \(ledger == 1 ? "entry takes" : "entries take") its budget line's expense account and won't change." }
+        return s
+    }
+
+    private var futureNote: String {
+        guard fileFuture else { return "Only these entries change; the next charges come in as before." }
+        var parts: [String] = []
+        if !targets.isEmpty { parts.append("Their target account\(targets.count == 1 ? "" : "s") (\(targets.joined(separator: ", "))) will be filed under it, so new entries with \(targets.count == 1 ? "it" : "them") are too.") }
+        if !loose.isEmpty { parts.append("The entries with no target account get this one, with their statement names, so the card and checking downloads post the next charges to it, under this expense account. It shows on Banking ▸ Target Accounts.") }
+        return parts.joined(separator: " ")
+    }
+
+    private func save() async {
+        saving = true
+        defer { saving = false }
+        do {
+            saved(try await SpendingClient.changeExpenseAccount(changeable, to: account, fileFuture: fileFuture, targetName: targetName))
+            dismiss()
+        } catch { self.error = describe(error) }
     }
 }
 

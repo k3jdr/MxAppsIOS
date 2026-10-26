@@ -581,7 +581,12 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   longest text wins when several match); and overriding both, a target account's. A **tag** on a single entry
   overrides them all, and can name an event ("Philmont 2026"). Rules are set on *Rules*; tags on *Entries*
   (double-click, or select several and right-click). The *Entries* context menu also opens the rule for an entry's
-  target account, statement text or expense account.
+  target account, statement text or expense account, and **Change Expense Account…** files the selected card and
+  check entries under another expense account (NJM INSURANCE from Subscriptions & Services to Insurance). With *Also
+  file future charges under it* (on at first), their target account is filed under it too; entries with no target
+  account get one (named in the sheet, found or made) that carries their statement names, so the next card and
+  checking downloads post to it, under that expense account. Expense-ledger entries take their budget line's expense
+  account and don't change.
 * **Rules.** *Expense Account Rules*: one row per expense account. *Target Account Rules*: the target accounts with a
   rule first (bold, ✕ removes it), then every target account with spending in either year, most spent this year first;
   *Only rules* hides the rest. Picking a category, driver or member on a row gives it a rule. Only entries linked to a
