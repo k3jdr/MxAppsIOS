@@ -12,7 +12,11 @@
                                                        the checking entry and the card payment, linked
     PUT  /cards/accounts/<code>/statements/<closing>   what the statement says {statementBalance, minimumDue, dueDate, notes}
     POST /cards/accounts/<code>/import                 {filename, text}: the download saved in the card's drop folder, then
-                                                       read (srm-loader POST /load/card-downloads); with no file, read them now
+                                                       read (srm-loader POST /load/card-downloads); with no file, read them now.
+                                                       With preview: true, what the file holds for the card, saving nothing:
+                                                       each line new or already read, the totals by kind, the lines before
+                                                       the card's opening date, categories with no expense account. A file
+                                                       that isn't a card download known here, or is another card's, is refused
     GET  /cards/targets                                the card registers' targets that aren't target accounts: each name as
                                                        the card company gives it, with its entries, total, dates and kinds
     POST /cards/targets                                make them target accounts {names: [...], by}: each a recipient of credit
@@ -396,15 +400,79 @@ def _drop_folder(code):
     return folder
 
 
+def _download(conn, card, body):
+    """(file name, what it is, the file's lines for the card) of an uploaded download, refused (ValueError) when it isn't
+    a card download known here or the card it names is another one — as card-downloads would read it from the card's
+    sub-folder."""
+    from srmlib.loaders import card_downloads   # SRM's folder is on sys.path (accounts_service.SRM)
+    name = os.path.basename(str(body.get("filename") or "download.csv"))
+    if not re.match(r"^[\w .()\-]{1,120}\.(csv|qfx|ofx)$", name, re.I):
+        raise ValueError("a card download is a .csv, .qfx or .ofx file")
+    text = str(body["text"]).lstrip("\ufeff")
+    what, found = card_downloads.read_file(name, text)
+    if not what:
+        raise ValueError("%s isn't a card download MxAcctMGR reads: Chase CSV or QFX / OFX, Discover or Capital One CSV"
+                         % name)
+    with conn.cursor() as cur:
+        cards, by_last4 = card_downloads.last4_map(cur, card_downloads.config())
+    code, lines, others = card["code"].upper(), [], set()
+    for l4, ls, _ in found:
+        to = card_downloads.card_of(l4, what == "QFX / OFX", code, cards, by_last4)
+        if to == code:
+            lines += ls
+        else:
+            others.add(to or "···" + (l4 or "?"))
+    if not lines:
+        names = {r["code"].upper(): r["name"] for r in fetch(conn, "SELECT code, name FROM srm.card_account")}
+        raise ValueError("%s is the activity of %s, not %s: pick that card to import it"
+                         % (name, ", ".join(sorted(names.get(o, o) for o in others)), card["name"]))
+    return name, what, lines
+
+
+def preview_download(conn, card, body):
+    """What an uploaded download holds for the card, saving nothing: its lines, each new or already read."""
+    from srmlib.loaders import card_downloads
+    name, what, lines = _download(conn, card, body)
+    fmt = "CSV" if name.lower().endswith(".csv") else "OFX"
+    with conn.cursor() as cur:
+        states = card_downloads.states(cur, card["card_account_id"], fmt, lines)
+    mapped = {r["c"] for r in fetch(conn, "SELECT issuer_category AS c FROM srm.card_category WHERE expense_account_id IS NOT NULL")}
+    new = [l for l, st in zip(lines, states) if st == "new"]
+    kinds = {}
+    for l in new:
+        k = kinds.setdefault(l["kind"], {"kind": l["kind"], "count": 0, "total": 0.0})
+        k["count"] += 1
+        k["total"] = round(k["total"] + l["amount"], 2)
+    opening = card["opening_date"]
+    # A CSV file doesn't name its card (Discover's): one from another card company is likely the wrong card's.
+    company = what[:-4] if what.endswith(" CSV") else None
+    issuer = (card["issuer"] or "").strip()
+    other_company = bool(company and issuer and company.lower() not in issuer.lower()
+                         and issuer.lower() not in company.lower())
+    return {"preview": {
+        "file": name, "what": what, "lines": len(lines), "new": len(new),
+        "otherCompany": "%s is a %s download, and %s is a %s card" % (name, company, card["name"], issuer) if other_company else None,
+        "read": states.count("read"), "otherFormat": states.count("other format"),
+        "first": min(l["date"] for l in lines), "last": max(l["date"] for l in lines),
+        "openingDate": opening,
+        "beforeOpening": sum(1 for l in new if opening and (l["transDate"] or l["date"]) < opening),
+        "kinds": sorted(kinds.values(), key=lambda k: KINDS.index(k["kind"]) if k["kind"] in KINDS else 99),
+        "unmapped": sorted({l["category"] for l in new if l["category"] and l["kind"] == "charge"
+                            and l["category"].lower() not in mapped}),
+        "entries": [{"date": l["transDate"] or l["date"], "postedDate": l["date"], "kind": l["kind"], "name": l["name"],
+                     "category": l["category"], "amount": l["amount"], "state": st}
+                    for l, st in zip(lines, states)]}}
+
+
 def import_downloads(conn, code, body):
     """Saves an uploaded download in the card's drop folder, then runs srm.py load card-downloads through srm-loader
-    (so it shows in the activity log), then the register."""
+    (so it shows in the activity log), then the register. With preview, only what the file holds."""
     card = _card(conn, code)
+    if body.get("text") and body.get("preview"):
+        return preview_download(conn, card, body)
     saved = None
     if body.get("text"):
-        name = os.path.basename(str(body.get("filename") or "download.csv"))
-        if not re.match(r"^[\w .()\-]{1,120}\.(csv|qfx|ofx)$", name, re.I):
-            raise ValueError("a card download is a .csv, .qfx or .ofx file")
+        name, _, _ = _download(conn, card, body)
         saved = os.path.join(_drop_folder(card["code"]), name)
         with open(saved, "w", encoding="utf-8") as f:
             f.write(body["text"])

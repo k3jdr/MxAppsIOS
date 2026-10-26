@@ -402,6 +402,24 @@ files the entry under the target's category. It starts as a **Debit** with no ch
 entered before; its gear button opens **Settings ▸ Banking**, where the kind, the check number (empty or the register's
 next) and the date (the entry before's or today) it starts with are set.
 
+### Importing a card download (Banking ▸ Credit Card Accounts ▸ Import File…)
+
+Download the card's activity from the card company — Chase: Spreadsheet (CSV) or Quicken (QFX / OFX); Discover
+(*All Available* reaches back two years) and Capital One: CSV — and pick it with **Import File…** above the card's
+register. Before anything is saved, a sheet shows what the file holds for the card (`POST /cards/accounts/<code>/import`
+with `preview`): what it is (Discover CSV …) and its dates; how many lines are new and how many were read already —
+by a download that overlapped it, or from the card's other format (a Chase CSV and a QFX of the same weeks); the new
+lines by kind (charges, credits, payments, fees, interest) and how much they change the balance owed; and every line,
+or only the new ones. It warns of new lines dated before the register starts (*Edit… ▸ Register starts* and *Owed
+then* set where the balance begins), of card-company categories with no expense account, and of a CSV from another
+card company than the card's. A file that names another card (Chase's *Chase1234_Activity…* file names, Capital One's
+Card No., a QFX's account) is refused — pick that card — and so is a file that isn't a card download.
+
+**Import *N* New Lines** saves the file in the card's drop folder (`src-cards/<CODE>/`) and runs `srm.py load
+card-downloads` through srm-loader (it shows in the shared activity log): each line is read once and posts to the
+register — matching a charge entered by hand, else as a new entry with its target and category — and the card's
+payments link to the checking entries that paid them once *Paid from checking as* is set.
+
 ### Target accounts (Banking ▸ Target Accounts)
 
 A target account is where a register entry's money goes to or comes from — a utility, a card, a brokerage, a person
@@ -606,7 +624,7 @@ code), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 
 hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding VTI` selects a holding in My Holdings. Debug builds only:
 `-linkEdit symbol` (or `name`) opens the Link dialog for the selected company or holding, and `-linkHoverTest ID`
 (e.g. `META|symbol`) shows a linked cell's hover card as if the pointer rested on it, and
-`-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard), and `-addSecurities YES -addLinkEdit META|name` opens the Link dialog for that row of Add Securities.
+`-linkPasteboard NAME` makes the dialog look for a copied MxNoteONE link on that named pasteboard (not the clipboard), and `-addSecurities YES -addLinkEdit META|name` opens the Link dialog for that row of Add Securities. `-screen cards -cardAccount DISCOVER -cardImportFile PATH` opens Import File… with that file picked (an unsandboxed test build reads it: `ENABLE_APP_SANDBOX=NO`).
 
 ## Files
 

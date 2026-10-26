@@ -5,8 +5,8 @@
 //  Banking ▸ Credit Card Accounts: each card kept as a register in the security master (accounts service /cards,
 //  V029) — its charges, credits, payments, fees and interest with the balance owed, the credit left, and its
 //  statement periods (statement balance, minimum due, due date, paid or not). The card company's side comes from its
-//  downloads (Chase CSV / QFX, Discover and Capital One CSV; srm.py load card-downloads): Import File… saves one in
-//  the card's drop folder and reads it; each line is read once, also when downloads overlap, and posts to the
+//  downloads (Chase CSV / QFX, Discover and Capital One CSV; srm.py load card-downloads): Import File… shows what one
+//  holds for the card (new lines, already read, totals by kind), then saves it in the card's drop folder and reads it; each line is read once, also when downloads overlap, and posts to the
 //  register — matching a charge entered by hand, else as a new entry with its target and category. A card's payments
 //  link to the checking entries that paid them (Pay… writes both).
 //
@@ -129,6 +129,34 @@ struct CardRegister: Decodable {
     var load: Load?
 }
 
+/// What a download holds for a card before it is imported (POST …/import with preview): nothing is saved yet.
+struct CardImportPreview: Decodable {
+    struct Kind: Decodable, Hashable { var kind: String; var count: Int; var total: Double }
+    struct Line: Decodable, Hashable { var date: String; var postedDate: String; var kind: String; var name: String?; var category: String?; var amount: Double; var state: String }
+    var file: String
+    var what: String
+    var lines: Int
+    var new: Int
+    var read: Int
+    var otherFormat: Int
+    var first: String
+    var last: String
+    var openingDate: String?
+    var beforeOpening: Int
+    var otherCompany: String?
+    var kinds: [Kind]
+    var unmapped: [String]
+    var entries: [Line]
+}
+
+/// A download picked with Import File…, shown before it is imported.
+struct PendingCardImport: Identifiable {
+    let id = UUID()
+    var filename: String
+    var text: String
+    var preview: CardImportPreview
+}
+
 nonisolated enum CardClient {
     private struct Accounts: Decodable { var accounts: [CardAccount] }
     private static func signed(_ body: [String: Any]) -> [String: Any] { body.merging(["by": BankClient.by]) { a, _ in a } }
@@ -165,6 +193,12 @@ nonisolated enum CardClient {
     static func saveStatement(_ code: String, _ closing: String, _ body: [String: Any]) async throws -> CardRegister {
         try await AccountsClient.request("PUT", "/cards/accounts/\(code)/statements/\(closing)", body: signed(body), as: CardRegister.self)
     }
+    /// What a download holds for the card, saving nothing: refused when it isn't a card download or is another card's.
+    static func previewFile(_ code: String, filename: String, text: String) async throws -> CardImportPreview {
+        struct Answer: Decodable { var preview: CardImportPreview }
+        return try await AccountsClient.request("POST", "/cards/accounts/\(code)/import", body: ["filename": filename, "text": text, "preview": true],
+                                                timeout: 120, as: Answer.self).preview
+    }
     /// Saves a download in the card's drop folder and reads it; with no file, reads the drop folders now.
     static func importFile(_ code: String, filename: String? = nil, text: String? = nil) async throws -> CardRegister {
         var body: [String: Any] = [:]
@@ -194,6 +228,8 @@ struct CardsView: View {
     @State private var paying = false
     @State private var linking: CardEntry?
     @State private var statement: CardStatement?
+    /// A download picked with Import File…, shown before it is imported.
+    @State private var pending: PendingCardImport?
     @State private var selection = Set<CardEntry.ID>()
     @State private var draft = CardDraft()
     /// The register's Excel-style sorting and column filters (the header buttons).
@@ -201,7 +237,7 @@ struct CardsView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: "Each card's register: what was charged and paid, the balance owed and the credit left, statement by statement. The card company's downloads post to it.", lesson: [
-            "Download the card's activity — Chase: Spreadsheet (CSV) or Quicken (QFX); Discover and Capital One: CSV — and Import File… it here. Downloads that overlap are fine: each line is read once.",
+            "Download the card's activity — Chase: Spreadsheet (CSV) or Quicken (QFX); Discover and Capital One: CSV — and Import File… it here: what it holds for the card shows first. Downloads that overlap are fine: each line is read once.",
             "Each line posts to the register with its target (found by the name the card company uses, once you have picked a target for it) and category (the target's, else the card company's). Enter a charge by hand from a receipt and the download's line matches it.",
             "Pay… writes the checking entry and the card's payment together, linked; a payment already in the check register links by itself (same amount within a week). A statement is paid when the payments by its due date cover its balance.",
         ]) {
@@ -228,6 +264,15 @@ struct CardsView: View {
         .task { await reload() }
         // A target's link changed (here, in Checking or in Target Accounts): the register shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
+        #if DEBUG
+        // Self-test, once the register is loaded: Import File… with this file picked (-cardImportFile PATH; an
+        // unsandboxed test build reads it).
+        .task(id: register == nil) {
+            guard register != nil, let path = UserDefaults.standard.string(forKey: "cardImportFile") else { return }
+            UserDefaults.standard.removeObject(forKey: "cardImportFile")
+            preview(URL(fileURLWithPath: path))
+        }
+        #endif
         .task(id: selected) {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -261,6 +306,11 @@ struct CardsView: View {
                 await run { try await CardClient.link(e.id, to: bankTxn) }
             }
         }
+        .sheet(item: $pending) { p in
+            if let a = register?.account {
+                CardImportSheet(card: a, pending: p) { await importPending(p) }
+            }
+        }
         .sheet(item: $statement) { s in
             StatementSheet(statement: s) { body in
                 guard let code = register?.account.code else { return nil }
@@ -286,7 +336,7 @@ struct CardsView: View {
             if let message { Text(message).font(.callout).foregroundStyle(.secondary).lineLimit(2) }
             Button { importFile() } label: { Label("Import File…", systemImage: "arrow.down.doc") }
                 .disabled(register == nil || busy)
-                .help("Read a download from the card company (Chase CSV / QFX / OFX, Discover or Capital One CSV): it is saved in the card's drop folder, and lines already read are skipped")
+                .help("Read a download from the card company (Chase CSV / QFX / OFX, Discover or Capital One CSV): what it holds shows first; imported, it is saved in the card's drop folder, and lines already read are skipped")
             Button { paying = true } label: { Label("Pay…", systemImage: "arrow.right.circle") }
                 .disabled(register == nil || busy)
                 .help("Pay the card from a checking account: the checking entry and the card's payment, linked")
@@ -368,7 +418,7 @@ struct CardsView: View {
             GridFilterStatus(shown: rows.count, of: period.count, options: $grid)
             Table(rows, selection: $selection) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
-                TableColumn("Kind") { e in Text(kindLabel(e.kind)).foregroundStyle(.secondary) }.width(min: 50, ideal: 64)
+                TableColumn("Kind") { e in Text(Self.kindLabel(e.kind)).foregroundStyle(.secondary) }.width(min: 50, ideal: 64)
                 TableColumn("Target") { e in
                     TargetCell(entry: e.target, website: e.payeeId.flatMap { id in book?.payees.first { $0.id == id }?.logonUrl }) { id, note in await saveNote(id, note) }
                 }.width(min: 140, ideal: 200)
@@ -494,7 +544,7 @@ struct CardsView: View {
         }
     }
 
-    private func kindLabel(_ k: String) -> String {
+    static func kindLabel(_ k: String) -> String {
         ["charge": "Charge", "credit": "Credit", "payment": "Payment", "fee": "Fee", "interest": "Interest", "adjustment": "Adjust"][k] ?? k
     }
 
@@ -595,6 +645,12 @@ struct CardsView: View {
         panel.allowsOtherFileTypes = true
         panel.message = "A download of the card's activity: Chase CSV or QFX / OFX, Discover or Capital One CSV"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        preview(url)
+    }
+
+    /// Shows what the download holds for the card (the import sheet), or why it can't be imported.
+    private func preview(_ url: URL) {
+        guard let code = register?.account.code else { return }
         guard let text = (try? String(contentsOf: url, encoding: .utf8)) ?? (try? String(contentsOf: url, encoding: .isoLatin1)) else {
             message = "\(url.lastPathComponent) could not be read."
             return
@@ -603,12 +659,27 @@ struct CardsView: View {
             busy = true
             defer { busy = false }
             do {
-                let r = try await CardClient.importFile(code, filename: url.lastPathComponent, text: text)
-                register = r
-                message = r.load?.message.map { "\(r.load?.file ?? "Downloads"): \($0)" }
+                let preview = try await CardClient.previewFile(code, filename: url.lastPathComponent, text: text)
+                message = nil
+                pending = PendingCardImport(filename: url.lastPathComponent, text: text, preview: preview)
             } catch {
                 message = describe(error)
             }
+        }
+    }
+
+    /// Imports the download the preview showed: nil when done, else why not.
+    private func importPending(_ p: PendingCardImport) async -> String? {
+        guard let code = register?.account.code else { return "No card is selected." }
+        busy = true
+        defer { busy = false }
+        do {
+            let r = try await CardClient.importFile(code, filename: p.filename, text: p.text)
+            register = r
+            message = r.load?.message.map { "\(r.load?.file ?? "Downloads"): \($0)" }
+            return r.load?.status == "failed" ? (r.load?.message ?? "card-downloads failed") : nil
+        } catch {
+            return describe(error)
         }
     }
 }
@@ -971,5 +1042,118 @@ struct StatementSheet: View {
             due = isoDay.date(from: statement.dueDate) ?? Date()
             notes = statement.notes ?? ""
         }
+    }
+}
+
+// MARK: - Importing a download
+
+/// What a card company's download holds for the card before it is imported: its lines, each new or already read; the
+/// new lines' totals by kind; and what to look at first — another card company's file, lines dated before the
+/// register starts, categories with no expense account. Import saves it in the card's drop folder and reads it.
+struct CardImportSheet: View {
+    let card: CardAccount
+    let pending: PendingCardImport
+    var importFile: () async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var onlyNew = true
+    @State private var importing = false
+    @State private var error: String?
+
+    private struct Row: Identifiable {
+        let id: Int
+        let line: CardImportPreview.Line
+    }
+
+    private var p: CardImportPreview { pending.preview }
+    private var rows: [Row] {
+        p.entries.enumerated().compactMap { i, l in onlyNew && l.state != "new" ? nil : Row(id: i, line: l) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Import \(p.file)").heading(.heading)
+            Text("\(p.what) for \(card.name)\(card.last4.map { " ···\($0)" } ?? "") · \(shortDay(p.first)) – \(shortDay(p.last))")
+                .foregroundStyle(.secondary)
+            Text(summary).font(.callout)
+            if !p.kinds.isEmpty { totals }
+            ForEach(warnings, id: \.self) { w in
+                Label(w, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle("Only the new lines", isOn: $onlyNew).disabled(p.new == 0 || p.new == p.lines)
+            Table(rows) {
+                TableColumn("Date") { r in Text(shortDay(r.line.date)).monospacedDigit() }.width(80)
+                TableColumn("Posted") { r in Text(shortDay(r.line.postedDate)).monospacedDigit().foregroundStyle(.secondary) }.width(80)
+                TableColumn("Kind") { r in Text(CardsView.kindLabel(r.line.kind)).foregroundStyle(.secondary) }.width(56)
+                TableColumn("Description") { r in Text(r.line.name ?? "").help(r.line.name ?? "") }.width(min: 120, ideal: 170)
+                TableColumn("Category") { r in Text(r.line.category ?? "").foregroundStyle(.secondary) }.width(104)
+                TableColumn("Charge") { r in Text(r.line.amount > 0 ? money2(r.line.amount) : "").monospacedDigit() }.width(84)
+                TableColumn("Credit") { r in Text(r.line.amount < 0 ? money2(-r.line.amount) : "").monospacedDigit().foregroundStyle(.green) }.width(84)
+                TableColumn("Line") { r in
+                    Text(r.line.state == "new" ? "New" : "Read").foregroundStyle(r.line.state == "new" ? .primary : .secondary)
+                        .help(r.line.state == "other format" ? "Already read from the card's other download format" : r.line.state == "new" ? "Not read yet" : "Already read")
+                }.width(52)
+            }
+            .tableText()
+            .frame(height: 300)
+            if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            HStack {
+                Text("Imported, the file is kept in the card's drop folder; a later download that overlaps it is fine.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if importing { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(p.new == 0 ? "Nothing New" : "Import \(p.new.formatted()) New Line\(p.new == 1 ? "" : "s")") {
+                    Task {
+                        importing = true
+                        if let e = await importFile() { error = e; importing = false } else { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(p.new == 0 || importing)
+            }
+        }
+        .padding(18)
+        .frame(width: 900)
+        .onAppear { onlyNew = p.new > 0 }
+    }
+
+    private var summary: String {
+        if p.new == 0 { return "Nothing new: all \(p.lines.formatted()) lines have been read already." }
+        var s = "\(p.lines.formatted()) line\(p.lines == 1 ? "" : "s"): \(p.new.formatted()) new"
+        if p.read > 0 { s += ", \(p.read.formatted()) already read" }
+        if p.otherFormat > 0 { s += ", \(p.otherFormat.formatted()) already read from the card's other download format" }
+        return s + "."
+    }
+
+    /// The new lines by kind, and what they add to the balance owed.
+    private var totals: some View {
+        Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 3) {
+            ForEach(p.kinds, id: \.self) { k in
+                GridRow {
+                    Text(CardsView.kindLabel(k.kind)).foregroundStyle(.secondary)
+                    Text(k.count.formatted()).monospacedDigit().gridColumnAlignment(.trailing)
+                    Text(money2(k.total)).monospacedDigit().gridColumnAlignment(.trailing)
+                }
+            }
+            GridRow {
+                Text("Balance owed changes by").foregroundStyle(.secondary)
+                Text("")
+                Text(money2(p.kinds.reduce(0) { $0 + $1.total })).monospacedDigit().bold()
+            }
+        }
+        .font(.callout)
+    }
+
+    private var warnings: [String] {
+        var w: [String] = []
+        if let other = p.otherCompany { w.append("\(other): check that it is this card's activity.") }
+        if p.beforeOpening > 0, let opening = p.openingDate {
+            w.append("\(p.beforeOpening.formatted()) new line\(p.beforeOpening == 1 ? " is" : "s are") dated before the register starts (\(shortDay(opening))), and the register adds \(p.beforeOpening == 1 ? "it" : "them") to what was owed then. To begin with the download, set Edit… ▸ Register starts to \(shortDay(p.first)) or earlier, and Owed then to the balance owed that day.")
+        }
+        if !p.unmapped.isEmpty {
+            w.append("No expense account for the card company's \(p.unmapped.count == 1 ? "category" : "categories") \(p.unmapped.joined(separator: ", ")): \(p.unmapped.count == 1 ? "its" : "their") charges post without a category unless their target has one.")
+        }
+        return w
     }
 }

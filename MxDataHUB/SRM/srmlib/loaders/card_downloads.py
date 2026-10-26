@@ -8,8 +8,9 @@ as .csv. Drop them in a folder named in card_accounts.local.json (not in git; co
 
 `accounts` maps a card number's last four digits to the card's code in MxAcctMGR (Banking ▸ Credit Card Accounts);
 a card's own last four digits, set there, map it too. A QFX / OFX file names its card, and so do Chase's CSV file
-names (Chase1234_Activity…) and Capital One's Card No. column; other CSV files (Discover's) go in a sub-folder named
-by the card's code (src-cards/DISCOVER/…). MxAcctMGR's Import File… puts a file there.
+names (Chase1234_Activity…) and Capital One's Card No. column: a card it names and that is mapped is the one it goes
+to, wherever the file is. Other CSV files (Discover's) go in a sub-folder named by the card's code
+(src-cards/DISCOVER/…). MxAcctMGR's Import File… puts a file there, after showing what it holds (read_file, states).
 
 Each run reads every download there (oldest first) and keeps each line once (srm.card_line, by the file's
 transaction id, or a hash of the CSV row and how many times the same row came before it in that file). Downloads of
@@ -180,44 +181,92 @@ def _files(folders, single):
     return sorted(set(paths), key=os.path.getmtime)
 
 
-def statements(path, text, cards, by_last4):
-    """[(code or None, lines, balance or None)] of one download."""
-    name = os.path.basename(path)
-    if not path.lower().endswith(".csv"):
-        if "<CCSTMTRS>" not in text:
-            return []       # a bank, brokerage or retirement plan file, not a card
-        return [(by_last4.get(l4), lines, bal) for l4, lines, bal in read_ofx(text)]
+LAYOUTS = {"chase": "Chase CSV", "discover": "Discover CSV", "capitalone": "Capital One CSV"}
+
+
+def read_file(name, text):
+    """(what it is, [(the last four digits of the card it names or None, lines, balance or None)]) of one download;
+    (None, []) when it isn't a card download we know (a bank, brokerage or retirement plan file)."""
+    if not name.lower().endswith(".csv"):
+        return ("QFX / OFX", read_ofx(text)) if "<CCSTMTRS>" in text else (None, [])
     kind, lines = read_csv(text)
     if kind is None:
-        return []           # not a card download we know
-    folder = os.path.basename(os.path.dirname(path)).upper()
-    if folder in cards:
-        return [(folder, lines, None)]
+        return None, []
     m = CHASE_FILE.match(name)
     if m:
-        return [(by_last4.get(m.group(1)), lines, None)]
+        return LAYOUTS[kind], [(m.group(1), lines, None)]
     if kind == "capitalone":
         groups = {}
         for l in lines:
-            groups.setdefault(by_last4.get(l["last4"] or ""), []).append(l)
-        return [(code, ls, None) for code, ls in groups.items()]
-    return [(None, lines, None)]
+            groups.setdefault(l["last4"], []).append(l)
+        return LAYOUTS[kind], [(l4, ls, None) for l4, ls in groups.items()]
+    return LAYOUTS[kind], [(None, lines, None)]
+
+
+def card_of(last4, ofx, folder, cards, by_last4):
+    """The code of the card a download's statement goes to: the one it names (by its last four digits), else — for a
+    CSV file naming none, or a card not mapped — the card whose sub-folder holds it, unless its own last four digits
+    are others; None when neither."""
+    if last4 and last4 in by_last4:
+        return by_last4[last4]
+    if ofx or folder not in cards:
+        return None
+    own = cards[folder][1]
+    return None if last4 and own and own != last4 else folder
+
+
+def statements(path, text, cards, by_last4):
+    """[(code or None, lines, balance or None)] of one download."""
+    what, found = read_file(os.path.basename(path), text)
+    folder = os.path.basename(os.path.dirname(path)).upper()
+    return [(card_of(l4, what == "QFX / OFX", folder, cards, by_last4), lines, bal) for l4, lines, bal in found]
+
+
+def last4_map(cur, config):
+    """({code: (card_account_id, last4)} of the open cards, {last four digits: code}): card_accounts.local.json's
+    accounts, and each card's own last four digits."""
+    by_last4 = {k: v.upper() for k, v in (config.get("accounts") or {}).items()}
+    cur.execute("SELECT upper(code), card_account_id, account_last4 FROM srm.card_account WHERE closed_date IS NULL")
+    cards = {c: (i, l4) for c, i, l4 in cur.fetchall()}
+    for code, (_, l4) in cards.items():
+        if l4:
+            by_last4.setdefault(l4, code)
+    return cards, by_last4
+
+
+def config():
+    if not os.path.exists(CONFIG_FILE):
+        return {}
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
+
+
+def states(cur, aid, fmt, lines):
+    """Each line against what the card has read: 'new', 'read' (the line itself, by its id) or 'other format' (the
+    same posted date and amount read from the other format, as many times as the other format has it)."""
+    if not lines:
+        return []
+    cur.execute("""SELECT posted_date, amount, count(*) FROM srm.card_line
+                    WHERE card_account_id = %s AND file_format <> %s AND posted_date BETWEEN %s AND %s
+                    GROUP BY 1, 2""", (aid, fmt, min(l["date"] for l in lines), max(l["date"] for l in lines)))
+    other = {(d, float(a)): n for d, a, n in cur.fetchall()}
+    cur.execute("SELECT fitid FROM srm.card_line WHERE card_account_id = %s AND fitid = ANY(%s)",
+                (aid, [l["fitid"] for l in lines]))
+    ids = {r[0] for r in cur.fetchall()}
+    out, occurrence = [], {}
+    for l in lines:
+        k = (l["date"], l["amount"])
+        occurrence[k] = occurrence.get(k, 0) + 1
+        out.append("other format" if occurrence[k] <= other.get(k, 0) else "read" if l["fitid"] in ids else "new")
+    return out
 
 
 def run(conn, cfg, args):
     single = getattr(args, "file", None)
-    config = {}
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE) as f:
-            config = json.load(f)
-    folders = config.get("dropFolders") or DEFAULT_FOLDERS
-    by_last4 = {k: v.upper() for k, v in (config.get("accounts") or {}).items()}
+    conf = config()
+    folders = conf.get("dropFolders") or DEFAULT_FOLDERS
     with LoadRun(conn, "CARD_DOWNLOADS", "card_downloads", {"folders": folders, "file": single}) as run, conn.cursor() as cur:
-        cur.execute("SELECT upper(code), card_account_id, account_last4 FROM srm.card_account WHERE closed_date IS NULL")
-        cards = {c: (i, l4) for c, i, l4 in cur.fetchall()}
-        for code, (_, l4) in cards.items():       # a card's own last four digits map it too
-            if l4:
-                by_last4.setdefault(l4, code)
+        cards, by_last4 = last4_map(cur, conf)
         touched, new, skipped = set(), 0, 0
         for path in _files(folders, single):
             name = os.path.basename(path)
@@ -235,19 +284,10 @@ def run(conn, cfg, args):
                     continue
                 aid = cards[code][0]
                 touched.add(aid)
-                # The other format's lines of the same days: a line found there (as many times as it is) is not new.
-                other, occurrence = {}, {}
-                if lines:
-                    cur.execute("""SELECT posted_date, amount, count(*) FROM srm.card_line
-                                    WHERE card_account_id = %s AND file_format <> %s AND posted_date BETWEEN %s AND %s
-                                    GROUP BY 1, 2""",
-                                (aid, fmt, min(l["date"] for l in lines), max(l["date"] for l in lines)))
-                    other = {(d, float(a)): n for d, a, n in cur.fetchall()}
-                for l in lines:
+                # A line already read from the other format (a Chase CSV and a QFX of the same weeks) is not new.
+                for l, state in zip(lines, states(cur, aid, fmt, lines)):
                     run.read += 1
-                    k = (l["date"], l["amount"])
-                    occurrence[k] = occurrence.get(k, 0) + 1
-                    if occurrence[k] <= other.get(k, 0):
+                    if state == "other format":
                         skipped += 1
                         continue
                     cur.execute("""INSERT INTO srm.card_line (card_account_id, fitid, trans_date, posted_date, amount, kind,
