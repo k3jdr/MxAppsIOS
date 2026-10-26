@@ -532,6 +532,10 @@ private struct SpendingEntriesTab: View {
     @State private var selected = Set<SpendingEntry.ID>()
     @State private var tagging: [SpendingEntry]?
     @State private var ruleFor: RuleTarget?
+    /// The columns' widths (drag a header's edge), order and visibility, kept across reloads and launches: the Deep
+    /// Dive builds a new table for each category, which would otherwise start from the standard widths.
+    @AppStorage("spendingEntriesColumns") private var columnsStore = Data()
+    @State private var columns = TableColumnCustomization<SpendingEntry>()
 
     private var shown: [SpendingEntry] {
         let q = search.lowercased()
@@ -559,29 +563,32 @@ private struct SpendingEntriesTab: View {
                     HStack(spacing: 10) { Spacer(); entryCount(rows) }
                 }
             }
-            Table(rows, selection: $selected) {
-                TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 80)
-                TableColumn("From") { e in Text(e.register ?? e.sourceTitle).foregroundStyle(.secondary).help(e.sourceTitle) }.width(min: 60, ideal: 100)
-                TableColumn("Payee") { e in Text(e.payee ?? "").help(e.description ?? "") }.width(min: 100, ideal: 180)
-                TableColumn("Expense account") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 130)
-                TableColumn("Amount") { e in Text(money2(e.amount)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(min: 70, ideal: 90)
+            Table(rows, selection: $selected, columnCustomization: $columns) {
+                TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 80).customizationID("date")
+                TableColumn("From") { e in Text(e.register ?? e.sourceTitle).foregroundStyle(.secondary).help(e.sourceTitle) }.width(min: 60, ideal: 100).customizationID("from")
+                TableColumn("Payee") { e in Text(e.payee ?? "").help([e.payee, e.description].compactMap { $0 }.joined(separator: "\n")) }
+                    .width(min: 80, ideal: 220, max: 900).customizationID("payee")
+                TableColumn("Expense account") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 130).customizationID("account")
+                TableColumn("Amount") { e in Text(money2(e.amount)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(min: 70, ideal: 90).customizationID("amount")
                 TableColumn("Category") { e in
                     Text(setup.category(e.category)?.name ?? "Not assigned").foregroundStyle(e.category == nil ? .secondary : .primary)
                         .help(e.categoryFrom.map { "From the \($0)" } ?? "No rule or tag")
-                }.width(min: 80, ideal: 110)
+                }.width(min: 80, ideal: 110).customizationID("category")
                 TableColumn("Driver") { e in
                     Text(SpendingDriver.title(e.driver)).foregroundStyle(e.driver == nil ? .secondary : .primary)
                         .help(e.driverFrom.map { "From the \($0)" } ?? "No rule or tag: counts as usage")
-                }.width(min: 80, ideal: 130)
-                TableColumn("Member") { e in Text(setup.member(e.memberId)?.name ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 80)
+                }.width(min: 80, ideal: 130).customizationID("driver")
+                TableColumn("Member") { e in Text(setup.member(e.memberId)?.name ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 80).customizationID("member")
                 TableColumn("Event") { e in
                     HStack(spacing: 3) {
                         if e.tagged { Image(systemName: "tag.fill").font(.caption2).foregroundStyle(.secondary) }
                         Text(e.event ?? "")
                     }
                     .help(e.notes ?? "")
-                }.width(min: 60, ideal: 110)
+                }.width(min: 60, ideal: 110).customizationID("event")
             }
+            .onAppear { columns = (try? JSONDecoder().decode(TableColumnCustomization<SpendingEntry>.self, from: columnsStore)) ?? columns }
+            .onChange(of: columns) { columnsStore = (try? JSONEncoder().encode(columns)) ?? columnsStore }
             .tableText()
             .copiesSelectedRows(rows, selected: selected, as: Self.text)
             .contextMenu(forSelectionType: SpendingEntry.ID.self) { ids in

@@ -110,3 +110,10 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
   .kinds, .suggest.on { grid-template-columns: 1fr; }
   .row { grid-template-columns: 1fr; }
 }
+
+/* The entries tables' Payee column: as wide as --payee-w (dragged on its header's grip); longer names end in "…". */
+th.payee, td.payee { width: var(--payee-w, 220px); min-width: var(--payee-w, 220px); max-width: var(--payee-w, 220px); overflow: hidden; text-overflow: ellipsis; }
+th.payee { position: relative; padding-right: 14px; }
+.grip { position: absolute; top: 0; right: 0; width: 10px; height: 100%; cursor: col-resize; touch-action: none; }
+.grip::after { content: ""; position: absolute; top: 20%; bottom: 20%; right: 4px; border-right: 2px solid var(--line); }
+.grip:hover::after { border-color: var(--accent); }

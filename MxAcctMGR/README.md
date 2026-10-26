@@ -590,7 +590,8 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - **Where It Went**: by expense account, with the target accounts whose spending changed most;
   - the ten largest entries this year, and spending by family member;
   - its lifecycle triggers and what they bring each child in the next ten years;
-  - its entries, to tag.
+  - its entries, to tag. The entries tables (here and on Entries) keep their column widths, order and shown columns
+    across reloads and launches: drag a header's edge to widen Payee.
 * **Sources.** A strip above every tab names the sources included and how fresh they are: the newest spending date,
   when the card and checking downloads were last read, and the CPI's latest month. It turns orange when a register's
   newest spending is more than 14 days old or the CPI more than 75. Its *Sources…* button opens the **Sources** tab,

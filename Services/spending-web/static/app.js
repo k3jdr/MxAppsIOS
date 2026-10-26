@@ -417,8 +417,8 @@ function entriesBox(list, title, locked) {
       <label><input type="checkbox" data-set="unassignedOnly"${S.unassignedOnly ? " checked" : ""}> No driver yet</label>
       <input type="search" data-set="search" value="${esc(S.search)}" placeholder="Search payee, description, event">
       <span class="spacer"></span><span class="muted">${rows.length.toLocaleString()} entries, ${money(rows.reduce((a, e) => a + e.amount, 0))}</span></div>
-    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l">Payee</th><th class="l">Expense account</th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Member</th><th class="l">Event</th><th></th></tr>
-    ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l">${esc(e.payee ?? e.description ?? "")}</td><td class="l muted">${esc(e.expenseAccount ?? "")}</td>
+    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l">Expense account</th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Member</th><th class="l">Event</th><th></th></tr>
+    ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td><td class="l muted">${esc(e.expenseAccount ?? "")}</td>
       <td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "From the " + e.categoryFrom : "No rule or tag")}">${esc(catName(e.category))}</td><td class="l" title="${esc(e.driverFrom ? "From the " + e.driverFrom : "No rule or tag: counts as usage")}">${esc(driverTitle(e.driver))}</td>
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
     ${rows.length > S.shown ? `<p><button data-action="more">Show ${Math.min(200, rows.length - S.shown)} more</button></p>` : ""}`;
@@ -657,6 +657,24 @@ document.getElementById("note-form").addEventListener("change", ev => { if (ev.t
 document.getElementById("note-form").addEventListener("submit", ev => {
   if (ev.submitter?.value === "send") { ev.preventDefault(); sendNote(); }
 });
+// The Payee column's width: dragged on its header's grip (mouse or finger), kept in this browser.
+const PAYEE_WIDTH = 220;
+const setPayeeWidth = w => document.documentElement.style.setProperty("--payee-w", Math.round(Math.min(900, Math.max(80, w))) + "px");
+setPayeeWidth(saved("payeeWidth", PAYEE_WIDTH));
+document.addEventListener("pointerdown", ev => {
+  const grip = ev.target.closest('[data-resize="payee"]'); if (!grip) return;
+  ev.preventDefault();
+  const startX = ev.clientX, start = grip.parentElement.getBoundingClientRect().width;
+  try { grip.setPointerCapture(ev.pointerId); } catch { /* the page's own listeners below follow the pointer anyway */ }
+  const move = e => setPayeeWidth(start + e.clientX - startX);
+  const up = () => {
+    document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
+    keep("payeeWidth", parseInt(getComputedStyle(document.documentElement).getPropertyValue("--payee-w")));
+  };
+  document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
+});
+document.addEventListener("dblclick", ev => { if (ev.target.closest('[data-resize="payee"]')) { setPayeeWidth(PAYEE_WIDTH); keep("payeeWidth", PAYEE_WIDTH); } });
+
 let resizeTimer;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 200); });
 load();
