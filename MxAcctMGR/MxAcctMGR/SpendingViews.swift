@@ -1044,6 +1044,9 @@ private struct SpendingRulesTab: View {
                 Text(p.name).lineLimit(1).fontWeight(rule != nil ? .semibold : .regular).help(targetTip(p, rule: rule))
             }
         }
+        // Not selectable text (the screen's is): a right-click brings up this menu, not the text menu (Copy, Look Up),
+        // as on Banking's target accounts.
+        .textSelection(.disabled)
         .contextMenu {
             payeeLinkMenu(t)
             Divider()
@@ -1078,6 +1081,7 @@ private struct SpendingRulesTab: View {
                     .help("Every entry whose payee, statement name or description contains \u{201C}\(text)\u{201D}, ignoring case: \(spent.count) \(spent.count == 1 ? "entry" : "entries") in the two years.\n\(ruleTip(r))\nRight-click to add a link, with hover text of its own.")
             }
         }
+        .textSelection(.disabled)
         .contextMenu {
             Button(r.link == nil ? "Add Link to \(text)…" : "Edit Link on \(text)…") { linking = r }
             if let url = r.link?.link.url { Button("Open Link") { LinkInfo.follow(url) } }
