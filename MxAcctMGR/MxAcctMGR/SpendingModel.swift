@@ -353,6 +353,125 @@ enum SpendingEngine {
     }
 }
 
+// MARK: - Sources
+
+/// Where the analysis's data comes from (Sources tab): each register, whether it is included, its drop folders and
+/// downloads, the tables its data lands in, its last import and its spending in both periods; every SRM table and view
+/// the analysis reads with its rows, newest data and last change; and the download and CPI loaders' last runs.
+struct SpendingSources: Decodable {
+    struct Run: Decodable, Hashable {
+        var loadId: Int
+        var loader: String
+        var status: String
+        var startedAt: String?
+        var finishedAt: String?
+        var rowsRead: Int?
+        var rowsInserted: Int?
+        var message: String?
+    }
+    struct Download: Decodable, Hashable { var path: String; var name: String; var bytes: Int; var modified: String }
+    struct Source: Decodable, Identifiable, Hashable {
+        var source: String
+        var code: String
+        var name: String
+        var institution: String?
+        var last4: String?
+        var closedDate: String?
+        var entries: Int?
+        var first: String?
+        var last: String?
+        var edited: String?
+        var fromDownloads: Int?
+        var lines: Int?
+        var firstLine: String?
+        var lastLine: String?
+        var included: Bool
+        var choiceBy: String?
+        var choiceAt: String?
+        var linesTable: String?
+        var registerTable: String
+        var loader: String?
+        var dropFolders: [String]
+        var downloads: [Download]
+        var lastImport: Run?
+        var spendingFirst: String?
+        var spendingLast: String?
+        var entriesNow: Int
+        var spentNow: Double
+        var entriesBefore: Int
+        var spentBefore: Double
+        var id: String { source + code }
+        var kindTitle: String { source == "bank" ? "Checking account" : source == "card" ? "Credit card" : "Expense ledger" }
+        var symbol: String { source == "bank" ? "checkmark.rectangle.stack" : source == "card" ? "creditcard" : "briefcase" }
+        var screen: String { source == "bank" ? "Banking ▸ Checking Accounts" : source == "card" ? "Banking ▸ Credit Card Accounts" : "Banking ▸ Expense Accounts" }
+    }
+    struct Table: Decodable, Identifiable, Hashable {
+        var name: String
+        var kind: String
+        var role: String
+        var rows: Int
+        var newest: String?
+        var changed: String?
+        var id: String { name }
+    }
+    var start: String
+    var end: String
+    var priorStart: String
+    var priorEnd: String
+    var sources: [Source]
+    var tables: [Table]
+    var loaders: [Run]
+    var now: String?
+
+    func table(_ name: String) -> Table? { tables.first { $0.name == name } }
+    func run(_ loader: String) -> Run? { loaders.first { $0.loader == loader } }
+}
+
+/// How old a date or time is, for the freshness of the analysis's data.
+enum Freshness {
+    /// Registers older than this (days) are flagged: a download is due.
+    static let staleDays = 14
+    /// CPI is monthly and published about six weeks after the month starts.
+    static let staleCPIDays = 75
+
+    private static let stamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f
+    }()
+    private static let stampWhole = ISO8601DateFormatter()
+
+    /// A date (yyyy-mm-dd) or a timestamp as the service sends them.
+    static func date(_ s: String?) -> Date? {
+        guard let s, !s.isEmpty else { return nil }
+        if s.count == 10 { return isoDay.date(from: s) }
+        let t = s.replacingOccurrences(of: " ", with: "T")
+        return stamp.date(from: t) ?? stampWhole.date(from: t)
+    }
+
+    static func days(_ s: String?) -> Int? {
+        guard let d = date(s) else { return nil }
+        return Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: d), to: Calendar.current.startOfDay(for: .now)).day
+    }
+
+    /// "today", "yesterday", "12 days ago", "in 4 days" (a scheduled entry).
+    static func age(_ s: String?) -> String {
+        guard let n = days(s) else { return "" }
+        switch n {
+        case 0: return "today"
+        case 1: return "yesterday"
+        case ..<0: return "in \(-n) day\(n == -1 ? "" : "s")"
+        default: return "\(n) days ago"
+        }
+    }
+
+    /// A timestamp as a day and time.
+    static func when(_ s: String?) -> String {
+        guard let d = date(s) else { return s ?? "" }
+        return s?.count == 10 ? shortDay(s) : d.formatted(.dateTime.month(.twoDigits).day(.twoDigits).year().hour().minute())
+    }
+
+    static func isStale(_ s: String?, days limit: Int = staleDays) -> Bool { (days(s) ?? 0) > limit }
+}
+
 // MARK: - Client
 
 nonisolated enum SpendingClient {
@@ -383,6 +502,14 @@ nonisolated enum SpendingClient {
     }
     static func deleteTrigger(_ id: Int) async throws -> SpendingSetup {
         try await AccountsClient.request("DELETE", "/spending/triggers/\(id)", as: SpendingSetup.self)
+    }
+    static func sources(start: String, end: String, priorStart: String, priorEnd: String) async throws -> SpendingSources {
+        try await AccountsClient.request("GET", "/spending/sources?start=\(start)&end=\(end)&priorStart=\(priorStart)&priorEnd=\(priorEnd)",
+                                         as: SpendingSources.self)
+    }
+    static func include(_ s: SpendingSources.Source, _ included: Bool, window: SpendingSources) async throws -> SpendingSources {
+        try await AccountsClient.request("PUT", "/spending/sources/\(s.source)/\(s.code)?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
+                                         body: signed(["included": included]), as: SpendingSources.self)
     }
     static func tag(_ entry: SpendingEntry, _ body: [String: Any]) async throws -> SpendingEntry? {
         try await AccountsClient.request("PUT", "/spending/tags/\(entry.source)/\(entry.entryId)", body: signed(body), as: TagAnswer.self).entry

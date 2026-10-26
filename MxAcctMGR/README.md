@@ -578,6 +578,28 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   current spending, change, growth %, and each effect's share of the change, with a reading: unavoidable (prices or
   age), habit change, one-time, or more of the same. Charts: a waterfall from last year to this year, each category's
   change by effect, and this year's spending by category and driver.
+* **Sources.** A strip above every tab names the sources included and how fresh they are: the newest spending date,
+  when the card and checking downloads were last read, and the CPI's latest month. It turns orange when a register's
+  newest spending is more than 14 days old or the CPI more than 75. Its *Sources…* button opens the **Sources** tab,
+  which shows:
+  - **Time Window:** the two periods' dates, year to date or whole years, how partial registers are treated, and the
+    CPI months compared.
+  - **Spending Sources:** each checking account, credit card and expense ledger, with a checkbox that includes it or
+    leaves it out. The choice is kept in the security master (`srm.spending_source`, V038), shared by every Mac, with
+    who changed it and when. For each source:
+    - where its data comes from: the loader (`pnc-bank`, `card-downloads`), its drop folders (`bank_accounts.local.json`
+      / `card_accounts.local.json`, else `src-bank`, `src-cards`) and the downloads there for the account, newest first,
+      with their dates and sizes; or, for a ledger, entries made by hand;
+    - the tables its data lands in (`srm.card_line` → `srm.card_txn` → `srm.v_spending_entry`), with its lines' dates;
+    - its last import (the `srm.load_run` that wrote its newest lines);
+    - its register: entries, dates, how many came from downloads, the last edit;
+    - its spending in both periods.
+
+    A checking account none of whose entries is in an expense account says that none of it counts as spending (card
+    payments and transfers aren't).
+  - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
+    rows, its newest data and its last change.
+  - **Last Loads:** the latest `pnc-bank`, `card-downloads` and `fred-yields` runs.
 * **Periods.** A year against the year before, year to date by default (January 1 to today's date in both).
   *Only registers covering both years* leaves out a register whose entries start after the earlier year does, so
   its whole spending isn't counted as growth (the TECH_2026 ledger starts in December 2025).
@@ -702,5 +724,5 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its Attribution, Forward Curve, Entries, Rules and Family & Lifecycle tabs and their sheets |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Attribution, Forward Curve, Entries, Rules, Family & Lifecycle and Sources tabs and their sheets |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

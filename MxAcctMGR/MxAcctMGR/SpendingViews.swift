@@ -4,7 +4,7 @@
 //
 //  Reporting ▸ Spending Analysis (SpendingModel.swift): why the family's spending changed from one year to the next
 //  — the attribution table and charts — and the forward curve of what the children's ages bring, with the entries,
-//  rules, family and lifecycle model they are made from.
+//  rules, family and lifecycle model they are made from, and the sources they come from with how fresh each is.
 //
 
 import Charts
@@ -18,11 +18,12 @@ struct SpendingAnalysisView: View {
     @AppStorage("spendingFullCoverage") private var fullCoverage = true
     @State private var setup: SpendingSetup?
     @State private var data: SpendingAnalysisData?
+    @State private var sources: SpendingSources?
     @State private var problem: String?
     @State private var busy = false
 
     static let tabs = [("attribution", "Attribution"), ("curve", "Forward Curve"), ("entries", "Entries"), ("rules", "Rules"),
-                       ("family", "Family & Lifecycle")]
+                       ("family", "Family & Lifecycle"), ("sources", "Sources")]
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
     var body: some View {
@@ -32,6 +33,7 @@ struct SpendingAnalysisView: View {
             "The forward curve stacks each child's lifecycle costs — club sports at 10, a phone at 12, a laptop at 13, tutors at 14, driving at 16, college visits and applications at 16–17, college at 18 — so the waves show three to five years ahead.",
         ]) {
             periodBar
+            if let sources { sourcesStrip(sources) }
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
@@ -45,6 +47,13 @@ struct SpendingAnalysisView: View {
                 case "rules":
                     if let data { SpendingRulesTab(setup: setup, entries: shownEntries(data).filter { inCurrent($0, data) }) { applied($0) } }
                 case "family": SpendingFamilyTab(setup: setup, data: data) { applied($0) }
+                case "sources":
+                    if let sources {
+                        SpendingSourcesTab(sources: sources, data: data, yearToDate: yearToDate, fullCoverage: fullCoverage) { updated in
+                            self.sources = updated
+                            Task { await reload() }
+                        }
+                    }
                 default:
                     if let data { attribution(data, setup) }
                 }
@@ -96,11 +105,38 @@ struct SpendingAnalysisView: View {
         do {
             async let s = SpendingClient.setup()
             async let d = SpendingClient.analysis(start: p.start, end: p.end, priorStart: p.priorStart, priorEnd: p.priorEnd)
-            (setup, data) = try await (s, d)
+            async let o = SpendingClient.sources(start: p.start, end: p.end, priorStart: p.priorStart, priorEnd: p.priorEnd)
+            (setup, data, sources) = try await (s, d, o)
             problem = nil
         } catch {
             problem = describe(error)
         }
+    }
+
+    /// What the analysis reads and how fresh it is, on every tab: the sources included, the newest spending, the last
+    /// downloads read and the CPI's last month. Orange when a download or the CPI is overdue.
+    private func sourcesStrip(_ o: SpendingSources) -> some View {
+        let used = o.sources.filter(\.included)
+        let newest = used.compactMap(\.spendingLast).filter { (Freshness.days($0) ?? 0) >= 0 }.max()
+        let cards = o.run("card_downloads"), bank = o.run("pnc_bank")
+        let cpi = o.table("srm.market_series_value")?.newest
+        let stale = Freshness.isStale(newest) || Freshness.isStale(cpi, days: Freshness.staleCPIDays)
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: stale ? "exclamationmark.triangle.fill" : "tray.full").foregroundStyle(stale ? .orange : .secondary)
+            Text(([
+                "Sources: " + (used.isEmpty ? "none" : used.map(\.name).joined(separator: ", "))
+                    + (used.count < o.sources.count ? " (\(o.sources.count - used.count) left out)" : ""),
+                newest.map { "spending through \(shortDay($0)) (\(Freshness.age($0)))" },
+                cards?.finishedAt.map { "cards read \(Freshness.when($0))" },
+                bank?.finishedAt.map { "checking downloads read \(Freshness.when($0))" },
+                cpi.map { "CPI through \(Freshness.date($0)?.formatted(.dateTime.month(.abbreviated).year()) ?? $0)" },
+            ] as [String?]).compactMap { $0 }.joined(separator: " · "))
+                .font(.callout).foregroundStyle(stale ? Color.orange : .secondary).fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button("Sources…") { tab = "sources" }
+                .help("Which accounts feed the analysis, where their data comes from, the time window, and how fresh each SRM table is")
+        }
+        .quickHelpArea(QuickHelpItem(title: "Spending Sources", detail: "The registers the analysis adds up, how recent their spending is, when the card and checking downloads were last read into the security master, and the CPI's latest month. Orange when a register's newest spending is more than \(Freshness.staleDays) days old or the CPI more than \(Freshness.staleCPIDays). Sources… shows each source's folders, files, tables and dates.", symbol: "tray.full"))
     }
 
     /// A rule, category or family change saved: the entries are resolved again with it.
@@ -1013,6 +1049,256 @@ private struct TriggerSheet: View {
             guard let t = trigger else { return }
             name = t.name; category = t.category; kind = t.kind; ageFrom = t.ageFrom; ageTo = t.ageTo
             everyYears = t.everyYears ?? 0; annualCost = t.annualCost; notes = t.notes ?? ""; active = t.active
+        }
+    }
+}
+
+// MARK: - Sources
+
+private struct SpendingSourcesTab: View {
+    var sources: SpendingSources
+    var data: SpendingAnalysisData?
+    var yearToDate: Bool
+    var fullCoverage: Bool
+    var changed: (SpendingSources) -> Void
+    @State private var problem: String?
+    @State private var saving: String?
+
+    var body: some View {
+        if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+        window
+        Box(title: "Spending Sources", symbol: "tray.full", help: "Each checking account, credit card and expense ledger that can feed the analysis: whether it does (the checkbox, kept in the security master for every Mac), where its data comes from (the drop folder and the downloads in it, or entries made by hand), the SRM tables it lands in, when it was last imported and edited, and what it spent in both periods.") {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(sources.sources.enumerated()), id: \.element.id) { i, s in
+                    if i > 0 { Divider() }
+                    sourceRow(s)
+                }
+            }
+        }
+        tablesBox
+        loadsBox
+    }
+
+    // MARK: Time window
+
+    private var window: some View {
+        let days = (Freshness.date(sources.end).flatMap { e in Freshness.date(sources.start).map { Calendar.current.dateComponents([.day], from: $0, to: e).day ?? 0 } } ?? 0) + 1
+        let cpi = data?.inflation.first { $0.basis == "CPI" }
+        return Box(title: "Time Window", symbol: "calendar", help: "The dates the analysis compares. Change them with the year picker and Year to date above.") {
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
+                GridRow {
+                    Text("This period").foregroundStyle(.secondary)
+                    Text("\(shortDay(sources.start)) – \(shortDay(sources.end)) (\(days) days)").monospacedDigit()
+                }
+                GridRow {
+                    Text("Compared with").foregroundStyle(.secondary)
+                    Text("\(shortDay(sources.priorStart)) – \(shortDay(sources.priorEnd)), the same dates a year earlier").monospacedDigit()
+                }
+                GridRow {
+                    Text("Basis").foregroundStyle(.secondary)
+                    Text(yearToDate ? "Year to date: January 1 to today's date in both years" : "Whole calendar years")
+                }
+                GridRow {
+                    Text("Partial registers").foregroundStyle(.secondary)
+                    Text(fullCoverage ? "Left out when their spending starts after the earlier period does (Only registers covering both years)"
+                         : "Kept even when their spending starts after the earlier period does: their whole spending counts as growth")
+                }
+                GridRow {
+                    Text("Inflation").foregroundStyle(.secondary)
+                    Text(cpi.map { "CPI: the \($0.months) months of this period with values (to \(shortDay($0.through))) over the same months a year earlier" }
+                         ?? "No CPI values for these months: each category's assumed rate")
+                }
+            }
+            .font(.callout)
+        }
+    }
+
+    // MARK: A source
+
+    private func sourceRow(_ s: SpendingSources.Source) -> some View {
+        let partial = fullCoverage && (Freshness.date(s.spendingFirst).map { first in
+            Freshness.date(sources.priorStart).map { first > Calendar.current.date(byAdding: .day, value: 31, to: $0)! } ?? false } ?? false)
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Toggle(isOn: Binding(get: { s.included }, set: { v in Task { await include(s, v) } })) {
+                    Label(s.name, systemImage: s.symbol).font(.body.weight(.semibold))
+                }
+                .toggleStyle(.checkbox)
+                .disabled(saving != nil)
+                .help(s.included ? "Included: its spending is in the analysis. Untick to leave it out (for every Mac)." : "Left out of the analysis. Tick to include it.")
+                Text([s.kindTitle, s.code, s.institution, s.last4.map { "…\($0)" }].compactMap { $0 }.joined(separator: " · "))
+                    .foregroundStyle(.secondary)
+                if s.closedDate != nil { Text("closed").font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                if saving == s.id { ProgressView().controlSize(.small) }
+                if let by = s.choiceBy { Text("\(s.included ? "included" : "left out") by \(by), \(Freshness.when(s.choiceAt))").font(.caption).foregroundStyle(.secondary) }
+            }
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+                GridRow {
+                    Text("Comes from").foregroundStyle(.secondary)
+                    origin(s)
+                }
+                GridRow {
+                    Text("Lands in").foregroundStyle(.secondary)
+                    Text(landsIn(s)).textSelection(.enabled)
+                }
+                if s.loader != nil {
+                    GridRow {
+                        Text("Last import").foregroundStyle(.secondary)
+                        lastImport(s)
+                    }
+                }
+                GridRow {
+                    Text("Register").foregroundStyle(.secondary)
+                    Text(register(s)).foregroundStyle(s.source != "ledger" && s.included && Freshness.isStale(s.last) ? .orange : .primary)
+                }
+                GridRow {
+                    Text("In the analysis").foregroundStyle(.secondary)
+                    analysisLine(s, partial: partial)
+                }
+            }
+            .font(.callout)
+            .padding(.leading, 22)
+        }
+        .opacity(s.included ? 1 : 0.6)
+    }
+
+    @ViewBuilder
+    private func origin(_ s: SpendingSources.Source) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            switch s.source {
+            case "ledger":
+                Text("Entered by hand in \(s.screen); an item that is also a card or check entry counts with that register instead")
+            default:
+                Text("\(s.source == "bank" ? "Entries made by hand in \(s.screen), cleared by the bank's downloads" : "The card company's downloads, posted to its register in \(s.screen); charges entered by hand are matched to them") — read by srm.py load \(s.loader ?? "") from:")
+                ForEach(s.dropFolders, id: \.self) { f in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(f)/\(s.code)/").font(.callout.monospaced()).textSelection(.enabled)
+                        Text(s.source == "bank" ? "for CSV downloads; a QFX / OFX anywhere in \(f) that names account …\(s.last4 ?? "")"
+                             : (s.institution ?? "").localizedCaseInsensitiveContains("chase")
+                                ? "or anywhere in \(f): a QFX / OFX or a Chase CSV (Chase\(s.last4 ?? "")_…) that names card …\(s.last4 ?? "")"
+                                : "or anywhere in \(f): a QFX / OFX that names card …\(s.last4 ?? "")")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if s.downloads.isEmpty {
+                    Text("No downloads there now.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(s.downloads.prefix(4), id: \.path) { d in
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc").foregroundStyle(.secondary)
+                            Text(d.path).font(.callout.monospaced()).textSelection(.enabled)
+                            Text("\(Freshness.when(d.modified)) · \(ByteCountFormatter.string(fromByteCount: Int64(d.bytes), countStyle: .file))").foregroundStyle(.secondary)
+                        }
+                    }
+                    if s.downloads.count > 4 { Text("and \(s.downloads.count - 4) older").foregroundStyle(.secondary) }
+                }
+            }
+        }
+    }
+
+    private func landsIn(_ s: SpendingSources.Source) -> String {
+        var steps: [String] = []
+        if let lines = s.linesTable {
+            steps.append("\(lines) (\(s.lines ?? 0) line\(s.lines == 1 ? "" : "s")\(s.firstLine.map { ", \(shortDay($0)) – \(shortDay(s.lastLine))" } ?? ""))")
+        }
+        steps.append("\(s.registerTable) (the register)")
+        steps.append("srm.v_spending_entry (spending only, categories and drivers resolved)")
+        return steps.joined(separator: " → ")
+    }
+
+    @ViewBuilder
+    private func lastImport(_ s: SpendingSources.Source) -> some View {
+        if let r = s.lastImport {
+            Text("\(Freshness.when(r.finishedAt)) (\(Freshness.age(r.finishedAt))), load \(r.loadId) \(r.status)\(r.message.map { ": \($0)" } ?? "")")
+                .foregroundStyle(r.status == "succeeded" ? .primary : Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text("Never: no line of this \(s.source == "bank" ? "account" : "card") has been read from a download yet").foregroundStyle(.orange)
+        }
+    }
+
+    private func register(_ s: SpendingSources.Source) -> String {
+        guard let n = s.entries, n > 0 else { return "No entries yet" }
+        var parts = ["\(n.formatted()) entries, \(shortDay(s.first)) – \(shortDay(s.last))"]
+        if let last = s.last { parts[0] += " (newest \(Freshness.age(last)))" }
+        if s.source == "card" { parts.append("\((s.fromDownloads ?? 0).formatted()) from downloads, \((n - (s.fromDownloads ?? 0)).formatted()) entered by hand") }
+        if s.source == "bank" { parts.append("\((s.fromDownloads ?? 0).formatted()) cleared by the bank's lines") }
+        if let e = s.edited { parts.append("last changed \(Freshness.when(e))") }
+        return parts.joined(separator: "; ")
+    }
+
+    @ViewBuilder
+    private func analysisLine(_ s: SpendingSources.Source, partial: Bool) -> some View {
+        let y = String(sources.start.prefix(4)), py = String(sources.priorStart.prefix(4))
+        VStack(alignment: .leading, spacing: 2) {
+            if s.entriesNow + s.entriesBefore == 0 && (s.entries ?? 0) > 0 && s.spendingFirst == nil {
+                Text("None of its \((s.entries ?? 0).formatted()) entries counts as spending: none is in an expense account (card payments and transfers are not spending). File an entry in an expense account, or give its target account one, for it to count.")
+                    .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("\(y): \(s.entriesNow.formatted()) entries, \(money(s.spentNow)) · \(py): \(s.entriesBefore.formatted()) entries, \(money(s.spentBefore))"
+                     + (s.spendingFirst.map { " · spending \(shortDay($0)) – \(shortDay(s.spendingLast))" } ?? ""))
+                    .monospacedDigit()
+                if !s.included {
+                    Text("Left out: none of it is in the analysis.").foregroundStyle(.secondary)
+                } else if partial {
+                    Text("Its spending starts \(shortDay(s.spendingFirst)), after the earlier period does: left out while Only registers covering both years is on.").foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+
+    private func include(_ s: SpendingSources.Source, _ v: Bool) async {
+        saving = s.id
+        defer { saving = nil }
+        do { changed(try await SpendingClient.include(s, v, window: sources)); problem = nil } catch { problem = describe(error) }
+    }
+
+    // MARK: Tables
+
+    private var tablesBox: some View {
+        Box(title: "SRM Tables in the Aggregation", symbol: "tablecells", help: "Every table and view in the security master (schema srm) the analysis reads. Downloads land in the line tables and post to the registers; srm.v_spending_entry gathers the registers' spending and resolves each entry's category, driver and member from the tags and rules; the app adds them up per category and period and takes inflation from the CPI series. Newest data is the latest transaction, line or observation date; last changed is the latest edit, or the load that wrote the newest rows.") {
+            Text("Downloads → line tables → registers → srm.v_spending_entry (with expense accounts, target accounts, rules, tags) → the attribution, with inflation from srm.market_series_value; the family and lifecycle triggers make the forward curve.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                GridRow {
+                    Text("Table or view"); Text("What it gives the analysis"); Text("Rows").gridColumnAlignment(.trailing); Text("Newest data"); Text("Last changed")
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(sources.tables) { t in
+                    let limit = t.name == "srm.market_series_value" ? Freshness.staleCPIDays : Freshness.staleDays
+                    let dated = ["srm.bank_txn", "srm.card_txn", "srm.card_line", "srm.bank_line", "srm.v_spending_entry", "srm.market_series_value"].contains(t.name)
+                    GridRow {
+                        Text(t.name).font(.callout.monospaced()).textSelection(.enabled)
+                            .help(t.kind == "view" ? "A view: computed from the tables below each time it is read" : "A table")
+                        Text(t.role).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 420, alignment: .leading)
+                        Text(t.rows.formatted()).monospacedDigit().foregroundStyle(t.rows == 0 ? .secondary : .primary)
+                        Text(t.newest.map { "\(shortDay($0)) (\(Freshness.age($0)))" } ?? "—")
+                            .foregroundStyle(dated && t.rows > 0 && Freshness.isStale(t.newest, days: limit) ? .orange : .primary)
+                        Text(t.changed.map { "\(Freshness.when($0)) (\(Freshness.age($0)))" } ?? "—")
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+    }
+
+    private var loadsBox: some View {
+        Box(title: "Last Loads", symbol: "arrow.down.doc", help: "The loaders that bring outside data into these tables, each run through srm-loader and audited in srm.load_run: pnc-bank and card-downloads read the drop folders' downloads, fred-yields the CPI from FRED. A run reads every download in the folders and keeps each line once. Banking ▸ Checking Accounts and Credit Card Accounts run them (Import File…), as do MxJobsMGR's and MxDataHUB's refreshes.") {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                GridRow { Text("Loader"); Text("Last run"); Text("Status"); Text("Result") }
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(sources.loaders, id: \.loadId) { r in
+                    GridRow {
+                        Text(r.loader.replacingOccurrences(of: "_", with: "-")).font(.callout.monospaced())
+                        Text("\(Freshness.when(r.finishedAt ?? r.startedAt)) (\(Freshness.age(r.finishedAt ?? r.startedAt)))")
+                        Text(r.status).foregroundStyle(r.status == "succeeded" ? .green : .orange)
+                        Text(r.message ?? "\(r.rowsInserted ?? 0) new rows of \(r.rowsRead ?? 0) read").foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.callout)
+                }
+            }
         }
     }
 }
