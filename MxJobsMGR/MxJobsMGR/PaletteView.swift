@@ -3,7 +3,8 @@
 //  MxJobsMGR
 //
 //  The sidebar: node kinds grouped by layer. Drag one onto the canvas, or double-click
-//  it to add it at the end of its lane.
+//  it to add it at the end of its lane. Right-click an element to rename it or give it a link,
+//  a layer's header to give it a link (PaletteEdits.swift).
 //
 
 import SwiftUI
@@ -12,27 +13,51 @@ struct PaletteView: View {
     var editor: EditorState
     @Environment(\.openWindow) private var openWindow
     @State private var running: [String: Bool] = [:]
+    /// The selected element (Return edits it).
+    @State private var selection: PaletteItem?
+    /// A click on a row selects it without focusing the list (the row is draggable); focus it so Return reaches it.
+    @FocusState private var focused: Bool
+    /// Edit Element… is open for this element, the Link dialog for this item (PaletteEdits.swift).
+    @State private var editingElement: NodeKind?
+    @State private var editingLink: PaletteItem?
+
+    private var edits: PaletteEdits { .shared }
 
     var body: some View {
-        List {
+        List(selection: $selection) {
             ForEach(Layer.allCases) { layer in
                 Section {
                     ForEach(NodeKind.kinds(in: layer)) { kind in
-                        PaletteRow(kind: kind)
+                        PaletteRow(kind: kind, linked: edits.link(.kind(kind)) != nil)
+                            .paletteLink(.kind(kind)) { editingLink = .kind(kind) }
                             .draggable(kind.rawValue) {
-                                Label(kind.title, systemImage: kind.symbol)
+                                Label(edits.title(kind), systemImage: kind.symbol)
                                     .padding(8)
                                     .background(kind.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
                             }
-                            .onTapGesture(count: 2) { editor.add(kind) }
+                            // Simultaneous, so a single click still selects the row.
+                            .simultaneousGesture(TapGesture(count: 2).onEnded { editor.add(kind) })
                             .contextMenu {
                                 Button("Add to Layer \(layer.rawValue)") { editor.add(kind) }
+                                Divider()
+                                Button("Edit Element…") { editingElement = kind }
+                                if edits.isEdited(kind) {
+                                    Button("Reset to \(kind.title)") { edits.reset(kind) }
+                                }
+                                Divider()
+                                paletteLinkMenu(.kind(kind)) { editingLink = .kind(kind) }
                             }
                             .quickHelpArea(JobsHelp.paletteKind(kind))
+                            .tag(PaletteItem.kind(kind))
                     }
                 } header: {
                     Text("Layer \(layer.rawValue) · \(layer.title)")
                         .foregroundStyle(layer.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .paletteLink(.layer(layer)) { editingLink = .layer(layer) }
+                        .contextMenu { paletteLinkMenu(.layer(layer)) { editingLink = .layer(layer) } }
+                        .quickHelpArea(JobsHelp.paletteLayer(layer))
                 }
             }
 
@@ -74,6 +99,15 @@ struct PaletteView: View {
             }
         }
         .listStyle(.sidebar)
+        .focused($focused)
+        .onChange(of: selection) { if selection != nil { focused = true } }
+        .onKeyPress(.return) {
+            guard case .kind(let kind) = selection else { return .ignored }
+            editingElement = kind
+            return .handled
+        }
+        .sheet(item: $editingElement) { PaletteElementSheet(kind: $0) }
+        .sheet(item: $editingLink) { PaletteLinkSheet(item: $0) }
         .quickHelpArea(JobsHelp.palette)
         .task { running = await ServiceCatalog.probeAll() }
     }
@@ -81,21 +115,26 @@ struct PaletteView: View {
 
 private struct PaletteRow: View {
     var kind: NodeKind
+    /// Has a link: its mark sits at the trailing edge, and its hover card takes the place of the tooltip.
+    var linked: Bool
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: kind.symbol)
                 .foregroundStyle(kind.color)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 1) {
-                Text(kind.title)
-                Text(kind.summary)
+                Text(PaletteEdits.shared.title(kind))
+                Text(PaletteEdits.shared.summary(kind))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+            .padding(.trailing, linked ? 16 : 0)
         }
         .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .help("Drag onto the canvas, or double-click to add")
+        .help(linked ? "" : "Drag onto the canvas, or double-click to add; right-click to edit it or give it a link")
     }
 }

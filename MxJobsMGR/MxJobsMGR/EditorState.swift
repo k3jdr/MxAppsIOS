@@ -139,7 +139,8 @@ final class EditorState {
             x: (laneNodes.map { CGFloat($0.x) }.max() ?? Metrics.gutter) + Metrics.nodeSize.width + 50,
             y: Metrics.laneCenter(kind.layer))
         let p = Metrics.place(point ?? fallback, in: kind.layer)
-        let node = JobNode(kind: kind, x: p.x, y: p.y)
+        // A renamed palette element names its new steps (PaletteEdits.swift).
+        let node = JobNode(kind: kind, title: PaletteEdits.shared.title(kind), x: p.x, y: p.y)
         document.wrappedValue.space.nodes.append(node)
         selectedLink = nil
         selectedNodes = [node.id]
