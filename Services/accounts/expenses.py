@@ -11,6 +11,8 @@ spending, with their budget lines, subscriptions, equipment, training and trips 
     PUT  /expense-entries/<id>                      change one {version, …}: refused (409) when someone changed it since
     POST /expense-entries/<id>/approve              {approval: pending | approved | rejected}
     POST /expense-entries/<id>/renew                a subscription's next charge (a month or a year on)
+    POST /expense-ledgers/<code>/entries/delete     delete entries for good {entries: [{id, version}], by}: all or none,
+                                                    refused (409) when someone changed one since
     POST /expense-ledgers/<code>/fund               funding transfers {date, amount, payeeId, months, description}:
                                                     one a month from the date, those after today scheduled
     PUT  /expense-ledgers/<code>/lines/<id>         a budget line (id 0 adds one)
@@ -20,7 +22,9 @@ spending, with their budget lines, subscriptions, equipment, training and trips 
     GET  /expense-ledgers/<code>/card-charges       recent card charges in no expense ledger, to add from
 
 Amounts are signed as the balance reads them: positive is spent and not funded yet, negative lowers it (funding,
-refunds). An entry is never deleted: it is voided.
+refunds). An entry is voided to take it out of the balance and keep it; deleting one (the user's choice) removes it
+for good: a card charge or check it was linked to stays in its register, its spending tag goes with it (V037), assets
+and training keep no entry, and a move of it in Year-End Tax (srm.tax_assignment, V040) is taken off.
 """
 
 import calendar
@@ -375,6 +379,26 @@ def update_entry(conn, eid, body):
     return book(conn, row["code"])
 
 
+def delete_entries(conn, code, body):
+    """Deletes entries of one ledger for good, each at the version it was seen at; answers with the book."""
+    led = _ledger(conn, code)
+    chosen = body.get("entries") or []
+    if not isinstance(chosen, list) or not chosen:
+        raise ValueError("entries is a list of {id, version}")
+    for c in chosen:
+        row = _locked_entry(conn, int(c.get("id") or 0))
+        if row["ledger_id"] != led["ledger_id"]:
+            conn.rollback()
+            raise ValueError("entry %s is in %s, not %s" % (row["entry_id"], row["code"], led["code"]))
+        _check_version(conn, row, c)
+    ids = [int(c["id"]) for c in chosen]
+    fetch(conn, "DELETE FROM srm.tax_assignment WHERE source = 'ledger' AND entry_id = ANY(%s)", (ids,))
+    fetch(conn, "DELETE FROM srm.expense_entry WHERE entry_id = ANY(%s)", (ids,))
+    fetch(conn, "SELECT srm.match_expense_funding(%s)", (led["ledger_id"],))
+    conn.commit()
+    return book(conn, led["code"])
+
+
 def approve_entry(conn, eid, body):
     row = _locked_entry(conn, eid)
     approval = body.get("approval")
@@ -555,6 +579,8 @@ def route(conn, method, parts, body, q):
             return fund(conn, parts[1], body)
         if parts[2] == "card-charges" and method == "GET":
             return card_charges(conn, parts[1])
+    if len(parts) == 4 and parts[0] == "expense-ledgers" and parts[2:] == ["entries", "delete"] and method == "POST":
+        return delete_entries(conn, parts[1], body)
     if len(parts) == 4 and parts[0] == "expense-ledgers" and method == "PUT":
         save = {"lines": save_line, "assets": save_asset, "training": save_training, "trips": save_trip}.get(parts[2])
         if save:

@@ -430,6 +430,15 @@ unlinked), the target accounts its charges were filed to, and the activity log. 
 *card*** takes it away (`DELETE /cards/accounts/<code>?confirm=<code>`), which can't be undone. Its drop folder is moved
 to `src-cards/_removed/<CODE>-<date-time>/`, not deleted, where card-downloads doesn't read it.
 
+### Removing expense ledger entries (Banking ▸ Expense Ledgers ▸ Register)
+
+Right-click an entry for **Void** (it stays on record, struck through and out of the balance; **Restore** brings it
+back) or select one or several and choose **Delete Entry…** / **Delete N Entries…** (or press Delete) to remove them
+for good after a confirmation that names them and their total. Deleting is all or none, and refused when someone changed
+one of them since the register was loaded. A card charge or check an entry was linked to stays in its register; the
+entry's spending tag and any Year-End Tax move of it go with it, and assets or training records that named it keep no
+entry.
+
 ### Target accounts (Banking ▸ Target Accounts)
 
 A target account is where a register entry's money goes to or comes from — a utility, a card, a brokerage, a person

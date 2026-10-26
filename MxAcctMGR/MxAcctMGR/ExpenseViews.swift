@@ -230,6 +230,11 @@ nonisolated enum ExpenseClient {
     static func save(_ code: String, _ part: String, _ id: Int, _ body: [String: Any]) async throws -> ExpenseBookData {
         try await AccountsClient.request("PUT", "/expense-ledgers/\(code)/\(part)/\(id)", body: signed(body), as: ExpenseBookData.self)
     }
+    /// Deletes entries for good, each at the version it was seen at: all or none (409 when one changed since).
+    static func delete(_ code: String, _ entries: [ExpenseEntry]) async throws -> ExpenseBookData {
+        try await AccountsClient.request("POST", "/expense-ledgers/\(code)/entries/delete",
+                                         body: signed(["entries": entries.map { ["id": $0.id, "version": $0.version] }]), as: ExpenseBookData.self)
+    }
     static func cardCharges(_ code: String) async throws -> [CardCharge] {
         try await AccountsClient.request("GET", "/expense-ledgers/\(code)/card-charges", as: Charges.self).charges
     }
@@ -265,6 +270,8 @@ struct ExpenseLedgersView: View {
     @State private var draft = ExpenseDraft()
     @State private var ledgerSheet: ExpenseLedger??
     @State private var editing: ExpenseEntry?
+    /// The entries Delete… asks about.
+    @State private var deleting: [ExpenseEntry] = []
     @State private var funding = false
     @State private var fromCard = false
     @State private var lineSheet: ExpenseLine??
@@ -333,6 +340,19 @@ struct ExpenseLedgersView: View {
             ExpenseEntrySheet(entry: e, lines: data?.lines ?? [], trips: data?.trips ?? [], payees: book?.payees ?? []) { body in
                 await run { try await ExpenseClient.update(e.id, body) }
             }
+        }
+        .confirmationDialog(deleteTitle, isPresented: Binding(get: { !deleting.isEmpty }, set: { if !$0 { deleting = [] } }),
+                            titleVisibility: .visible) {
+            Button(deleting.count == 1 ? "Delete Entry" : "Delete \(deleting.count) Entries", role: .destructive) {
+                let chosen = deleting
+                guard let code = data?.ledger.code else { return }
+                Task {
+                    if await run({ try await ExpenseClient.delete(code, chosen) }) == nil { selection.subtract(chosen.map(\.id)) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(deleteMessage)
         }
         .sheet(isPresented: $funding) {
             if let l = data?.ledger {
@@ -446,7 +466,7 @@ struct ExpenseLedgersView: View {
     private func register(_ d: ExpenseBookData) -> some View {
         let byLine = lineShown == 0 ? d.entries : d.entries.filter { $0.lineId == lineShown }
         let rows = LocalGrid.rows(byLine, grid, Self.columns)
-        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry in date order with the running balance (over the whole ledger, also when one line is shown or the rows are filtered or sorted otherwise). Each column header's button sorts and filters it, as in Excel. Double-click to change one; the ledger is shared, so a change made from an older copy is refused.") {
+        return Box(title: "Register", symbol: "list.bullet.rectangle", help: "Every entry in date order with the running balance (over the whole ledger, also when one line is shown or the rows are filtered or sorted otherwise). Each column header's button sorts and filters it, as in Excel. Double-click to change one; the ledger is shared, so a change made from an older copy is refused. Right-click to void an entry (kept on record, out of the balance) or delete one or several for good (also the Delete key), after a confirmation.") {
             HStack {
                 Picker("Show", selection: $lineShown) {
                     Text("Every line").tag(0)
@@ -482,6 +502,11 @@ struct ExpenseLedgersView: View {
                 if ids.count == 1, let e = d.entries.first(where: { ids.contains($0.id) }) { editing = e }
             }
             .textSelection(.disabled)
+            // The Delete key and Edit ▸ Delete ask to delete the selected entries.
+            .onDeleteCommand {
+                let chosen = rows.filter { selection.contains($0.id) }
+                if !chosen.isEmpty { deleting = chosen }
+            }
             .onCopyCommand {
                 let chosen = rows.filter { selection.contains($0.id) }
                 return chosen.isEmpty ? [] : [NSItemProvider(object: Self.text(chosen) as NSString)]
@@ -544,11 +569,26 @@ struct ExpenseLedgersView: View {
             Divider()
             if e.status != "void" { Button("Void") { Task { await setStatus(e, "void") } } }
             else { Button("Restore") { Task { await setStatus(e, "actual") } } }
-            Divider()
         }
         if !chosen.isEmpty {
+            Button(chosen.count == 1 ? "Delete Entry…" : "Delete \(chosen.count) Entries…", role: .destructive) { deleting = chosen }
+            Divider()
             Button(chosen.count == 1 ? "Copy Entry" : "Copy \(chosen.count) Entries") { copy(Self.text(chosen)) }
         }
+    }
+
+    private var deleteTitle: String {
+        deleting.count == 1 ? "Delete \u{201C}\(deleting[0].description)\u{201D} for good?" : "Delete \(deleting.count) entries for good?"
+    }
+
+    private var deleteMessage: String {
+        var lines = [deleting.count == 1 ? "\(shortDay(deleting[0].date)) · \(money2(abs(deleting[0].amount)))"
+                     : "\(money2(deleting.map { abs($0.amount) }.reduce(0, +))) in all, \(shortDay(deleting.map(\.date).min())) to \(shortDay(deleting.map(\.date).max()))"]
+        lines.append("They're taken out of the ledger and the security master; this can't be undone. To keep an entry on record but out of the balance, Void it instead.")
+        if deleting.contains(where: { $0.cardTxnId != nil || $0.bankTxnId != nil }) {
+            lines.append("The card charges and checks they're linked to stay in their registers.")
+        }
+        return lines.joined(separator: "\n\n")
     }
 
     // MARK: Budget
