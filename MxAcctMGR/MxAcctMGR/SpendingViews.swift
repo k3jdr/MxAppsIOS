@@ -33,14 +33,13 @@ struct SpendingAnalysisView: View {
             "Every dollar the check register, the credit cards and the expense ledgers spend has two dimensions: a spending category (Food, Housing, Transportation, Education, Activities, Technology, Healthcare, Clothing, Travel) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event). Rules on expense and target accounts set them; tag a single entry (Philmont as a one-time event) on Entries.",
             "Each category's change splits as in performance attribution: change = inflation + usage + lifecycle + behavior + one-time. Inflation is last year's spending times the category's CPI change (FRED, in the security master); each driver's effect is what its spending grew beyond inflation. Inflation and lifecycle are the unavoidable part; behavior is habit.",
             "The forward curve stacks each child's lifecycle costs — club sports at 10, a phone at 12, a laptop at 13, tutors at 14, driving at 16, college visits and applications at 16–17, college at 18 — so the waves show three to five years ahead.",
-        ]) {
+        ], scrollsHorizontally: true) {
             periodBar
             if let sources { sourcesStrip(sources) }
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
-            Picker("", selection: $tab) { ForEach(Self.tabs, id: \.0) { Text($0.1).tag($0.0) } }
-                .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 720)
+            SpendingTabBar(tabs: Self.tabs, selection: $tab)
             if let setup {
                 switch tab {
                 case "curve": SpendingCurveTab(setup: setup, data: data) { tab = "family" }
@@ -85,24 +84,37 @@ struct SpendingAnalysisView: View {
         return (day(year, 1, 1), day(year, m, d), day(year - 1, 1, 1), day(year - 1, m, d))
     }
 
+    /// The year and its options, and the dates compared with Refresh: on one line, or two when the page is narrow.
     private var periodBar: some View {
-        HStack(spacing: 12) {
-            Picker("Year", selection: $year) {
-                ForEach((Self.thisYear - 5)...Self.thisYear, id: \.self) { y in Text(verbatim: "\(y) vs \(y - 1)").tag(y) }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { periodControls; Spacer(); periodStatus }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) { periodControls; Spacer() }
+                HStack(spacing: 12) { periodStatus; Spacer() }
             }
-            .frame(maxWidth: 200)
-            Toggle("Year to date", isOn: $yearToDate).toggleStyle(.checkbox)
-                .help("Compare January 1 to today's date in both years; off, the whole years")
-            Toggle("Only registers covering both years", isOn: $fullCoverage).toggleStyle(.checkbox)
-                .help("Leave out the registers whose entries start after the earlier year does: comparing them would count all their spending as growth")
-            Spacer()
-            if busy { ProgressView().controlSize(.small) }
-            if let data { Text("\(shortDay(data.start)) – \(shortDay(data.end)) vs \(shortDay(data.priorStart)) – \(shortDay(data.priorEnd))").font(.callout).foregroundStyle(.secondary) }
-            Button { Task { await reload() } } label: { Image(systemName: "arrow.clockwise") }
-                .help("Read the registers again")
         }
         .onChange(of: year) { Task { await reload() } }
         .onChange(of: yearToDate) { Task { await reload() } }
+    }
+
+    @ViewBuilder
+    private var periodControls: some View {
+        Picker("Year", selection: $year) {
+            ForEach((Self.thisYear - 5)...Self.thisYear, id: \.self) { y in Text(verbatim: "\(y) vs \(y - 1)").tag(y) }
+        }
+        .frame(maxWidth: 200)
+        Toggle("Year to date", isOn: $yearToDate).toggleStyle(.checkbox)
+            .help("Compare January 1 to today's date in both years; off, the whole years")
+        Toggle("Only registers covering both years", isOn: $fullCoverage).toggleStyle(.checkbox)
+            .help("Leave out the registers whose entries start after the earlier year does: comparing them would count all their spending as growth")
+    }
+
+    @ViewBuilder
+    private var periodStatus: some View {
+        if busy { ProgressView().controlSize(.small) }
+        if let data { Text("\(shortDay(data.start)) – \(shortDay(data.end)) vs \(shortDay(data.priorStart)) – \(shortDay(data.priorEnd))").font(.callout).foregroundStyle(.secondary) }
+        Button { Task { await reload() } } label: { Image(systemName: "arrow.clockwise") }
+            .help("Read the registers again")
     }
 
     private func reload() async {
@@ -506,24 +518,12 @@ private struct SpendingEntriesTab: View {
     var body: some View {
         let rows = shown
         Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, its expense account's rule). Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — or to set the rule for their target or expense account.") {
-            HStack(spacing: 10) {
-                Picker("", selection: $period) {
-                    Text("This year").tag("current"); Text("Earlier year").tag("prior"); Text("Both").tag("both")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { entryFilters; Spacer(); entryCount(rows) }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 10) { entryFilters; Spacer() }
+                    HStack(spacing: 10) { Spacer(); entryCount(rows) }
                 }
-                .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 280)
-                if lockedCategory == nil {
-                    Picker("Category", selection: $category) {
-                        Text("All").tag("")
-                        ForEach(setup.categories) { c in Text(c.name).tag(c.code) }
-                        Text("Not assigned").tag(SpendingEngine.unassigned)
-                    }
-                    .frame(maxWidth: 220)
-                }
-                Toggle("No driver yet", isOn: $onlyUnassigned).toggleStyle(.checkbox)
-                TextField("Search payee, description, event", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
-                Spacer()
-                Text("\(rows.count) entries, \(money(rows.map(\.amount).reduce(0, +)))").monospacedDigit().foregroundStyle(.secondary)
-                RowsStepper(rows: $tableRows)
             }
             Table(rows, selection: $selected) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 80)
@@ -567,6 +567,9 @@ private struct SpendingEntriesTab: View {
                 tagging = rows.filter { ids.contains($0.id) }
             }
             .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 8), tableRows)))
+            // The page's width, not the columns' preferred widths: the table narrows its columns (and scrolls them)
+            // rather than widening the page.
+            .frame(minWidth: 0, maxWidth: .infinity)
         }
         .sheet(isPresented: Binding(get: { tagging != nil }, set: { if !$0 { tagging = nil } })) {
             if let picked = tagging { SpendingTagSheet(setup: setup, entries: picked) { body in await tag(picked, body) } }
@@ -574,6 +577,30 @@ private struct SpendingEntriesTab: View {
         .sheet(item: $ruleFor) { target in
             SpendingRuleSheet(setup: setup, target: target) { ruleSaved($0) }
         }
+    }
+
+    @ViewBuilder
+    private var entryFilters: some View {
+        Picker("", selection: $period) {
+            Text("This year").tag("current"); Text("Earlier year").tag("prior"); Text("Both").tag("both")
+        }
+        .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 280)
+        if lockedCategory == nil {
+            Picker("Category", selection: $category) {
+                Text("All").tag("")
+                ForEach(setup.categories) { c in Text(c.name).tag(c.code) }
+                Text("Not assigned").tag(SpendingEngine.unassigned)
+            }
+            .frame(maxWidth: 220)
+        }
+        Toggle("No driver yet", isOn: $onlyUnassigned).toggleStyle(.checkbox)
+        TextField("Search payee, description, event", text: $search).textFieldStyle(.roundedBorder).frame(minWidth: 160, maxWidth: 240)
+    }
+
+    @ViewBuilder
+    private func entryCount(_ rows: [SpendingEntry]) -> some View {
+        Text("\(rows.count) entries, \(money(rows.map(\.amount).reduce(0, +)))").monospacedDigit().foregroundStyle(.secondary)
+        RowsStepper(rows: $tableRows)
     }
 
     private func tag(_ picked: [SpendingEntry], _ body: [String: Any]) async -> String? {
@@ -1315,6 +1342,35 @@ private struct SpendingSourcesTab: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Tabs
+
+/// The page's tabs as a row of buttons, each as wide as its name. A segmented picker of seven tabs redrew every
+/// segment as wide as the widest name after a tab change; the row then outgrew the page and, centered, slid under
+/// the sidebar.
+private struct SpendingTabBar: View {
+    var tabs: [(String, String)]
+    @Binding var selection: String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(tabs, id: \.0) { id, title in
+                Button { selection = id } label: {
+                    Text(title)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .foregroundStyle(selection == id ? Color.white : .primary)
+                        .background(selection == id ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 6))
+                        .contentShape(Rectangle())
+                }
+                .plainButton()
+                .accessibilityAddTraits(selection == id ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .fixedSize()
     }
 }
 

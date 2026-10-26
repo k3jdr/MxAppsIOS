@@ -180,29 +180,67 @@ struct StepPage<Content: View>: View {
     var lesson: [String]
     /// The page title, when it isn't the screen's (a report walkthrough's report).
     var title: String? = nil
+    /// Scrolls sideways when the content is wider than the window gives it, from its left edge, instead of making
+    /// the page wider than its column (which pushes it under the sidebar or past the window's edge).
+    var scrollsHorizontally = false
     @ViewBuilder var content: Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title ?? store.title(store.screen)).heading(.pageTitle)
-                    // Settings ▸ Guidance ▸ Minimal hides the introduction, Brief and Minimal the lesson.
-                    if PortSettings.shared.showsIntroductions {
-                        Text(subtitle).heading(.pageSubtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
+        if scrollsHorizontally {
+            // The reader is flexible, so the page never asks the window for more width than it has.
+            GeometryReader { geo in
+                ScrollView([.vertical, .horizontal]) {
+                    PageWidth(available: geo.size.width, widest: 1180) { column }
                 }
-                if store.screen.group == .mine { MyPortfolioBar(store: store) }
-                if !lesson.isEmpty, PortSettings.shared.showsLessons {
-                    LessonCard(store: store, id: store.screen.rawValue, title: lessonTitle, points: lesson)
-                }
-                content
-                StepFooter(store: store)
             }
-            .padding(20)
-            .frame(maxWidth: 1180, alignment: .leading)
-            .frame(maxWidth: .infinity)
+        } else {
+            ScrollView {
+                column
+                    .frame(maxWidth: 1180, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+            }
         }
+    }
+
+    private var column: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title ?? store.title(store.screen)).heading(.pageTitle)
+                // Settings ▸ Guidance ▸ Minimal hides the introduction, Brief and Minimal the lesson.
+                if PortSettings.shared.showsIntroductions {
+                    Text(subtitle).heading(.pageSubtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if store.screen.group == .mine { MyPortfolioBar(store: store) }
+            if !lesson.isEmpty, PortSettings.shared.showsLessons {
+                LessonCard(store: store, id: store.screen.rawValue, title: lessonTitle, points: lesson)
+            }
+            content
+            StepFooter(store: store)
+        }
+        .padding(20)
+    }
+}
+
+/// A page column laid out at the width available (at most `widest`, centered when the window is wider), or wider
+/// when its content can't fit in that: then it is as wide as the content needs, from the left edge, and the scroll
+/// view around it scrolls sideways. A frame would keep the width and let the content spill out of it instead.
+private struct PageWidth: Layout {
+    var available: CGFloat
+    var widest: CGFloat
+
+    private var target: CGFloat { min(available, widest) }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let size = subviews.first?.sizeThatFits(ProposedViewSize(width: target, height: proposal.height)) ?? .zero
+        return CGSize(width: max(available, size.width), height: size.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let page = subviews.first else { return }
+        let width = max(target, page.sizeThatFits(ProposedViewSize(width: target, height: bounds.height)).width)
+        page.place(at: CGPoint(x: bounds.minX + max(0, (bounds.width - width) / 2), y: bounds.minY), anchor: .topLeading,
+                   proposal: ProposedViewSize(width: width, height: bounds.height))
     }
 }
 
