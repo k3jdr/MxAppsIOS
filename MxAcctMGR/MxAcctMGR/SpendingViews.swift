@@ -549,7 +549,7 @@ private struct SpendingEntriesTab: View {
     }
 
     static let text = TableText<SpendingEntry>(
-        titles: ["Date", "From", "Payee", "Description", "Expense account", "Amount", "Category", "Driver", "Member", "Event"],
+        titles: ["Date", "From", "Payee", "Description", "Expense account", "Amount", "Category", "Driver", "Family member", "Event"],
         cells: { e in [e.date, e.register ?? e.sourceTitle, e.payee ?? "", e.description ?? "", e.expenseAccount ?? "",
                        String(format: "%.2f", e.amount), e.category ?? "", SpendingDriver.title(e.driver), e.memberId.map(String.init) ?? "", e.event ?? ""] })
 
@@ -578,7 +578,7 @@ private struct SpendingEntriesTab: View {
                     Text(SpendingDriver.title(e.driver)).foregroundStyle(e.driver == nil ? .secondary : .primary)
                         .help(e.driverFrom.map { "From the \($0)" } ?? "No rule or tag: counts as usage")
                 }.width(min: 80, ideal: 130).customizationID("driver")
-                TableColumn("Member") { e in Text(setup.member(e.memberId)?.name ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 80).customizationID("member")
+                TableColumn("Family member") { e in Text(setup.member(e.memberId)?.name ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110).customizationID("member")
                 TableColumn("Event") { e in
                     HStack(spacing: 3) {
                         if e.tagged { Image(systemName: "tag.fill").font(.caption2).foregroundStyle(.secondary) }
@@ -1016,7 +1016,7 @@ private struct SpendingRulesTab: View {
     private func header(_ title: String, trailing: Bool) -> some View {
         GridRow {
             Text(title); Text(priorYear).gridColumnAlignment(.trailing); Text(year).gridColumnAlignment(.trailing)
-            Text("Category"); Text("Driver"); Text("Member")
+            Text("Category"); Text("Driver"); Text("Family member")
             if trailing { Text("") }
         }
         .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
