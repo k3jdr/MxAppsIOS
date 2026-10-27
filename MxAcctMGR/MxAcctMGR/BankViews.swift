@@ -141,6 +141,8 @@ struct Payee: Decodable, Identifiable, Hashable {
 }
 
 struct ExpenseBook: Decodable {
+    /// The expense account just saved (PUT /expense-accounts/<id>).
+    var id: Int?
     var year: Int
     var expenseAccounts: [ExpenseAccount]
     var payees: [Payee]

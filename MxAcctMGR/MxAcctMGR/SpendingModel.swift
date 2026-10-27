@@ -96,6 +96,8 @@ struct SpendingSetup: Decodable {
         var id: Int
         var name: String
         var expenseAccountId: Int?
+        /// An expense account's description.
+        var description: String?
         // A target account's details and link (srm.payee_link, V032), for the Rules tab's names and hover text.
         var institution: String?
         var last4: String?

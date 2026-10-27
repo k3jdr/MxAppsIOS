@@ -166,7 +166,8 @@ def setup(conn, details=False):
                every_years AS "everyYears", annual_cost AS "annualCost", notes, active
           FROM srm.lifecycle_trigger ORDER BY sort_order, age_from, name""")
     accounts = fetch(conn, """
-        SELECT expense_account_id AS id, name FROM srm.expense_account WHERE kind = 'expense' ORDER BY sort_order, name""")
+        SELECT expense_account_id AS id, name, description FROM srm.expense_account WHERE kind = 'expense'
+         ORDER BY sort_order, name""")
     if details:
         payees = [nest_link(p, "link") for p in fetch(conn, """
             SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.institution,

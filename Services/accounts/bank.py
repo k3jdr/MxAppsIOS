@@ -12,7 +12,12 @@
     POST /bank/lines/<id>/match                  match it to an entry {txnId}
     POST /bank/accounts/<code>/import            read the bank's downloads now (srm-loader POST /load/pnc-bank)
     GET  /expense-accounts                       expense accounts with their payees and this year's totals
-    PUT  /expense-accounts/<id>                  create (id 0) or change one {name, kind, description}
+    PUT  /expense-accounts/<id>                  create (id 0) or change one {name, kind, description}; names are unique
+                                                 (ignoring case); answers with the list and the account's id
+    GET  /expense-accounts/<id>/usage            what files under it: card and checking entries, target accounts,
+                                                 expense-ledger lines, card categories, its spending rule
+    DELETE /expense-accounts/<id>?moveTo=&by=    take one off; what files under it moves to moveTo (another of the
+                                                 same kind), which is required when anything does
     PUT  /payees/<id>                            create (id 0) or change a target account {version, name, nickname, description,
                                                  status, reference (its identifier), institution, last4, expenseAccountId,
                                                  defaultAmount, nextPaymentDate, nextPaymentAmount, logonUrl, userName,
@@ -419,19 +424,81 @@ def expense_accounts(conn, q=None):
 
 
 def save_expense_account(conn, eid, body):
-    name = (body.get("name") or "").strip()
+    eid = int(eid)
+    name = " ".join((body.get("name") or "").split())[:80]
     if not name:
         raise ValueError("name is required")
-    kind = body.get("kind") or "expense"
+    cur = None
+    if eid:
+        rows = fetch(conn, "SELECT kind, description FROM srm.expense_account WHERE expense_account_id = %s", (eid,))
+        if not rows:
+            raise LookupError("no expense account %s" % eid)
+        cur = rows[0]
+    kind = body.get("kind") or (cur["kind"] if cur else "expense")
     if kind not in ("expense", "income", "transfer"):
         raise ValueError("kind must be expense, income or transfer")
-    if int(eid) == 0:
-        fetch(conn, """INSERT INTO srm.expense_account (name, kind, description, sort_order)
-                       VALUES (%s, %s, %s, coalesce((SELECT max(sort_order) FROM srm.expense_account WHERE kind = %s), 100) + 1)""",
-              (name[:80], kind, body.get("description"), kind))
+    if fetch(conn, "SELECT 1 FROM srm.expense_account WHERE lower(name) = lower(%s) AND expense_account_id <> %s", (name, eid)):
+        raise ValueError("there is already an expense account named %s" % name)
+    # A change keeps the description it doesn't send.
+    description = (str(body["description"]).strip() or None) if "description" in body else (cur["description"] if cur else None)
+    if not eid:
+        eid = fetch(conn, """INSERT INTO srm.expense_account (name, kind, description, sort_order)
+                             VALUES (%s, %s, %s, coalesce((SELECT max(sort_order) FROM srm.expense_account WHERE kind = %s), 100) + 1)
+                             RETURNING expense_account_id""", (name, kind, description, kind))[0]["expense_account_id"]
     else:
         fetch(conn, "UPDATE srm.expense_account SET name = %s, kind = %s, description = %s WHERE expense_account_id = %s",
-              (name[:80], kind, body.get("description"), int(eid)))
+              (name, kind, description, eid))
+    conn.commit()
+    return dict(expense_accounts(conn), id=eid)
+
+
+# What files under an expense account, and how to move it elsewhere: (what, count query, move statement).
+EXPENSE_USES = (
+    ("card entries", "SELECT count(*) FROM srm.card_txn WHERE expense_account_id = %s",
+     "UPDATE srm.card_txn SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now() WHERE expense_account_id = %s"),
+    ("checking entries", "SELECT count(*) FROM srm.bank_txn WHERE expense_account_id = %s",
+     "UPDATE srm.bank_txn SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now() WHERE expense_account_id = %s"),
+    ("target accounts", "SELECT count(*) FROM srm.payee WHERE expense_account_id = %s",
+     "UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now() WHERE expense_account_id = %s"),
+    ("expense-ledger lines", "SELECT count(*) FROM srm.expense_line WHERE expense_account_id = %s",
+     "UPDATE srm.expense_line SET expense_account_id = %s WHERE expense_account_id = %s"),
+    ("card categories", "SELECT count(*) FROM srm.card_category WHERE expense_account_id = %s",
+     "UPDATE srm.card_category SET expense_account_id = %s WHERE expense_account_id = %s"),
+)
+
+
+def expense_account_usage(conn, eid):
+    rows = fetch(conn, "SELECT name, kind FROM srm.expense_account WHERE expense_account_id = %s", (int(eid),))
+    if not rows:
+        raise LookupError("no expense account %s" % eid)
+    uses = {what: fetch(conn, count, (int(eid),))[0]["count"] for what, count, _ in EXPENSE_USES}
+    rule = fetch(conn, "SELECT 1 FROM srm.spending_rule WHERE expense_account_id = %s", (int(eid),))
+    return {"id": int(eid), "name": rows[0]["name"], "kind": rows[0]["kind"], "uses": uses, "inUse": sum(uses.values()),
+            "spendingRule": bool(rule)}
+
+
+def delete_expense_account(conn, eid, q):
+    """Takes an expense account off. What files under it — card and checking entries, target accounts, expense-ledger
+    lines, the card categories mapped to it — moves to moveTo first (required when anything does); its spending rule
+    goes with it (moveTo keeps its own)."""
+    usage = expense_account_usage(conn, eid)
+    move_to = int(q.get("moveTo") or 0)
+    by = str(q.get("by") or "MxAcctMGR")[:80]
+    if usage["inUse"]:
+        if not move_to:
+            one = {"card entries": "card entry", "checking entries": "checking entry", "target accounts": "target account",
+                   "expense-ledger lines": "expense-ledger line", "card categories": "card category"}
+            raise ValueError("%s is in use (%s): choose an expense account to move it to" % (
+                usage["name"], ", ".join("%d %s" % (n, one[w] if n == 1 else w) for w, n in usage["uses"].items() if n)))
+        target = fetch(conn, "SELECT kind FROM srm.expense_account WHERE expense_account_id = %s", (move_to,))
+        if not target or move_to == int(eid):
+            raise ValueError("moveTo must be another expense account")
+        if target[0]["kind"] != usage["kind"]:
+            raise ValueError("moveTo must be an %s account, as %s is" % (usage["kind"], usage["name"]))
+        for what, _, move in EXPENSE_USES:
+            params = (move_to, by, int(eid)) if "updated_by" in move else (move_to, int(eid))
+            fetch(conn, move, params)
+    fetch(conn, "DELETE FROM srm.expense_account WHERE expense_account_id = %s", (int(eid),))
     conn.commit()
     return expense_accounts(conn)
 
@@ -579,6 +646,10 @@ def route(conn, method, parts, body, q):
         return expense_accounts(conn, q)
     if len(parts) == 2 and parts[0] == "expense-accounts" and method == "PUT":
         return save_expense_account(conn, parts[1], body)
+    if len(parts) == 2 and parts[0] == "expense-accounts" and method == "DELETE":
+        return delete_expense_account(conn, parts[1], q)
+    if len(parts) == 3 and parts[0] == "expense-accounts" and parts[2] == "usage" and method == "GET":
+        return expense_account_usage(conn, parts[1])
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "note" and method == "PUT":
         return save_payee_note(conn, parts[1], body)
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "link" and method == "PUT":

@@ -1044,6 +1044,9 @@ private struct SpendingRulesTab: View {
     @State private var editing: RuleTarget?
     /// The statement text rule whose Link dialog is open.
     @State private var linking: SpendingRule?
+    /// New Expense Account… (.some(nil)) or Edit Expense Account… (.some(account)).
+    @State private var accountEditing: SpendingSetup.Named??
+    @State private var accountRemoving: SpendingSetup.Named?
     @State private var problem: String?
 
     private var year: String { String(data.start.prefix(4)) }
@@ -1071,15 +1074,24 @@ private struct SpendingRulesTab: View {
     var body: some View {
         if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
         let byAccount = spent { $0.expenseAccountId }
-        Box(title: "Expense Account Rules", symbol: "briefcase", help: "The category, primary driver and family member of each expense account's spending: the default for every entry in it. A target account's rule, a statement text rule, or an entry's own tag overrides it. Changes save as you pick, and the entries and attribution follow them.") {
+        Box(title: "Expense Account Rules", symbol: "briefcase", help: "The category, primary driver and family member of each expense account's spending: the default for every entry in it. A target account's rule, a statement text rule, or an entry's own tag overrides it. Changes save as you pick, and the entries and attribution follow them. New Expense Account… adds one (Home Office, Studio); right-click one to edit or remove it.") {
+            HStack {
+                Button("New Expense Account…") { accountEditing = .some(nil) }
+                Spacer()
+                Text("\(setup.expenseAccounts.count) expense accounts").foregroundStyle(.secondary)
+            }
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 header("Expense account", trailing: false)
                 ForEach(setup.expenseAccounts) { a in
-                    ruleRow(label: Text(a.name).lineLimit(1), spent: byAccount[a.id] ?? Spent(), rule: setup.rule(expenseAccount: a.id),
+                    ruleRow(label: accountLabel(a), spent: byAccount[a.id] ?? Spent(), rule: setup.rule(expenseAccount: a.id),
                             target: ["expenseAccountId": a.id], blank: "None")
                 }
             }
         }
+        .sheet(isPresented: Binding(get: { accountEditing != nil }, set: { if !$0 { accountEditing = nil } })) {
+            ExpenseAccountEditor(setup: setup, account: accountEditing ?? nil) { saved($0) }
+        }
+        .sheet(item: $accountRemoving) { a in RemoveExpenseAccountSheet(setup: setup, account: a) { saved($0) } }
         targetBox(spent { $0.payeeId })
             .sheet(item: $linking) { r in
                 LinkSheet(subject: r.pattern ?? "", detail: "Statement text rule", initial: r.link?.link, words: r.pattern ?? "",
@@ -1188,6 +1200,17 @@ private struct SpendingRulesTab: View {
     }
 
     // MARK: Names: links, hover text, right-click
+
+    /// An expense account's name: its description on hover; right-click edits or removes it.
+    private func accountLabel(_ a: SpendingSetup.Named) -> some View {
+        Text(a.name).lineLimit(1)
+            .help([a.description, "Right-click to edit or remove it."].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n"))
+            .textSelection(.disabled)
+            .contextMenu {
+                Button("Edit Expense Account…") { accountEditing = .some(a) }
+                Button("Remove Expense Account…") { accountRemoving = a }
+            }
+    }
 
     /// A target account's name: its link when it has one (a click opens it, the pointer resting on it shows the hover
     /// card), else its details on hover; right-click adds or edits the link and the rule.

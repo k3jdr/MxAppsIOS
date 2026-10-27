@@ -619,7 +619,11 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   cookies from the window. Amazon's Conditions of Use don't allow robots: it runs only when you ask, at your own risk,
   and may stop working when Amazon changes its pages (its scripts read the pages' words, not their layout, to last
   longer).
-* **Rules.** *Expense Account Rules*: one row per expense account. *Target Account Rules*: the target accounts with a
+* **Rules.** *Expense Account Rules*: one row per expense account. **New Expense Account…** adds one (Home Office,
+  Studio) with, if you pick them, its spending category and driver; right-click an expense account for **Edit Expense
+  Account…** (name, description) or **Remove Expense Account…**: one in use (card and checking entries, target accounts,
+  expense-ledger lines, the card companies' categories mapped to it) moves all of it to the expense account you choose
+  first, and its own spending rule goes. Names are unique, ignoring case. *Target Account Rules*: the target accounts with a
   rule first (bold, ✕ removes it), then every target account with spending in either year, most spent this year first;
   *Only rules* hides the rest. Picking a category, driver or member on a row gives it a rule. Only entries linked to a
   target account (the check register, Chase) have one — Discover's charges and the expense-ledger lines carry only the
@@ -858,6 +862,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
+| `SpendingExpenseAccounts.swift` | Spending Analysis ▸ Rules: New Expense Account… and Edit Expense Account… (with a new one's spending rule), and Remove Expense Account… with what files under it and where it moves |
 | `SpendingAdminView.swift` | Spending Analysis ▸ Admin: the Driver & Category guide with the Category × Driver table and its cells' origins, and the Target Accounts & Expense Ledgers guide with the Counted Twice finder and its links |
 | `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |
