@@ -220,7 +220,7 @@ struct FileListView: NSViewRepresentable {
 
         func copyToPasteboard() { workspace?.copyToPasteboard() }
         func paste() { workspace?.pasteFromPasteboard(move: false) }
-        func moveToTrash() { workspace?.moveToTrash() }
+        func deleteItems() { workspace?.deleteItems() }
 
         private func refreshQuickLook() {
             if QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared(), panel.isVisible,
@@ -402,7 +402,7 @@ struct FileListView: NSViewRepresentable {
                 menu.addItem(ActionMenuItem("Show in Finder") { workspace.revealInFinder() })
                 menu.addItem(ActionMenuItem("Properties…") { workspace.showProperties() })
                 menu.addItem(.separator())
-                menu.addItem(ActionMenuItem("Move to Trash") { workspace.moveToTrash() })
+                menu.addItem(ActionMenuItem("Delete…") { workspace.deleteItems() })
                 menu.addItem(.separator())
             }
             menu.addItem(ActionMenuItem("New Folder…") { workspace.newFolder() })
@@ -460,7 +460,7 @@ final class FileTableView: NSTableView {
     // Edit menu (responder chain).
     @objc func copy(_ sender: Any?) { coordinator?.copyToPasteboard() }
     @objc func paste(_ sender: Any?) { coordinator?.paste() }
-    @objc func delete(_ sender: Any?) { coordinator?.moveToTrash() }
+    @objc func delete(_ sender: Any?) { coordinator?.deleteItems() }
 
     // MARK: Quick Look
 

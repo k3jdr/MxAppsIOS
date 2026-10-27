@@ -35,9 +35,6 @@ final class AppSettings {
     var foldersFirst: Bool {
         didSet { defaults.set(foldersFirst, forKey: "foldersFirst"); listingChanged() }
     }
-    var confirmTrash: Bool {
-        didSet { defaults.set(confirmTrash, forKey: "confirmTrash") }
-    }
     var showFunctionKeyBar: Bool {
         didSet { defaults.set(showFunctionKeyBar, forKey: "showFunctionKeyBar") }
     }
@@ -61,7 +58,6 @@ final class AppSettings {
         defaults.register(defaults: [
             "showHidden": false,
             "foldersFirst": true,
-            "confirmTrash": false,
             "showFunctionKeyBar": true,
             "editorPath": "/System/Applications/TextEdit.app",
             "terminalPath": "/System/Applications/Utilities/Terminal.app",
@@ -70,7 +66,6 @@ final class AppSettings {
         ])
         showHidden = defaults.bool(forKey: "showHidden")
         foldersFirst = defaults.bool(forKey: "foldersFirst")
-        confirmTrash = defaults.bool(forKey: "confirmTrash")
         showFunctionKeyBar = defaults.bool(forKey: "showFunctionKeyBar")
         editorPath = defaults.string(forKey: "editorPath") ?? ""
         terminalPath = defaults.string(forKey: "terminalPath") ?? ""

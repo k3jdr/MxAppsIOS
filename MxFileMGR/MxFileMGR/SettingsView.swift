@@ -16,7 +16,6 @@ struct SettingsView: View {
                 Toggle("Show hidden files", isOn: $settings.showHidden)
                 Toggle("Folders before files", isOn: $settings.foldersFirst)
                 Toggle("Show function key bar", isOn: $settings.showFunctionKeyBar)
-                Toggle("Ask before moving items to the Trash", isOn: $settings.confirmTrash)
             }
             Section("Applications") {
                 appRow("Editor (F4):", path: $settings.editorPath)

@@ -24,6 +24,10 @@
 //  back but music players don't show. -id3v2_version 3 keeps the widely read ID3v2.3 (ffmpeg would write 2.4)
 //  and -write_id3v1 1 keeps ID3v1 tags (ffmpeg would drop them). M4A keeps description natively, like MP4.
 //
+//  A file on an SMB or NFS mount is read and written by ffprobe / ffmpeg on its server, over ssh (FileHost.swift),
+//  so the media never crosses the network: only the tags, progress lines and errors come back. The temporary
+//  copy is written next to the original on the server and moved into place there.
+//
 
 import AppKit
 import SwiftUI
@@ -57,12 +61,37 @@ nonisolated enum FFmpegTool {
         }
     }
 
-    /// Current tags, format, duration and streams, from ffprobe.
-    static func read(_ url: URL) async throws -> Info {
-        guard let ffprobe else { throw CLIToolError(message: "ffprobe isn't installed. Install it with: brew install ffmpeg") }
-        let data = try await CLITool.run(ffprobe, ["-v", "error", "-print_format", "json",
-                                                   "-show_entries", "format=format_name,duration:format_tags:stream=codec_type,codec_name",
-                                                   url.path], environment: CLITool.environment())
+    /// What's wrong with running ffmpeg for this file (not installed here or on its host, host unreachable), or nil.
+    static func problem(on location: FileLocation) async -> String? {
+        guard let host = location.host else {
+            return ffmpeg == nil ? "ffmpeg isn't installed. Install it with: brew install ffmpeg" : nil
+        }
+        let script = switch host.os {
+        case .windows: "foreach ($t in 'ffmpeg','ffprobe') { if (-not (Get-Command $t -CommandType Application -ErrorAction SilentlyContinue)) { $t } }"
+        case .posix: "for t in ffmpeg ffprobe; do command -v $t >/dev/null 2>&1 || echo $t; done"
+        }
+        do {
+            let missing = try await host.run(script).split(whereSeparator: \.isNewline).map(String.init)
+            guard !missing.isEmpty else { return nil }
+            let hint = host.os == .windows ? "winget install Gyan.FFmpeg" : "brew install ffmpeg (or the system's package manager)"
+            return "\(missing.joined(separator: " and ")) isn't installed on \(host.name), where this file is. Install it there with: \(hint)"
+        } catch {
+            return (error as? CLIToolError)?.message ?? error.localizedDescription
+        }
+    }
+
+    /// Current tags, format, duration and streams, from ffprobe (on the file's host).
+    static func read(_ location: FileLocation) async throws -> Info {
+        let args = ["-v", "error", "-print_format", "json",
+                    "-show_entries", "format=format_name,duration:format_tags:stream=codec_type,codec_name", location.path]
+        let data: Data
+        if let host = location.host {
+            data = Data(try await host.run(host.toolScript("ffprobe", args)).utf8)
+        } else {
+            guard let ffprobe else { throw CLIToolError(message: "ffprobe isn't installed. Install it with: brew install ffmpeg") }
+            data = try await CLITool.run(ffprobe, args, environment: CLITool.environment())
+        }
+        let url = location.url
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         let format = json["format"] as? [String: Any] ?? [:]
         var info = Info()
@@ -100,13 +129,14 @@ nonisolated enum FFmpegTool {
         }
     }
 
-    static func arguments(input: URL, output: URL, title: String, description: String, progress: Bool) -> [String] {
-        ["-nostdin", "-v", "error", "-y", "-i", input.path,
+    /// `input` and `output` are paths on the machine ffmpeg runs on; `url` (the file as listed) gives the type.
+    static func arguments(for url: URL, input: String, output: String, title: String, description: String, progress: Bool) -> [String] {
+        ["-nostdin", "-v", "error", "-y", "-i", input,
          "-map", "0", "-map_metadata", "0", "-c", "copy", "-ignore_unknown"]
-            + containerOptions(for: input)
-            + ["-metadata", "title=\(title)", "-metadata", "\(descriptionKey(for: input))=\(description)"]
+            + containerOptions(for: url)
+            + ["-metadata", "title=\(title)", "-metadata", "\(descriptionKey(for: url))=\(description)"]
             + (progress ? ["-progress", "pipe:1", "-nostats"] : [])
-            + [output.path]
+            + [output]
     }
 
     /// The command as you would type it in Terminal (shown in the dialog).
@@ -118,24 +148,26 @@ nonisolated enum FFmpegTool {
             + "  -metadata title=\(q(title)) \\\n  -metadata \(descriptionKey(for: input))=\(q(description)) \\\n  \(q(output.lastPathComponent))"
     }
 
-    /// Writes the tags as a background job. `destination` nil replaces the original.
+    /// Writes the tags as a background job, on the file's host. `newName` (a file next to it) nil replaces the original.
     @MainActor
-    static func write(_ source: URL, title: String, description: String, to destination: URL?, duration: Double?) {
+    static func write(_ location: FileLocation, title: String, description: String, newName: String?, duration: Double?) {
+        if location.isRemote {
+            writeRemote(location, title: title, description: description, newName: newName, duration: duration)
+            return
+        }
         guard let ffmpeg else { Alerts.message("ffmpeg isn't installed.", info: "Install it with: brew install ffmpeg"); return }
+        let source = location.url
+        let destination = newName.map { source.deletingLastPathComponent().appendingPathComponent($0) }
         let replace = destination == nil
         let stem = source.deletingPathExtension().lastPathComponent
         let output = destination ?? source.deletingLastPathComponent()
             .appendingPathComponent(".\(stem).mxmeta-\(UUID().uuidString.prefix(8)).\(source.pathExtension)")
-        let args = arguments(input: source, output: output, title: title, description: description, progress: true)
+        let args = arguments(for: source, input: source.path, output: output.path, title: title, description: description, progress: true)
         let name = source.lastPathComponent
         TransferManager.shared.start("Writing meta-data to “\(name)”") { reporter in
             reporter.begin(name)
-            let ok = CLITool.runJob(ffmpeg, args, environment: CLITool.environment(), reporter: reporter) { line in
-                if line.hasPrefix("out_time_us="), let us = Double(line.dropFirst("out_time_us=".count)),
-                   let duration, duration > 0 {
-                    reporter.progress(done: Int64(max(0, us)), of: Int64(duration * 1_000_000), name)
-                }
-            }
+            let ok = CLITool.runJob(ffmpeg, args, environment: CLITool.environment(), reporter: reporter,
+                                    onLine: progressHandler(reporter, name, duration))
             guard ok, !reporter.isCancelled else {
                 // Only our own output: the temporary file, or the new file (which didn't exist before).
                 try? FileManager.default.removeItem(at: output)
@@ -151,6 +183,54 @@ nonisolated enum FFmpegTool {
             }
         }
     }
+
+    /// ffmpeg on the file's server writes a temporary copy next to it, which is then moved over the original
+    /// (or to the new name) there. Stopping the job stops that ffmpeg (found by the temporary name) and removes the copy.
+    @MainActor
+    private static func writeRemote(_ location: FileLocation, title: String, description: String, newName: String?, duration: Double?) {
+        guard let host = location.host else { return }
+        let source = location.url
+        let folder = host.parent(location.path)
+        let marker = "mxmeta-\(UUID().uuidString.prefix(8))"
+        let temp = host.join(folder, [".\(source.deletingPathExtension().lastPathComponent).\(marker).\(source.pathExtension)"])
+        let target = newName.map { host.join(folder, [$0]) } ?? location.path
+        let args = arguments(for: source, input: location.path, output: temp, title: title, description: description, progress: true)
+        let (q, name) = (host.quote, source.lastPathComponent)
+        let finish = switch host.os {
+        case .windows: newName == nil
+            ? "Move-Item -LiteralPath \(q(temp)) -Destination \(q(target)) -Force -ErrorAction Stop"
+            : "Move-Item -LiteralPath \(q(temp)) -Destination \(q(target)) -ErrorAction Stop"
+        case .posix: newName == nil
+            ? "mv -f -- \(q(temp)) \(q(target))"
+            : "if [ -e \(q(target)) ]; then echo \(q("\(newName ?? "") already exists.")) >&2; exit 1; fi; mv -- \(q(temp)) \(q(target))"
+        }
+        let cleanup = switch host.os {
+        case .windows: """
+            Get-CimInstance Win32_Process -Filter "Name='ffmpeg.exe'" | Where-Object { $_.CommandLine -like '*\(marker)*' } |
+              ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            Start-Sleep -Milliseconds 500
+            Remove-Item -LiteralPath \(q(temp)) -Force -ErrorAction SilentlyContinue
+            """
+        // The bracket keeps pkill from matching this shell's own command line.
+        case .posix: "pkill -f \(q(marker.replacingOccurrences(of: "-", with: "[-]"))); sleep 0.5; rm -f -- \(q(temp))"
+        }
+        TransferManager.shared.start("Writing meta-data to “\(name)” on \(host.name)") { reporter in
+            reporter.begin(name)
+            let ok = host.runJob(host.toolScript("ffmpeg", args), reporter: reporter,
+                                 onLine: progressHandler(reporter, name, duration))
+            if ok, !reporter.isCancelled, host.runJob(finish, reporter: reporter) { return }
+            _ = try? await host.run(cleanup)
+        }
+    }
+
+    private static func progressHandler(_ reporter: ProgressReporter, _ name: String, _ duration: Double?) -> @Sendable (String) -> Void {
+        { line in
+            if line.hasPrefix("out_time_us="), let us = Double(line.dropFirst("out_time_us=".count)),
+               let duration, duration > 0 {
+                reporter.progress(done: Int64(max(0, us)), of: Int64(duration * 1_000_000), name)
+            }
+        }
+    }
 }
 
 /// The ffmpeg Meta-data… dialog.
@@ -158,6 +238,8 @@ struct MediaMetadataSheet: View {
     let workspace: Workspace
     let url: URL
     @State private var info: FFmpegTool.Info?
+    @State private var location: FileLocation?
+    @State private var toolProblem: String?
     @State private var title = ""
     @State private var descriptionText = ""
     @State private var saveAsNew = false
@@ -198,13 +280,17 @@ struct MediaMetadataSheet: View {
                 }
             }
 
-            if FFmpegTool.ffmpeg == nil {
-                Label("ffmpeg isn't installed. Install it with: brew install ffmpeg", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+            if let toolProblem {
+                Label(toolProblem, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange).textSelection(.enabled)
             } else if let loadError {
                 Text(loadError).foregroundStyle(.red).font(.callout).textSelection(.enabled)
             } else if info == nil {
                 HStack { ProgressView().controlSize(.small); Text("Reading the current tags…") }
+            }
+            if let location, let host = location.host {
+                Label("ffmpeg runs on \(host.name), where the file is: \(location.path)", systemImage: "server.rack")
+                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
 
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 8) {
@@ -269,7 +355,7 @@ struct MediaMetadataSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Apply") { apply() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(info == nil || FFmpegTool.ffmpeg == nil || newNameProblem != nil || !changed)
+                    .disabled(info == nil || location == nil || toolProblem != nil || newNameProblem != nil || !changed)
             }
         }
         .padding(20)
@@ -297,7 +383,11 @@ struct MediaMetadataSheet: View {
 
     private func load() async {
         do {
-            let read = try await FFmpegTool.read(url)
+            let location = try await FileHosts.locate(url)
+            self.location = location
+            toolProblem = await FFmpegTool.problem(on: location)
+            guard toolProblem == nil else { return }
+            let read = try await FFmpegTool.read(location)
             info = read
             title = read.title
             descriptionText = read.description
@@ -307,8 +397,10 @@ struct MediaMetadataSheet: View {
     }
 
     private func apply() {
+        guard let location else { return }
         let destination = saveAsNew ? output : nil
-        FFmpegTool.write(url, title: title, description: descriptionText, to: destination, duration: info?.duration)
+        FFmpegTool.write(location, title: title, description: descriptionText,
+                         newName: destination?.lastPathComponent, duration: info?.duration)
         if let destination { workspace.activeTab.focus(on: destination) }
         dismiss()
     }

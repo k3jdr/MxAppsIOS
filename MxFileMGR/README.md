@@ -19,7 +19,7 @@ privacy permissions, so it asks again for Photos and protected folders.
 | **Two panes** | Each pane has **tabs** (a tab strip appears with 2+ tabs), Back / Forward / Up, a clickable **breadcrumb** path (right-click: Copy Path, Go to Folder…), a **quick filter**, the file list and a status line (items, selection size, free space). The active pane has an accent line on top. |
 | **File list** | Columns Name, Ext, Size, Date Modified, Kind. Click a header to sort, drag to reorder or resize (remembered). Folders show `<DIR>` until you use **Calculate Folder Sizes**. The `..` row goes up. Hidden items are dimmed and symlinks are in italics. Folders update by themselves when their contents change. |
 | **Transfer panel** | Running copies, moves, deletes and archive jobs, with progress and **Stop**. Jobs that hit problems stay listed, with the errors, until dismissed. |
-| **Function key bar** | F2 Rename, F3 View, F4 Edit, F5 Copy, F6 Move, F7 New Folder, F8 Trash, ⌥F7 Find (View ▸ Function Key Bar). |
+| **Function key bar** | F2 Rename, F3 View, F4 Edit, F5 Copy, F6 Move, F7 New Folder, F8 Delete, ⌥F7 Find (View ▸ Function Key Bar). |
 
 ## Keyboard
 
@@ -37,7 +37,7 @@ On a Mac keyboard, press **fn** with the F-keys unless "Use F1, F2, etc. keys as
 | View / Edit | F3 / F4 |
 | Copy / Move to other pane | F5 / F6 |
 | New Folder / New File | F7 / ⇧F4 |
-| Move to Trash / Delete Immediately | ⌘⌫ / ⌥⌘⌫ |
+| Delete… | ⌘⌫ (F8) |
 | Quick Look | Space or ⌘Y |
 | Duplicate | ⌘D |
 | Properties | ⌘I |
@@ -84,8 +84,20 @@ Choose what happens when an item already exists: **Ask**, **Replace**, **Replace
 **Drag and drop** works between panes, with Finder and with other apps. Within one volume a drag moves;
 hold ⌥ to copy. Drop on a folder row to put the items into that folder.
 
-**Trash (F8 / ⌘⌫)** moves items to the Trash. Settings can make it ask first. **Delete Immediately**
-always asks and can't be undone.
+**Delete… (F8 / ⌘⌫)** deletes the marked items permanently (nothing goes to the Trash), on the machine they
+are on: a file on an SMB or NFS mount is deleted by its server over `ssh` (`Remove-Item` on Windows, `rm` elsewhere),
+so nothing is copied or moved across the network. It always asks first, naming the items, their paths on that
+machine and the host. The server's command checks that each path is still what the list showed (folder or
+file, same size) and leaves it alone otherwise; a symlink or junction is removed itself, never what it points
+to. A server that can't be reached over `ssh` is named in the question, and its items are deleted through the
+mount instead.
+
+**Commands on a file's server.** Delete and ffmpeg Meta-data… find the machine from the mount: the SSH target is
+the `~/.ssh/config` alias whose `HostName` is the mount's server (else `user@server` with the mount's user),
+signed in with keys or the agent (never prompting). The share's folder comes from the server itself:
+`Get-SmbShare` on Windows (through `powershell -EncodedCommand`, so cmd or PowerShell as sshd's shell both work),
+`testparm` (Samba) or `sharing -l` (macOS) elsewhere; an NFS export is its own path. For example
+`//calla@192.168.0.223/MyDataMAC/Videos/a.mp4` is `D:\MyDataMAC\Videos\a.mp4` on `k3jdr-dsktop-11`.
 
 **Compress** makes `name.zip` (or `Archive.zip` for several items) in the same folder. **Extract** unpacks zip,
 tar, tgz, tbz, txz, 7z, rar, cpio, xar and iso archives into a new folder in the other pane.
@@ -95,7 +107,11 @@ tar, tgz, tbz, txz, 7z, rar, cpio, xar and iso archives into a new folder in the
 `ffmpeg -i in -map 0 -map_metadata 0 -c copy -ignore_unknown -metadata title=… -metadata description=… out`: every stream
 is copied without re-encoding, the other tags are kept, and an empty field removes its tag. The original is replaced once
 the new copy is written (or choose **Save as a new file**); progress shows in the transfer panel, and **Command** shows the
-equivalent command. For `.mov` it adds `-movflags use_metadata_tags` (QuickTime's standard tags have no description) and blanks the
+equivalent command. A file on an SMB or NFS mount is read and rewritten by `ffprobe` / `ffmpeg` **on its server**
+over `ssh` (see Commands on a file's server), so the media never crosses the network: the temporary copy is written next to
+the original there and moved into place there, and only the tags, progress and errors come back. The dialog says which host
+it runs on; if that host has no ffmpeg (or can't be reached) it says so and Apply stays off (on Windows: `winget install
+Gyan.FFmpeg`). Stop in the transfer panel stops ffmpeg on the server and removes its temporary copy. For `.mov` it adds `-movflags use_metadata_tags` (QuickTime's standard tags have no description) and blanks the
 duplicated `major_brand` / `minor_version` / `compatible_brands` tags that option would otherwise accumulate. AVI's tags have no
 description, so for `.avi` the Description is stored in (and read from) the comment tag (ICMT). For `.mp3` the Description is a
 custom ID3 frame (`TXXX:description`, not shown by music players), and the command adds `-id3v2_version 3 -write_id3v1 1` so
@@ -141,7 +157,7 @@ own; closing that window docks it again. Both choices are remembered. The panel 
 
 ## Settings
 
-Hidden files, folders first, the function key bar, confirmation before using the Trash, and which apps
+Hidden files, folders first, the function key bar, and which apps
 **Edit (F4)** and **Open Terminal Here** use (TextEdit and Terminal by default; iTerm etc. work too).
 
 The open tabs of both panes are saved and restored in the next window.

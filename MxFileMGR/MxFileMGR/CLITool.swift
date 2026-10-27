@@ -96,7 +96,11 @@ nonisolated enum CLITool {
     }
 
     private static func message(_ stderr: Data, path: String, status: Int32) -> String {
-        let text = String(decoding: stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        // Windows PowerShell (run over ssh, FileHost.swift) adds its progress and error records as CLIXML.
+        let text = String(decoding: stderr, as: UTF8.self).split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#< CLIXML") && !$0.hasPrefix("<Objs") }
+            .joined(separator: "\n")
         return text.isEmpty ? "\((path as NSString).lastPathComponent) exited with status \(status)" : text
     }
 

@@ -40,7 +40,7 @@ enum FileHelp {
         title: "MxFileMGR",
         detail: "Two panes, each with tabs; the active one has the accent line on top. Tab switches panes, Return opens, Backspace goes up, "
             + "Space shows Quick Look and typing jumps to a name. Mark items with click, ⇧-click or ⌘-click; F5 copies and F6 moves them "
-            + "to the other pane, F2 renames, F7 makes a folder, F8 (⌘⌫) moves to the Trash. The sidebar has Favorites, cloud storage, drives and servers.",
+            + "to the other pane, F2 renames, F7 makes a folder, F8 (⌘⌫) deletes, on the machine the files are on. The sidebar has Favorites, cloud storage, drives and servers.",
         symbol: "rectangle.split.2x1")
 
     private static func sheetScreen(_ sheet: WorkspaceSheet) -> (String, QuickHelpItem) {
@@ -100,7 +100,7 @@ enum FileHelp {
         let folders = marked.filter(\.isDirectory).count
         return QuickHelpItem(title: "\(marked.count) Items Marked",
                              detail: "\(Fmt.size(bytes))\(folders > 0 ? " (\(Fmt.count(folders, "folder")) not counted until Calculate Folder Sizes, ⌥⌘S)" : ""). "
-                                + "F5 copies or F6 moves them to the other pane; F2 renames them together with Multi-Rename; F8 moves them to the Trash.",
+                                + "F5 copies or F6 moves them to the other pane; F2 renames them together with Multi-Rename; F8 deletes them permanently, after asking.",
                              symbol: "checkmark.circle")
     }
 
@@ -175,7 +175,7 @@ enum FileHelp {
 
     static let mediaMetadataDetail = "Edits the Title and Description tags of this MP4, M4V, MOV, WebM, MKV, AVI, MP3 or M4A file (AVI: Description goes in the comment tag; MP3: in a TXXX frame) with ffmpeg, copying every stream without re-encoding "
         + "(-map 0 -c copy); the other tags are kept and an empty field removes its tag. Apply replaces the original once the new copy is written, "
-        + "or saves a new file. Progress shows in the transfer panel; Command shows the equivalent ffmpeg command."
+        + "or saves a new file. A file on a network share is processed by ffmpeg on its server (over ssh), so the media never crosses the network. Progress shows in the transfer panel; Command shows the equivalent ffmpeg command."
 
     static let sftpSheet = QuickHelpItem(
         title: "SFTP Account",
@@ -270,7 +270,7 @@ enum FileHelp {
 
     static let functionKeys = QuickHelpItem(
         title: "Function Keys",
-        detail: "The Total Commander keys, for the marked items: F2 Rename, F3 View, F4 Edit, F5 Copy, F6 Move, F7 New Folder, F8 Trash, ⌥F7 Find. "
+        detail: "The Total Commander keys, for the marked items: F2 Rename, F3 View, F4 Edit, F5 Copy, F6 Move, F7 New Folder, F8 Delete, ⌥F7 Find. "
             + "On a Mac keyboard hold fn with them. View ▸ Function Key Bar hides the row.",
         symbol: "keyboard")
 

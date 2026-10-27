@@ -179,16 +179,6 @@ final class TransferManager {
         }
     }
 
-    func trash(_ urls: [URL]) {
-        start("Moving \(Fmt.count(urls.count, "item")) to the Trash") { reporter in
-            for (i, url) in urls.enumerated() where !reporter.isCancelled {
-                reporter.step(i, of: urls.count, url.lastPathComponent)
-                do { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
-                catch { reporter.error("\(url.lastPathComponent): \(error.localizedDescription)") }
-            }
-        }
-    }
-
     func delete(_ urls: [URL]) {
         start("Deleting \(Fmt.count(urls.count, "item"))") { reporter in
             for (i, url) in urls.enumerated() where !reporter.isCancelled {
@@ -196,6 +186,34 @@ final class TransferManager {
                 do { try FileManager.default.removeItem(at: url) }
                 catch { reporter.error("\(url.lastPathComponent): \(error.localizedDescription)") }
             }
+        }
+    }
+
+    /// Deletes items on the remote host they live on (see FileHost.swift), many per ssh call. An item whose
+    /// path there isn't what the list showed (a folder for a file, another size) is left alone.
+    func deleteRemote(_ targets: [RemoteDeleteTarget], on host: RemoteHost) {
+        start("Deleting \(Fmt.count(targets.count, "item")) on \(host.name)") { reporter in
+            var done = 0
+            var chunk: [(Int, RemoteDeleteTarget)] = []
+            func flush() {
+                guard !chunk.isEmpty, !reporter.isCancelled else { return }
+                let names = Dictionary(uniqueKeysWithValues: chunk.map { ($0.0, $0.1.name) })
+                let script = RemoteDeleteTarget.script(chunk, on: host)
+                chunk = []
+                // The script prints "ok<TAB>index" or "err<TAB>index<TAB>reason" per item.
+                host.runJob(script, reporter: reporter) { line in
+                    let fields = line.split(separator: "\t", maxSplits: 2).map(String.init)
+                    guard fields.count >= 2, fields[0] == "err", let name = Int(fields[1]).flatMap({ names[$0] }) else { return }
+                    reporter.error("\(name): \(fields.count > 2 ? fields[2] : "couldn't delete it")")
+                }
+                done += names.count
+                reporter.step(done, of: targets.count, names.values.first ?? "")
+            }
+            for (i, target) in targets.enumerated() {
+                chunk.append((i, target))
+                if chunk.count >= 40 { flush() }
+            }
+            flush()
         }
     }
 

@@ -113,7 +113,7 @@ private struct FunctionKeyBar: View {
             key("F5", "Copy") { workspace.copyOrMoveToOtherPane(move: false) }
             key("F6", "Move") { workspace.copyOrMoveToOtherPane(move: true) }
             key("F7", "New Folder") { workspace.newFolder() }
-            key("F8", "Trash") { workspace.moveToTrash() }
+            key("F8", "Delete") { workspace.deleteItems() }
             key("⌥F7", "Find") { workspace.search() }
         }
         .padding(.vertical, 3)

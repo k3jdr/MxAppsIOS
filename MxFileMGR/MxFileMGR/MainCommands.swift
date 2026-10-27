@@ -44,8 +44,7 @@ struct MainCommands: Commands {
             item("Compress") { $0.compress() }
             item("Extract to Other Pane", .f(9), [.option]) { $0.extract() }
             Divider()
-            item("Move to Trash", .delete) { $0.moveToTrash() }
-            item("Delete Immediately…", .delete, [.command, .option]) { $0.deleteImmediately() }
+            item("Delete…", .delete) { $0.deleteItems() }
             Divider()
             item("Properties…", "i") { $0.showProperties() }
             item("Show in Finder", "r", [.command, .option]) { $0.revealInFinder() }
