@@ -3,7 +3,7 @@
 //  MxAcctMGR
 //
 //  Adding, editing and removing expense accounts from Spending Analysis ▸ Rules: the bookkeeping categories the card
-//  and checking registers, target accounts and expense-ledger lines file entries under (Home Office, Studio …). A new
+//  and checking registers and cash-ledger lines file entries under (Home Office, Studio …). A new
 //  one can get its spending rule at once. Removing one in use moves what files under it to another expense account
 //  first (the accounts service's DELETE /expense-accounts/<id>?moveTo=).
 //
@@ -15,7 +15,7 @@ struct ExpenseAccountUsage: Decodable {
     var id: Int
     var name: String
     var kind: String
-    /// card entries, checking entries, target accounts, expense-ledger lines, card categories → how many.
+    /// card entries, checking entries, cash-ledger lines, card categories → how many.
     var uses: [String: Int]
     var inUse: Int
     var spendingRule: Bool
@@ -49,7 +49,7 @@ struct ExpenseAccountEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(account == nil ? "New Expense Account" : "Edit Expense Account").heading(.heading)
-            Text("An expense account is the bookkeeping category the card and checking registers, target accounts and expense-ledger lines file entries under. Spending Analysis puts its entries in a spending category with its rule.")
+            Text("An expense account is the bookkeeping category the card and checking registers and cash-ledger lines file entries under. Spending Analysis puts its entries in a spending category with its rule.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
                 TextField("Name", text: $name, prompt: Text("Home Office, Studio"))
@@ -108,9 +108,9 @@ struct RemoveExpenseAccountSheet: View {
     @State private var error: String?
     @State private var working = false
 
-    private static let order = ["card entries", "checking entries", "target accounts", "expense-ledger lines", "card categories"]
-    private static let one = ["card entries": "card entry", "checking entries": "checking entry", "target accounts": "target account",
-                              "expense-ledger lines": "expense-ledger line", "card categories": "card category"]
+    private static let order = ["card entries", "checking entries", "cash-ledger lines", "card categories"]
+    private static let one = ["card entries": "card entry", "checking entries": "checking entry",
+                              "cash-ledger lines": "cash-ledger line", "card categories": "card category"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

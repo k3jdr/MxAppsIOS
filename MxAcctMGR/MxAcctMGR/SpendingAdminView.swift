@@ -12,8 +12,8 @@
 //  * Driver and category: two dimensions on every dollar, set by the same rules. The guide says what each means and
 //    where they come from; the Category × Driver table shows this year's spending in both, a click on a cell shows
 //    what put its entries there, with Rule… to change it.
-//  * Target accounts and expense ledgers: who was paid, and what it was for. One purchase can be in both — a card
-//    charge to a target account and an entry in a ledger — and counts twice unless the entry is linked to the charge.
+//  * Registers and cash ledgers: who was paid, and what it was for. One purchase can be in both — a card charge and
+//    an entry in a ledger — and counts twice unless the entry is linked to the charge.
 //    The overlap finder lists the ledger entries that match an unlinked card charge or check (the accounts service's
 //    GET /spending/overlaps) and links them (POST /expense-entries/<id>/link).
 //
@@ -27,7 +27,7 @@ struct SpendingAdminTab: View {
     var entries: [SpendingEntry]
     /// Opens another Spending Analysis tab (rules, entries, sources).
     var openTab: (String) -> Void
-    /// Opens another screen (Expense Ledgers, Target Accounts).
+    /// Opens another screen (Cash Ledger).
     var go: (Screen) -> Void
     var ruleSaved: (SpendingSetup) -> Void
     /// A ledger entry was linked: the analysis is read again.
@@ -62,7 +62,7 @@ private struct ExpenseAccountsAdmin: View {
             now[id, default: (0, 0)].amount += e.amount
             now[id, default: (0, 0)].count += 1
         }
-        return Box(title: "Expense Accounts", symbol: "folder", help: "The bookkeeping categories the card and checking registers, target accounts and expense-ledger lines file entries under. Each has a rule that puts its entries in a spending category (Rule…). Edit… renames one or changes its description; Remove… moves what files under it to another first.") {
+        return Box(title: "Expense Accounts", symbol: "folder", help: "The bookkeeping categories the card and checking registers and cash-ledger lines file entries under. Each has a rule that puts its entries in a spending category (Rule…). Edit… renames one or changes its description; Remove… moves what files under it to another first.") {
             HStack {
                 Button("New Expense Account…") { editing = .some(nil) }
                 Spacer()
@@ -339,12 +339,11 @@ private struct DriverCategoryGuide: View {
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 3) {
                 Text("1. The entry's own tag (Entries: double-click, or select several and right-click).")
-                Text("2. Its target account's rule (Rules ▸ Target Account Rules).")
-                Text("3. The longest statement text rule its payee or description contains (Rules ▸ Statement Text Rules).")
-                Text("4. Its expense account's rule (Rules ▸ Expense Account Rules): the default for everything filed there.")
+                Text("2. The longest statement text rule its payee or description contains (Rules ▸ Statement Text Rules).")
+                Text("3. Its expense account's rule (Rules ▸ Expense Account Rules): the default for everything filed there.")
             }
             .font(.callout).padding(.leading, 8)
-            Text("So a target account's rule can set only the driver and leave the category to the expense account's rule, or the other way round.")
+            Text("So a statement text rule can set only the driver and leave the category to the expense account's rule, or the other way round.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("Open Rules") { openTab("rules") }
@@ -427,9 +426,6 @@ private struct DriverCategoryGuide: View {
         case "expense account":
             let t = e.expenseAccountId.map { RuleTarget(expenseAccountId: $0, name: e.expenseAccount ?? "") }
             return (Origin(kind: "expense account rule", label: e.expenseAccount ?? "—", target: t?.id), t)
-        case "target account":
-            let t = e.payeeId.map { RuleTarget(payeeId: $0, name: e.payee ?? "") }
-            return (Origin(kind: "target account rule", label: e.payee ?? "—", target: t?.id), t)
         case "statement text":
             let text = e.rulePattern ?? ""
             let t = RuleTarget(pattern: text, ruleId: setup.rule(pattern: text)?.id, name: text)
@@ -437,10 +433,9 @@ private struct DriverCategoryGuide: View {
         case "entry":
             return (Origin(kind: "the entry's own tag", label: "Tagged on the entry", target: nil), nil)
         default:
-            // Nothing sets it: offer the rule most likely to — the expense account's, else the target account's,
-            // else a statement text rule for its words.
+            // Nothing sets it: offer the rule most likely to — the expense account's, else a statement text rule for
+            // its words.
             let t = e.expenseAccountId.map { RuleTarget(expenseAccountId: $0, name: e.expenseAccount ?? "") }
-                ?? e.payeeId.map { RuleTarget(payeeId: $0, name: e.payee ?? "") }
                 ?? RuleTarget(pattern: e.statementKey, name: e.statementKey)
             return (Origin(kind: "no rule or tag", label: e.expenseAccount.map { "\($0) (its rule sets none)" } ?? "Nothing sets it", target: t.id), t)
         }
@@ -512,7 +507,7 @@ private struct DriverCategoryGuide: View {
     }
 }
 
-// MARK: - Target accounts and expense ledgers
+// MARK: - Registers and cash ledgers
 
 private struct LedgerTargetGuide: View {
     var entries: [SpendingEntry]
@@ -527,20 +522,19 @@ private struct LedgerTargetGuide: View {
     @State private var problem: String?
 
     var body: some View {
-        Box(title: "Target Accounts & Expense Ledgers", symbol: "arrow.triangle.branch", help: "How a purchase is recorded as a payment to someone and as an item bought for a purpose, and how to keep it from counting twice.") {
+        Box(title: "Registers & Cash Ledger", symbol: "arrow.triangle.branch", help: "How a purchase is recorded as a payment to someone and as an item bought for a purpose, and how to keep it from counting twice.") {
             HStack(alignment: .top, spacing: 14) {
-                AdminCard(title: "Target account: who was paid", symbol: "arrow.left.arrow.right.square",
-                          text: "Every check and card charge names the account the money went to (Banking ▸ Target Accounts), filed under an expense account. Discover's charges carry only the statement's words (APPLE.COM/US 800-692-7753) and have no target account.")
-                AdminCard(title: "Expense ledger: what it was for", symbol: "briefcase",
-                          text: "A funded budget for a purpose (Banking ▸ Expense Ledgers): Mac, Software & Home Office 2026, each item on a budget line (Mac & Software, Home Office Desk Buildout), with the transfers that fund it.")
+                AdminCard(title: "Register entry: who was paid", symbol: "checkmark.rectangle.stack",
+                          text: "Every check and card charge names who the money went to in its own words — as written in the check register, or as the card company's statement gives it (APPLE.COM/US 800-692-7753) — filed under an expense account.")
+                AdminCard(title: "Cash ledger: what it was for", symbol: "briefcase",
+                          text: "A funded budget for a purpose (Banking ▸ Cash Ledger): Mac, Software & Home Office 2026, each item on a budget line (Mac & Software, Home Office Desk Buildout), with the transfers that fund it.")
             }
             Text("One purchase can be in both: the MacBook charged on Discover to APPLE.COM/US is also the ledger's \u{201C}Mac Book Pro\u{201D}. When the ledger entry is linked to the charge or check that paid it (Add from Card Charges on the ledger, or Link below), Spending Analysis counts the purchase once, as the charge, with the charge's rules. A ledger entry with no link is spending of its own, so while its ledger is in the analysis (Sources) the purchase counts twice.")
                 .fixedSize(horizontal: false, vertical: true)
             Text("A linked entry shows a card or bank mark in the ledger's register. Linking changes nothing in the ledger's balance: the item is still bought on its budget line.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Open Expense Ledgers") { go(.expenseLedgers) }
-                Button("Open Target Accounts") { go(.expenses) }
+                Button("Open Cash Ledger") { go(.expenseLedgers) }
                 Button("Open Sources") { openTab("sources") }
             }
         }
@@ -555,7 +549,7 @@ private struct LedgerTargetGuide: View {
         let inAnalysis = Set(entries.filter { $0.source == "ledger" }.compactMap(\.register))
         let twiceNow = list.filter { inAnalysis.contains($0.ledger) }
         return Box(title: "Counted Twice: Ledger Entries That Match a Card Charge or Check", symbol: "link",
-                   help: "Expense-ledger entries not linked to a card charge or check that match one: the same amount within a week, the charge or check linked to no entry yet. Link counts the purchase once, as the charge; check the match first — the same amount can be a different purchase.") {
+                   help: "Cash-ledger entries not linked to a card charge or check that match one: the same amount within a week, the charge or check linked to no entry yet. Link counts the purchase once, as the charge; check the match first — the same amount can be a different purchase.") {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             if overlaps == nil {
                 ProgressView().controlSize(.small)

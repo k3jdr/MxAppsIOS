@@ -2,7 +2,7 @@
 //  ExpenseViews.swift
 //  MxAcctMGR
 //
-//  Banking ▸ Expense Ledgers: funded ledgers of purpose spending kept in the security master (accounts service
+//  Banking ▸ Cash Ledger: funded ledgers of purpose spending kept in the security master (accounts service
 //  /expense-ledgers, V030) — a Mac and its software, a home office build-out, subscriptions, training, travel. Each
 //  item is entered on a budget line (with its kind, budget and colour); transfers from a funding account (an external
 //  account of the check register) fund it, and the balance is what was spent and not funded yet. What the spending
@@ -24,7 +24,8 @@ struct ExpenseLedger: Decodable, Identifiable, Hashable {
     var openingDate: String
     var openingBalance: Double
     var budget: Double?
-    var fundingPayees: [Int]
+    /// The names its funding transfers have in the check register (V048): they link to its funding entries.
+    var fundingNames: [String]
     var fundingAmount: Double?
     var fundingDay: Int?
     var closedDate: String?
@@ -65,8 +66,6 @@ struct ExpenseEntry: Decodable, Identifiable, Hashable {
     var lineColor: String?
     var tripId: Int?
     var trip: String?
-    var payeeId: Int?
-    var payee: String?
     var amount: Double
     var recurrence: String
     var status: String
@@ -251,7 +250,7 @@ extension Color {
 private func day(_ s: String?) -> Date? { s.flatMap { isoDay.date(from: String($0.prefix(10))) } }
 private func iso(_ d: Date?) -> Any { d.map { isoDay.string(from: $0) } ?? NSNull() }
 
-// MARK: - Expense Ledgers
+// MARK: - Cash Ledger
 
 struct ExpenseLedgersView: View {
     @Bindable var store: PortStore
@@ -311,11 +310,11 @@ struct ExpenseLedgersView: View {
                 }
             } else if ledgers.isEmpty && problem == nil && !busy {
                 ContentUnavailableView {
-                    Label("No expense ledger yet", systemImage: "briefcase")
+                    Label("No cash ledger yet", systemImage: "briefcase")
                 } description: {
                     Text("Add one for a purpose — a computer and its software, a home office, training, travel — with the account that funds it.")
                 } actions: {
-                    Button("New Expense Ledger…") { ledgerSheet = .some(nil) }
+                    Button("New Cash Ledger…") { ledgerSheet = .some(nil) }
                 }
             }
         }
@@ -327,7 +326,7 @@ struct ExpenseLedgersView: View {
             }
         }
         .sheet(isPresented: Binding(get: { ledgerSheet != nil }, set: { if !$0 { ledgerSheet = nil } })) {
-            LedgerSheet(ledger: ledgerSheet ?? nil, payees: book?.payees ?? []) { code, body in
+            LedgerSheet(ledger: ledgerSheet ?? nil) { code, body in
                 do {
                     ledgers = try await ExpenseClient.saveLedger(code, body)
                     selected = code.uppercased()
@@ -337,7 +336,7 @@ struct ExpenseLedgersView: View {
             }
         }
         .sheet(item: $editing) { e in
-            ExpenseEntrySheet(entry: e, lines: data?.lines ?? [], trips: data?.trips ?? [], payees: book?.payees ?? []) { body in
+            ExpenseEntrySheet(entry: e, lines: data?.lines ?? [], trips: data?.trips ?? []) { body in
                 await run { try await ExpenseClient.update(e.id, body) }
             }
         }
@@ -356,7 +355,7 @@ struct ExpenseLedgersView: View {
         }
         .sheet(isPresented: $funding) {
             if let l = data?.ledger {
-                FundSheet(ledger: l, payees: book?.payees ?? []) { body in await run { try await ExpenseClient.fund(l.code, body) } }
+                FundSheet(ledger: l) { body in await run { try await ExpenseClient.fund(l.code, body) } }
             }
         }
         .sheet(isPresented: $fromCard) {
@@ -390,7 +389,7 @@ struct ExpenseLedgersView: View {
 
     private var accountBar: some View {
         HStack(spacing: 10) {
-            Picker("Expense ledger", selection: $selected) {
+            Picker("Cash ledger", selection: $selected) {
                 ForEach(ledgers) { l in Text(l.name).tag(l.code) }
             }
             .frame(maxWidth: 380)
@@ -402,7 +401,7 @@ struct ExpenseLedgersView: View {
             if let message { Text(message).font(.callout).foregroundStyle(.secondary).lineLimit(2) }
             Button { fromCard = true } label: { Label("From Card…", systemImage: "creditcard") }
                 .disabled(data == nil || busy)
-                .help("Add charges from Credit Card Accounts to this expense ledger (each charge once, in one expense ledger)")
+                .help("Add charges from Credit Card Accounts to this cash ledger (each charge once, in one cash ledger)")
             Button { funding = true } label: { Label("Fund…", systemImage: "arrow.down.circle") }
                 .disabled(data == nil || busy)
                 .help("Enter funding transfers: one, or one a month (those still to come are scheduled)")
@@ -452,7 +451,7 @@ struct ExpenseLedgersView: View {
         "Date": .date({ $0.date }, display: { shortDay($0.date) }),
         "Line": .text { $0.kind == "funding" ? "Funding" : $0.line },
         "Item": .text { $0.description },
-        "Vendor": .text { $0.vendor ?? $0.payee },
+        "Vendor": .text { $0.vendor },
         "Spent": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
         "Funded": .number({ $0.amount < 0 ? -$0.amount : nil }, display: { $0.amount < 0 ? money2(-$0.amount) : nil }),
         "✓": .text { e in
@@ -487,7 +486,7 @@ struct ExpenseLedgersView: View {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().foregroundStyle(e.status == "scheduled" ? .secondary : .primary).help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Line") { e in lineLabel(e) }.width(min: 90, ideal: 160)
                 TableColumn("Item") { e in itemLabel(e) }.width(min: 140, ideal: 240)
-                TableColumn("Vendor") { e in Text(e.vendor ?? e.payee ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
+                TableColumn("Vendor") { e in Text(e.vendor ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
                 TableColumn("Spent") { e in Text(e.amount > 0 ? money2(e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("Funded") { e in Text(e.amount < 0 ? money2(-e.amount) : "").monospacedDigit().foregroundStyle(.green) }.width(min: 60, ideal: 90)
                 TableColumn("✓") { e in statusMark(e) }.width(56)
@@ -769,7 +768,6 @@ struct ExpenseLedgersView: View {
     private func entryHelp(_ e: ExpenseEntry) -> String {
         var parts = ["Entered by \(e.enteredBy ?? "—")"]
         if let u = e.updatedBy, u != e.enteredBy { parts.append("last changed by \(u)") }
-        if let p = e.payee { parts.append(p) }
         return parts.joined(separator: " · ")
     }
 
@@ -830,12 +828,12 @@ struct ExpenseLedgersView: View {
     }
 
     private func savePart(_ part: String, _ id: Int, _ body: [String: Any]) async -> String? {
-        guard let code = data?.ledger.code else { return "Choose an expense ledger" }
+        guard let code = data?.ledger.code else { return "Choose a cash ledger" }
         return await run { try await ExpenseClient.save(code, part, id, body) }
     }
 
     private func add() async -> String? {
-        guard let code = data?.ledger.code else { return "Choose an expense ledger" }
+        guard let code = data?.ledger.code else { return "Choose a cash ledger" }
         let error = await run { try await ExpenseClient.add(code, draft.body) }
         if error == nil {
             let keep = (draft.date, draft.lineId, draft.tripId)
@@ -929,7 +927,6 @@ struct ExpenseEntrySheet: View {
     let entry: ExpenseEntry
     var lines: [ExpenseLine]
     var trips: [ExpenseTrip]
-    var payees: [Payee]
     var save: ([String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var date = Date()
@@ -938,7 +935,6 @@ struct ExpenseEntrySheet: View {
     @State private var vendor = ""
     @State private var lineId: Int?
     @State private var tripId: Int?
-    @State private var payeeId: Int?
     @State private var amount: Double?
     @State private var recurrence = "none"
     @State private var status = "actual"
@@ -958,10 +954,7 @@ struct ExpenseEntrySheet: View {
                 }
                 TextField("Item", text: $description)
                 if kind == "funding" {
-                    Picker("From", selection: $payeeId) {
-                        Text("—").tag(Int?.none)
-                        ForEach(payees) { Text(TargetPicker.title($0)).tag(Optional($0.id)) }
-                    }
+                    TextField("From", text: $vendor, prompt: Text("the transfer's name in the check register"))
                 } else {
                     TextField("Vendor", text: $vendor)
                     Picker("Line", selection: $lineId) {
@@ -991,7 +984,7 @@ struct ExpenseEntrySheet: View {
                     Task {
                         let body: [String: Any] = [
                             "version": entry.version, "date": isoDay.string(from: date), "kind": kind, "description": description,
-                            "vendor": vendor, "lineId": lineId ?? NSNull(), "tripId": tripId ?? NSNull(), "payeeId": payeeId ?? NSNull(),
+                            "vendor": vendor, "lineId": lineId ?? NSNull(), "tripId": tripId ?? NSNull(),
                             "amount": amount ?? 0, "recurrence": recurrence, "status": status, "url": url, "notes": notes]
                         if let e = await save(body) { error = e } else { dismiss() }
                     }
@@ -1003,7 +996,7 @@ struct ExpenseEntrySheet: View {
         .frame(width: 480)
         .onAppear {
             date = day(entry.date) ?? Date(); kind = entry.kind; description = entry.description; vendor = entry.vendor ?? ""
-            lineId = entry.lineId; tripId = entry.tripId; payeeId = entry.payeeId
+            lineId = entry.lineId; tripId = entry.tripId
             amount = entry.kind == "adjustment" ? entry.amount : abs(entry.amount)
             recurrence = entry.recurrence; status = entry.status; url = entry.url ?? ""; notes = entry.notes ?? ""
         }
@@ -1014,7 +1007,6 @@ struct ExpenseEntrySheet: View {
 
 struct LedgerSheet: View {
     let ledger: ExpenseLedger?
-    var payees: [Payee]
     var save: (String, [String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var code = ""
@@ -1025,7 +1017,8 @@ struct LedgerSheet: View {
     @State private var openingDate = Date()
     @State private var openingBalance = 0.0
     @State private var budget: Double?
-    @State private var fundingPayees = Set<Int>()
+    /// One name a line.
+    @State private var fundingNames = ""
     @State private var fundingAmount: Double?
     @State private var fundingDay: Int?
     @State private var closed = false
@@ -1033,7 +1026,7 @@ struct LedgerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(ledger == nil ? "New Expense Ledger" : "Edit \(ledger!.name)").heading(.heading)
+            Text(ledger == nil ? "New Cash Ledger" : "Edit \(ledger!.name)").heading(.heading)
             Form {
                 TextField("Code", text: $code).disabled(ledger != nil).help("A short name for it: letters, digits, _ or - (TECH_2026)")
                 TextField("Name", text: $name)
@@ -1044,13 +1037,10 @@ struct LedgerSheet: View {
                 DatePicker("Starts", selection: $openingDate, displayedComponents: .date)
                 TextField("Unfunded then", value: $openingBalance, format: .number.precision(.fractionLength(2)))
                 Section("Funding") {
-                    Text("The target accounts whose transfers in the check register fund it: they link to its funding entries.")
+                    Text("The names its funding transfers have in the check register, one a line (ignoring case): they link to its funding entries.")
                         .font(.caption).foregroundStyle(.secondary)
-                    List(payees.filter(\.active)) { p in
-                        Toggle(TargetPicker.title(p), isOn: Binding(get: { fundingPayees.contains(p.id) },
-                                                                     set: { if $0 { fundingPayees.insert(p.id) } else { fundingPayees.remove(p.id) } }))
-                    }
-                    .frame(height: 110)
+                    TextEditor(text: $fundingNames).font(.body).frame(height: 70)
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
                     TextField("Planned transfer", value: $fundingAmount, format: .number.precision(.fractionLength(2)))
                     TextField("On day", value: $fundingDay, format: .number)
                 }
@@ -1065,7 +1055,8 @@ struct LedgerSheet: View {
                         var body: [String: Any] = [
                             "name": name, "purpose": purpose, "owner": owner, "costCenter": costCenter,
                             "openingDate": isoDay.string(from: openingDate), "openingBalance": openingBalance,
-                            "budget": budget ?? NSNull(), "fundingPayees": Array(fundingPayees),
+                            "budget": budget ?? NSNull(),
+                            "fundingNames": fundingNames.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
                             "fundingAmount": fundingAmount ?? NSNull(), "fundingDay": fundingDay ?? NSNull(),
                             "closedDate": closed ? (ledger?.closedDate ?? isoDay.string(from: Date())) : NSNull()]
                         if let v = ledger?.version { body["version"] = v }
@@ -1082,17 +1073,16 @@ struct LedgerSheet: View {
             guard let l = ledger else { return }
             code = l.code; name = l.name; purpose = l.purpose ?? ""; owner = l.owner; costCenter = l.costCenter ?? ""
             openingDate = day(l.openingDate) ?? Date(); openingBalance = l.openingBalance; budget = l.budget
-            fundingPayees = Set(l.fundingPayees); fundingAmount = l.fundingAmount; fundingDay = l.fundingDay; closed = l.closedDate != nil
+            fundingNames = l.fundingNames.joined(separator: "\n"); fundingAmount = l.fundingAmount; fundingDay = l.fundingDay; closed = l.closedDate != nil
         }
     }
 }
 
 struct FundSheet: View {
     let ledger: ExpenseLedger
-    var payees: [Payee]
     var fund: ([String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
-    @State private var payeeId: Int?
+    @State private var from = ""
     @State private var date = Date()
     @State private var amount: Double?
     @State private var months = 1
@@ -1102,8 +1092,14 @@ struct FundSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Fund \(ledger.name)").heading(.heading)
             Form {
-                Picker("From", selection: $payeeId) {
-                    ForEach(payees.filter { ledger.fundingPayees.contains($0.id) || $0.active }) { Text(TargetPicker.title($0)).tag(Optional($0.id)) }
+                HStack(spacing: 4) {
+                    TextField("From", text: $from, prompt: Text("the transfer's name in the check register"))
+                    Menu {
+                        ForEach(ledger.fundingNames, id: \.self) { n in Button(n) { from = n } }
+                    } label: { Image(systemName: "clock.arrow.circlepath") }
+                        .menuStyle(.borderlessButton).fixedSize()
+                        .disabled(ledger.fundingNames.isEmpty)
+                        .help("The ledger's funding names (Edit…)")
                 }
                 DatePicker("First transfer", selection: $date, displayedComponents: .date)
                 TextField("Amount", value: $amount, format: .number.precision(.fractionLength(2)))
@@ -1118,7 +1114,7 @@ struct FundSheet: View {
                 Button("Fund") {
                     Task {
                         var body: [String: Any] = ["date": isoDay.string(from: date), "amount": amount ?? 0, "months": months]
-                        if let payeeId { body["payeeId"] = payeeId }
+                        if !from.isEmpty { body["vendor"] = from }
                         if let e = await fund(body) { error = e } else { dismiss() }
                     }
                 }
@@ -1128,7 +1124,7 @@ struct FundSheet: View {
         .padding(18)
         .frame(width: 440)
         .onAppear {
-            payeeId = ledger.fundingPayees.first
+            from = ledger.fundingNames.first ?? ""
             amount = ledger.fundingAmount
             if let d = ledger.fundingDay {
                 var c = Calendar.current.dateComponents([.year, .month], from: Date())
@@ -1155,7 +1151,7 @@ struct CardChargesSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Add Card Charges").heading(.heading)
-            Text("Charges from Credit Card Accounts in the last year that no expense ledger has yet. Each is added once, linked to its charge.")
+            Text("Charges from Credit Card Accounts in the last year that no cash ledger has yet. Each is added once, linked to its charge.")
                 .font(.callout).foregroundStyle(.secondary)
             if loading { ProgressView() }
             Table(charges, selection: $chosen) {

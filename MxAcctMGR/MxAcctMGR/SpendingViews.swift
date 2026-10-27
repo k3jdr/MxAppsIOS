@@ -35,7 +35,7 @@ struct SpendingAnalysisView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: "Household spending attribution: like portfolio attribution, for the family's spending — why it changed from last year (prices, more of the same, the children's ages, habits, one-time events) and what the children's ages bring in the next ten years.", lesson: [
-            "Every dollar the check register, the credit cards and the expense ledgers spend has two dimensions: a spending category (Food, Housing, Transportation, Education, Activities, Technology, Healthcare, Clothing, Travel) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event). Rules on expense and target accounts set them; tag a single entry (Philmont as a one-time event) on Entries.",
+            "Every dollar the check register, the credit cards and the cash ledgers spend has two dimensions: a spending category (Food, Housing, Transportation, Education, Activities, Technology, Healthcare, Clothing, Travel) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event). Rules on expense accounts and statement text set them; tag a single entry (Philmont as a one-time event) on Entries.",
             "Each category's change splits as in performance attribution: change = inflation + usage + lifecycle + behavior + one-time + taxes. Inflation is last year's spending times the category's CPI change (FRED, in the security master); each driver's effect is what its spending grew beyond inflation. Inflation and lifecycle are the unavoidable part; behavior is habit.",
             "The forward curve stacks each child's lifecycle costs — club sports at 10, a phone at 12, a laptop at 13, tutors at 14, driving at 16, college visits and applications at 16–17, college at 18 — so the waves show three to five years ahead.",
         ], scrollsHorizontally: true, widest: .infinity) {
@@ -95,8 +95,6 @@ struct SpendingAnalysisView: View {
             }
         }
         .task { await reload() }
-        // A target account's link saved here (the Rules tab) or on Banking: the setup brings it.
-        .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .quickHelpArea(PortHelp.about(.spending))
     }
 
@@ -248,7 +246,7 @@ struct SpendingAnalysisView: View {
         tiles(total)
         if rows.isEmpty {
             ContentUnavailableView("No spending in these periods", systemImage: "chart.bar.xaxis",
-                                   description: Text("The check register, credit cards and expense ledgers have no spending entries in either year."))
+                                   description: Text("The check register, credit cards and cash ledgers have no spending entries in either year."))
         } else {
             metricsTable(rows, total)
             HStack(alignment: .top, spacing: 14) {
@@ -599,7 +597,7 @@ private struct SpendingEntriesTab: View {
         let gridColumns = Self.gridColumns(setup)
         let rows = LocalGrid.rows(base, grid, gridColumns)
         let picked = rows.filter { selected.contains($0.id) }
-        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, a statement text rule, its expense account's rule). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Each column header's button sorts and filters it, as in Excel. Select several entries (⇧ / ⌘ click, ⌘A) and use Category or Driver above the table, or right-click, to change just that for all of them; each keeps the rest of its own tag. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to set the rule for their target account, statement text or expense account, or to file them under another expense account (Change Expense Account…), with the charges to come.") {
+        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and cash-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, a statement text rule, its expense account's rule). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Each column header's button sorts and filters it, as in Excel. Select several entries (⇧ / ⌘ click, ⌘A) and use Category or Driver above the table, or right-click, to change just that for all of them; each keeps the rest of its own tag. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to set the rule for their statement text or expense account, or to file them under another expense account (Change Expense Account…).") {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) { entryFilters; Spacer(); entryCount(rows) }
                 VStack(alignment: .leading, spacing: 6) {
@@ -671,7 +669,6 @@ private struct SpendingEntriesTab: View {
                 }
                 if picked.count == 1, let e = picked.first {
                     Divider()
-                    if let id = e.payeeId { Button("Rule for Target Account \(e.payee ?? "")…") { ruleFor = RuleTarget(payeeId: id, name: e.payee ?? "") } }
                     if let text = e.rulePattern {
                         Button("Rule for Statement Text \(text)…") { ruleFor = RuleTarget(pattern: text, ruleId: setup.rule(pattern: text)?.id, name: text) }
                     } else {
@@ -838,23 +835,15 @@ private struct SpendingEntriesTab: View {
     }
 }
 
-/// What a rule is for: an expense account, a target account or a piece of statement text (V042).
+/// What a rule is for: an expense account or a piece of statement text (V042).
 struct RuleTarget: Identifiable {
     var expenseAccountId: Int? = nil
-    var payeeId: Int? = nil
     /// Statement text: the rule's, or what a new rule starts from.
     var pattern: String? = nil
     /// The statement text rule being changed, when there is one.
     var ruleId: Int? = nil
     var name: String
-    var id: String { "\(expenseAccountId ?? -1)-\(payeeId ?? -1)-\(ruleId ?? -1)-\(pattern ?? "")" }
-}
-
-extension PayeeLinkTarget {
-    /// A target account on the Rules tab, for its link and the Link dialog.
-    init(_ p: SpendingSetup.Named) {
-        payeeId = p.id; name = p.name; last4 = p.last4; institution = p.institution; website = p.logonUrl; link = p.link?.link
-    }
+    var id: String { "\(expenseAccountId ?? -1)-\(ruleId ?? -1)-\(pattern ?? "")" }
 }
 
 private func null(_ v: Any?) -> Any { v ?? NSNull() }
@@ -957,7 +946,7 @@ struct SpendingRuleSheet: View {
 
     private var rule: SpendingRule? {
         if isText { return target.ruleId.flatMap { id in setup.rules.first { $0.id == id } } ?? target.pattern.flatMap { setup.rule(pattern: $0) } }
-        return target.payeeId.flatMap { setup.rule(payee: $0) } ?? target.expenseAccountId.flatMap { setup.rule(expenseAccount: $0) }
+        return target.expenseAccountId.flatMap { setup.rule(expenseAccount: $0) }
     }
 
     /// The text as the service keeps it: trimmed, single spaces.
@@ -993,10 +982,9 @@ struct SpendingRuleSheet: View {
 
     private var explanation: String {
         if isText {
-            return "Every entry whose payee, statement name or description contains this text, ignoring case: for the card charges and expense-ledger lines with no target account. A target account's rule or the entry's own tag still wins, and when several texts match, the longest does. Left blank, the expense account's rule decides."
+            return "Every entry whose payee, statement name or description contains this text, ignoring case, overriding its expense account's rule. The entry's own tag still wins, and when several texts match, the longest does. Left blank, the expense account's rule decides."
         }
-        if target.payeeId != nil { return "Every entry with this target account, unless the entry has a tag of its own. Left blank, the expense account's rule decides." }
-        return "Every entry in this expense account, unless its target account's rule, a statement text rule or its own tag says otherwise."
+        return "Every entry in this expense account, unless a statement text rule or its own tag says otherwise."
     }
 
     /// What the text matches in the analysis's two periods, as the service will match it.
@@ -1041,7 +1029,6 @@ struct SpendingRuleSheet: View {
             body["id"] = null(rule?.id)
         } else {
             body["expenseAccountId"] = null(target.expenseAccountId)
-            body["payeeId"] = null(target.payeeId)
         }
         Task {
             do {
@@ -1053,21 +1040,17 @@ struct SpendingRuleSheet: View {
 }
 
 /// Change Expense Account…: files card and check entries under another expense account (the bookkeeping category the
-/// registers show) and, unless turned off, what comes next with the same target account or statement name too.
+/// registers show). A new entry paid to the same name takes it from then on (the latest entry's expense account).
 private struct RefileSheet: View {
     var setup: SpendingSetup
     var entries: [SpendingEntry]
     var saved: (SpendingSetup) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var account = 0
-    @State private var fileFuture = true
-    @State private var targetName = ""
     @State private var error: String?
     @State private var saving = false
 
     private var changeable: [SpendingEntry] { entries.filter { $0.source != "ledger" } }
-    private var loose: [SpendingEntry] { changeable.filter { $0.payeeId == nil } }
-    private var targets: [String] { Array(Set(changeable.compactMap { $0.payeeId == nil ? nil : $0.payee })).sorted() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1078,12 +1061,9 @@ private struct RefileSheet: View {
                     Text("Choose…").tag(0)
                     ForEach(setup.expenseAccounts) { a in Text(a.name).tag(a.id) }
                 }
-                Toggle("Also file future charges under it", isOn: $fileFuture)
-                if fileFuture && !loose.isEmpty {
-                    TextField("Target account", text: $targetName, prompt: Text("NJM Insurance"))
-                }
             }
-            Text(futureNote).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("A new entry entered by hand with the same payee takes the expense account its latest entry has, so it follows. A card company's downloaded line takes the one its card category maps to.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             HStack {
                 Spacer()
@@ -1091,15 +1071,11 @@ private struct RefileSheet: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Change") { Task { await save() } }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(saving || account == 0 || (fileFuture && !loose.isEmpty && targetName.trimmingCharacters(in: .whitespaces).isEmpty))
+                    .disabled(saving || account == 0)
             }
         }
         .padding(18)
         .frame(width: 500)
-        .onAppear {
-            // Start from the most common statement words of the entries without a target account.
-            targetName = loose.first.map { $0.statementKey.capitalized } ?? ""
-        }
     }
 
     private var summary: String {
@@ -1109,23 +1085,15 @@ private struct RefileSheet: View {
         let now = Set(changeable.compactMap(\.expenseAccount))
         if !now.isEmpty { s += ". Filed under \(now.sorted().joined(separator: ", ")) now." }
         let ledger = entries.count - changeable.count
-        if ledger > 0 { s += " \(ledger) expense-ledger \(ledger == 1 ? "entry takes" : "entries take") its budget line's expense account and won't change." }
+        if ledger > 0 { s += " \(ledger) cash-ledger \(ledger == 1 ? "entry takes" : "entries take") its budget line's expense account and won't change." }
         return s
-    }
-
-    private var futureNote: String {
-        guard fileFuture else { return "Only these entries change; the next charges come in as before." }
-        var parts: [String] = []
-        if !targets.isEmpty { parts.append("Their target account\(targets.count == 1 ? "" : "s") (\(targets.joined(separator: ", "))) will be filed under it, so new entries with \(targets.count == 1 ? "it" : "them") are too.") }
-        if !loose.isEmpty { parts.append("The entries with no target account get this one, with their statement names, so the card and checking downloads post the next charges to it, under this expense account. It shows on Banking ▸ Target Accounts.") }
-        return parts.joined(separator: " ")
     }
 
     private func save() async {
         saving = true
         defer { saving = false }
         do {
-            saved(try await SpendingClient.changeExpenseAccount(changeable, to: account, fileFuture: fileFuture, targetName: targetName))
+            saved(try await SpendingClient.changeExpenseAccount(changeable, to: account))
             dismiss()
         } catch { self.error = describe(error) }
     }
@@ -1139,9 +1107,6 @@ private struct SpendingRulesTab: View {
     /// Both periods' entries (of the registers shown), for each rule's spending.
     var entries: [SpendingEntry]
     var saved: (SpendingSetup) -> Void
-    @State private var search = ""
-    @State private var showAll = false
-    @AppStorage("spendingOnlyRules") private var onlyRules = false
     @State private var editing: RuleTarget?
     /// The statement text rule whose Link dialog is open.
     @State private var linking: SpendingRule?
@@ -1175,7 +1140,7 @@ private struct SpendingRulesTab: View {
     var body: some View {
         if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
         let byAccount = spent { $0.expenseAccountId }
-        Box(title: "Expense Account Rules", symbol: "briefcase", help: "The category, primary driver and family member of each expense account's spending: the default for every entry in it. A target account's rule, a statement text rule, or an entry's own tag overrides it. Changes save as you pick, and the entries and attribution follow them. New Expense Account… adds one (Home Office, Studio); right-click one to edit or remove it.") {
+        Box(title: "Expense Account Rules", symbol: "briefcase", help: "The category, primary driver and family member of each expense account's spending: the default for every entry in it. A statement text rule, or an entry's own tag, overrides it. Changes save as you pick, and the entries and attribution follow them. New Expense Account… adds one (Home Office, Studio); right-click one to edit or remove it.") {
             HStack {
                 Button("New Expense Account…") { accountEditing = .some(nil) }
                 Spacer()
@@ -1193,56 +1158,14 @@ private struct SpendingRulesTab: View {
             ExpenseAccountEditor(setup: setup, account: accountEditing ?? nil) { saved($0) }
         }
         .sheet(item: $accountRemoving) { a in RemoveExpenseAccountSheet(setup: setup, account: a) { saved($0) } }
-        targetBox(spent { $0.payeeId })
+        textBox(spent { $0.rulePattern?.lowercased() })
             .sheet(item: $linking) { r in
                 LinkSheet(subject: r.pattern ?? "", detail: "Statement text rule", initial: r.link?.link, words: r.pattern ?? "",
                           whereKept: "Kept in the security master with the statement text rule: it shows on its text on Spending Analysis's Rules tab.") { link in
                     await saveLink(link, for: r)
                 }
             }
-        textBox(spent { $0.rulePattern?.lowercased() })
             .sheet(item: $editing) { t in SpendingRuleSheet(setup: setup, target: t, entries: entries) { saved($0) } }
-    }
-
-    // MARK: Target accounts
-
-    private func targetBox(_ byPayee: [Int: Spent]) -> some View {
-        let q = search.lowercased()
-        let payees = setup.payees.filter { p in
-            let ruled = setup.rule(payee: p.id) != nil
-            return (ruled || byPayee[p.id]?.any == true) && (!onlyRules || ruled) && (q.isEmpty || p.name.lowercased().contains(q))
-        }
-        .sorted { a, b in
-            let ra = setup.rule(payee: a.id) != nil, rb = setup.rule(payee: b.id) != nil
-            if ra != rb { return ra }
-            let sa = byPayee[a.id] ?? Spent(), sb = byPayee[b.id] ?? Spent()
-            return sa.now != sb.now ? sa.now > sb.now : sa.before > sb.before
-        }
-        let ruled = payees.filter { setup.rule(payee: $0.id) != nil }.count
-        return Box(title: "Target Account Rules", symbol: "arrow.left.arrow.right.square", help: "Rules for single target accounts — a tutoring service as Education, Lifecycle Transition, for one child; a scout council as Activities — overriding their expense account's rule and any statement text rule. Listed: the target accounts with a rule first (✕ removes one), then those with spending in either year, most spent this year first. Pick a category, driver or member on a row to give it a rule; \"Account's\" leaves the expense account's rule in charge. Only entries linked to a target account have one: Discover's charges and expense-ledger lines don't, so they take Statement Text Rules. A name with a link (made here or on Banking) opens it, and the pointer resting on it shows its hover card; on other names it shows the account's details. Right-click a name to add or edit its link or its rule.") {
-            HStack {
-                TextField("Search target accounts", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 260)
-                Toggle("Only rules", isOn: $onlyRules).toggleStyle(.checkbox)
-                Spacer()
-                Text("\(ruled) with a rule · \(payees.count) target accounts").foregroundStyle(.secondary)
-            }
-            if payees.isEmpty {
-                Text(onlyRules && q.isEmpty ? "No target account has a rule yet. Turn off Only rules and pick a category, driver or member on one." : "No target account matches.")
-                    .foregroundStyle(.secondary).font(.callout)
-            } else {
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                    header("Target account", trailing: true)
-                    ForEach(showAll ? payees : Array(payees.prefix(40))) { p in
-                        let rule = setup.rule(payee: p.id)
-                        ruleRow(label: targetLabel(p, rule: rule), spent: byPayee[p.id] ?? Spent(), rule: rule, target: ["payeeId": p.id],
-                                blank: "Account's", trailing: true)
-                    }
-                }
-            }
-            if payees.count > 40 {
-                Button(showAll ? "Show the first 40" : "Show all \(payees.count)") { showAll.toggle() }
-            }
-        }
     }
 
     // MARK: Statement text
@@ -1252,21 +1175,21 @@ private struct SpendingRulesTab: View {
             let sa = byText[a.pattern?.lowercased() ?? ""] ?? Spent(), sb = byText[b.pattern?.lowercased() ?? ""] ?? Spent()
             return sa.now != sb.now ? sa.now > sb.now : (a.pattern ?? "").lowercased() < (b.pattern ?? "").lowercased()
         }
-        // Statement names with no target account and no statement text rule, most spent first: where a rule can go.
+        // Statement names no statement text rule reaches, most spent first: where a rule can go.
         var open: [String: Spent] = [:]
-        for e in entries where e.payeeId == nil && e.rulePattern == nil {
+        for e in entries where e.rulePattern == nil {
             if e.date >= data.start && e.date <= data.end { open[e.statementKey, default: Spent()].now += e.amount }
             else if e.date >= data.priorStart && e.date <= data.priorEnd { open[e.statementKey, default: Spent()].before += e.amount }
         }
         let names = open.sorted { $0.value.now + $0.value.before > $1.value.now + $1.value.before }.prefix(15)
-        return Box(title: "Statement Text Rules", symbol: "text.magnifyingglass", help: "Rules for a piece of statement text, for the entries with no target account: Discover's charges and expense-ledger lines carry only the statement's words. Every entry whose payee, statement name or description contains the text (ignoring case) takes the rule, unless its target account's rule or its own tag says otherwise; when several texts match, the longest wins. Listed: the rules, most spent this year first (✎ changes the text, ✕ removes the rule), and the largest statement names no rule reaches yet. Right-click a text to add or edit its link (a web page, an email address or a page in MxNoteONE, with hover text of its own) or its rule; with a link, a click opens it and the pointer resting on it shows its hover card.") {
+        return Box(title: "Statement Text Rules", symbol: "text.magnifyingglass", help: "Rules for a piece of statement text: checks, card charges and cash-ledger lines carry only their payee's and statement's words. Every entry whose payee, statement name or description contains the text (ignoring case) takes the rule over its expense account's, unless its own tag says otherwise; when several texts match, the longest wins. Listed: the rules, most spent this year first (✎ changes the text, ✕ removes the rule), and the largest statement names no rule reaches yet. Right-click a text to add or edit its link (a web page, an email address or a page in MxNoteONE, with hover text of its own) or its rule; with a link, a click opens it and the pointer resting on it shows its hover card.") {
             HStack {
                 Button("Add Statement Text Rule…") { editing = RuleTarget(pattern: "", name: "") }
                 Spacer()
                 Text("\(rules.count) \(rules.count == 1 ? "rule" : "rules")").foregroundStyle(.secondary)
             }
             if rules.isEmpty {
-                Text("No statement text rule yet. Discover's charges and expense-ledger lines have no target account, so a rule for their text (APPLE.COM, NETFLIX, Mac Book) is how to give them a category, driver or member of their own.")
+                Text("No statement text rule yet. A rule for a payee's or statement's text (APPLE.COM, NETFLIX, Mac Book) gives its entries a category, driver or member of their own, over their expense account's rule.")
                     .foregroundStyle(.secondary).font(.callout).fixedSize(horizontal: false, vertical: true)
             } else {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
@@ -1311,40 +1234,6 @@ private struct SpendingRulesTab: View {
                 Button("Edit Expense Account…") { accountEditing = .some(a) }
                 Button("Remove Expense Account…") { accountRemoving = a }
             }
-    }
-
-    /// A target account's name: its link when it has one (a click opens it, the pointer resting on it shows the hover
-    /// card), else its details on hover; right-click adds or edits the link and the rule.
-    private func targetLabel(_ p: SpendingSetup.Named, rule: SpendingRule?) -> some View {
-        let t = PayeeLinkTarget(p)
-        return Group {
-            if let link = t.link {
-                PayeeLinks.shared.words(t, link: link, testID: "rules-payee:\(p.id)")
-            } else {
-                Text(p.name).lineLimit(1).fontWeight(rule != nil ? .semibold : .regular).help(targetTip(p, rule: rule))
-            }
-        }
-        // Not selectable text (the screen's is): a right-click brings up this menu, not the text menu (Copy, Look Up),
-        // as on Banking's target accounts.
-        .textSelection(.disabled)
-        .contextMenu {
-            payeeLinkMenu(t)
-            Divider()
-            Button(rule == nil ? "Add Rule for \(p.name)…" : "Edit Rule for \(p.name)…") { editing = RuleTarget(payeeId: p.id, name: p.name) }
-            if rule != nil { Button("Remove Rule") { remove(["payeeId": p.id]) } }
-        }
-    }
-
-    private func targetTip(_ p: SpendingSetup.Named, rule: SpendingRule?) -> String {
-        var lines = [p.name]
-        let bank = [p.institution, p.last4.map { "account ending \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }
-        if !bank.isEmpty { lines.append(bank.joined(separator: " · ")) }
-        if let n = p.nickname, !n.isEmpty { lines.append("Known as \(n)") }
-        if let a = setup.expenseAccounts.first(where: { $0.id == p.expenseAccountId }) { lines.append("Filed under \(a.name)") }
-        if let n = p.notes, !n.isEmpty { lines.append(n) }
-        lines.append(ruleTip(rule))
-        lines.append("Right-click to add a link, with hover text of its own.")
-        return lines.joined(separator: "\n")
     }
 
     /// A statement text: its link when it has one, else what it matches on hover; right-click adds or edits the link
@@ -1732,7 +1621,7 @@ private struct SpendingSourcesTab: View {
     var body: some View {
         if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
         window
-        Box(title: "Spending Sources", symbol: "tray.full", help: "Each checking account, credit card and expense ledger that can feed the analysis: whether it does (the checkbox, kept in the security master for every Mac), where its data comes from (the drop folder and the downloads in it, or entries made by hand), the SRM tables it lands in, when it was last imported and edited, and what it spent in both periods.") {
+        Box(title: "Spending Sources", symbol: "tray.full", help: "Each checking account, credit card and cash ledger that can feed the analysis: whether it does (the checkbox, kept in the security master for every Mac), where its data comes from (the drop folder and the downloads in it, or entries made by hand), the SRM tables it lands in, when it was last imported and edited, and what it spent in both periods.") {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(sources.sources.enumerated()), id: \.element.id) { i, s in
                     if i > 0 { Divider() }
@@ -2027,7 +1916,7 @@ private struct SpendingSourcesTab: View {
         let y = String(sources.start.prefix(4)), py = String(sources.priorStart.prefix(4))
         VStack(alignment: .leading, spacing: 2) {
             if s.entriesNow + s.entriesBefore == 0 && (s.entries ?? 0) > 0 && s.spendingFirst == nil {
-                Text("None of its \((s.entries ?? 0).formatted()) entries counts as spending: none is in an expense account (card payments and transfers are not spending). File an entry in an expense account, or give its target account one, for it to count.")
+                Text("None of its \((s.entries ?? 0).formatted()) entries counts as spending: none is in an expense account (card payments and transfers are not spending). File an entry in an expense account for it to count.")
                     .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("\(y): \(s.entriesNow.formatted()) entries, \(money(s.spentNow)) · \(py): \(s.entriesBefore.formatted()) entries, \(money(s.spentBefore))"
@@ -2052,7 +1941,7 @@ private struct SpendingSourcesTab: View {
 
     private var tablesBox: some View {
         Box(title: "SRM Tables in the Aggregation", symbol: "tablecells", help: "Every table and view in the security master (schema srm) the analysis reads. Downloads land in the line tables and post to the registers; srm.v_spending_entry gathers the registers' spending and resolves each entry's category, driver and member from the tags and rules; the app adds them up per category and period and takes inflation from the CPI series. Newest data is the latest transaction, line or observation date; last changed is the latest edit, or the load that wrote the newest rows.") {
-            Text("Downloads → line tables → registers → srm.v_spending_entry (with expense accounts, target accounts, rules, tags) → the attribution, with inflation from srm.market_series_value; the family and lifecycle triggers make the forward curve.")
+            Text("Downloads → line tables → registers → srm.v_spending_entry (with expense accounts, rules, tags) → the attribution, with inflation from srm.market_series_value; the family and lifecycle triggers make the forward curve.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 GridRow {
@@ -2203,7 +2092,7 @@ private struct CategoryChartMenu: View {
 // MARK: - Deep dive
 
 /// One category taken apart: what it spent in both periods and why it changed (effects, months, drivers), how its
-/// entries got into it (the rules and tags), where the money went (expense and target accounts, the largest entries,
+/// entries got into it (the rules and tags), where the money went (expense accounts and payees, the largest entries,
 /// family members), what the lifecycle model brings to it, and its entries to tag.
 private struct SpendingDeepDiveTab: View {
     var setup: SpendingSetup
@@ -2368,7 +2257,7 @@ private struct SpendingDeepDiveTab: View {
     // MARK: How entries got here: rules and tags
 
     private struct Origin: Identifiable {
-        var kind: String          // expense account, target account, statement text, entry
+        var kind: String          // expense account, statement text, entry
         var label: String
         var target: RuleTarget?
         var rule: SpendingRule?
@@ -2385,9 +2274,6 @@ private struct SpendingDeepDiveTab: View {
             case "expense account":
                 label = e.expenseAccount ?? "—"
                 if let id = e.expenseAccountId { target = RuleTarget(expenseAccountId: id, name: label); rule = setup.rule(expenseAccount: id) }
-            case "target account":
-                label = e.payee ?? "—"
-                if let id = e.payeeId { target = RuleTarget(payeeId: id, name: label); rule = setup.rule(payee: id) }
             case "statement text":
                 label = e.rulePattern ?? "—"
                 rule = setup.rule(pattern: label)
@@ -2398,7 +2284,7 @@ private struct SpendingDeepDiveTab: View {
             groups[kind + label, default: Origin(kind: kind, label: label, target: target, rule: rule, entries: [])].entries.append(e)
         }
         let list = groups.values.sorted { abs(sums($0.entries).now) + abs(sums($0.entries).before) > abs(sums($1.entries).now) + abs(sums($1.entries).before) }
-        return Box(title: "How Entries Got Here", symbol: "point.3.connected.trianglepath.dotted", help: "What put each entry in \(name): an expense account's rule (every entry filed in that expense account), a target account's rule (every entry with that target, overriding its expense account's), a statement text rule (every entry whose statement contains the text), or the entry's own tag. Rule… changes a rule; tag single entries in the table below.") {
+        return Box(title: "How Entries Got Here", symbol: "point.3.connected.trianglepath.dotted", help: "What put each entry in \(name): an expense account's rule (every entry filed in that expense account), a statement text rule (every entry whose payee or statement contains the text, overriding its expense account's), or the entry's own tag. Rule… changes a rule; tag single entries in the table below.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
                 GridRow {
                     Text("Put here by").gridColumnAlignment(.leading); Text("Rule says").gridColumnAlignment(.leading)
@@ -2433,10 +2319,10 @@ private struct SpendingDeepDiveTab: View {
     private func accountsBox(_ mine: [SpendingEntry]) -> some View {
         let byAccount = Dictionary(grouping: mine, by: { $0.expenseAccount ?? "No expense account" })
         let accounts = byAccount.keys.sorted { sums(byAccount[$0]!).now > sums(byAccount[$1]!).now }
-        return Box(title: "Where It Went", symbol: "building.2", help: "\(name) spending by expense account, and within each the target accounts (payees) whose spending changed most between the periods.") {
+        return Box(title: "Where It Went", symbol: "building.2", help: "\(name) spending by expense account, and within each the payees whose spending changed most between the periods.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 3) {
                 GridRow {
-                    Text("Expense account / target account").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change"); Text("Entries")
+                    Text("Expense account / payee").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change"); Text("Entries")
                 }
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(accounts, id: \.self) { a in
@@ -2900,7 +2786,7 @@ private struct SpendingTaxTab: View {
     }
 
     private func itemsBox(_ r: TaxReport) -> some View {
-        Box(title: "Tax Items", symbol: "list.bullet.rectangle", help: "What makes a payment a tax item: a target account, an expense-ledger line, or a name the card companies use (when the charge has no target account). Each has its section, category, jurisdiction, deductible share and whether it follows estimated-tax quarters.") {
+        Box(title: "Tax Items", symbol: "list.bullet.rectangle", help: "What makes a payment a tax item: a cash-ledger line, or a name its check or card charge has (the longest name a payment contains wins). Each has its section, category, jurisdiction, deductible share and whether it follows estimated-tax quarters.") {
             HStack { Button("Add Tax Item…") { editing = .some(nil) }; Spacer() }
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                 GridRow { Text("Item"); Text("Section"); Text("Category"); Text("Comes from"); Text("Share").gridColumnAlignment(.trailing); Text("") }
@@ -2925,7 +2811,7 @@ private struct SpendingTaxTab: View {
     }
 
     private func body(_ i: TaxReport.Item, share: Double) -> [String: Any] {
-        ["payeeId": i.payeeId ?? NSNull(), "ledgerLineId": i.ledgerLineId ?? NSNull(), "namePattern": i.namePattern ?? NSNull(),
+        ["ledgerLineId": i.ledgerLineId ?? NSNull(), "namePattern": i.namePattern ?? NSNull(),
          "label": i.label, "section": i.section, "taxCategory": i.taxCategory, "jurisdiction": i.jurisdiction ?? NSNull(),
          "deductibleShare": share, "quarterly": i.quarterly, "notes": i.notes ?? NSNull(), "active": i.active]
     }
@@ -2955,8 +2841,7 @@ private struct TaxItemSheet: View {
     var lines: [TaxReport.Line]
     var save: (Int, [String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
-    @State private var origin = "payee"
-    @State private var payeeId = 0
+    @State private var origin = "pattern"
     @State private var lineId = 0
     @State private var pattern = ""
     @State private var label = ""
@@ -2974,7 +2859,7 @@ private struct TaxItemSheet: View {
             Text(item == nil ? "Add Tax Item" : "Edit \(item!.label)").heading(.heading)
             Form {
                 Picker("Payments from", selection: $origin) {
-                    Text("A target account").tag("payee"); Text("An expense-ledger line").tag("line"); Text("Card names containing").tag("pattern")
+                    Text("Names containing").tag("pattern"); Text("A cash-ledger line").tag("line")
                 }
                 switch origin {
                 case "line":
@@ -2982,13 +2867,9 @@ private struct TaxItemSheet: View {
                         Text("—").tag(0)
                         ForEach(lines) { l in Text("\(l.ledger): \(l.name)").tag(l.id) }
                     }
-                case "pattern":
-                    TextField("Name contains", text: $pattern, prompt: Text("TURBOTAX"))
                 default:
-                    Picker("Target account", selection: $payeeId) {
-                        Text("—").tag(0)
-                        ForEach(setup.payees) { p in Text(p.name).tag(p.id) }
-                    }
+                    TextField("Name contains", text: $pattern, prompt: Text("TURBOTAX, Peco"))
+                        .help("Checks and card charges whose payee contains it, ignoring case")
                 }
                 TextField("Label", text: $label, prompt: Text("Peco"))
                 Picker("Section", selection: $section) { ForEach(TaxReport.sections, id: \.0) { Text($0.1).tag($0.0) } }
@@ -3011,7 +2892,6 @@ private struct TaxItemSheet: View {
                 Button("Save") {
                     Task {
                         error = await save(item?.id ?? 0, [
-                            "payeeId": origin == "payee" && payeeId != 0 ? payeeId : NSNull(),
                             "ledgerLineId": origin == "line" && lineId != 0 ? lineId : NSNull(),
                             "namePattern": origin == "pattern" ? pattern : NSNull(),
                             "label": label, "section": section, "taxCategory": category, "jurisdiction": jurisdiction.isEmpty ? NSNull() : jurisdiction,
@@ -3027,8 +2907,8 @@ private struct TaxItemSheet: View {
         .frame(width: 480)
         .onAppear {
             guard let i = item else { return }
-            origin = i.payeeId != nil ? "payee" : i.ledgerLineId != nil ? "line" : "pattern"
-            payeeId = i.payeeId ?? 0; lineId = i.ledgerLineId ?? 0; pattern = i.namePattern ?? ""
+            origin = i.ledgerLineId != nil ? "line" : "pattern"
+            lineId = i.ledgerLineId ?? 0; pattern = i.namePattern ?? ""
             label = i.label; section = i.section; category = i.taxCategory; jurisdiction = i.jurisdiction ?? ""
             share = i.deductibleShare * 100; quarterly = i.quarterly; notes = i.notes ?? ""; active = i.active
         }

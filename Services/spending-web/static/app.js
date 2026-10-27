@@ -427,14 +427,14 @@ function diveTab() {
     ${Object.keys(DRIVERS).concat([""]).filter(d => byDriver[d]).map(d => { const s = sums(byDriver[d]); const eff = EFFECTS.find(e => e.id === (DRIVERS[d]?.effect ?? "usage")); return `<tr><td class="l" title="${esc(DRIVERS[d]?.help ?? "No rule or tag gives it a driver")}">${esc(DRIVERS[d]?.title ?? "No driver yet")}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${money(s.now - s.before * (1 + r.rate))}</td><td class="l">${eff.name}</td></tr>`; }).join("")}
     <tr class="total"><td class="l">Change</td><td>${money(r.prior)}</td><td>${money(r.current)}</td><td>${money(r.change)}</td><td>${money(r.change)}</td><td></td></tr></table></div>`, { section: `Deep Dive ${name}: drivers` });
   // How entries got here.
-  const origins = group(mine, e => (e.categoryFrom ?? "none") + "|" + (e.categoryFrom === "expense account" ? e.expenseAccount : e.categoryFrom === "target account" ? e.payee : e.categoryFrom === "statement text" ? e.rulePattern : e.categoryFrom === "entry" ? "Tagged on the entry" : (e.expenseAccount ? e.expenseAccount + " (no rule)" : "No expense account, rule or tag")));
-  const ruleText = (kind, label) => { const rr = S.setup.rules.find(x => kind === "expense account" ? x.expenseAccount === label : kind === "target account" ? x.payee === label : kind === "statement text" ? (x.pattern ?? "").toLowerCase() === (label ?? "").toLowerCase() : false); return rr ? [catName(rr.category), rr.driver && driverTitle(rr.driver), memberName(rr.memberId)].filter(Boolean).join(" · ") : ""; };
+  const origins = group(mine, e => (e.categoryFrom ?? "none") + "|" + (e.categoryFrom === "expense account" ? e.expenseAccount : e.categoryFrom === "statement text" ? e.rulePattern : e.categoryFrom === "entry" ? "Tagged on the entry" : (e.expenseAccount ? e.expenseAccount + " (no rule)" : "No expense account, rule or tag")));
+  const ruleText = (kind, label) => { const rr = S.setup.rules.find(x => kind === "expense account" ? x.expenseAccount === label : kind === "statement text" ? (x.pattern ?? "").toLowerCase() === (label ?? "").toLowerCase() : false); return rr ? [catName(rr.category), rr.driver && driverTitle(rr.driver), memberName(rr.memberId)].filter(Boolean).join(" · ") : ""; };
   h += box("How Entries Got Here", `<div class="scroll"><table><tr><th class="l">Put here by</th><th class="l">Rule says</th><th>${py}</th><th>${y}</th><th>Change</th><th>Entries</th><th></th></tr>
     ${Object.entries(origins).sort((a, b) => Math.abs(sums(b[1]).now) + Math.abs(sums(b[1]).before) - Math.abs(sums(a[1]).now) - Math.abs(sums(a[1]).before)).map(([k, list]) => {
       const [kind, ...rest] = k.split("|"), label = rest.join("|"); const s = sums(list);
       return `<tr><td class="l">${esc(label)}<br><span class="muted">${kind === "none" ? "not assigned" : kind === "entry" ? "entry tags" : kind + " rule"}</span></td><td class="l muted">${esc(ruleText(kind, label))}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${s.countBefore} → ${s.count}</td>
-        <td>${kind === "expense account" || kind === "target account" || kind === "statement text" ? `<button class="icon" data-action="feedback" data-kind="rule" data-section="Rule: ${esc(kind)} ${esc(label)}" data-category="${esc(code)}">Suggest a change</button>` : ""}</td></tr>`;
-    }).join("")}</table></div>`, { section: `Deep Dive ${name}: how entries got here`, help: "What put each entry in this category: an expense account's rule, a target account's rule, a statement text rule (every entry whose statement contains the text), or the entry's own tag" });
+        <td>${kind === "expense account" || kind === "statement text" ? `<button class="icon" data-action="feedback" data-kind="rule" data-section="Rule: ${esc(kind)} ${esc(label)}" data-category="${esc(code)}">Suggest a change</button>` : ""}</td></tr>`;
+    }).join("")}</table></div>`, { section: `Deep Dive ${name}: how entries got here`, help: "What put each entry in this category: an expense account's rule, a statement text rule (every entry whose statement contains the text), or the entry's own tag" });
   // Where it went.
   const byAccount = group(mine, e => e.expenseAccount ?? "No expense account");
   let w = "";
@@ -525,21 +525,18 @@ function rulesTab() {
     for (const e of entries()) { const k = key(e); if (k == null) continue; const s = m[k] ?? (m[k] = { before: 0, now: 0 }); if (inNow(e)) s.now += e.amount; else if (inBefore(e)) s.before += e.amount; }
     return m;
   };
-  const byAccount = spentBy(e => e.expenseAccountId), byPayee = spentBy(e => e.payeeId), byText = spentBy(e => e.rulePattern?.toLowerCase());
+  const byAccount = spentBy(e => e.expenseAccountId), byText = spentBy(e => e.rulePattern?.toLowerCase());
   const py = S.data.priorStart.slice(0, 4), y = S.data.start.slice(0, 4);
   const row = (name, spent, r, kind, blank) => `<tr><td class="l">${esc(name)}</td><td>${money(spent?.before ?? 0)}</td><td>${money(spent?.now ?? 0)}</td><td class="l">${esc(r?.category ? catName(r.category) : blank)}</td><td class="l">${esc(r?.driver ? driverTitle(r.driver) : blank === "None" ? "—" : blank)}</td><td class="l muted">${esc(memberName(r?.memberId) ?? "")}</td>
     <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Rule: ${esc(kind)} ${esc(name)}" data-category="${esc(r?.category ?? "")}">Suggest a change</button></td></tr>`;
   const head = first => `<tr><th class="l">${first}</th><th>${py}</th><th>${y}</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th></th></tr>`;
   const rankBy = spent => (a, b) => ((spent[b]?.now ?? 0) - (spent[a]?.now ?? 0));
-  const targets = S.setup.rules.filter(r => r.payeeId).sort((a, b) => rankBy(byPayee)(a.payeeId, b.payeeId));
   const texts = S.setup.rules.filter(r => r.pattern).sort((a, b) => rankBy(byText)(a.pattern.toLowerCase(), b.pattern.toLowerCase()));
-  return `<p class="hint">Each dollar's category and driver come from the first of these that sets them: the entry's own tag, its target account's rule, the longest statement text rule its payee or description contains, its expense account's rule. John changes the rules in MxAcctMGR; Suggest a change tells him.</p>`
+  return `<p class="hint">Each dollar's category and driver come from the first of these that sets them: the entry's own tag, the longest statement text rule its payee or description contains, its expense account's rule. John changes the rules in MxAcctMGR; Suggest a change tells him.</p>`
     + box("Expense Account Rules", `<div class="scroll"><table>${head("Expense account")}${S.setup.expenseAccounts.map(a => row(a.name, byAccount[a.id], S.setup.rules.find(r => r.expenseAccountId === a.id), "expense account", "None")).join("")}</table></div>`,
       { help: "The category, driver and family member of each expense account's spending: the default for everything filed there" })
-    + box("Target Account Rules", targets.length ? `<div class="scroll"><table>${head("Target account")}${targets.map(r => row(r.payee, byPayee[r.payeeId], r, "target account", "Account's")).join("")}</table></div>` : `<p class="muted">No target account has a rule of its own.</p>`,
-      { help: "Rules for single target accounts, overriding their expense account's rule and any statement text rule" })
     + box("Statement Text Rules", texts.length ? `<div class="scroll"><table>${head("Statement text")}${texts.map(r => row(r.pattern, byText[r.pattern.toLowerCase()], r, "statement text", "Account's")).join("")}</table></div>` : `<p class="muted">No statement text rule yet.</p>`,
-      { help: "Rules for a piece of statement text: every entry whose payee or description contains it, for the card charges with no target account" });
+      { help: "Rules for a piece of statement text: every entry whose payee or description contains it, overriding its expense account's rule" });
 }
 
 function familyTab() {
@@ -557,7 +554,7 @@ function sourcesTab() {
   let h = box("Time Window", `<table><tr><td class="l muted">This period</td><td class="l">${day(o.start)} – ${day(o.end)}</td></tr><tr><td class="l muted">Compared with</td><td class="l">${day(o.priorStart)} – ${day(o.priorEnd)}, the same dates a year earlier</td></tr>
     <tr><td class="l muted">Basis</td><td class="l">${S.ytd ? "Year to date" : "Whole calendar years"}</td></tr></table>`);
   h += box("Spending Sources", o.sources.map(s => {
-    const kind = s.source === "bank" ? "Checking account" : s.source === "card" ? "Credit card" : "Expense ledger";
+    const kind = s.source === "bank" ? "Checking account" : s.source === "card" ? "Credit card" : "Cash ledger";
     const noSpend = s.entriesNow + s.entriesBefore === 0 && (s.entries ?? 0) > 0 && !s.spendingFirst;
     return `<div class="note"><div class="meta"><b style="color:var(--ink)">${esc(s.name)}</b><span>${esc([kind, s.code, s.institution, s.last4 && "…" + s.last4].filter(Boolean).join(" · "))}</span>${s.included ? "" : `<span class="badge left">left out</span>`}</div>
       <table>
@@ -567,7 +564,7 @@ function sourcesTab() {
         <tr><td class="l muted">Register</td><td class="l wrap"${s.source !== "ledger" && s.included && daysAgo(s.last) > STALE_DAYS ? ' style="color:var(--warn)"' : ""}>${s.entries ? `${s.entries.toLocaleString()} entries, ${day(s.first)} – ${day(s.last)} (newest ${age(s.last)})` : "No entries yet"}</td></tr>
         <tr><td class="l muted">In the analysis</td><td class="l wrap">${noSpend ? "None of its entries counts as spending: none is in an expense account (card payments and transfers aren't spending)." : `${o.start.slice(0, 4)}: ${s.entriesNow.toLocaleString()} entries, ${money(s.spentNow)} · ${o.priorStart.slice(0, 4)}: ${s.entriesBefore.toLocaleString()} entries, ${money(s.spentBefore)}`}</td></tr>
       </table></div>`;
-  }).join(""), { help: "Each checking account, credit card and expense ledger that can feed the analysis" });
+  }).join(""), { help: "Each checking account, credit card and cash ledger that can feed the analysis" });
   h += box("SRM Tables in the Aggregation", `<div class="scroll"><table><tr><th class="l">Table or view</th><th class="l">What it gives the analysis</th><th>Rows</th><th class="l">Newest data</th><th class="l">Last changed</th></tr>
     ${o.tables.map(t => `<tr><td class="l"><code>${esc(t.name)}</code></td><td class="l wrap muted">${esc(t.role)}</td><td>${t.rows.toLocaleString()}</td><td class="l">${t.newest ? `${day(t.newest)} (${age(t.newest)})` : "—"}</td><td class="l">${t.changed ? `${when(t.changed)}` : "—"}</td></tr>`).join("")}</table></div>`);
   h += box("Last Loads", `<table>${o.loaders.map(r => `<tr><td class="l"><code>${esc(r.loader.replace("_", "-"))}</code></td><td class="l">${when(r.finishedAt ?? r.startedAt)} (${age(r.finishedAt ?? r.startedAt)})</td><td class="l">${esc(r.status)}</td><td class="l wrap muted">${esc(r.message ?? "")}</td></tr>`).join("")}</table>`);
@@ -634,7 +631,7 @@ function taxTab() {
     { section: "Year-End Tax: items", help: "What makes a payment a tax item" });
   return h;
 }
-const origin = i => i.payee ? `Target account ${i.payee}` : i.ledgerLine ? `Ledger ${i.ledger ?? ""} line ${i.ledgerLine}` : i.namePattern ? `Card names containing ${i.namePattern}` : "";
+const origin = i => i.ledgerLine ? `Ledger ${i.ledger ?? ""} line ${i.ledgerLine}` : i.namePattern ? `Card names containing ${i.namePattern}` : "";
 
 // As TaxReport.csv (SpendingModel.swift): every payment, then each item's totals and the payments by quarter.
 function taxCsv(r) {

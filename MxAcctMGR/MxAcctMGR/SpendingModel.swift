@@ -3,9 +3,9 @@
 //  MxAcctMGR
 //
 //  Reporting ▸ Spending Analysis: household spending attribution, kept in the security master (accounts service
-//  /spending, V037). Every dollar the registers and expense ledgers spend has two dimensions — a spending category
+//  /spending, V037). Every dollar the registers and cash ledgers spend has two dimensions — a spending category
 //  (Food, Housing, Transportation …) and a primary driver (inflation, family growth, a new activity, a lifecycle
-//  transition, a preference change, a one-time event) — set by rules on expense and target accounts and by tags on
+//  transition, a preference change, a one-time event) — set by rules on expense accounts and statement text and by tags on
 //  single entries. Like portfolio attribution, a category's change from one year to the next splits into effects:
 //
 //      change = inflation + usage + lifecycle + behavior + one-time + taxes
@@ -48,22 +48,30 @@ struct HouseholdMember: Decodable, Identifiable, Hashable {
     func age(in year: Int) -> Int { year - birthYear }
 }
 
-/// An expense account's, a target account's or a piece of statement text's category, driver and member.
+/// An expense account's or a piece of statement text's category, driver and member.
 struct SpendingRule: Decodable, Identifiable, Hashable {
     var id: Int
     var expenseAccountId: Int?
     var expenseAccount: String?
-    var payeeId: Int?
-    var payee: String?
     /// Statement text (V042): entries whose payee, statement name or description contains it, ignoring case.
     var pattern: String?
-    /// A statement text rule's link (V043), shown on its text as target accounts' links are (TargetAccountLinks.swift).
-    var link: TargetLink?
+    /// A statement text rule's link (V043), shown on its text.
+    var link: RuleLink?
     var category: String?
     var driver: String?
     var memberId: Int?
     var notes: String?
     var updatedBy: String?
+}
+
+/// A statement text rule's link as the accounts service sends it (srm.spending_rule_link, V043; the hover text as RTF).
+struct RuleLink: Decodable, Hashable {
+    var address: String
+    var text: String?
+    var tip: String?
+    var title: String?
+
+    var link: SecurityLink { SecurityLink(address: address, text: text, tip: tip.map { Data($0.utf8) }, title: title) }
 }
 
 /// What a child's age brings and costs a year, in today's dollars.
@@ -100,13 +108,6 @@ struct SpendingSetup: Decodable {
         var expenseAccountId: Int?
         /// An expense account's description.
         var description: String?
-        // A target account's details and link (srm.payee_link, V032), for the Rules tab's names and hover text.
-        var institution: String?
-        var last4: String?
-        var logonUrl: String?
-        var nickname: String?
-        var notes: String?
-        var link: TargetLink?
     }
     struct Series: Decodable, Identifiable, Hashable { var code: String; var name: String; var id: String { code } }
     var members: [HouseholdMember]
@@ -114,7 +115,6 @@ struct SpendingSetup: Decodable {
     var rules: [SpendingRule]
     var triggers: [LifecycleTrigger]
     var expenseAccounts: [Named]
-    var payees: [Named]
     var cpiSeries: [Series]
     /// Why spending changed, in their order (srm.spending_driver, V047; changed on Admin).
     var drivers: [SpendingDriver]
@@ -126,25 +126,23 @@ struct SpendingSetup: Decodable {
     func member(_ id: Int?) -> HouseholdMember? { members.first { $0.id == id } }
     var children: [HouseholdMember] { members.filter { $0.isChild && $0.active } }
     func rule(expenseAccount id: Int) -> SpendingRule? { rules.first { $0.expenseAccountId == id } }
-    func rule(payee id: Int) -> SpendingRule? { rules.first { $0.payeeId == id } }
     func rule(pattern: String) -> SpendingRule? { rules.first { $0.pattern?.lowercased() == pattern.lowercased() } }
     var textRules: [SpendingRule] { rules.filter { $0.pattern != nil } }
 }
 
-/// One spending dollar's entry: a check, a card charge or credit, or an expense-ledger item, positive when spent.
+/// One spending dollar's entry: a check, a card charge or credit, or a cash-ledger item, positive when spent.
 struct SpendingEntry: Decodable, Identifiable, Hashable {
     var source: String
     var entryId: Int
     var date: String
     var register: String?
-    var payeeId: Int?
     var payee: String?
     var description: String?
     var expenseAccountId: Int?
     var expenseAccount: String?
     var amount: Double
     var category: String?
-    /// Where the category came from: entry, target account, statement text or expense account.
+    /// Where the category came from: entry, statement text or expense account.
     var categoryFrom: String?
     var driver: String?
     var driverFrom: String?
@@ -197,7 +195,7 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
                  "amazon music", "amazon digital", "amzn digital"].contains { text.contains($0) }
             && text.range(of: #"\baws\b"#, options: .regularExpression) == nil
     }
-    var sourceTitle: String { source == "bank" ? "Checking" : source == "card" ? "Card" : "Expense ledger" }
+    var sourceTitle: String { source == "bank" ? "Checking" : source == "card" ? "Card" : "Cash ledger" }
 
     /// Statement text to start a rule from: the payee's first words, without a card processor's prefix ("SQ *",
     /// "IN *") and stopping at store numbers, phone numbers and "#": "APPLE.COM/BILL 866-712-7753 CA" → "APPLE.COM/BILL".
@@ -238,7 +236,7 @@ struct AmazonItem: Decodable, Hashable {
     }
 }
 
-/// An expense-ledger entry that looks like a card charge or check it isn't linked to (Admin): counted twice while its
+/// A cash-ledger entry that looks like a card charge or check it isn't linked to (Admin): counted twice while its
 /// ledger is in the analysis, once when linked.
 struct SpendingOverlap: Decodable, Identifiable, Hashable {
     struct Match: Decodable, Hashable {
@@ -521,9 +519,9 @@ struct SpendingSources: Decodable {
         var entriesBefore: Int
         var spentBefore: Double
         var id: String { source + code }
-        var kindTitle: String { source == "bank" ? "Checking account" : source == "card" ? "Credit card" : "Expense ledger" }
+        var kindTitle: String { source == "bank" ? "Checking account" : source == "card" ? "Credit card" : "Cash ledger" }
         var symbol: String { source == "bank" ? "checkmark.rectangle.stack" : source == "card" ? "creditcard" : "briefcase" }
-        var screen: String { source == "bank" ? "Banking ▸ Checking Accounts" : source == "card" ? "Banking ▸ Credit Card Accounts" : "Banking ▸ Expense Ledgers" }
+        var screen: String { source == "bank" ? "Banking ▸ Checking Accounts" : source == "card" ? "Banking ▸ Credit Card Accounts" : "Banking ▸ Cash Ledger" }
     }
     struct Table: Decodable, Identifiable, Hashable {
         var name: String
@@ -637,8 +635,6 @@ struct SpendingFeedback: Decodable, Identifiable, Hashable {
 struct TaxReport: Decodable {
     struct Item: Decodable, Identifiable, Hashable {
         var id: Int
-        var payeeId: Int?
-        var payee: String?
         var ledgerLineId: Int?
         var ledgerLine: String?
         var ledger: String?
@@ -658,9 +654,8 @@ struct TaxReport: Decodable {
 
         /// Where its payments come from, in words.
         var origin: String {
-            if let payee { return "Target account \(payee)" }
             if let ledgerLine { return "Ledger \(ledger ?? "") line \(ledgerLine)" }
-            if let namePattern { return "Card names containing \(namePattern)" }
+            if let namePattern { return "Names containing \(namePattern)" }
             return ""
         }
     }
@@ -845,14 +840,13 @@ nonisolated enum SpendingClient {
     static func saveRule(_ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/rules", body: signed(body), as: SpendingSetup.self)
     }
-    /// Files card and check entries under another expense account; with fileFuture, their target account (or a new
-    /// one named targetName, with their statement names) too, so future downloads land there.
-    static func changeExpenseAccount(_ entries: [SpendingEntry], to account: Int, fileFuture: Bool, targetName: String) async throws -> SpendingSetup {
+    /// Files card and check entries under another expense account.
+    static func changeExpenseAccount(_ entries: [SpendingEntry], to account: Int) async throws -> SpendingSetup {
         try await AccountsClient.request("POST", "/spending/expense-account",
-                                         body: signed(["entries": entries.map { ["source": $0.source, "id": $0.entryId] }, "expenseAccountId": account,
-                                                       "fileFuture": fileFuture, "targetName": targetName]), as: SpendingSetup.self)
+                                         body: signed(["entries": entries.map { ["source": $0.source, "id": $0.entryId] }, "expenseAccountId": account]),
+                                         as: SpendingSetup.self)
     }
-    /// Expense-ledger entries that match an unlinked card charge or check (Admin).
+    /// Cash-ledger entries that match an unlinked card charge or check (Admin).
     static func overlaps() async throws -> [SpendingOverlap] {
         struct Answer: Decodable { var overlaps: [SpendingOverlap] }
         return try await AccountsClient.request("GET", "/spending/overlaps", as: Answer.self).overlaps
@@ -863,7 +857,7 @@ nonisolated enum SpendingClient {
         _ = try await AccountsClient.request("POST", "/expense-entries/\(o.entryId)/link",
                                              body: signed(["version": o.version, "source": m.source, "txnId": m.txnId]), as: Ignored.self)
     }
-    /// A statement text rule's link (V043), saved or with nil taken off, as BankClient.savePayeeLink does a target's.
+    /// A statement text rule's link (V043), saved or with nil taken off.
     static func saveRuleLink(_ id: Int, _ link: SecurityLink?) async throws -> SpendingSetup {
         guard let link else { return try await AccountsClient.request("DELETE", "/spending/rules/\(id)/link", as: SpendingSetup.self) }
         let body: [String: Any] = ["address": link.address, "text": link.text ?? "", "hoverText": link.tipPlain ?? "",

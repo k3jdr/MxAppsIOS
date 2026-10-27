@@ -7,8 +7,9 @@
 //  statement periods (statement balance, minimum due, due date, paid or not). The card company's side comes from its
 //  downloads (Chase CSV / QFX, Discover and Capital One CSV; srm.py load card-downloads): Import File… shows what one
 //  holds for the card (new lines, already read, totals by kind), then saves it in the card's drop folder and reads it; each line is read once, also when downloads overlap, and posts to the
-//  register — matching a charge entered by hand, else as a new entry with its target and category. A card's payments
-//  link to the checking entries that paid them (Pay… writes both). Remove… takes a card away with its register, the
+//  register — matching a charge entered by hand, else as a new entry with the card company's name for it and its
+//  category. A card's payments link to the checking entries that paid them, found by the name checking gives them
+//  (Edit… ▸ Paid from checking as; Pay… writes both). Remove… takes a card away with its register, the
 //  card company's lines and its statements, once its sheet has shown what goes and what stays.
 //
 
@@ -28,8 +29,8 @@ struct CardAccount: Decodable, Identifiable, Hashable {
     var dueDay: Int?
     var openingDate: String
     var openingBalance: Double
-    var payeeId: Int?
-    var payee: String?
+    /// The name checking's payments to the card have (V048): how they are found and how Pay… names one.
+    var paymentName: String?
     var issuerBalance: Double?
     var issuerAvailable: Double?
     var issuerBalanceAsOf: String?
@@ -47,11 +48,7 @@ struct CardEntry: Decodable, Identifiable, Hashable {
     var date: String
     var postedDate: String?
     var kind: String
-    var payeeId: Int?
     var payee: String?
-    var payeeLast4: String?
-    var payeeInstitution: String?
-    var payeeNote: String?
     var expenseAccountId: Int?
     var expenseAccount: String?
     var memo: String?
@@ -68,21 +65,6 @@ struct CardEntry: Decodable, Identifiable, Hashable {
     var enteredBy: String?
     var updatedBy: String?
     var balance: Double
-    /// The target's link (TargetAccountLinks.swift), nickname and next payment.
-    var payeeLink: TargetLink?
-    var payeeNickname: String?
-    var payeeNextDate: String?
-    var payeeNextAmount: Double?
-
-    /// The entry as the check register's target cell shows it (target, last four digits, note on hover).
-    var target: RegisterEntry {
-        RegisterEntry(id: id, date: date, kind: kind, checkNo: nil, payeeId: payeeId, payee: payee, payeeLast4: payeeLast4,
-                      payeeInstitution: payeeInstitution, payeeNote: payeeNote, expenseAccountId: expenseAccountId,
-                      expenseAccount: expenseAccount, memo: memo, amount: amount, status: status, bankLineId: cardLineId,
-                      bankDate: postedDate, bankName: issuerName, version: version, enteredBy: enteredBy,
-                      updatedBy: updatedBy, balance: balance, line: 0, payeeLink: payeeLink, payeeNickname: payeeNickname,
-                      payeeNextDate: payeeNextDate, payeeNextAmount: payeeNextAmount)
-    }
 }
 
 struct CardStatement: Decodable, Identifiable, Hashable {
@@ -189,14 +171,6 @@ nonisolated enum CardClient {
     static func register(_ code: String) async throws -> CardRegister {
         try await AccountsClient.request("GET", "/cards/accounts/\(code)/register", as: CardRegister.self)
     }
-    /// The card registers' targets that aren't target accounts yet (Target Accounts ▸ Add from Card Registers…).
-    static func targets() async throws -> [CardTarget] {
-        try await AccountsClient.request("GET", "/cards/targets", as: CardTargets.self).targets
-    }
-    /// Makes these card targets target accounts (recipients of credit card payments), their entries linked to them.
-    static func addTargets(_ names: [String]) async throws -> CardTargets {
-        try await AccountsClient.request("POST", "/cards/targets", body: signed(["names": names]), as: CardTargets.self)
-    }
     static func add(_ code: String, _ body: [String: Any]) async throws -> CardRegister {
         try await AccountsClient.request("POST", "/cards/accounts/\(code)/transactions", body: signed(body), as: CardRegister.self)
     }
@@ -284,7 +258,7 @@ struct CardsView: View {
             }
             if let r = register {
                 tiles(r)
-                CardEntryForm(draft: $draft, payees: activePayees, expenseAccounts: book?.expenseAccounts ?? []) { await add() }
+                CardEntryForm(draft: $draft, known: knownPayees, expenseAccounts: book?.expenseAccounts ?? []) { await add() }
                 registerTable(r)
                 if !r.unlinkedPayments.isEmpty { unlinked(r) }
                 statements(r)
@@ -299,8 +273,6 @@ struct CardsView: View {
             }
         }
         .task { await reload() }
-        // A target's link changed (here, in Checking or in Target Accounts): the register shows it.
-        .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         #if DEBUG
         // Self-tests, once the register is loaded: Import File… with this file picked (-cardImportFile PATH; an
         // unsandboxed test build reads it), or Remove… (-cardRemove YES).
@@ -319,12 +291,12 @@ struct CardsView: View {
             }
         }
         .sheet(item: $editing) { e in
-            CardEditSheet(entry: e, payees: activePayees, expenseAccounts: book?.expenseAccounts ?? []) { body in
+            CardEditSheet(entry: e, known: knownPayees, expenseAccounts: book?.expenseAccounts ?? []) { body in
                 await run { try await CardClient.update(e.id, body) }
             }
         }
         .sheet(isPresented: Binding(get: { accountSheet != nil }, set: { if !$0 { accountSheet = nil } })) {
-            CardAccountSheet(account: accountSheet ?? nil, payees: book?.payees ?? []) { code, body in
+            CardAccountSheet(account: accountSheet ?? nil) { code, body in
                 do {
                     accounts = try await CardClient.saveAccount(code, body)
                     selected = code.uppercased()
@@ -361,8 +333,10 @@ struct CardsView: View {
         }
     }
 
-    /// The targets this register offers: active target accounts with credit card among their funding sources.
-    private var activePayees: [Payee] { (book?.payees ?? []).filter { $0.offered(in: .card) } }
+    /// The names this register has had, for a new entry.
+    private var knownPayees: [KnownPayee] {
+        KnownPayee.list((register?.entries ?? []).filter { $0.status != "void" && $0.kind != "payment" }.map { ($0.payee, $0.date, $0.expenseAccountId) })
+    }
 
     private var accountBar: some View {
         HStack(spacing: 10) {
@@ -434,7 +408,7 @@ struct CardsView: View {
     static let columns: [String: LocalGridColumn<CardEntry>] = [
         "Date": .date({ $0.date }, display: { shortDay($0.date) }),
         "Kind": .text { ["charge": "Charge", "credit": "Credit", "payment": "Payment", "fee": "Fee", "interest": "Interest", "adjustment": "Adjust"][$0.kind] ?? $0.kind },
-        "Target": .text { $0.payee },
+        "Payee": .text { $0.payee },
         "Category": .text { $0.expenseAccount },
         "Memo": .text { $0.memo },
         "Charge": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
@@ -464,8 +438,8 @@ struct CardsView: View {
             Table(rows, selection: $selection) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit().help(entryHelp(e)) }.width(min: 70, ideal: 84)
                 TableColumn("Kind") { e in Text(Self.kindLabel(e.kind)).foregroundStyle(.secondary) }.width(min: 50, ideal: 64)
-                TableColumn("Target") { e in
-                    TargetCell(entry: e.target, website: e.payeeId.flatMap { id in book?.payees.first { $0.id == id }?.logonUrl }) { id, note in await saveNote(id, note) }
+                TableColumn("Payee") { e in
+                    Text(e.payee ?? "—").strikethrough(e.status == "void").help(e.issuerName.map { "\(r.account.issuer): \($0)" } ?? "")
                 }.width(min: 140, ideal: 200)
                 TableColumn("Category") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary).help(e.issuerCategory.map { "\(r.account.issuer): \($0)" } ?? "") }.width(min: 80, ideal: 130)
                 TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 90)
@@ -507,7 +481,7 @@ struct CardsView: View {
     }
 
     private func unlinked(_ r: CardRegister) -> some View {
-        Box(title: "Checking payments to \(r.account.payee ?? "this card"), not linked", symbol: "link.badge.plus", help: "Entries in a check register paid to this card's target account that no card payment is linked to yet — the card company's line for them hasn't been read, or its amount or date differs. Link… ties one to the card's payment it is.") {
+        Box(title: "Checking payments to \(r.account.paymentName ?? "this card"), not linked", symbol: "link.badge.plus", help: "Entries in a check register paid to the card's payment name (Edit… ▸ Paid from checking as) that no card payment is linked to yet — the card company's line for them hasn't been read, or its amount or date differs. Link… ties one to the card's payment it is.") {
             ForEach(r.unlinkedPayments) { p in
                 HStack(spacing: 10) {
                     Text(shortDay(p.date)).monospacedDigit().frame(width: 84, alignment: .leading)
@@ -659,15 +633,6 @@ struct CardsView: View {
         }
     }
 
-    private func saveNote(_ payee: Int, _ note: String) async -> String? {
-        do {
-            _ = try await BankClient.savePayeeNote(payee, note)
-            await refresh()
-            book = try? await BankClient.book()
-            return nil
-        } catch { return describe(error) }
-    }
-
     private func add() async -> String? {
         guard let code = register?.account.code else { return "Choose a card" }
         let error = await run { try await CardClient.add(code, draft.body) }
@@ -779,7 +744,7 @@ struct CardDraft {
 
 struct CardEntryForm: View {
     @Binding var draft: CardDraft
-    var payees: [Payee]
+    var known: [KnownPayee]
     var expenseAccounts: [ExpenseAccount]
     var save: () async -> String?
     @State private var error: String?
@@ -789,12 +754,12 @@ struct CardEntryForm: View {
                         ("interest", "Interest"), ("adjustment", "Adjustment")]
 
     var body: some View {
-        Box(title: "New entry", symbol: "square.and.pencil", help: "A charge from a receipt (or a credit, fee …) before the card company's download shows it: the date, its target, what it is for and the amount. When the download's line comes — the same amount within a week — it posts this entry instead of adding another.") {
+        Box(title: "New entry", symbol: "square.and.pencil", help: "A charge from a receipt (or a credit, fee …) before the card company's download shows it: the date, who it paid, what it is for and the amount. When the download's line comes — the same amount within a week — it posts this entry instead of adding another.") {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 DatePicker("", selection: $draft.date, displayedComponents: .date).labelsHidden().fixedSize()
                 Picker("", selection: $draft.kind) { ForEach(Self.kinds, id: \.0) { Text($0.1).tag($0.0) } }
                     .labelsHidden().frame(width: 130)
-                TargetPicker(target: $draft.payee, payees: payees, prompt: draft.kind == "credit" ? "From" : "Paid to") { fill() }
+                PayeePicker(name: $draft.payee, known: known, prompt: draft.kind == "credit" ? "From" : "Paid to") { fill() }
                 Picker("", selection: $draft.expenseAccountId) {
                     Text("Category").tag(Int?.none)
                     ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
@@ -813,10 +778,9 @@ struct CardEntryForm: View {
     }
 
     private func fill() {
-        guard let p = payees.first(where: { $0.name.caseInsensitiveCompare(draft.payee) == .orderedSame }) else { return }
+        guard let p = KnownPayee.named(draft.payee, in: known) else { return }
         draft.payee = p.name
         if draft.expenseAccountId == nil { draft.expenseAccountId = p.expenseAccountId }
-        if draft.amount == nil, let a = p.defaultAmount { draft.amount = a }
     }
 
     private func enter() async {
@@ -829,7 +793,7 @@ struct CardEntryForm: View {
 
 struct CardEditSheet: View {
     let entry: CardEntry
-    var payees: [Payee]
+    var known: [KnownPayee]
     var expenseAccounts: [ExpenseAccount]
     var save: ([String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
@@ -845,7 +809,7 @@ struct CardEditSheet: View {
             Form {
                 DatePicker("Date", selection: $draft.date, displayedComponents: .date)
                 Picker("Kind", selection: $draft.kind) { ForEach(CardEntryForm.kinds, id: \.0) { Text($0.1).tag($0.0) } }
-                TargetPicker(target: $draft.payee, payees: payees, prompt: "Paid to", label: "Target") {}
+                PayeePicker(name: $draft.payee, known: known, prompt: "Paid to", label: "Payee") {}
                 Picker("Category", selection: $draft.expenseAccountId) {
                     Text("None").tag(Int?.none)
                     ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
@@ -858,7 +822,7 @@ struct CardEditSheet: View {
                 }
             }
             if let n = entry.issuerName {
-                Label("The card company's line \"\(n)\"\(entry.issuerCategory.map { " (\($0))" } ?? "") of \(shortDay(entry.postedDate)). A target picked here is used for that name from now on; marking it not posted or void unmatches the line.", systemImage: "creditcard")
+                Label("The card company's line \"\(n)\"\(entry.issuerCategory.map { " (\($0))" } ?? "") of \(shortDay(entry.postedDate)). Marking it not posted or void unmatches the line.", systemImage: "creditcard")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if let error { Text(error).foregroundStyle(.red).font(.callout).fixedSize(horizontal: false, vertical: true) }
@@ -893,7 +857,6 @@ struct CardEditSheet: View {
 
 struct CardAccountSheet: View {
     let account: CardAccount?
-    var payees: [Payee]
     var save: (String, [String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var code = ""
@@ -906,7 +869,7 @@ struct CardAccountSheet: View {
     @State private var dueDay: Int?
     @State private var openingDate = Date()
     @State private var openingBalance = 0.0
-    @State private var payeeId: Int?
+    @State private var paymentName = ""
     @State private var error: String?
 
     var body: some View {
@@ -927,12 +890,8 @@ struct CardAccountSheet: View {
                     .help("The day of the month the statement closes (the last day when the month is shorter)")
                 TextField("Payment due on day", value: $dueDay, format: .number)
                     .help("The day of the month the payment is due: in the month after the statement closes when it comes before the closing day")
-                Picker("Paid from checking as", selection: $payeeId) {
-                    Text("None").tag(Int?.none)
-                    // A recipient of checking account payments (and the one chosen, whatever it is now).
-                    ForEach(payees.filter { $0.offered(in: .checking) || $0.id == payeeId }) { p in Text(TargetPicker.title(p)).tag(Optional(p.id)) }
-                }
-                .help("The target account the check register pays this card as (Chase Card, Discover …): its payments there link to the card's")
+                TextField("Paid from checking as", text: $paymentName, prompt: Text("CHASE CREDIT CRD AUTOPAY"))
+                    .help("The name the check register's payments to this card have, as the bank's downloads give it (ignoring case): they link to the card's payments, and Pay… names its transfer so")
                 DatePicker("Register starts", selection: $openingDate, displayedComponents: .date)
                     .help("Best a statement's closing date: the first period is the next full one")
                 TextField("Owed then", value: $openingBalance, format: .number.precision(.fractionLength(2)))
@@ -951,7 +910,7 @@ struct CardAccountSheet: View {
                         body["apr"] = apr ?? NSNull()
                         body["closeDay"] = closeDay ?? NSNull()
                         body["dueDay"] = dueDay ?? NSNull()
-                        body["payeeId"] = payeeId ?? NSNull()
+                        body["paymentName"] = paymentName
                         if let c = account?.closedDate { body["closedDate"] = c }
                         if let e = await save(code, body) { error = e } else { dismiss() }
                     }
@@ -965,7 +924,7 @@ struct CardAccountSheet: View {
         .onAppear {
             guard let a = account else { code = "CHASE_VISA"; name = "Chase Visa"; return }
             code = a.code; name = a.name; issuer = a.issuer; last4 = a.last4 ?? ""
-            creditLimit = a.creditLimit; apr = a.apr; closeDay = a.closeDay; dueDay = a.dueDay; payeeId = a.payeeId
+            creditLimit = a.creditLimit; apr = a.apr; closeDay = a.closeDay; dueDay = a.dueDay; paymentName = a.paymentName ?? ""
             openingDate = isoDay.date(from: a.openingDate) ?? Date(); openingBalance = a.openingBalance
         }
     }
@@ -986,7 +945,7 @@ struct PayCardSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Pay \(card.name)").heading(.heading)
-            if card.payeeId == nil {
+            if card.paymentName == nil {
                 Label("Set how the check register pays this card first (Edit… ▸ Paid from checking as).", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange).font(.callout)
             }
@@ -1006,7 +965,7 @@ struct PayCardSheet: View {
                 .buttonStyle(.link).font(.callout)
                 TextField("Memo", text: $memo, prompt: Text("\(card.name) payment"))
             }
-            Text("Writes a transfer in the checking register to \(card.payee ?? "the card's target account") and the card's payment, linked. The card company's line for it posts the payment when its download is read.")
+            Text("Writes a transfer in the checking register to \(card.paymentName ?? "the card's payment name") and the card's payment, linked. The card company's line for it posts the payment when its download is read.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let error { Text(error).foregroundStyle(.red).font(.callout).fixedSize(horizontal: false, vertical: true) }
             HStack {
@@ -1020,7 +979,7 @@ struct PayCardSheet: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(from.isEmpty || (amount ?? 0) <= 0 || card.payeeId == nil)
+                .disabled(from.isEmpty || (amount ?? 0) <= 0 || card.paymentName == nil)
             }
         }
         .padding(18)
@@ -1237,8 +1196,8 @@ struct CardImportSheet: View {
 // MARK: - Removing a card
 
 /// Asks before a card is removed: what goes with it (its register entries, the card company's lines, its statements;
-/// its downloads moved aside) and what stays (the checking entries that paid it and the expense-ledger entries naming
-/// its charges, unlinked; the target accounts). Cancel is the default.
+/// its downloads moved aside) and what stays (the checking entries that paid it and the cash-ledger entries naming
+/// its charges, unlinked). Cancel is the default.
 struct CardRemovalSheet: View {
     let removal: CardRemoval
     var remove: () async -> String?
@@ -1303,10 +1262,10 @@ struct CardRemovalSheet: View {
     private var kept: [String] {
         let r = removal
         var k: [String] = []
-        if let p = r.payee { k.append("Its checking target \(p) and the checking entries that paid it" + (r.checkingLinked > 0 ? " (\(count(r.checkingLinked, "payment", "payments")) linked, now unlinked)" : "")) }
+        if let p = r.payee { k.append("The checking entries paid to \(p)" + (r.checkingLinked > 0 ? " (\(count(r.checkingLinked, "payment", "payments")) linked, now unlinked)" : "")) }
         else if r.checkingLinked > 0 { k.append("The checking entries that paid it (\(count(r.checkingLinked, "payment", "payments")) linked, now unlinked)") }
-        if r.expenseLinked > 0 { k.append(count(r.expenseLinked, "expense-ledger entry", "expense-ledger entries") + " naming its charges, now unlinked") }
-        k.append("The target accounts its charges were filed to, and the activity log of its downloads")
+        if r.expenseLinked > 0 { k.append(count(r.expenseLinked, "cash-ledger entry", "cash-ledger entries") + " naming its charges, now unlinked") }
+        k.append("The activity log of its downloads")
         return k
     }
 }

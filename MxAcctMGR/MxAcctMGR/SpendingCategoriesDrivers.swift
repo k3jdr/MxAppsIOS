@@ -67,7 +67,7 @@ struct CategoryEditor: View {
         let made = spendingCode(from: name, upper: true)
         VStack(alignment: .leading, spacing: 12) {
             Text(category == nil ? "New Category" : "Edit Category").heading(.heading)
-            Text("A spending category is what the money bought. Rules on expense accounts, target accounts and statement text put entries in it; its consumer price index decides how much of its change is inflation.")
+            Text("A spending category is what the money bought. Rules on expense accounts and statement text put entries in it; its consumer price index decides how much of its change is inflation.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
                 TextField("Name", text: $name, prompt: Text("Pets, Gifts, Insurance"))

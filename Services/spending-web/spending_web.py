@@ -143,7 +143,6 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if method == "GET" and name == "setup":
                     out = spending.setup(conn)
-                    out.pop("payees", None)     # names of every target account: not needed on the page
                 elif method == "GET" and name == "analysis":
                     out = spending.analysis(conn, q)
                 elif method == "GET" and name == "sources":

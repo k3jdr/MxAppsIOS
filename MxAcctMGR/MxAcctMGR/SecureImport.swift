@@ -168,7 +168,7 @@ struct SecureImportSheet: View {
     /// The secure accounts now: rows are matched to them by name.
     let accounts: [SecureAccount]
     /// Saves an account (id 0 makes one); answers its id, or why it couldn't.
-    var save: (Int, [String: Any]) async -> PayeeSaved
+    var save: (Int, [String: Any]) async -> SecureSaved
     var done: () async -> Void
     @Environment(\.dismiss) private var dismiss
 

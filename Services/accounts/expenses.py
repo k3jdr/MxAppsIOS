@@ -1,9 +1,9 @@
-"""Expense ledgers for the accounts service (MxAcctMGR's Banking ▸ Expense Ledgers): funded ledgers of purpose
+"""Cash ledgers for the accounts service (MxAcctMGR's Banking ▸ Cash Ledger): funded ledgers of purpose
 spending, with their budget lines, subscriptions, equipment, training and trips (V030).
 
-    GET  /expense-ledgers                           the expense ledgers with spent, funded and balance
+    GET  /expense-ledgers                           the cash ledgers with spent, funded and balance
     PUT  /expense-ledgers/<code>                    create or change one {name, purpose, owner, costCenter, openingDate,
-                                                    openingBalance, budget, fundingPayees, fundingAmount, fundingDay, closedDate}
+                                                    openingBalance, budget, fundingNames, fundingAmount, fundingDay, closedDate}
     GET  /expense-ledgers/<code>                    its book: lines (budget against actual), entries (running balance),
                                                     subscriptions, assets (depreciation), training, trips and alerts
     POST /expense-ledgers/<code>/entries            add an entry {date, kind, description, vendor, lineId, tripId, amount,
@@ -15,13 +15,13 @@ spending, with their budget lines, subscriptions, equipment, training and trips 
                                                     source: card | bank, txnId, by}: the purchase then counts once
     POST /expense-ledgers/<code>/entries/delete     delete entries for good {entries: [{id, version}], by}: all or none,
                                                     refused (409) when someone changed one since
-    POST /expense-ledgers/<code>/fund               funding transfers {date, amount, payeeId, months, description}:
+    POST /expense-ledgers/<code>/fund               funding transfers {date, amount, vendor, months, description}:
                                                     one a month from the date, those after today scheduled
     PUT  /expense-ledgers/<code>/lines/<id>         a budget line (id 0 adds one)
     PUT  /expense-ledgers/<code>/assets/<id>        an asset (id 0 adds one)
     PUT  /expense-ledgers/<code>/training/<id>      a training record (id 0 adds one)
     PUT  /expense-ledgers/<code>/trips/<id>         a trip (id 0 adds one)
-    GET  /expense-ledgers/<code>/card-charges       recent card charges in no expense ledger, to add from
+    GET  /expense-ledgers/<code>/card-charges       recent card charges in no cash ledger, to add from
 
 Amounts are signed as the balance reads them: positive is spent and not funded yet, negative lowers it (funding,
 refunds). An entry is voided to take it out of the balance and keep it; deleting one (the user's choice) removes it
@@ -47,7 +47,7 @@ def _by(body):
 def _ledger(conn, code):
     rows = fetch(conn, "SELECT * FROM srm.expense_ledger WHERE upper(code) = upper(%s)", (code,))
     if not rows:
-        raise LookupError("no expense ledger %s" % code)
+        raise LookupError("no cash ledger %s" % code)
     return rows[0]
 
 
@@ -80,7 +80,7 @@ def _months_between(a, b):
 def ledgers(conn):
     rows = fetch(conn, """
         SELECT l.code, l.name, l.purpose, l.owner, l.cost_center AS "costCenter", l.opening_date AS "openingDate",
-               l.opening_balance AS "openingBalance", l.budget, l.funding_payees AS "fundingPayees",
+               l.opening_balance AS "openingBalance", l.budget, l.funding_names AS "fundingNames",
                l.funding_amount AS "fundingAmount", l.funding_day AS "fundingDay", l.closed_date AS "closedDate",
                l.version,
                coalesce(sum(e.amount) FILTER (WHERE e.status = 'actual' AND e.kind IN ('expense', 'refund', 'adjustment')), 0) AS spent,
@@ -100,28 +100,33 @@ def save_ledger(conn, code, body):
     name = _text(body, "name", 120)
     if not name:
         raise ValueError("name is required")
-    payees = [int(p) for p in (body.get("fundingPayees") or []) if str(p).isdigit()]
+    # The names the funding transfers have in the check register (V048), each once whatever its case.
+    names = []
+    for n in body.get("fundingNames") or []:
+        n = " ".join(str(n).split())[:120]
+        if n and n.lower() not in [x.lower() for x in names]:
+            names.append(n)
     day = body.get("fundingDay")
     if day not in (None, "") and not (str(day).isdigit() and 1 <= int(day) <= 31):
         raise ValueError("fundingDay must be a day of the month (1–31)")
     cur = fetch(conn, "SELECT ledger_id, version FROM srm.expense_ledger WHERE upper(code) = upper(%s) FOR UPDATE", (code,))
     if cur and "version" in body and int(body["version"]) != cur[0]["version"]:
         conn.rollback()
-        raise Conflict("someone changed this expense ledger since you opened it", version=cur[0]["version"])
+        raise Conflict("someone changed this cash ledger since you opened it", version=cur[0]["version"])
     rows = fetch(conn, """
         INSERT INTO srm.expense_ledger (code, name, purpose, owner, cost_center, opening_date, opening_balance, budget,
-                                        funding_payees, funding_amount, funding_day, closed_date, updated_by)
+                                        funding_names, funding_amount, funding_day, closed_date, updated_by)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (code) DO UPDATE SET name = excluded.name, purpose = excluded.purpose, owner = excluded.owner,
                cost_center = excluded.cost_center, opening_date = excluded.opening_date,
                opening_balance = excluded.opening_balance, budget = excluded.budget,
-               funding_payees = excluded.funding_payees, funding_amount = excluded.funding_amount,
+               funding_names = excluded.funding_names, funding_amount = excluded.funding_amount,
                funding_day = excluded.funding_day, closed_date = excluded.closed_date, updated_by = excluded.updated_by,
                version = srm.expense_ledger.version + 1, updated_at = now()
         RETURNING ledger_id""",
                  (code.upper(), name, _text(body, "purpose", 500), _text(body, "owner", 80) or "Personal",
                   _text(body, "costCenter", 80), _date(body.get("openingDate") or dt.date.today()),
-                  _num(body.get("openingBalance") or 0, "openingBalance"), _opt_num(body, "budget"), payees,
+                  _num(body.get("openingBalance") or 0, "openingBalance"), _opt_num(body, "budget"), names,
                   _opt_num(body, "fundingAmount"), int(day) if day not in (None, "") else None,
                   _opt_date(body, "closedDate"), _by(body)))
     fetch(conn, "SELECT srm.match_expense_funding(%s)", (rows[0]["ledger_id"],))
@@ -133,15 +138,13 @@ def save_ledger(conn, code, body):
 
 ENTRY_SQL = """
     SELECT e.entry_id AS id, e.entry_date AS date, e.kind, e.description, e.vendor, e.line_id AS "lineId",
-           ln.name AS line, ln.color AS "lineColor", e.trip_id AS "tripId", tr.name AS trip, e.payee_id AS "payeeId",
-           p.name AS payee, e.amount, e.recurrence, e.status, e.approval, e.approved_by AS "approvedBy",
+           ln.name AS line, ln.color AS "lineColor", e.trip_id AS "tripId", tr.name AS trip, e.amount, e.recurrence, e.status, e.approval, e.approved_by AS "approvedBy",
            e.approved_at AS "approvedAt", e.url, e.notes, e.card_txn_id AS "cardTxnId", ca.code AS "cardAccount",
            e.bank_txn_id AS "bankTxnId", ba.code AS "bankAccount", bt.txn_date AS "bankDate", e.version,
            e.entered_by AS "enteredBy", e.updated_by AS "updatedBy", e.updated_at AS "updatedAt"
       FROM srm.expense_entry e
       LEFT JOIN srm.expense_line ln ON ln.line_id = e.line_id
       LEFT JOIN srm.expense_trip tr ON tr.trip_id = e.trip_id
-      LEFT JOIN srm.payee p ON p.payee_id = e.payee_id
       LEFT JOIN srm.card_txn ct ON ct.txn_id = e.card_txn_id
       LEFT JOIN srm.card_account ca ON ca.card_account_id = ct.card_account_id
       LEFT JOIN srm.bank_txn bt ON bt.txn_id = e.bank_txn_id
@@ -309,14 +312,14 @@ def _entry_fields(conn, lid, body, cur=None):
         raise ValueError("approval must be none, pending, approved or rejected")
     line_id = get("lineId")
     if line_id and not fetch(conn, "SELECT 1 FROM srm.expense_line WHERE line_id = %s AND ledger_id = %s", (int(line_id), lid)):
-        raise ValueError("lineId must be a line of this expense ledger")
+        raise ValueError("lineId must be a line of this cash ledger")
     trip_id = get("tripId")
     if trip_id and not fetch(conn, "SELECT 1 FROM srm.expense_trip WHERE trip_id = %s AND ledger_id = %s", (int(trip_id), lid)):
-        raise ValueError("tripId must be a trip of this expense ledger")
+        raise ValueError("tripId must be a trip of this cash ledger")
     return {"entry_date": _date(get("date") or dt.date.today()), "kind": kind, "description": description,
             "vendor": (str(get("vendor") or "")).strip()[:120] or None,
             "line_id": int(line_id) if line_id and kind != "funding" else None, "trip_id": int(trip_id) if trip_id else None,
-            "payee_id": int(get("payeeId")) if get("payeeId") else None, "amount": amount, "recurrence": recurrence,
+            "amount": amount, "recurrence": recurrence,
             "status": status, "approval": approval, "url": (str(get("url") or "")).strip()[:500] or None,
             "notes": (str(get("notes") or "")).strip()[:2000] or None}
 
@@ -326,11 +329,11 @@ def add_entry(conn, code, body, commit=True):
     f = _entry_fields(conn, led["ledger_id"], body)
     for key, table in (("cardTxnId", "card_txn_id"), ("bankTxnId", "bank_txn_id")):
         if body.get(key) and fetch(conn, "SELECT 1 FROM srm.expense_entry WHERE %s = %%s" % table, (int(body[key]),)):
-            raise Conflict("that %s is already in an expense ledger" % ("card charge" if key == "cardTxnId" else "checking entry"))
+            raise Conflict("that %s is already in a cash ledger" % ("card charge" if key == "cardTxnId" else "checking entry"))
     rows = fetch(conn, """
-        INSERT INTO srm.expense_entry (ledger_id, line_id, trip_id, entry_date, kind, description, vendor, payee_id, amount,
+        INSERT INTO srm.expense_entry (ledger_id, line_id, trip_id, entry_date, kind, description, vendor, amount,
                                        recurrence, status, approval, url, notes, card_txn_id, bank_txn_id, entered_by, updated_by)
-        VALUES (%(lid)s, %(line_id)s, %(trip_id)s, %(entry_date)s, %(kind)s, %(description)s, %(vendor)s, %(payee_id)s,
+        VALUES (%(lid)s, %(line_id)s, %(trip_id)s, %(entry_date)s, %(kind)s, %(description)s, %(vendor)s,
                 %(amount)s, %(recurrence)s, %(status)s, %(approval)s, %(url)s, %(notes)s, %(card)s, %(bank)s, %(by)s, %(by)s)
         RETURNING entry_id""",
                  dict(f, lid=led["ledger_id"], card=body.get("cardTxnId") or None, bank=body.get("bankTxnId") or None, by=_by(body)))
@@ -363,13 +366,13 @@ def update_entry(conn, eid, body):
     row = _locked_entry(conn, eid)
     _check_version(conn, row, body)
     cur = {"kind": row["kind"], "amount": float(row["amount"]), "description": row["description"], "vendor": row["vendor"],
-           "lineId": row["line_id"], "tripId": row["trip_id"], "payeeId": row["payee_id"], "date": row["entry_date"].isoformat(),
+           "lineId": row["line_id"], "tripId": row["trip_id"], "date": row["entry_date"].isoformat(),
            "recurrence": row["recurrence"], "status": row["status"], "approval": row["approval"], "url": row["url"],
            "notes": row["notes"]}
     f = _entry_fields(conn, row["ledger_id"], body, cur)
     fetch(conn, """
         UPDATE srm.expense_entry SET line_id = %(line_id)s, trip_id = %(trip_id)s, entry_date = %(entry_date)s,
-               kind = %(kind)s, description = %(description)s, vendor = %(vendor)s, payee_id = %(payee_id)s,
+               kind = %(kind)s, description = %(description)s, vendor = %(vendor)s,
                amount = %(amount)s, recurrence = %(recurrence)s, status = %(status)s, approval = %(approval)s,
                url = %(url)s, notes = %(notes)s,
                bank_txn_id = CASE WHEN %(status)s = 'void' THEN NULL ELSE bank_txn_id END,
@@ -469,13 +472,12 @@ def fund(conn, code, body):
     if not 1 <= months <= 60:
         raise ValueError("months must be 1–60")
     start = _date(body.get("date") or dt.date.today())
-    payee = body.get("payeeId") or (led["funding_payees"][0] if led["funding_payees"] else None)
-    name = fetch(conn, "SELECT name FROM srm.payee WHERE payee_id = %s", (payee,))[0]["name"] if payee else None
+    name = (body.get("vendor") or "").strip()[:120] or (led["funding_names"][0] if led["funding_names"] else None)
     today = dt.date.today()
     for i in range(months):
         d = _add_months(start, i)
         add_entry(conn, code, {"date": d.isoformat(), "kind": "funding", "description": body.get("description") or name or "Funding",
-                               "payeeId": payee, "amount": amount, "status": "scheduled" if d > today else "actual",
+                               "vendor": name, "amount": amount, "status": "scheduled" if d > today else "actual",
                                "by": _by(body)}, commit=False)
     fetch(conn, "SELECT srm.match_expense_funding(%s)", (led["ledger_id"],))
     conn.commit()
@@ -583,9 +585,8 @@ def card_charges(conn, code):
     _ledger(conn, code)
     return {"charges": fetch(conn, """
         SELECT t.txn_id AS id, a.code AS "cardAccount", a.name AS card, t.txn_date AS date,
-               coalesce(p.name, t.payee_name) AS payee, t.memo, t.amount, e.name AS "expenseAccount"
+               t.payee_name AS payee, t.memo, t.amount, e.name AS "expenseAccount"
           FROM srm.card_txn t JOIN srm.card_account a USING (card_account_id)
-          LEFT JOIN srm.payee p ON p.payee_id = t.payee_id
           LEFT JOIN srm.expense_account e ON e.expense_account_id = t.expense_account_id
          WHERE t.kind IN ('charge', 'credit') AND t.status <> 'void' AND t.txn_date >= current_date - 365
            AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.card_txn_id = t.txn_id)
@@ -593,7 +594,7 @@ def card_charges(conn, code):
 
 
 def route(conn, method, parts, body, q):
-    """The expense ledger endpoints' answer, or None when the path isn't one of them."""
+    """The cash ledger endpoints' answer, or None when the path isn't one of them."""
     if parts == ["expense-ledgers"] and method == "GET":
         return ledgers(conn)
     if len(parts) == 2 and parts[0] == "expense-ledgers":
