@@ -236,7 +236,7 @@ struct SpendingAnalysisView: View {
 
     @ViewBuilder
     private func attribution(_ data: SpendingAnalysisData, _ setup: SpendingSetup) -> some View {
-        let rows = SpendingEngine.attribute(data, entries: shownEntries(data), categories: setup.categories)
+        let rows = SpendingEngine.attribute(data, entries: shownEntries(data), setup: setup)
         let total = SpendingEngine.total(rows)
         let partial = SpendingEngine.partialRegisters(data)
         if !partial.isEmpty {
@@ -351,21 +351,22 @@ struct SpendingAnalysisView: View {
     private func twoDimensions(_ data: SpendingAnalysisData, _ setup: SpendingSetup) -> some View {
         var sums: [String: Double] = [:]
         for e in shownEntries(data) where inCurrent(e, data) {
-            sums[(setup.category(e.category)?.name ?? "Not assigned") + "|" + SpendingDriver.title(e.driver), default: 0] += e.amount
+            sums[(setup.category(e.category)?.name ?? "Not assigned") + "|" + setup.driverTitle(e.driver), default: 0] += e.amount
         }
         let slices = sums.map { k, v in
             let p = k.split(separator: "|", maxSplits: 1).map(String.init)
             return Slice(category: p[0], driver: p[1], amount: v)
         }
         let order = setup.categories.map(\.name) + ["Not assigned"]
-        let drivers = SpendingDriver.allCases.map(\.title) + ["Not assigned"]
+        let drivers = setup.drivers.map(\.title) + ["Not assigned"]
+        let palette: [Color] = [.orange, .blue, .cyan, .purple, .pink, .indigo, .teal, .brown, .mint, .yellow, .green, .red]
         return Box(title: "This Year by Category and Driver", symbol: "square.stack.3d.up", help: "Both dimensions of every dollar this year: the category it was spent on and its primary driver. Assign drivers with rules (Rules) and tags on single entries (Entries). Right-click (or double-click) a category's bar or its name under the chart for a deep dive into it.") {
             Chart(slices) { s in
                 BarMark(x: .value("Category", s.category), y: .value("Dollars", s.amount))
                     .foregroundStyle(by: .value("Driver", s.driver))
             }
             .chartXScale(domain: order.filter { n in slices.contains { $0.category == n } })
-            .chartForegroundStyleScale(domain: drivers, range: [Color.orange, .blue, .cyan, .purple, .pink, .indigo, .teal, .brown, .gray.opacity(0.5)])
+            .chartForegroundStyleScale(domain: drivers, range: setup.drivers.indices.map { palette[$0 % palette.count] } + [Color.gray.opacity(0.5)])
             .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(money(d)) } } } }
             .chartOverlay { proxy in CategoryChartMenu(proxy: proxy, axis: .horizontal) { openDeepDive($0) } }
             .frame(height: 260)
@@ -568,11 +569,13 @@ private struct SpendingEntriesTab: View {
         .sorted { $0.date > $1.date }
     }
 
-    static let text = TableText<SpendingEntry>(
-        titles: ["Date", "From", "Payee", "Description", "Bought", "Expense account", "Amount", "Category", "Driver", "Family member", "Event"],
-        cells: { e in [e.date, e.register ?? e.sourceTitle, e.payee ?? "", e.description ?? "",
-                       (e.amazonItems ?? []).map(\.label).joined(separator: "; "), e.expenseAccount ?? "",
-                       String(format: "%.2f", e.amount), e.category ?? "", SpendingDriver.title(e.driver), e.memberId.map(String.init) ?? "", e.event ?? ""] })
+    static func text(_ setup: SpendingSetup) -> TableText<SpendingEntry> {
+        TableText(
+            titles: ["Date", "From", "Payee", "Description", "Bought", "Expense account", "Amount", "Category", "Driver", "Family member", "Event"],
+            cells: { e in [e.date, e.register ?? e.sourceTitle, e.payee ?? "", e.description ?? "",
+                           (e.amazonItems ?? []).map(\.label).joined(separator: "; "), e.expenseAccount ?? "",
+                           String(format: "%.2f", e.amount), e.category ?? "", setup.driverTitle(e.driver), e.memberId.map(String.init) ?? "", e.event ?? ""] })
+    }
 
     /// The table's columns for sorting and filtering, by their titles: each filters on what it shows (a category's
     /// and a member's name, a driver's title), Amount by value and Date by day.
@@ -585,7 +588,7 @@ private struct SpendingEntriesTab: View {
             "Expense account": .text { $0.expenseAccount },
             "Amount": .number({ $0.amount }, display: { money2($0.amount) }),
             "Category": .text { setup.category($0.category)?.name ?? "Not assigned" },
-            "Driver": .text { SpendingDriver.title($0.driver) },
+            "Driver": .text { setup.driverTitle($0.driver) },
             "Family member": .text { setup.member($0.memberId)?.name },
             "Event": .text { $0.event },
         ]
@@ -619,7 +622,7 @@ private struct SpendingEntriesTab: View {
                         .help(e.categoryFrom.map { $0 == "statement text" ? "From the statement text rule \"\(e.rulePattern ?? "")\"" : "From the \($0)" } ?? "No rule or tag")
                 }.width(min: 80, ideal: 110).customizationID("category")
                 TableColumn("Driver") { e in
-                    Text(SpendingDriver.title(e.driver)).foregroundStyle(e.driver == nil ? .secondary : .primary)
+                    Text(setup.driverTitle(e.driver)).foregroundStyle(e.driver == nil ? .secondary : .primary)
                         .help(e.driverFrom.map { "From the \($0)" } ?? "No rule or tag: counts as usage")
                 }.width(min: 80, ideal: 130).customizationID("driver")
                 TableColumn("Family member") { e in Text(setup.member(e.memberId)?.name ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110).customizationID("member")
@@ -643,7 +646,7 @@ private struct SpendingEntriesTab: View {
             }
             .onChange(of: columns) { columnsStore = (try? JSONEncoder().encode(columns)) ?? columnsStore }
             .tableText()
-            .copiesSelectedRows(rows, selected: selected, as: Self.text)
+            .copiesSelectedRows(rows, selected: selected, as: Self.text(setup))
             .columnHeaderFilters(types: LocalGrid.types(gridColumns), options: grid,
                                  loadValues: { (LocalGrid.values(base, column: $0, grid, gridColumns), false) },
                                  apply: { grid = $0 })
@@ -683,7 +686,7 @@ private struct SpendingEntriesTab: View {
                     }
                 }
                 Divider()
-                CopyRowsButton(rows: rows, ids: ids, text: Self.text)
+                CopyRowsButton(rows: rows, ids: ids, text: Self.text(setup))
             } primaryAction: { ids in
                 tagging = rows.filter { ids.contains($0.id) }
             }
@@ -741,8 +744,8 @@ private struct SpendingEntriesTab: View {
 
     private func driverMenu(_ picked: [SpendingEntry], label: String) -> some View {
         Menu(label) {
-            ForEach(SpendingDriver.allCases) { d in
-                Button(d.title) { Task { await setField(picked, "driver", d.rawValue) } }.help(d.help)
+            ForEach(setup.drivers) { d in
+                Button(d.title) { Task { await setField(picked, "driver", d.code) } }.help(d.help ?? "")
             }
             Divider()
             Button("Follow the Rules") { Task { await setField(picked, "driver", "") } }
@@ -871,7 +874,7 @@ private struct DimensionPickers: View {
         }
         Picker("Driver", selection: $driver) {
             Text(blank).tag("")
-            ForEach(SpendingDriver.allCases) { d in Text(d.title).help(d.help).tag(d.rawValue) }
+            ForEach(setup.drivers) { d in Text(d.title).help(d.help ?? "").tag(d.code) }
         }
         Picker("Family member", selection: $member) {
             Text(blank).tag(0)
@@ -1371,7 +1374,7 @@ private struct SpendingRulesTab: View {
     /// What a rule says and who changed it last.
     private func ruleTip(_ rule: SpendingRule?) -> String {
         guard let r = rule else { return "No rule: its expense account's rule decides." }
-        let says = [setup.category(r.category)?.name, r.driver.map { SpendingDriver.title($0) }, setup.member(r.memberId)?.name].compactMap { $0 }
+        let says = [setup.category(r.category)?.name, r.driver.map { setup.driverTitle($0) }, setup.member(r.memberId)?.name].compactMap { $0 }
         return "Rule: " + (says.isEmpty ? "nothing set" : says.joined(separator: " · ")) + (r.updatedBy.map { ", last changed by \($0)" } ?? "")
     }
 
@@ -1426,7 +1429,7 @@ private struct SpendingRulesTab: View {
             .labelsHidden().frame(width: 150)
             Picker("", selection: Binding(get: { rule?.driver ?? "" }, set: { save(driver: $0) })) {
                 Text(blank).tag("")
-                ForEach(SpendingDriver.allCases) { d in Text(d.title).tag(d.rawValue) }
+                ForEach(setup.drivers) { d in Text(d.title).help(d.help ?? "").tag(d.code) }
             }
             .labelsHidden().frame(width: 170)
             Picker("", selection: Binding(get: { rule?.memberId ?? 0 }, set: { save(member: .some($0 == 0 ? nil : $0)) })) {
@@ -2231,7 +2234,7 @@ private struct SpendingDeepDiveTab: View {
     }
 
     var body: some View {
-        let rows = SpendingEngine.attribute(data, entries: entries, categories: setup.categories)
+        let rows = SpendingEngine.attribute(data, entries: entries, setup: setup)
         let row = rows.first { $0.code == code }
         let mine = entries.filter { ($0.category ?? SpendingEngine.unassigned) == code }
         header(rows, row)
@@ -2324,7 +2327,8 @@ private struct SpendingDeepDiveTab: View {
 
     private func driversBox(_ mine: [SpendingEntry], _ row: CategoryAttribution) -> some View {
         let groups = Dictionary(grouping: mine, by: { $0.driver ?? "" })
-        let order = SpendingDriver.allCases.map(\.rawValue) + [""]
+        // A driver taken off since the entries were read still shows, after the others.
+        let order = setup.drivers.map(\.code) + groups.keys.filter { !$0.isEmpty && setup.driver($0) == nil }.sorted() + [""]
         let rate = row.inflationRate
         return Box(title: "By Driver", symbol: "arrow.triangle.branch", help: "\(name) spending by primary driver in both periods. A driver's effect is what its spending grew beyond prices (this year less last year's grown by the category's CPI change); with the price change on last year's spending they add up to the change. Spending with no driver counts as usage.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
@@ -2340,9 +2344,10 @@ private struct SpendingDeepDiveTab: View {
                 }
                 ForEach(order.filter { groups[$0] != nil }, id: \.self) { d in
                     let s = sums(groups[d] ?? [])
-                    let driver = SpendingDriver(rawValue: d)
+                    let driver = setup.driver(d)
                     GridRow {
-                        Text(driver?.title ?? "No driver yet").foregroundStyle(driver == nil ? .secondary : .primary).help(driver?.help ?? "No rule or tag gives it a driver: it counts as usage")
+                        Text(driver?.title ?? (d.isEmpty ? "No driver yet" : d)).foregroundStyle(driver == nil ? .secondary : .primary)
+                            .help(driver.map { $0.help ?? "" } ?? "No rule or tag gives it a driver: it counts as usage")
                         Text(money(s.before)); Text(money(s.now))
                         Text(money(s.change)).foregroundStyle(s.change > 0.5 ? .red : s.change < -0.5 ? .green : .secondary)
                         Text(money(s.now - s.before * (1 + rate))).foregroundStyle((driver?.effect ?? .usage).color)
@@ -2408,7 +2413,7 @@ private struct SpendingDeepDiveTab: View {
                             Text(o.kind == "none" ? "not assigned" : o.kind == "entry" ? "entry tags" : "\(o.kind) rule").font(.caption).foregroundStyle(.secondary)
                         }
                         Text(o.rule.map { r in
-                            [setup.category(r.category)?.name, r.driver.map { SpendingDriver.title($0) }, setup.member(r.memberId)?.name].compactMap { $0 }.joined(separator: " · ")
+                            [setup.category(r.category)?.name, r.driver.map { setup.driverTitle($0) }, setup.member(r.memberId)?.name].compactMap { $0 }.joined(separator: " · ")
                         } ?? "").foregroundStyle(.secondary)
                         Text(money(s.before)); Text(money(s.now))
                         Text(money(s.change)).foregroundStyle(s.change > 0.5 ? .red : s.change < -0.5 ? .green : .secondary)
@@ -2478,7 +2483,7 @@ private struct SpendingDeepDiveTab: View {
                         Text(e.bought ?? e.payee ?? e.description ?? "—").lineLimit(1)
                             .help([e.payee, e.description, e.boughtDetail].compactMap { $0 }.joined(separator: "\n"))
                         Text(money2(e.amount)).monospacedDigit().gridColumnAlignment(.trailing)
-                        Text(e.event ?? SpendingDriver.title(e.driver)).foregroundStyle(.secondary).lineLimit(1)
+                        Text(e.event ?? setup.driverTitle(e.driver)).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
             }
@@ -2635,7 +2640,7 @@ private struct FeedbackCard: View {
             }
             Text(note.message).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             if let c = note.context, c.payee != nil || c.amount != nil {
-                Text("Entry: \(shortDay(c.date)) \(c.payee ?? "") \(c.amount.map(money2) ?? "") — then \(setup.category(c.category)?.name ?? "Not assigned"), \(SpendingDriver.title(c.driver))")
+                Text("Entry: \(shortDay(c.date)) \(c.payee ?? "") \(c.amount.map(money2) ?? "") — then \(setup.category(c.category)?.name ?? "Not assigned"), \(setup.driverTitle(c.driver))")
                     .font(.callout).foregroundStyle(.secondary)
             }
             if let s = note.suggestion { Text("Suggests: \(s)").font(.callout) }

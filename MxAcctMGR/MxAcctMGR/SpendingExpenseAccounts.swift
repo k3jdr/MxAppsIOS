@@ -62,7 +62,7 @@ struct ExpenseAccountEditor: View {
                         }
                         Picker("Driver", selection: $driver) {
                             Text("None").tag("")
-                            ForEach(SpendingDriver.allCases) { d in Text(d.title).help(d.help).tag(d.rawValue) }
+                            ForEach(setup.drivers) { d in Text(d.title).help(d.help ?? "").tag(d.code) }
                         }
                     }
                 }

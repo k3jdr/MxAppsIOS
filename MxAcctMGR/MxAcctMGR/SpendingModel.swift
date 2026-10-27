@@ -24,6 +24,8 @@ import SwiftUI
 struct SpendingCategory: Decodable, Identifiable, Hashable {
     var code: String
     var name: String
+    /// What it covers (V047).
+    var description: String?
     var cpiSeries: String?
     var cpiName: String?
     var assumedInflation: Double
@@ -114,8 +116,13 @@ struct SpendingSetup: Decodable {
     var expenseAccounts: [Named]
     var payees: [Named]
     var cpiSeries: [Series]
+    /// Why spending changed, in their order (srm.spending_driver, V047; changed on Admin).
+    var drivers: [SpendingDriver]
 
     func category(_ code: String?) -> SpendingCategory? { categories.first { $0.code == code } }
+    func driver(_ code: String?) -> SpendingDriver? { drivers.first { $0.code == code } }
+    /// A driver's title; Not assigned for none (or one taken off since the entry was read).
+    func driverTitle(_ code: String?) -> String { driver(code)?.title ?? "Not assigned" }
     func member(_ id: Int?) -> HouseholdMember? { members.first { $0.id == id } }
     var children: [HouseholdMember] { members.filter { $0.isChild && $0.active } }
     func rule(expenseAccount id: Int) -> SpendingRule? { rules.first { $0.expenseAccountId == id } }
@@ -285,55 +292,35 @@ struct SpendingAnalysisData: Decodable {
     var coverage: [RegisterCoverage]
 }
 
-enum SpendingDriver: String, CaseIterable, Identifiable {
-    case inflation, familyGrowth = "family_growth", newActivity = "new_activity", lifecycle, preference, lifestyle, oneTime = "one_time", taxes
-    var id: String { rawValue }
+/// Why spending changed (Family Growth, One-Time Event …): srm.spending_driver (V047), added and changed on Admin.
+/// Rules and tags store its code.
+struct SpendingDriver: Decodable, Identifiable, Hashable {
+    var code: String
+    var title: String
+    /// What it means.
+    var help: String?
+    /// The effect's code (srm.spending_driver.effect).
+    var effectCode: String
+    var sortOrder: Int
+    var id: String { code }
 
-    var title: String {
-        switch self {
-        case .inflation: "Inflation"
-        case .familyGrowth: "Family Growth"
-        case .newActivity: "New Activity"
-        case .lifecycle: "Lifecycle Transition"
-        case .preference: "Preference Change"
-        case .lifestyle: "Lifestyle & Hobbies"
-        case .oneTime: "One-Time Event"
-        case .taxes: "Taxes"
-        }
-    }
-
-    var help: String {
-        switch self {
-        case .inflation: "The same thing costs more"
-        case .familyGrowth: "More people, more of the same things"
-        case .newActivity: "Something the family didn't do before"
-        case .lifecycle: "Expected age-related spending: tutors, driving, college"
-        case .preference: "A habit or taste changed: eating out more, a better brand"
-        case .lifestyle: "The family's hobbies and way of living: music gear and lessons, sports, crafts, clubs"
-        case .oneTime: "An event that won't repeat: Philmont, a wedding, a repair"
-        case .taxes: "Taxes changed: real estate, income, local or sales taxes and their fees"
-        }
-    }
+    private enum CodingKeys: String, CodingKey { case code, title, help, effectCode = "effect", sortOrder }
 
     /// The attribution effect its spending's growth counts toward.
-    var effect: SpendingEffect {
-        switch self {
-        case .inflation: .inflation
-        case .familyGrowth, .newActivity: .usage
-        case .lifecycle: .lifecycle
-        case .preference, .lifestyle: .behavior
-        case .oneTime: .oneTime
-        case .taxes: .taxes
-        }
-    }
-
-    static func title(_ raw: String?) -> String { raw.flatMap(SpendingDriver.init(rawValue:))?.title ?? "Not assigned" }
+    var effect: SpendingEffect { SpendingEffect(code: effectCode) ?? .usage }
 }
 
 /// The attribution formula's terms: change = inflation + usage + lifecycle + behavior + one-time + taxes.
 enum SpendingEffect: String, CaseIterable, Identifiable {
     case inflation = "Inflation", usage = "Usage", lifecycle = "Lifecycle", behavior = "Behavior", oneTime = "One-Time", taxes = "Taxes"
     var id: String { rawValue }
+
+    /// How the security master names it (srm.spending_driver.effect).
+    var code: String { self == .oneTime ? "one_time" : rawValue.lowercased() }
+    init?(code: String) {
+        guard let e = Self.allCases.first(where: { $0.code == code }) else { return nil }
+        self = e
+    }
 
     var color: Color {
         switch self {
@@ -348,12 +335,12 @@ enum SpendingEffect: String, CaseIterable, Identifiable {
 
     var help: String {
         switch self {
-        case .inflation: "Prices: last year's spending times the category's CPI change, plus what spending tagged Inflation grew beyond it"
-        case .usage: "More (or less) of the same: family growth, new activities, and spending with no driver assigned"
-        case .lifecycle: "Expected age-related costs: the growth of spending tagged Lifecycle Transition, beyond inflation"
-        case .behavior: "Habits, tastes and hobbies: the growth of spending tagged Preference Change or Lifestyle & Hobbies, beyond inflation"
-        case .oneTime: "Events that won't repeat: the growth of spending tagged One-Time Event, beyond inflation"
-        case .taxes: "Taxes: the growth of spending tagged Taxes, beyond inflation"
+        case .inflation: "Prices: last year's spending times the category's CPI change, plus what spending whose driver counts as Inflation grew beyond it"
+        case .usage: "More (or less) of the same: the growth beyond inflation of spending whose driver counts as Usage (Family Growth, New Activity …), and of spending with no driver"
+        case .lifecycle: "Expected age-related costs: the growth beyond inflation of spending whose driver counts as Lifecycle (Lifecycle Transition …)"
+        case .behavior: "Habits, tastes and hobbies: the growth beyond inflation of spending whose driver counts as Behavior (Preference Change, Lifestyle & Hobbies …)"
+        case .oneTime: "Events that won't repeat: the growth beyond inflation of spending whose driver counts as One-Time (One-Time Event …)"
+        case .taxes: "Taxes: the growth beyond inflation of spending whose driver counts as Taxes"
         }
     }
 }
@@ -394,7 +381,8 @@ enum SpendingEngine {
     static let unassigned = "UNASSIGNED"
 
     /// Each category's attribution (and Not assigned's, when it has spending), in the categories' order.
-    static func attribute(_ data: SpendingAnalysisData, entries: [SpendingEntry], categories: [SpendingCategory]) -> [CategoryAttribution] {
+    static func attribute(_ data: SpendingAnalysisData, entries: [SpendingEntry], setup: SpendingSetup) -> [CategoryAttribution] {
+        let categories = setup.categories
         let rates = Dictionary(data.inflation.map { ($0.category, $0) }, uniquingKeysWith: { a, _ in a })
         var prior: [String: [String: Double]] = [:], current: [String: [String: Double]] = [:]
         for e in entries {
@@ -413,7 +401,7 @@ enum SpendingEngine {
             var effects: [SpendingEffect: Double] = [.inflation: priorTotal * rate]
             for d in Set(p.keys).union(c.keys) {
                 let grew = (c[d] ?? 0) - (p[d] ?? 0) * (1 + rate)
-                effects[SpendingDriver(rawValue: d)?.effect ?? .usage, default: 0] += grew
+                effects[setup.driver(d)?.effect ?? .usage, default: 0] += grew
             }
             return CategoryAttribution(code: code, name: name, prior: priorTotal, current: c.values.reduce(0, +),
                                        inflationRate: rate, basis: inf?.basis ?? "assumed", effects: effects)
@@ -824,6 +812,36 @@ nonisolated enum SpendingClient {
     static func saveCategory(_ code: String, _ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/categories/\(code)", body: signed(body), as: SpendingSetup.self)
     }
+    static func addCategory(_ body: [String: Any]) async throws -> SpendingSetup {
+        try await AccountsClient.request("POST", "/spending/categories", body: signed(body), as: SpendingSetup.self)
+    }
+    static func categoryUsage(_ code: String) async throws -> SpendingUsage {
+        try await AccountsClient.request("GET", "/spending/categories/\(code)/usage", as: SpendingUsage.self)
+    }
+    /// Removes a category; its rules, tags, lifecycle triggers and notes move to `moveTo` first (none: they lose it).
+    static func deleteCategory(_ code: String, moveTo: String?) async throws -> SpendingSetup {
+        try await AccountsClient.request("DELETE", "/spending/categories/\(code)?moveTo=\(moveTo ?? "")&by=\(byQuery)", as: SpendingSetup.self)
+    }
+    static func orderCategories(_ codes: [String]) async throws -> SpendingSetup {
+        try await AccountsClient.request("PUT", "/spending/category-order", body: signed(["codes": codes]), as: SpendingSetup.self)
+    }
+    static func addDriver(_ body: [String: Any]) async throws -> SpendingSetup {
+        try await AccountsClient.request("POST", "/spending/drivers", body: signed(body), as: SpendingSetup.self)
+    }
+    static func saveDriver(_ code: String, _ body: [String: Any]) async throws -> SpendingSetup {
+        try await AccountsClient.request("PUT", "/spending/drivers/\(code)", body: signed(body), as: SpendingSetup.self)
+    }
+    static func driverUsage(_ code: String) async throws -> SpendingUsage {
+        try await AccountsClient.request("GET", "/spending/drivers/\(code)/usage", as: SpendingUsage.self)
+    }
+    /// Removes a driver; its rules and tags move to `moveTo` first (none: they lose their driver).
+    static func deleteDriver(_ code: String, moveTo: String?) async throws -> SpendingSetup {
+        try await AccountsClient.request("DELETE", "/spending/drivers/\(code)?moveTo=\(moveTo ?? "")&by=\(byQuery)", as: SpendingSetup.self)
+    }
+    static func orderDrivers(_ codes: [String]) async throws -> SpendingSetup {
+        try await AccountsClient.request("PUT", "/spending/driver-order", body: signed(["codes": codes]), as: SpendingSetup.self)
+    }
+    private static var byQuery: String { BankClient.by.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "" }
     static func saveRule(_ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/rules", body: signed(body), as: SpendingSetup.self)
     }

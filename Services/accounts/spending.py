@@ -6,7 +6,23 @@
     PUT    /spending/members/<id>                  a family member, created (id 0) or changed {version, name, relation,
                                                    birthYear, birthMonth, notes, active, by}
     DELETE /spending/members/<id>                  take one off (their rules and tags keep no member)
-    PUT    /spending/categories/<code>             a category's {cpiSeries, assumedInflation}
+    POST   /spending/categories                    add a category {name, code (else made from the name), description,
+                                                   cpiSeries, assumedInflation, by}; it goes last, before Other
+    PUT    /spending/categories/<code>             a category's {name, description, cpiSeries, assumedInflation, by}:
+                                                   only the fields sent change
+    GET    /spending/categories/<code>/usage       its rules, tags and lifecycle triggers, and the entries now in it
+    DELETE /spending/categories/<code>?moveTo=&by= take one off (V047): its rules, tags, lifecycle triggers and notes
+                                                   move to moveTo first (required with triggers; without it rules and
+                                                   tags lose their category)
+    PUT    /spending/category-order                {codes: [...]}: every category, in the order shown
+    POST   /spending/drivers                       add a driver (V047) {title, code (else made from the title), help,
+                                                   effect, by}; effect inflation, usage, lifecycle, behavior, one_time
+                                                   or taxes: what its growth beyond inflation counts as
+    PUT    /spending/drivers/<code>                a driver's {title, help, effect, by}: only the fields sent change
+    GET    /spending/drivers/<code>/usage          its rules and tags, and the entries it is now the driver of
+    DELETE /spending/drivers/<code>?moveTo=&by=    take one off: its rules and tags move to moveTo first (none: they
+                                                   lose their driver)
+    PUT    /spending/driver-order                  {codes: [...]}: every driver, in the order shown
     PUT    /spending/rules                         an expense account's, target account's or statement text's rule
                                                    {expenseAccountId | payeeId | pattern, id (to change a statement
                                                    text), category, driver, memberId, notes, by}; nothing set removes it
@@ -78,8 +94,8 @@
     DELETE /spending/tax/items/<id>                take one off
     PUT    /spending/tax/assign/<source>/<entryId> move a payment to {taxYear, quarter, note}; no taxYear undoes it
 
-Every setup change answers with the setup. Drivers: inflation, family_growth, new_activity, lifecycle, preference,
-lifestyle (V045), one_time, taxes (V044).
+Every setup change answers with the setup. The drivers are srm.spending_driver's (V047), with the effect each counts
+as; the setup lists them as {code, title, help, effect, sortOrder}.
 """
 
 import base64
@@ -92,7 +108,8 @@ import urllib.request
 
 from bank import fetch, nest_link, _date, _num, Conflict
 
-DRIVERS = ("inflation", "family_growth", "new_activity", "lifecycle", "preference", "lifestyle", "one_time", "taxes")
+# The attribution formula's terms, which a driver's growth beyond inflation counts toward (srm.spending_driver.effect).
+EFFECTS = ("inflation", "usage", "lifecycle", "behavior", "one_time", "taxes")
 KINDS = ("recurring", "replacement", "peak", "transition")
 SOURCES = {"bank": "bank_txn_id", "card": "card_txn_id", "ledger": "expense_entry_id"}
 
@@ -124,11 +141,16 @@ def _category(conn, body, key="category", required=False):
     return code
 
 
-def _driver(body):
+def _driver(conn, body):
     d = body.get("driver") or None
-    if d and d not in DRIVERS:
-        raise ValueError("driver must be one of " + ", ".join(DRIVERS))
+    if d and not fetch(conn, "SELECT 1 FROM srm.spending_driver WHERE code = %s", (d,)):
+        raise ValueError("no spending driver %s" % d)
     return d
+
+
+def _drivers(conn):
+    return fetch(conn, """SELECT code, title, help, effect, sort_order AS "sortOrder" FROM srm.spending_driver
+                           ORDER BY sort_order, lower(title)""")
 
 
 # ------------------------------------------------------------------------------------------------------------ setup
@@ -141,7 +163,7 @@ def setup(conn, details=False):
         SELECT member_id AS id, name, relation, birth_year AS "birthYear", birth_month AS "birthMonth", notes, active,
                version FROM srm.household_member ORDER BY relation DESC, birth_year, name""")
     categories = fetch(conn, """
-        SELECT c.code, c.name, c.cpi_series AS "cpiSeries", s.name AS "cpiName",
+        SELECT c.code, c.name, c.description, c.cpi_series AS "cpiSeries", s.name AS "cpiName",
                c.assumed_inflation AS "assumedInflation", c.sort_order AS "sortOrder",
                (SELECT max(v.obs_date) FROM srm.market_series_value v WHERE v.series_code = c.cpi_series) AS "cpiThrough"
           FROM srm.spending_category c LEFT JOIN srm.market_series s ON s.series_code = c.cpi_series
@@ -184,7 +206,7 @@ def setup(conn, details=False):
     series = fetch(conn, """
         SELECT series_code AS code, name FROM srm.market_series WHERE family = 'INFLATION' ORDER BY sort_order""")
     return {"members": members, "categories": categories, "rules": rules, "triggers": triggers,
-            "expenseAccounts": accounts, "payees": payees, "cpiSeries": series, "drivers": list(DRIVERS)}
+            "expenseAccounts": accounts, "payees": payees, "cpiSeries": series, "drivers": _drivers(conn)}
 
 
 def save_member(conn, mid, body):
@@ -227,18 +249,219 @@ def delete_member(conn, mid):
     return setup(conn, details=True)
 
 
-def save_category(conn, code, body):
-    code = code.upper()
-    if not fetch(conn, "SELECT 1 FROM srm.spending_category WHERE code = %s", (code,)):
-        raise LookupError("no spending category %s" % code)
+# ------------------------------------------------------------------------------------------------ categories and drivers
+# Both kept in the security master (V047) and changed on Spending Analysis ▸ Admin. A category's code and a driver's
+# are what rules, tags and lifecycle triggers store: made from the name when added, and never changed after.
+
+def _new_code(body, name, upper):
+    """The code a new category (A_Z) or driver (a_z) is stored by: the one sent, else its name's letters."""
+    code = (body.get("code") or "").strip() or re.sub(r"[^A-Za-z]+", "_", name).strip("_")
+    code = code.upper() if upper else code.lower()
+    if not re.fullmatch(r"[A-Z_]+" if upper else r"[a-z_]+", code):
+        raise ValueError("code is letters and _ only")
+    return code
+
+
+def _series(conn, body):
     series = (body.get("cpiSeries") or "").strip().upper() or None
     if series and not fetch(conn, "SELECT 1 FROM srm.market_series WHERE series_code = %s", (series,)):
         raise ValueError("no market series %s" % series)
+    return series
+
+
+def _rate(body):
     rate = float(body.get("assumedInflation") if body.get("assumedInflation") not in (None, "") else 0.03)
     if not -0.5 < rate < 0.5:
         raise ValueError("assumedInflation is a fraction a year (0.03 for 3%)")
-    fetch(conn, "UPDATE srm.spending_category SET cpi_series = %s, assumed_inflation = %s WHERE code = %s",
-          (series, rate, code))
+    return rate
+
+
+def _effect(body):
+    effect = body.get("effect") or ""
+    if effect not in EFFECTS:
+        raise ValueError("effect must be one of " + ", ".join(EFFECTS))
+    return effect
+
+
+def _unique(conn, table, column, value, code, what):
+    """No other category (driver) has this name, ignoring case; code: the one being changed (None: one being added)."""
+    if fetch(conn, "SELECT 1 FROM %s WHERE lower(%s) = lower(%%s) AND code IS DISTINCT FROM %%s" % (table, column),
+             (value, code)):
+        raise Conflict("there is already a %s named %s" % (what, value))
+
+
+def add_category(conn, body):
+    name = _text(body, "name", 60)
+    if not name:
+        raise ValueError("name is required")
+    _unique(conn, "srm.spending_category", "name", name, None, "category")
+    code = _new_code(body, name, upper=True)
+    if fetch(conn, "SELECT 1 FROM srm.spending_category WHERE code = %s", (code,)):
+        raise Conflict("there is already a category coded %s: give this one a code of its own" % code)
+    # Last, but before Other when Other is last.
+    last = fetch(conn, "SELECT code, sort_order FROM srm.spending_category ORDER BY sort_order DESC LIMIT 1")
+    sort = (last[0]["sort_order"] if last else 0) + 1
+    if last and last[0]["code"] == "OTHER":
+        sort -= 1
+        fetch(conn, "UPDATE srm.spending_category SET sort_order = sort_order + 1 WHERE code = 'OTHER'")
+    fetch(conn, """INSERT INTO srm.spending_category (code, name, description, cpi_series, assumed_inflation, sort_order,
+                                                      updated_by)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+          (code, name, _text(body, "description", 400), _series(conn, body), _rate(body), sort, _by(body)))
+    conn.commit()
+    return setup(conn, details=True)
+
+
+def save_category(conn, code, body):
+    """A category's name, description, CPI series and assumed inflation: only the fields sent change (Family &
+    Lifecycle sends the series and the assumption)."""
+    code = code.upper()
+    if not fetch(conn, "SELECT 1 FROM srm.spending_category WHERE code = %s", (code,)):
+        raise LookupError("no spending category %s" % code)
+    sets, params = [], []
+    if "name" in body:
+        name = _text(body, "name", 60)
+        if not name:
+            raise ValueError("name is required")
+        _unique(conn, "srm.spending_category", "name", name, code, "category")
+        sets.append("name = %s"); params.append(name)
+    if "description" in body:
+        sets.append("description = %s"); params.append(_text(body, "description", 400))
+    if "cpiSeries" in body:
+        sets.append("cpi_series = %s"); params.append(_series(conn, body))
+    if "assumedInflation" in body:
+        sets.append("assumed_inflation = %s"); params.append(_rate(body))
+    if sets:
+        fetch(conn, "UPDATE srm.spending_category SET %s, updated_by = %%s, updated_at = now() WHERE code = %%s"
+              % ", ".join(sets), params + [_by(body), code])
+    conn.commit()
+    return setup(conn, details=True)
+
+
+# What stores a category, and the column that does.
+CATEGORY_USES = (("rules", "srm.spending_rule"), ("tags", "srm.spending_tag"), ("lifecycle triggers", "srm.lifecycle_trigger"))
+DRIVER_USES = (("rules", "srm.spending_rule"), ("tags", "srm.spending_tag"))
+
+
+def category_usage(conn, code):
+    code = code.upper()
+    rows = fetch(conn, "SELECT name FROM srm.spending_category WHERE code = %s", (code,))
+    if not rows:
+        raise LookupError("no spending category %s" % code)
+    uses = {what: fetch(conn, "SELECT count(*) AS n FROM %s WHERE category_code = %%s" % table, (code,))[0]["n"]
+            for what, table in CATEGORY_USES}
+    now = fetch(conn, "SELECT count(*) AS n, coalesce(sum(amount), 0) AS amount FROM srm.v_spending_entry "
+                      "WHERE category_code = %s", (code,))[0]
+    return {"code": code, "name": rows[0]["name"], "uses": uses, "inUse": sum(uses.values()), "entries": now["n"],
+            "amount": float(now["amount"])}
+
+
+def driver_usage(conn, code):
+    rows = fetch(conn, "SELECT title FROM srm.spending_driver WHERE code = %s", (code,))
+    if not rows:
+        raise LookupError("no spending driver %s" % code)
+    uses = {what: fetch(conn, "SELECT count(*) AS n FROM %s WHERE driver = %%s" % table, (code,))[0]["n"]
+            for what, table in DRIVER_USES}
+    now = fetch(conn, "SELECT count(*) AS n, coalesce(sum(amount), 0) AS amount FROM srm.v_spending_entry "
+                      "WHERE driver = %s", (code,))[0]
+    return {"code": code, "name": rows[0]["title"], "uses": uses, "inUse": sum(uses.values()), "entries": now["n"],
+            "amount": float(now["amount"])}
+
+
+def _drop_empty(conn):
+    """Rules and tags that set nothing once a category or driver came off them (a rule with a link keeps it)."""
+    fetch(conn, """DELETE FROM srm.spending_tag WHERE category_code IS NULL AND driver IS NULL AND member_id IS NULL
+                      AND event IS NULL AND notes IS NULL""")
+    fetch(conn, """DELETE FROM srm.spending_rule r WHERE category_code IS NULL AND driver IS NULL AND member_id IS NULL
+                      AND notes IS NULL AND NOT EXISTS (SELECT 1 FROM srm.spending_rule_link l WHERE l.rule_id = r.rule_id)""")
+
+
+def delete_category(conn, code, q):
+    """Takes a category off. Its rules, tags, lifecycle triggers and family-page notes move to moveTo first (required
+    when it has triggers, which always have a category); with no moveTo its rules and tags lose their category."""
+    usage = category_usage(conn, code)
+    code, by = usage["code"], str(q.get("by") or "MxAcctMGR")[:80]
+    move_to = (q.get("moveTo") or "").strip().upper() or None
+    if move_to and (move_to == code or not fetch(conn, "SELECT 1 FROM srm.spending_category WHERE code = %s", (move_to,))):
+        raise ValueError("moveTo must be another category")
+    if usage["uses"]["lifecycle triggers"] and not move_to:
+        raise ValueError("%s has lifecycle triggers: choose a category to move them to" % usage["name"])
+    if fetch(conn, "SELECT count(*) AS n FROM srm.spending_category")[0]["n"] <= 1:
+        raise ValueError("%s is the only category" % usage["name"])
+    for _, table in CATEGORY_USES:
+        fetch(conn, "UPDATE %s SET category_code = %%s, updated_by = %%s, updated_at = now() WHERE category_code = %%s"
+              % table, (move_to, by, code))
+    if move_to:
+        fetch(conn, "UPDATE srm.spending_feedback SET category_code = %s WHERE category_code = %s", (move_to, code))
+    _drop_empty(conn)
+    fetch(conn, "DELETE FROM srm.spending_category WHERE code = %s", (code,))
+    conn.commit()
+    return setup(conn, details=True)
+
+
+def add_driver(conn, body):
+    title = _text(body, "title", 60)
+    if not title:
+        raise ValueError("title is required")
+    _unique(conn, "srm.spending_driver", "title", title, None, "driver")
+    code = _new_code(body, title, upper=False)
+    if fetch(conn, "SELECT 1 FROM srm.spending_driver WHERE code = %s", (code,)):
+        raise Conflict("there is already a driver coded %s: give this one a code of its own" % code)
+    sort = fetch(conn, "SELECT coalesce(max(sort_order), 0) + 1 AS n FROM srm.spending_driver")[0]["n"]
+    fetch(conn, """INSERT INTO srm.spending_driver (code, title, help, effect, sort_order, updated_by)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+          (code, title, _text(body, "help", 400), _effect(body), sort, _by(body)))
+    conn.commit()
+    return setup(conn, details=True)
+
+
+def save_driver(conn, code, body):
+    """A driver's title, what it means and the effect it counts as: only the fields sent change."""
+    if not fetch(conn, "SELECT 1 FROM srm.spending_driver WHERE code = %s", (code,)):
+        raise LookupError("no spending driver %s" % code)
+    sets, params = [], []
+    if "title" in body:
+        title = _text(body, "title", 60)
+        if not title:
+            raise ValueError("title is required")
+        _unique(conn, "srm.spending_driver", "title", title, code, "driver")
+        sets.append("title = %s"); params.append(title)
+    if "help" in body:
+        sets.append("help = %s"); params.append(_text(body, "help", 400))
+    if "effect" in body:
+        sets.append("effect = %s"); params.append(_effect(body))
+    if sets:
+        fetch(conn, "UPDATE srm.spending_driver SET %s, updated_by = %%s, updated_at = now() WHERE code = %%s"
+              % ", ".join(sets), params + [_by(body), code])
+    conn.commit()
+    return setup(conn, details=True)
+
+
+def delete_driver(conn, code, q):
+    """Takes a driver off. Its rules and tags move to moveTo first; with none they lose their driver (and then count
+    as usage)."""
+    usage = driver_usage(conn, code)
+    by = str(q.get("by") or "MxAcctMGR")[:80]
+    move_to = (q.get("moveTo") or "").strip() or None
+    if move_to and (move_to == code or not fetch(conn, "SELECT 1 FROM srm.spending_driver WHERE code = %s", (move_to,))):
+        raise ValueError("moveTo must be another driver")
+    for _, table in DRIVER_USES:
+        fetch(conn, "UPDATE %s SET driver = %%s, updated_by = %%s, updated_at = now() WHERE driver = %%s" % table,
+              (move_to, by, code))
+    _drop_empty(conn)
+    fetch(conn, "DELETE FROM srm.spending_driver WHERE code = %s", (usage["code"],))
+    conn.commit()
+    return setup(conn, details=True)
+
+
+def set_order(conn, table, body):
+    """Every category's or driver's place, as the codes are listed."""
+    codes = [str(c) for c in body.get("codes") or []]
+    have = {r["code"] for r in fetch(conn, "SELECT code FROM %s" % table)}
+    if len(codes) != len(have) or set(codes) != have:
+        raise ValueError("codes must list each one once")
+    for n, c in enumerate(codes, 1):
+        fetch(conn, "UPDATE %s SET sort_order = %%s WHERE code = %%s" % table, (n, c))
     conn.commit()
     return setup(conn, details=True)
 
@@ -251,7 +474,7 @@ def save_rule(conn, body):
     if pattern is not None:
         return _save_text_rule(conn, body, pattern)
     key, value = ("expense_account_id", account) if account is not None else ("payee_id", payee)
-    category, driver, member = _category(conn, body), _driver(body), _opt_int(body, "memberId")
+    category, driver, member = _category(conn, body), _driver(conn, body), _opt_int(body, "memberId")
     notes = _text(body, "notes", 1000)
     if not (category or driver or member or notes):
         fetch(conn, "DELETE FROM srm.spending_rule WHERE %s = %%s" % key, (value,))
@@ -271,7 +494,7 @@ def _save_text_rule(conn, body, pattern):
     ignoring case. With an id it changes that rule, its text included."""
     if len(pattern) < 3:
         raise ValueError("statement text is at least 3 characters")
-    category, driver, member = _category(conn, body), _driver(body), _opt_int(body, "memberId")
+    category, driver, member = _category(conn, body), _driver(conn, body), _opt_int(body, "memberId")
     notes = _text(body, "notes", 1000)
     rid = _opt_int(body, "id")
     if rid:
@@ -368,7 +591,7 @@ def save_tag(conn, source, entry_id, body):
     if not column:
         raise ValueError("source must be bank, card or ledger")
     entry_id = int(entry_id)
-    category, driver, member = _category(conn, body), _driver(body), _opt_int(body, "memberId")
+    category, driver, member = _category(conn, body), _driver(conn, body), _opt_int(body, "memberId")
     event, notes = _text(body, "event", 120), _text(body, "notes", 1000)
     if body.get("merge"):
         # Only the fields sent change; the rest of the entry's own tag stays (MxAcctMGR's Entries: Set Category or
@@ -1181,9 +1404,6 @@ def assign_tax(conn, source, entry_id, body):
 # The family page's own changes (V041): an entry's category or driver (its tag) and a lifecycle trigger's category or
 # kind. Each is applied at once and listed for John as a 'change' note that MxAcctMGR can undo.
 
-DRIVER_TITLES = {"inflation": "Inflation", "family_growth": "Family Growth", "new_activity": "New Activity",
-                 "lifecycle": "Lifecycle Transition", "preference": "Preference Change",
-                 "lifestyle": "Lifestyle & Hobbies", "one_time": "One-Time Event", "taxes": "Taxes"}
 KIND_TITLES = {"recurring": "Recurring", "replacement": "Replacement", "peak": "Peak event", "transition": "Transition"}
 TAG_COLUMN = {"category": "category_code", "driver": "driver"}
 
@@ -1239,12 +1459,12 @@ def change_entry(conn, source, entry_id, body, client=None):
     if "category" in fields:
         values["category_code"] = _category(conn, body)            # empty: follow the rules again
     if "driver" in fields:
-        values["driver"] = _driver(body)
+        values["driver"] = _driver(conn, body)
     _write_tag(conn, column, entry_id, values, _signed(author))
     after = fetch(conn, _entry_sql(conn) + " WHERE source = %s AND entry_id = %s", (source, entry_id))[0]
-    names = _names(conn)
+    names, titles = _names(conn), {d["code"]: d["title"] for d in _drivers(conn)}
     show = {"category": lambda v: names.get(v, "Not assigned") if v else "Not assigned",
-            "driver": lambda v: DRIVER_TITLES.get(v, "no driver") if v else "no driver"}
+            "driver": lambda v: titles.get(v, "no driver") if v else "no driver"}
     what = "%s %s %s" % (entry["date"].strftime("%m/%d/%Y"), entry["payee"] or entry["description"] or "", "${:,.2f}".format(float(entry["amount"])))
     for f in fields:
         old, new = entry[f], after[f]
@@ -1496,8 +1716,28 @@ def route(conn, method, parts, body, q):
             return save_member(conn, parts[2], body)
         if method == "DELETE":
             return delete_member(conn, parts[2])
-    if len(parts) == 3 and parts[1] == "categories" and method == "PUT":
-        return save_category(conn, parts[2], body)
+    if parts == ["spending", "categories"] and method == "POST":
+        return add_category(conn, body)
+    if len(parts) == 3 and parts[1] == "categories":
+        if method == "PUT":
+            return save_category(conn, parts[2], body)
+        if method == "DELETE":
+            return delete_category(conn, parts[2], q)
+    if len(parts) == 4 and parts[1] == "categories" and parts[3] == "usage" and method == "GET":
+        return category_usage(conn, parts[2])
+    if parts == ["spending", "category-order"] and method == "PUT":
+        return set_order(conn, "srm.spending_category", body)
+    if parts == ["spending", "drivers"] and method == "POST":
+        return add_driver(conn, body)
+    if len(parts) == 3 and parts[1] == "drivers":
+        if method == "PUT":
+            return save_driver(conn, parts[2], body)
+        if method == "DELETE":
+            return delete_driver(conn, parts[2], q)
+    if len(parts) == 4 and parts[1] == "drivers" and parts[3] == "usage" and method == "GET":
+        return driver_usage(conn, parts[2])
+    if parts == ["spending", "driver-order"] and method == "PUT":
+        return set_order(conn, "srm.spending_driver", body)
     if len(parts) == 3 and parts[1] == "triggers":
         if method == "PUT":
             return save_trigger(conn, parts[2], body)

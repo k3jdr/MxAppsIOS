@@ -6,14 +6,15 @@
 const BASE = location.pathname.replace(/\/[^/]*$/, "");   // /s/<key>
 const UNASSIGNED = "UNASSIGNED";
 const EFFECTS = [
-  { id: "inflation", name: "Inflation", color: "var(--inflation)", help: "Prices: last year's spending times the category's CPI change, plus what spending tagged Inflation grew beyond it" },
-  { id: "usage", name: "Usage", color: "var(--usage)", help: "More (or less) of the same: family growth, new activities, and spending with no driver assigned" },
-  { id: "lifecycle", name: "Lifecycle", color: "var(--lifecycle)", help: "Expected age-related costs: what spending tagged Lifecycle Transition grew beyond inflation" },
-  { id: "behavior", name: "Behavior", color: "var(--behavior)", help: "Habits, tastes and hobbies: what spending tagged Preference Change or Lifestyle & Hobbies grew beyond inflation" },
-  { id: "oneTime", name: "One-Time", color: "var(--onetime)", help: "Events that won't repeat: what spending tagged One-Time Event grew beyond inflation" },
-  { id: "taxes", name: "Taxes", color: "var(--taxes)", help: "Taxes: what spending tagged Taxes grew beyond inflation" },
+  { id: "inflation", name: "Inflation", color: "var(--inflation)", help: "Prices: last year's spending times the category's CPI change, plus what spending whose driver counts as Inflation grew beyond it" },
+  { id: "usage", name: "Usage", color: "var(--usage)", help: "More (or less) of the same: what spending whose driver counts as Usage (Family Growth, New Activity …), and spending with no driver, grew beyond inflation" },
+  { id: "lifecycle", name: "Lifecycle", color: "var(--lifecycle)", help: "Expected age-related costs: what spending whose driver counts as Lifecycle (Lifecycle Transition …) grew beyond inflation" },
+  { id: "behavior", name: "Behavior", color: "var(--behavior)", help: "Habits, tastes and hobbies: what spending whose driver counts as Behavior (Preference Change, Lifestyle & Hobbies …) grew beyond inflation" },
+  { id: "oneTime", name: "One-Time", color: "var(--onetime)", help: "Events that won't repeat: what spending whose driver counts as One-Time (One-Time Event …) grew beyond inflation" },
+  { id: "taxes", name: "Taxes", color: "var(--taxes)", help: "Taxes: what spending whose driver counts as Taxes grew beyond inflation" },
 ];
-const DRIVERS = {
+// The drivers until the setup gives them (srm.spending_driver, V047, changed in MxAcctMGR's Admin): useDrivers.
+let DRIVERS = {
   inflation: { title: "Inflation", effect: "inflation", help: "The same thing costs more" },
   family_growth: { title: "Family Growth", effect: "usage", help: "More people, more of the same things" },
   new_activity: { title: "New Activity", effect: "usage", help: "Something the family didn't do before" },
@@ -23,7 +24,8 @@ const DRIVERS = {
   one_time: { title: "One-Time Event", effect: "oneTime", help: "An event that won't repeat" },
   taxes: { title: "Taxes", effect: "taxes", help: "Taxes changed: real estate, income, local or sales taxes and their fees" },
 };
-const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#5c6bc0", "#16a085", "#8d6e63", "#a0a0a0"];
+const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#5c6bc0", "#16a085", "#8d6e63", "#2ecc71", "#c0392b", "#f1c40f", "#34495e"];
+const driverColor = (d, i) => d ? DRIVER_COLORS[i % DRIVER_COLORS.length] : "#a0a0a0";   // "": no driver
 const CHILD_COLORS = ["#2e86de", "#e67e22", "#8e44ad", "#16a085", "#d6336c", "#b9770e"];
 const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["curve", "Forward Curve"], ["tax", "Year-End Tax"], ["entries", "Entries"],
               ["rules", "Rules"], ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
@@ -105,9 +107,17 @@ async function load() {
   try {
     const [setup, data, sources] = await Promise.all([api("setup"), api("analysis?" + q), api("sources?" + q)]);
     Object.assign(S, { setup, data, sources, problem: null });
+    useDrivers(setup.drivers);
     await loadNotes();
   } catch (e) { S.problem = e.message; }
   S.busy = false; render();
+}
+
+// The setup's drivers, {code, title, help, effect} (an older accounts service sends only their codes: the built-in
+// list stays).
+function useDrivers(list) {
+  if (!Array.isArray(list) || !list.length || typeof list[0] !== "object") return;
+  DRIVERS = Object.fromEntries(list.map(d => [d.code, { title: d.title, effect: d.effect === "one_time" ? "oneTime" : d.effect, help: d.help ?? "" }]));
 }
 
 // Her notes and changes: under the name given for notes, else the changes signed "Family page".
@@ -388,9 +398,9 @@ function attributionTab() {
   const cols = order.map(code => {
     const mine = now.filter(e => (e.category ?? UNASSIGNED) === code); if (!mine.length) return null;
     const by = group(mine, e => e.driver ?? "");
-    return { label: catName(code), cat: code, segs: drv.filter(d => by[d]).map(d => ({ name: driverTitle(d || null), value: by[d].reduce((a, e) => a + e.amount, 0), color: DRIVER_COLORS[drv.indexOf(d)] })) };
+    return { label: catName(code), cat: code, segs: drv.filter(d => by[d]).map(d => ({ name: driverTitle(d || null), value: by[d].reduce((a, e) => a + e.amount, 0), color: driverColor(d, drv.indexOf(d)) })) };
   }).filter(Boolean);
-  h += box("This Year by Category and Driver", columns({ cols, catAttr: true }) + legend(drv.map((d, i) => [driverTitle(d || null), DRIVER_COLORS[i]])),
+  h += box("This Year by Category and Driver", columns({ cols, catAttr: true }) + legend(drv.map((d, i) => [driverTitle(d || null), driverColor(d, i)])),
     { help: "Click a category's bar or name for its deep dive" });
   h += box("Inflation by Category", `<div class="scroll"><table><tr><th class="l">Category</th><th>Change</th><th class="l">Basis</th><th class="l">Series</th></tr>
     ${S.data.inflation.map(i => `<tr><td class="l">${esc(catName(i.category))}</td><td>${signedPct(i.rate, 1)}</td><td class="l">${i.basis === "CPI" ? `CPI, ${i.months} months to ${day(i.through)}` : `assumed ${pct(i.assumed, 1)} a year`}</td><td class="l muted">${esc(S.setup.categories.find(c => c.code === i.category)?.cpiName ?? "—")}</td></tr>`).join("")}</table></div>`);

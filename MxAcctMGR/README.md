@@ -702,10 +702,22 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - **Expense Accounts**: every expense account with its description, its rule (category · driver · family member;
     orange when it has none) and this year's spending and entries, with **Edit…** (name, description), **Rule…** and
     **Remove…** on each and **New Expense Account…**, the same sheets as the Rules tab's;
+  - **Spending Categories** (V047): every category in order with what it covers, its CPI series, its assumed rate, this
+    year's spending and entries and the rules and lifecycle triggers that set it, with **Edit…** (name, what it covers,
+    CPI series, assumed rate) and **Remove…** on each, **New Category…** (it goes before Other) and arrows that set the
+    order the page lists them in. A new category's code (what rules, tags and triggers store: letters and _) is made
+    from its name unless one is typed, and never changes. **Remove…** says what sets it and what is in it now and moves
+    its rules, tags, lifecycle triggers and family-page notes to the category chosen (required when it has triggers;
+    with *Not assigned* its rules and tags lose their category). Not assigned spending shows in orange;
+  - **Spending Drivers** (V047): every driver in order with what it means, the effect it **counts as** (Inflation,
+    Usage, Lifecycle, Behavior, One-Time or Taxes: the formula's terms, which stay fixed) and this year's spending,
+    entries and rules, with **Edit…** (title, meaning, effect), **Remove…**, **New Driver…** and the arrows; *No
+    driver* counts as Usage. **Remove…** moves its rules and tags to the driver chosen, or to none. Every menu, table
+    and chart of drivers (Entries, Rules, the Tag sheet, Deep Dive, the family page) lists the drivers as they are kept
+    here, in this order;
   - **Driver & Category**: a category is what the money bought (its CPI decides the inflation part), a driver why the
     spending changed (it decides the effect); they are independent, and each comes from the first of the entry's tag,
-    its target account's rule, a statement text rule and its expense account's rule. A table says what each driver
-    counts as. **This Year: Category × Driver** shows this year's spending in both, spending with no driver or category
+    its target account's rule, a statement text rule and its expense account's rule. **This Year: Category × Driver** shows this year's spending in both, spending with no driver or category
     in orange; a click on a cell lists what put its entries there (category from, driver from) with *Rule…* to change
     it, and its largest entries.
   - **Target Accounts & Expense Ledgers**: a target account is who was paid, an expense ledger what it was for; one
@@ -872,6 +884,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
 | `SpendingExpenseAccounts.swift` | Spending Analysis ▸ Rules: New Expense Account… and Edit Expense Account… (with a new one's spending rule), and Remove Expense Account… with what files under it and where it moves |
-| `SpendingAdminView.swift` | Spending Analysis ▸ Admin: the Expense Accounts list with Edit…, Rule… and Remove…, the Driver & Category guide with the Category × Driver table and its cells' origins, and the Target Accounts & Expense Ledgers guide with the Counted Twice finder and its links |
+| `SpendingCategoriesDrivers.swift` | Spending Analysis ▸ Admin: New / Edit Category… and New / Edit Driver… (a new one's code made from its name), and Remove Category… / Remove Driver… with what sets it, what is in it now and where its rules, tags and triggers move |
+| `SpendingAdminView.swift` | Spending Analysis ▸ Admin: the Expense Accounts list with Edit…, Rule… and Remove…, the Spending Categories and Spending Drivers lists with Edit…, Remove…, New… and their order, the Driver & Category guide with the Category × Driver table and its cells' origins, and the Target Accounts & Expense Ledgers guide with the Counted Twice finder and its links |
 | `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |
