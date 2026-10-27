@@ -478,6 +478,44 @@ enum SpendingEngine {
 /// Where the analysis's data comes from (Sources tab): each register, whether it is included, its drop folders and
 /// downloads, the tables its data lands in, its last import and its spending in both periods; every SRM table and view
 /// the analysis reads with its rows, newest data and last change; and the download and CPI loaders' last runs.
+/// Sources ▸ Transfers & Income (GET /spending/transfers): target accounts left out of the analysis as moving money
+/// (filed under a transfer or income account), the ones that look like they should be, and the accounts to file under.
+struct SpendingTransfers: Decodable {
+    struct Why: Decodable, Hashable { var kind: String; var text: String }
+    struct Target: Decodable, Identifiable, Hashable {
+        var id: Int
+        var name: String
+        var expenseAccountId: Int?
+        var expenseAccount: String?
+        /// Its account's kind: expense, income or transfer (nil: no category).
+        var kind: String?
+        var entries: Int
+        var lastDate: String?
+        /// What it moved in each period, signed as spending: paid out positive, came in negative.
+        var now: Double
+        var before: Double
+        var paidOut: Double
+        var cameIn: Double
+        var cards: [String]?
+        var ledgers: [String]?
+        /// A suggestion's reasons; certain when a card is paid with it or a cash ledger funded from it.
+        var why: [Why]?
+        var certain: Bool?
+        /// transfer or income.
+        var suggest: String?
+    }
+    struct Account: Decodable, Identifiable, Hashable { var id: Int; var name: String; var kind: String }
+    struct Refiled: Decodable, Hashable { var id: Int; var entries: Int }
+    var start: String
+    var end: String
+    var priorStart: String
+    var priorEnd: String
+    var leftOut: [Target]
+    var suggested: [Target]
+    var accounts: [Account]
+    var refiled: Refiled?
+}
+
 /// What disconnecting a spending source undoes and keeps (GET /spending/sources/<source>/<code>/links).
 struct SourceLinks: Decodable {
     struct Link: Decodable, Hashable { var kind: String; var what: String; var count: Int }
@@ -905,6 +943,16 @@ nonisolated enum SpendingClient {
     static func include(_ s: SpendingSources.Source, _ included: Bool, window: SpendingSources) async throws -> SpendingSources {
         try await AccountsClient.request("PUT", "/spending/sources/\(s.source)/\(s.code)?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          body: signed(["included": included]), as: SpendingSources.self)
+    }
+    static func transfers(window: SpendingSources) async throws -> SpendingTransfers {
+        try await AccountsClient.request("GET", "/spending/transfers?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
+                                         as: SpendingTransfers.self)
+    }
+    /// Files a target account and its checks and card entries under an account: a transfer or income account leaves
+    /// them out of the analysis, an expense account puts them back.
+    static func fileTarget(_ id: Int, under account: Int, window: SpendingSources) async throws -> SpendingTransfers {
+        try await AccountsClient.request("PUT", "/spending/transfers/\(id)?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
+                                         body: signed(["expenseAccountId": account]), as: SpendingTransfers.self)
     }
     /// What disconnecting a source undoes (its links to the other sources), and what stays.
     static func sourceLinks(_ s: SpendingSources.Source) async throws -> SourceLinks {

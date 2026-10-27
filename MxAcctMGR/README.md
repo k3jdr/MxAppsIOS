@@ -709,6 +709,17 @@ from one year to the next and forecasts what the children's ages bring. Everythi
 
     A checking account none of whose entries is in an expense account says that none of it counts as spending (card
     payments and transfers aren't).
+  - **Transfers & Income (Not Spending):** money moved between your own accounts, or coming in, isn't spending and
+    would count a dollar twice: the check that pays a card (its charges count on the card), the transfer that funds a
+    cash ledger (its items count), a move to savings or an investment, pay and deposits. A target account filed under
+    a *transfer* or *income* expense account (Transfers; Salary & Wages, Interest & Dividends, Other Income) is left
+    out with its checks and card entries. The box lists those (*Put Back Under…* an expense account brings one back),
+    and suggests the target accounts still in the analysis that look like they should be left out — certain, in bold,
+    when a card is paid with it or a cash ledger is funded from it; else by its name (Tx to / Tx fr, ACH, Vanguard
+    buys and sells, HYSA, Venmo, Zelle, Pay [x…] as income, deposits) — with both periods' amounts and why. *File
+    Under…* files the target account and its entries (a card's payments aside) under the account picked, the
+    suggested one marked; *File the N Certain Under Transfers* does the certain ones at once. The analysis reads again
+    after each (`GET` / `PUT /spending/transfers`).
   - **Amazon Orders** (V046): where Amazon's order export comes from — amazon.com ▸ Account ▸ Request Your Data ▸
     Your Orders; Amazon e-mails a link to a zip — its drop folder (`amazon_orders.local.json`, else `src-amazon`) and
     the exports there; the tables it lands in (`srm.amazon_order` → shipments, items → `srm.amazon_match` →

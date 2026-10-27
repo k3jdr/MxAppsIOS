@@ -538,6 +538,8 @@ private struct LedgerTargetGuide: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text("A linked entry shows a card or bank mark in the ledger's register. Linking changes nothing in the ledger's balance: the item is still bought on its budget line.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("Checks can count twice too: the one that pays a card (its charges count on the card), a transfer that funds a cash ledger, a move to savings or an investment. Sources ▸ Transfers & Income leaves them out by filing their target accounts under Transfers or an income account.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("Open Cash Ledger") { go(.expenseLedgers) }
                 Button("Open Target Accounts") { go(.expenses) }

@@ -54,6 +54,15 @@
                                                    newest data and last change
     PUT    /spending/sources/<source>/<code>       include or leave out a register {included, by} (source bank, card
                                                    or ledger); answers with the sources
+    GET    /spending/transfers?start=&end=&priorStart=&priorEnd=
+                                                   target accounts left out of the analysis because their category is a
+                                                   transfer or income account (what moved each period), the ones that
+                                                   look like they should be (each with why: a card is paid with it, a
+                                                   cash ledger is funded from it, its name), and the accounts to file
+                                                   them under
+    PUT    /spending/transfers/<payeeId>           file a target account and its checks and card entries under
+                                                   {expenseAccountId, by}: a transfer or income account leaves them out,
+                                                   an expense account puts them back; answers as GET, with `refiled`
     GET    /spending/sources/<source>/<code>/links what disconnecting it undoes (its links to the other sources) and
                                                    what stays with its register
     POST   /spending/sources/<source>/<code>/disconnect
@@ -1161,6 +1170,96 @@ def set_source(conn, source, code, body, q):
     return sources(conn, q)
 
 
+# ------------------------------------------------------------------------------------------------- transfers and income
+# A target account filed under a transfer or income account (srm.expense_account.kind) is not spending: the view leaves
+# its checks and card entries out. Sources ▸ Transfers & Income lists those and suggests the ones that would count a
+# dollar twice — the target account checking pays a card with (its charges count), a cash ledger's funding account
+# (its items count), and names that look like moving money: transfers, investment buys and sells, pay and deposits.
+
+TRANSFER_NAME = re.compile(r"^tx\b|\btransfer\b|\bach\b|\bvanguard (buy|sell)\b|\bzelle\b|\bvenmo\b|\bhysa\b", re.I)
+PAY_NAME = re.compile(r"\bpay \[|\bpayroll\b|\bsalary\b|\bdirect dep", re.I)
+DEPOSIT_NAME = re.compile(r"\bdeposit\b", re.I)
+# What each target account moved, signed as spending: a check out is positive, a deposit in negative.
+TARGET_ACTIVITY = """
+    SELECT payee_id, txn_date, -amount AS spent FROM srm.bank_txn WHERE status <> 'void' AND payee_id IS NOT NULL
+    UNION ALL
+    SELECT payee_id, txn_date, amount FROM srm.card_txn WHERE status <> 'void' AND kind <> 'payment' AND payee_id IS NOT NULL"""
+
+
+def transfers(conn, q):
+    start, end, prior_start, prior_end = _window(q)
+    rows = fetch(conn, """
+        WITH act AS (%s)
+        SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount",
+               e.kind, count(a.payee_id) AS entries, max(a.txn_date) AS "lastDate",
+               coalesce(sum(a.spent) FILTER (WHERE a.txn_date BETWEEN %%s AND %%s), 0) AS now,
+               coalesce(sum(a.spent) FILTER (WHERE a.txn_date BETWEEN %%s AND %%s), 0) AS before,
+               coalesce(sum(a.spent) FILTER (WHERE a.spent > 0), 0) AS "paidOut",
+               coalesce(-sum(a.spent) FILTER (WHERE a.spent < 0), 0) AS "cameIn",
+               (SELECT array_agg(c.code ORDER BY c.code) FROM srm.card_account c WHERE c.payee_id = p.payee_id) AS cards,
+               (SELECT array_agg(l.code ORDER BY l.code) FROM srm.expense_ledger l WHERE p.payee_id = ANY (l.funding_payees)) AS ledgers
+          FROM srm.payee p
+          LEFT JOIN srm.expense_account e ON e.expense_account_id = p.expense_account_id
+          LEFT JOIN act a ON a.payee_id = p.payee_id
+         GROUP BY p.payee_id, e.expense_account_id
+        HAVING count(a.payee_id) > 0""" % TARGET_ACTIVITY, (start, end, prior_start, prior_end))
+    left_out, suggested = [], []
+    for r in rows:
+        for k in ("now", "before", "paidOut", "cameIn"):
+            r[k] = float(r[k])
+        if r["kind"] in ("transfer", "income"):
+            left_out.append(r)
+            continue
+        why = []
+        if r["cards"]:
+            why.append({"kind": "card", "text": "checking pays %s with it: its charges count on the card" % ", ".join(r["cards"])})
+        if r["ledgers"]:
+            why.append({"kind": "ledger", "text": "it funds %s: the ledger's items count" % ", ".join(r["ledgers"])})
+        if PAY_NAME.search(r["name"]):
+            why.append({"kind": "pay", "text": "its name looks like pay coming in"})
+        elif TRANSFER_NAME.search(r["name"]):
+            why.append({"kind": "name", "text": "its name looks like money moved between accounts"})
+        elif DEPOSIT_NAME.search(r["name"]):
+            why.append({"kind": "deposit", "text": "its name looks like a deposit"})
+        if not why:
+            continue
+        kinds = {w["kind"] for w in why}
+        r["why"] = why
+        r["certain"] = bool(kinds & {"card", "ledger"})
+        r["suggest"] = "income" if kinds == {"pay"} else "transfer"
+        suggested.append(r)
+    left_out.sort(key=lambda r: (-abs(r["now"]) - abs(r["before"]), r["name"].lower()))
+    suggested.sort(key=lambda r: (not r["certain"], -(r["paidOut"] + r["cameIn"]), r["name"].lower()))
+    accounts = fetch(conn, """SELECT expense_account_id AS id, name, kind FROM srm.expense_account
+                               ORDER BY kind <> 'transfer', kind <> 'income', sort_order, name""")
+    return {"start": start, "end": end, "priorStart": prior_start, "priorEnd": prior_end,
+            "leftOut": left_out, "suggested": suggested, "accounts": accounts}
+
+
+def file_target(conn, pid, body, q):
+    """Files a target account, and its checks and card entries (a card's payments aside), under an expense account:
+    a transfer or income account leaves them out of the analysis, an expense account puts them back."""
+    pid = int(pid)
+    account = _opt_int(body, "expenseAccountId")
+    if account is None or not fetch(conn, "SELECT 1 FROM srm.expense_account WHERE expense_account_id = %s", (account,)):
+        raise ValueError("expenseAccountId must be an expense account")
+    by = _by(body)
+    if not fetch(conn, """UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now()
+                           WHERE payee_id = %s RETURNING payee_id""", (account, by, pid)):
+        raise LookupError("no target account %s" % pid)
+    refiled = len(fetch(conn, """UPDATE srm.bank_txn SET expense_account_id = %s, version = version + 1, updated_by = %s,
+                                        updated_at = now()
+                                  WHERE payee_id = %s AND status <> 'void' AND expense_account_id IS DISTINCT FROM %s
+                              RETURNING txn_id""", (account, by, pid, account)))
+    refiled += len(fetch(conn, """UPDATE srm.card_txn SET expense_account_id = %s, version = version + 1, updated_by = %s,
+                                         updated_at = now()
+                                   WHERE payee_id = %s AND status <> 'void' AND kind <> 'payment'
+                                     AND expense_account_id IS DISTINCT FROM %s
+                               RETURNING txn_id""", (account, by, pid, account)))
+    conn.commit()
+    return dict(transfers(conn, q), refiled={"id": pid, "entries": refiled})
+
+
 # ------------------------------------------------------------------------------------------------- disconnect, reconnect
 # A source taken out of Spending Analysis keeps its register (V049); its links to the other sources are undone and
 # kept in srm.source_link, to put back when it is reconnected.
@@ -1804,6 +1903,10 @@ def route(conn, method, parts, body, q):
         return sources(conn, q)
     if len(parts) == 4 and parts[1] == "sources" and method == "PUT":
         return set_source(conn, parts[2], parts[3], body, q)
+    if parts == ["spending", "transfers"] and method == "GET":
+        return transfers(conn, q)
+    if len(parts) == 3 and parts[1] == "transfers" and method == "PUT":
+        return file_target(conn, parts[2], body, q)
     if len(parts) == 5 and parts[1] == "sources" and parts[4] == "links" and method == "GET":
         return source_links(conn, parts[2], parts[3])
     if len(parts) == 5 and parts[1] == "sources" and parts[4] in ("disconnect", "reconnect") and method == "POST":

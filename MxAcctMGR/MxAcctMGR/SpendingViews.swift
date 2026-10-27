@@ -1745,6 +1745,11 @@ private struct SpendingSourcesTab: View {
                 }
             }
         }
+        TransfersBox(window: sources) {
+            if let s = try? await SpendingClient.sources(start: sources.start, end: sources.end, priorStart: sources.priorStart, priorEnd: sources.priorEnd) {
+                changed(s)
+            }
+        }
         if let a = sources.amazon { amazonBox(a) }
         tablesBox
         loadsBox
@@ -2151,6 +2156,160 @@ private struct SpendingSourcesTab: View {
 /// The page's tabs as a row of buttons, each as wide as its name. A segmented picker of seven tabs redrew every
 /// segment as wide as the widest name after a tab change; the row then outgrew the page and, centered, slid under
 /// the sidebar.
+/// Sources ▸ Transfers & Income: target accounts left out of the analysis as moving money rather than spending it
+/// (filed under a transfer or income account), and the ones that look like they should be — the one checking pays a
+/// card with (its charges count on the card), a cash ledger's funding account (its items count), names of transfers,
+/// investment buys and sells, pay and deposits — each filed from here, with its checks and card entries.
+private struct TransfersBox: View {
+    var window: SpendingSources
+    /// A target account was filed: the analysis is read again.
+    var filed: () async -> Void
+    @State private var data: SpendingTransfers?
+    @State private var problem: String?
+    @State private var notice: String?
+    @State private var saving: Int?
+    @State private var showAll = false
+
+    var body: some View {
+        Box(title: "Transfers & Income (Not Spending)", symbol: "arrow.left.arrow.right", help: "Money moved between your own accounts, or coming in, isn't spending, and counting it would count a dollar twice: a check that pays a card (its charges count on the card), a transfer that funds a cash ledger (its items count), a move to savings or an investment, pay and deposits. A target account filed under a transfer or income account (Banking ▸ Target Accounts' category) is left out, with its checks and card entries. Suggested: the target accounts that look like they should be — certain when a card is paid with it or a cash ledger funded from it, else by their names. File Under… files the target account and its entries; Put Back Under… brings them back into the analysis.") {
+            if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(.secondary).font(.callout) }
+            if let d = data {
+                suggestedList(d)
+                Divider()
+                leftOutList(d)
+            } else if problem == nil {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .task(id: window.start + window.end + window.priorStart + window.priorEnd) { await load() }
+    }
+
+    private var year: String { String(window.start.prefix(4)) }
+    private var priorYear: String { String(window.priorStart.prefix(4)) }
+
+    @ViewBuilder
+    private func suggestedList(_ d: SpendingTransfers) -> some View {
+        let certain = d.suggested.filter { $0.certain == true }
+        let shown = showAll ? d.suggested : Array(d.suggested.prefix(12))
+        HStack {
+            Text(d.suggested.isEmpty ? "No target account in the analysis looks like moving money." : "In the analysis, but they look like moving money: \(d.suggested.count)")
+                .font(.callout.weight(.semibold))
+            Spacer()
+            if saving != nil { ProgressView().controlSize(.small) }
+            if !certain.isEmpty, let transfers = d.accounts.first(where: { $0.kind == "transfer" }) {
+                Button("File the \(certain.count) Certain Under \(transfers.name)") { Task { await fileAll(certain, under: transfers) } }
+                    .disabled(saving != nil)
+                    .help(certain.map(\.name).joined(separator: ", "))
+            }
+        }
+        if !shown.isEmpty {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                header(category: "Now in")
+                ForEach(shown) { t in
+                    GridRow {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(t.name).fontWeight(t.certain == true ? .semibold : .regular)
+                            Text((t.why ?? []).map(\.text).joined(separator: "; ")).font(.caption)
+                                .foregroundStyle(t.certain == true ? Color.orange : .secondary).lineLimit(1)
+                                .help((t.why ?? []).map(\.text).joined(separator: "\n"))
+                        }
+                        .fillsGridColumn()
+                        amounts(t)
+                        Text(t.expenseAccount ?? "—").foregroundStyle(.secondary)
+                        fileMenu(t, d, label: "File Under", kinds: ["transfer", "income"], suggested: t.suggest)
+                    }
+                }
+            }
+            .font(.callout)
+            if d.suggested.count > 12 {
+                Button(showAll ? "Show the first 12" : "Show all \(d.suggested.count)") { showAll.toggle() }.buttonStyle(.link)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func leftOutList(_ d: SpendingTransfers) -> some View {
+        Text(d.leftOut.isEmpty ? "No target account is left out as a transfer or income yet." : "Left out as transfers or income: \(d.leftOut.count)")
+            .font(.callout.weight(.semibold))
+        if !d.leftOut.isEmpty {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                header(category: "Filed under")
+                ForEach(d.leftOut) { t in
+                    GridRow {
+                        Text(t.name).fillsGridColumn()
+                        amounts(t)
+                        Text("\(t.expenseAccount ?? "") (\(t.kind ?? ""))").foregroundStyle(.secondary)
+                        fileMenu(t, d, label: "Put Back Under", kinds: ["expense"], suggested: nil)
+                    }
+                }
+            }
+            .font(.callout)
+        }
+    }
+
+    private func header(category: String) -> some View {
+        GridRow {
+            Text("Target account").fillsGridColumn()
+            Text(priorYear).gridColumnAlignment(.trailing); Text(year).gridColumnAlignment(.trailing)
+            Text("Entries").gridColumnAlignment(.trailing)
+            Text(category); Text("")
+        }
+        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private func amounts(_ t: SpendingTransfers.Target) -> some View {
+        Text(money(t.before)).monospacedDigit().foregroundStyle(.secondary)
+        Text(money(t.now)).monospacedDigit()
+            .help("Paid out \(money2(t.paidOut)), came in \(money2(t.cameIn)) in all years\(t.lastDate.map { "; last \(shortDay($0))" } ?? "")")
+        Text("\(t.entries)").monospacedDigit().foregroundStyle(.secondary)
+    }
+
+    private func fileMenu(_ t: SpendingTransfers.Target, _ d: SpendingTransfers, label: String, kinds: [String], suggested: String?) -> some View {
+        Menu(label) {
+            ForEach(d.accounts.filter { kinds.contains($0.kind) }) { a in
+                Button(a.kind == suggested && d.accounts.first(where: { $0.kind == suggested })?.id == a.id ? "\(a.name) (suggested)" : a.name) {
+                    Task { await file(t, under: a) }
+                }
+            }
+        }
+        .fixedSize()
+        .controlSize(.small)
+        .disabled(saving != nil)
+    }
+
+    private func load() async {
+        do { data = try await SpendingClient.transfers(window: window); problem = nil } catch { problem = describe(error) }
+    }
+
+    private func file(_ t: SpendingTransfers.Target, under a: SpendingTransfers.Account) async {
+        saving = t.id
+        defer { saving = nil }
+        do {
+            let out = try await SpendingClient.fileTarget(t.id, under: a.id, window: window)
+            data = out
+            problem = nil
+            let n = out.refiled?.entries ?? 0
+            notice = "\(t.name) is filed under \(a.name)" + (n > 0 ? ", with \(n) entr\(n == 1 ? "y" : "ies")" : "")
+                + (a.kind == "expense" ? ": back in the analysis." : ": left out of the analysis.")
+            await filed()
+        } catch { problem = describe(error) }
+    }
+
+    private func fileAll(_ list: [SpendingTransfers.Target], under a: SpendingTransfers.Account) async {
+        var failed: [String] = []
+        for t in list {
+            saving = t.id
+            do { data = try await SpendingClient.fileTarget(t.id, under: a.id, window: window) } catch { failed.append("\(t.name): \(describe(error))") }
+        }
+        saving = nil
+        problem = failed.isEmpty ? nil : "Not filed — " + failed.joined(separator: "; ")
+        notice = "\(list.count - failed.count) target account\(list.count - failed.count == 1 ? "" : "s") filed under \(a.name): left out of the analysis."
+        await filed()
+    }
+}
+
 /// Disconnect…: what taking a source out of Spending Analysis undoes and what stays with its register.
 private struct DisconnectSourceSheet: View {
     let source: SpendingSources.Source
