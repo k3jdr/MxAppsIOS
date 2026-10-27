@@ -54,7 +54,22 @@ const money2 = x => x.toLocaleString("en-US", { style: "currency", currency: "US
 // What an Amazon charge bought (matched to its order, V046): "Swim Goggles and 1 more", and every item with its cost.
 const itemLabel = i => (i.quantity > 1 ? `${i.quantity} × ` : "") + i.name;
 const bought = e => e.amazonItems?.length ? itemLabel(e.amazonItems[0]) + (e.amazonItems.length > 1 ? ` and ${e.amazonItems.length - 1} more` : "") : "";
-const boughtDetail = e => e.amazonItems?.length ? (e.amount < 0 ? "Refunded:\n" : "Bought:\n") + e.amazonItems.map(i => itemLabel(i) + (i.amount != null ? " — " + money2(i.amount) : "")).join("\n") : "";
+// Its orders on amazon.com, as MxAcctMGR links them (whoever opens one signs in to Amazon there).
+const amazonOrders = e => [...new Set((e.amazonItems ?? []).map(i => i.orderId).filter(id => /^[0-9D]\d{2}-\d{7}-\d{7}$/.test(id ?? "")))];
+const amazonOrderURL = id => "https://www.amazon.com/gp/your-account/order-details?orderID=" + encodeURIComponent(id);
+const boughtDetail = e => {
+  if (!e.amazonItems?.length) return "";
+  const orders = amazonOrders(e);
+  return (e.amount < 0 ? "Refunded:\n" : "Bought:\n") + e.amazonItems.map(i => itemLabel(i) + (i.amount != null ? " — " + money2(i.amount) : "")).join("\n")
+    + (orders.length ? `\nAmazon order${orders.length === 1 ? "" : "s"} ${orders.join(", ")}` : "")
+    + (e.amazonMatchedBy === "amazon-lookup" ? " — from Amazon's Transactions list" : e.amazonMatchedBy === "amazon-orders" ? " — matched by amount and date" : "");
+};
+// What was bought, as a link to its (first) order; the items and every order on hover.
+const boughtLink = (e, fallback = "") => {
+  const orders = amazonOrders(e);
+  if (!orders.length) return esc(fallback);
+  return `<a href="${esc(amazonOrderURL(orders[0]))}" target="_blank" rel="noopener noreferrer" title="${esc(boughtDetail(e))}">${esc(bought(e))}</a>`;
+};
 const pct = (x, d = 0) => (100 * x).toFixed(d) + "%";
 const signedPct = (x, d = 1) => (x >= 0 ? "+" : "") + (100 * x).toFixed(d) + "%";
 const signedMoney = x => (x >= 0 ? "+" : "") + money(x);
@@ -424,7 +439,7 @@ function diveTab() {
   h += box("Where It Went", `<div class="scroll"><table><tr><th class="l">Expense account / payee</th><th>${py}</th><th>${y}</th><th>Change</th><th>Entries</th></tr>${w}</table></div>`, { section: `Deep Dive ${name}: where it went` });
   const top = mine.filter(inNow).sort((a, b) => b.amount - a.amount).slice(0, 10);
   const byMember = group(mine, e => e.memberId ?? 0);
-  h += `<div class="row">${box("Largest This Year", `<div class="scroll"><table>${top.map(e => `<tr><td class="l muted">${day(e.date)}</td><td class="l" title="${esc([e.payee, boughtDetail(e)].filter(Boolean).join("\n"))}">${esc(bought(e) || (e.payee ?? e.description ?? "—"))}</td><td>${money2(e.amount)}</td><td class="l muted">${esc(e.event ?? driverTitle(e.driver))}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>`, { section: `Deep Dive ${name}: largest` })}
+  h += `<div class="row">${box("Largest This Year", `<div class="scroll"><table>${top.map(e => `<tr><td class="l muted">${day(e.date)}</td><td class="l" title="${esc(e.payee ?? e.description ?? "")}">${boughtLink(e, e.payee ?? e.description ?? "—")}</td><td>${money2(e.amount)}</td><td class="l muted">${esc(e.event ?? driverTitle(e.driver))}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>`, { section: `Deep Dive ${name}: largest` })}
     ${box("By Family Member", Object.keys(byMember).every(k => k === "0") ? `<p class="muted">None of it names a family member yet.</p>` : `<table><tr><th class="l">Member</th><th>${py}</th><th>${y}</th><th>Change</th></tr>${Object.keys(byMember).map(k => { const s = sums(byMember[k]); return `<tr><td class="l">${esc(memberName(+k) ?? "No one named")}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td>${money(s.change)}</td></tr>`; }).join("")}</table>`, { section: `Deep Dive ${name}: members` })}</div>`;
   h += lifecycleBox(code);
   h += entriesBox(mine, `${name} Entries`, true);
@@ -469,10 +484,10 @@ function entriesBox(list, title, locked) {
       <span class="spacer"></span><span class="muted">${rows.length.toLocaleString()} entries, ${money(rows.reduce((a, e) => a + e.amount, 0))}</span></div>
     <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l bought">Bought</th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th class="l">Event</th><th></th></tr>
     ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td>
-      <td class="l bought" title="${esc(boughtDetail(e))}">${esc(bought(e))}</td><td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "No rule or tag")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "No rule or tag: counts as usage")}">${pick("driver", e)}</td>
+      <td class="l bought">${boughtLink(e)}</td><td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "No rule or tag")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "No rule or tag: counts as usage")}">${pick("driver", e)}</td>
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
     ${rows.length > S.shown ? `<p><button data-action="more">Show ${Math.min(200, rows.length - S.shown)} more</button></p>` : ""}`;
-  return box(title, body, { section: title, help: "Every spending dollar: its category and driver and where they came from, and for an Amazon charge what was bought. ⚑ tells John something about one entry." });
+  return box(title, body, { section: title, help: "Every spending dollar: its category and driver and where they came from, and for an Amazon charge what was bought — a link to the order on amazon.com. ⚑ tells John something about one entry." });
 }
 
 function curveTab() {

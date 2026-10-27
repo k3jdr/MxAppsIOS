@@ -37,7 +37,9 @@ the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attri
 (`SpendingModel.swift`), and the Deep Dive charts a category's lifecycle triggers ahead. Rules shows the expense
 account, target account and statement text rules read-only, with both years' spending and *Suggest a change* on each;
 MxAcctMGR's Admin tab stays MxAcctMGR's only. The entries tables' *Bought* column shows what an Amazon charge bought
-(V046; every item and its cost on hover), and the search finds items; `REVOKE SELECT ON srm.v_amazon_charge FROM
+(V046; every item, its cost and the order numbers on hover), as a link to the order on amazon.com as in MxAcctMGR (it
+opens in a new tab; whoever opens it signs in to Amazon there), and the search finds items; the Deep Dive's Largest
+This Year links them too; `REVOKE SELECT ON srm.v_amazon_charge FROM
 spending_web` takes the items off the page (the rest works without them). They read the
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, the entry filters, and the
