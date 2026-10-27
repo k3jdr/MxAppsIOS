@@ -476,6 +476,19 @@ enum SpendingEngine {
 /// Where the analysis's data comes from (Sources tab): each register, whether it is included, its drop folders and
 /// downloads, the tables its data lands in, its last import and its spending in both periods; every SRM table and view
 /// the analysis reads with its rows, newest data and last change; and the download and CPI loaders' last runs.
+/// What disconnecting a spending source undoes and keeps (GET /spending/sources/<source>/<code>/links).
+struct SourceLinks: Decodable {
+    struct Link: Decodable, Hashable { var kind: String; var what: String; var count: Int }
+    var source: String
+    var code: String
+    var name: String
+    var connected: Bool
+    var links: [Link]
+    /// Links kept from when it was disconnected, to put back.
+    var kept: Int
+    var spendingEntries: Int
+}
+
 struct SpendingSources: Decodable {
     struct Run: Decodable, Hashable {
         var loadId: Int
@@ -518,6 +531,12 @@ struct SpendingSources: Decodable {
         var spentNow: Double
         var entriesBefore: Int
         var spentBefore: Double
+        /// Disconnected (V049): out of the analysis, its links to the other sources undone and kept.
+        var connected: Bool
+        var disconnectedBy: String?
+        var disconnectedAt: String?
+        /// A card's: lines of a removed card with the same last four digits whose tags and links wait to re-attach.
+        var remembered: Int
         var id: String { source + code }
         var kindTitle: String { source == "bank" ? "Checking account" : source == "card" ? "Credit card" : "Cash ledger" }
         var symbol: String { source == "bank" ? "checkmark.rectangle.stack" : source == "card" ? "creditcard" : "briefcase" }
@@ -541,6 +560,9 @@ struct SpendingSources: Decodable {
     var loaders: [Run]
     /// Amazon's order export (V046); nil before it.
     var amazon: AmazonOrders?
+    /// Reconnect's answer: how many kept links were put back, and how many couldn't be.
+    var reconnected: Reconnected?
+    struct Reconnected: Decodable, Hashable { var code: String; var restored: Int; var skipped: Int }
     var now: String?
 
     func table(_ name: String) -> Table? { tables.first { $0.name == name } }
@@ -877,6 +899,15 @@ nonisolated enum SpendingClient {
     static func include(_ s: SpendingSources.Source, _ included: Bool, window: SpendingSources) async throws -> SpendingSources {
         try await AccountsClient.request("PUT", "/spending/sources/\(s.source)/\(s.code)?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          body: signed(["included": included]), as: SpendingSources.self)
+    }
+    /// What disconnecting a source undoes (its links to the other sources), and what stays.
+    static func sourceLinks(_ s: SpendingSources.Source) async throws -> SourceLinks {
+        try await AccountsClient.request("GET", "/spending/sources/\(s.source)/\(s.code)/links", as: SourceLinks.self)
+    }
+    /// Disconnects a source (V049), or reconnects it: its register stays; the links come back with it.
+    static func connect(_ s: SpendingSources.Source, _ connect: Bool, window: SpendingSources) async throws -> SpendingSources {
+        try await AccountsClient.request("POST", "/spending/sources/\(s.source)/\(s.code)/\(connect ? "reconnect" : "disconnect")?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
+                                         body: signed([:]), as: SpendingSources.self)
     }
     /// Reads Amazon's order export again (srm-loader amazon-orders); with a file, first saves it — the zip as
     /// downloaded, or a Retail.OrderHistory CSV — in the export's drop folder.

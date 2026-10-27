@@ -54,6 +54,16 @@
                                                    newest data and last change
     PUT    /spending/sources/<source>/<code>       include or leave out a register {included, by} (source bank, card
                                                    or ledger); answers with the sources
+    GET    /spending/sources/<source>/<code>/links what disconnecting it undoes (its links to the other sources) and
+                                                   what stays with its register
+    POST   /spending/sources/<source>/<code>/disconnect
+                                                   take it out of Spending Analysis (V049) {by}: its register stays in
+                                                   the security master; its links to the other sources (card payments
+                                                   to checks, cash-ledger entries to charges and checks) are undone and
+                                                   kept, and the payment and funding matches leave it alone
+    POST   /spending/sources/<source>/<code>/reconnect
+                                                   bring it back {by}: the links kept are put back where both sides are
+                                                   still there and free; nothing is read from a download
     POST   /spending/amazon/load                   read Amazon's order export again (srm-loader amazon-orders); with
                                                    {filename, data (base64)}, first save that export — the zip as
                                                    downloaded or a Retail.OrderHistory CSV — in its drop folder;
@@ -669,9 +679,9 @@ def _window(q):
 
 
 def _left_out(conn):
-    """The registers that don't feed the analysis (srm.spending_source, V038)."""
+    """The registers that don't feed the analysis: left out (srm.spending_source, V038) or disconnected (V049)."""
     return {(r["source"], r["register"]) for r in
-            fetch(conn, "SELECT source, register FROM srm.spending_source WHERE NOT included")}
+            fetch(conn, "SELECT source, register FROM srm.spending_source WHERE NOT included OR NOT connected")}
 
 
 def analysis(conn, q):
@@ -926,7 +936,10 @@ def sources(conn, q):
     except ImportError:
         amazon_folders = None
     choice = {(r["source"], r["register"]): r for r in fetch(conn, """
-        SELECT source, register, included, updated_by AS "updatedBy", updated_at AS "updatedAt" FROM srm.spending_source""")}
+        SELECT source, register, included, updated_by AS "updatedBy", updated_at AS "updatedAt", connected,
+               disconnected_by AS "disconnectedBy", disconnected_at AS "disconnectedAt" FROM srm.spending_source""")}
+    # What removed cards' lines had, waiting for a card with the same last four digits to read them again (V049).
+    waiting = {r["card_key"]: r["n"] for r in fetch(conn, "SELECT card_key, count(*) AS n FROM srm.card_line_memory GROUP BY 1")}
     spent = {(r["source"], r["register"]): r for r in fetch(conn, """
         SELECT source, register, min(txn_date) AS first, max(txn_date) AS last,
                count(*) FILTER (WHERE txn_date BETWEEN %s AND %s) AS "entriesNow",
@@ -940,14 +953,21 @@ def sources(conn, q):
             key = (kind, r["code"])
             c, s = choice.get(key, {}), spent.get(key, {})
             lines_table, register_table = LANDS_IN[kind]
+            # A checking account's source is its register in the security master, entered by hand: the bank's
+            # downloads only clear its entries (Banking ▸ Checking Accounts), so no folders or loader are listed.
+            files = kind == "card" and kind in folders
             out.append(dict(
                 {k: v for k, v in r.items() if k != "load_id"}, source=kind,
                 included=c.get("included", True), choiceBy=c.get("updatedBy"), choiceAt=c.get("updatedAt"),
-                linesTable=lines_table, registerTable=register_table,
-                loader=LOADER.get(kind, (None,))[0], dropFolders=folders.get(kind, []),
-                downloads=_downloads(folders[kind], r["code"], r["last4"]) if kind in folders else [],
-                foldersListed=kind in folders,
-                lastImport=_run(conn, load_id=r["load_id"]) if r["load_id"] else None,
+                connected=c.get("connected", True), disconnectedBy=c.get("disconnectedBy"),
+                disconnectedAt=c.get("disconnectedAt"),
+                remembered=waiting.get((r["last4"] or "").strip() or r["code"], 0) if kind == "card" else 0,
+                linesTable=lines_table if kind == "card" else None, registerTable=register_table,
+                loader=LOADER.get(kind, (None,))[0] if kind == "card" else None,
+                dropFolders=folders.get(kind, []) if files else [],
+                downloads=_downloads(folders[kind], r["code"], r["last4"]) if files else [],
+                foldersListed=files,
+                lastImport=_run(conn, load_id=r["load_id"]) if r["load_id"] and kind == "card" else None,
                 spendingFirst=s.get("first"), spendingLast=s.get("last"),
                 entriesNow=s.get("entriesNow", 0), spentNow=s.get("spentNow", 0),
                 entriesBefore=s.get("entriesBefore", 0), spentBefore=s.get("spentBefore", 0)))
@@ -1119,6 +1139,117 @@ def set_source(conn, source, code, body, q):
           (source, rows[0]["code"], bool(body.get("included", True)), _by(body)))
     conn.commit()
     return sources(conn, q)
+
+
+# ------------------------------------------------------------------------------------------------- disconnect, reconnect
+# A source taken out of Spending Analysis keeps its register (V049); its links to the other sources are undone and
+# kept in srm.source_link, to put back when it is reconnected.
+
+SOURCE_TABLES = {"bank": ("bank_account", "bank_account_id", "checking account"),
+                 "card": ("card_account", "card_account_id", "credit card"),
+                 "ledger": ("expense_ledger", "ledger_id", "cash ledger")}
+# Each source's links to the others: (kind, query of card_txn_id, bank_txn_id, expense_entry_id for the source's id).
+SOURCE_LINKS = {
+    "bank": [("payment", """SELECT c.txn_id AS card, c.bank_txn_id AS bank, NULL::bigint AS entry FROM srm.card_txn c
+                             JOIN srm.bank_txn b ON b.txn_id = c.bank_txn_id WHERE b.bank_account_id = %s"""),
+             ("ledger_bank", """SELECT NULL::bigint AS card, e.bank_txn_id AS bank, e.entry_id AS entry FROM srm.expense_entry e
+                                JOIN srm.bank_txn b ON b.txn_id = e.bank_txn_id WHERE b.bank_account_id = %s""")],
+    "card": [("payment", """SELECT c.txn_id AS card, c.bank_txn_id AS bank, NULL::bigint AS entry FROM srm.card_txn c
+                             WHERE c.card_account_id = %s AND c.bank_txn_id IS NOT NULL"""),
+             ("ledger_card", """SELECT e.card_txn_id AS card, NULL::bigint AS bank, e.entry_id AS entry FROM srm.expense_entry e
+                                JOIN srm.card_txn c ON c.txn_id = e.card_txn_id WHERE c.card_account_id = %s""")],
+    "ledger": [("ledger_card", """SELECT e.card_txn_id AS card, NULL::bigint AS bank, e.entry_id AS entry FROM srm.expense_entry e
+                                  WHERE e.ledger_id = %s AND e.card_txn_id IS NOT NULL"""),
+               ("ledger_bank", """SELECT NULL::bigint AS card, e.bank_txn_id AS bank, e.entry_id AS entry FROM srm.expense_entry e
+                                  WHERE e.ledger_id = %s AND e.bank_txn_id IS NOT NULL""")],
+}
+LINK_WORDS = {"payment": "card payments linked to the checks that paid them",
+              "ledger_card": "cash-ledger entries linked to card charges",
+              "ledger_bank": "cash-ledger entries linked to checks"}
+
+
+def _source_row(conn, source, code):
+    if source not in SOURCE_TABLES:
+        raise ValueError("source must be bank, card or ledger")
+    table, key, what = SOURCE_TABLES[source]
+    rows = fetch(conn, "SELECT %s AS id, code, name FROM srm.%s WHERE upper(code) = upper(%%s)" % (key, table), (code,))
+    if not rows:
+        raise LookupError("no %s %s" % (what, code))
+    state = fetch(conn, "SELECT connected FROM srm.spending_source WHERE source = %s AND register = %s",
+                  (source, rows[0]["code"]))
+    return dict(rows[0], connected=state[0]["connected"] if state else True)
+
+
+def source_links(conn, source, code):
+    """What disconnecting the source undoes, and what stays with its register."""
+    r = _source_row(conn, source, code)
+    links = {kind: len(fetch(conn, sql, (r["id"],))) for kind, sql in SOURCE_LINKS[source]}
+    kept = fetch(conn, "SELECT count(*) AS n FROM srm.source_link WHERE source = %s AND register = %s", (source, r["code"]))[0]["n"]
+    entries = fetch(conn, "SELECT count(*) AS n FROM srm.v_spending_entry WHERE source = %s AND register = %s",
+                    (source, r["code"]))[0]["n"]
+    return {"source": source, "code": r["code"], "name": r["name"], "connected": r["connected"],
+            "links": [{"kind": k, "what": LINK_WORDS[k], "count": n} for k, n in links.items()],
+            "kept": kept, "spendingEntries": entries}
+
+
+def disconnect_source(conn, source, code, body, q):
+    r = _source_row(conn, source, code)
+    if not r["connected"]:
+        raise ValueError("%s is already disconnected" % r["name"])
+    by = _by(body)
+    for kind, sql in SOURCE_LINKS[source]:
+        for link in fetch(conn, sql, (r["id"],)):
+            fetch(conn, """INSERT INTO srm.source_link (source, register, kind, card_txn_id, bank_txn_id, expense_entry_id, undone_by)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                  (source, r["code"], kind, link["card"], link["bank"], link["entry"], by))
+            if kind == "payment":
+                fetch(conn, """UPDATE srm.card_txn SET bank_txn_id = NULL, version = version + 1, updated_by = %s,
+                                      updated_at = now() WHERE txn_id = %s""", (by, link["card"]))
+            else:
+                column = "card_txn_id" if kind == "ledger_card" else "bank_txn_id"
+                fetch(conn, """UPDATE srm.expense_entry SET %s = NULL, version = version + 1, updated_by = %%s,
+                                      updated_at = now() WHERE entry_id = %%s""" % column, (by, link["entry"]))
+    fetch(conn, """INSERT INTO srm.spending_source (source, register, connected, disconnected_by, disconnected_at, updated_by)
+                   VALUES (%s, %s, false, %s, now(), %s)
+                   ON CONFLICT (source, register) DO UPDATE SET connected = false, disconnected_by = excluded.disconnected_by,
+                          disconnected_at = now(), updated_by = excluded.updated_by, updated_at = now()""",
+          (source, r["code"], by, by))
+    conn.commit()
+    return sources(conn, q)
+
+
+def reconnect_source(conn, source, code, body, q):
+    """Back in Spending Analysis, from the security master; each link kept is put back where both sides are still
+    there and neither has been linked to something else since. Answers with the sources and what was put back."""
+    r = _source_row(conn, source, code)
+    if r["connected"]:
+        raise ValueError("%s is connected" % r["name"])
+    by = _by(body)
+    restored = skipped = 0
+    for link in fetch(conn, "SELECT * FROM srm.source_link WHERE source = %s AND register = %s ORDER BY link_id",
+                      (source, r["code"])):
+        if link["kind"] == "payment":
+            done = fetch(conn, """UPDATE srm.card_txn SET bank_txn_id = %s, version = version + 1, updated_by = %s, updated_at = now()
+                                   WHERE txn_id = %s AND bank_txn_id IS NULL
+                                     AND EXISTS (SELECT 1 FROM srm.bank_txn WHERE txn_id = %s AND status <> 'void')
+                                     AND NOT EXISTS (SELECT 1 FROM srm.card_txn WHERE bank_txn_id = %s)
+                               RETURNING txn_id""",
+                         (link["bank_txn_id"], by, link["card_txn_id"], link["bank_txn_id"], link["bank_txn_id"]))
+        else:
+            column, table, other = (("card_txn_id", "srm.card_txn", link["card_txn_id"]) if link["kind"] == "ledger_card"
+                                    else ("bank_txn_id", "srm.bank_txn", link["bank_txn_id"]))
+            done = fetch(conn, """UPDATE srm.expense_entry SET %s = %%s, version = version + 1, updated_by = %%s, updated_at = now()
+                                   WHERE entry_id = %%s AND %s IS NULL
+                                     AND EXISTS (SELECT 1 FROM %s WHERE txn_id = %%s)
+                                     AND NOT EXISTS (SELECT 1 FROM srm.expense_entry WHERE %s = %%s)
+                               RETURNING entry_id""" % (column, column, table, column),
+                         (other, by, link["expense_entry_id"], other, other))
+        restored, skipped = (restored + 1, skipped) if done else (restored, skipped + 1)
+    fetch(conn, "DELETE FROM srm.source_link WHERE source = %s AND register = %s", (source, r["code"]))
+    fetch(conn, """UPDATE srm.spending_source SET connected = true, disconnected_by = NULL, disconnected_at = NULL,
+                          updated_by = %s, updated_at = now() WHERE source = %s AND register = %s""", (by, source, r["code"]))
+    conn.commit()
+    return dict(sources(conn, q), reconnected={"code": r["code"], "restored": restored, "skipped": skipped})
 
 
 # ------------------------------------------------------------------------------------------------------------ feedback
@@ -1569,14 +1700,17 @@ def overlaps(conn):
                    WHERE t.status <> 'void' AND t.kind <> 'payment' AND t.amount = e.amount
                      AND abs(t.txn_date - e.entry_date) <= 7
                      AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.card_txn_id = t.txn_id)
+                     AND NOT srm.source_disconnected('card', a.code)
                   UNION ALL
                   SELECT 'bank', b.txn_id, a.code, b.txn_date, b.payee_name
                     FROM srm.bank_txn b
                     JOIN srm.bank_account a USING (bank_account_id)
                    WHERE b.status <> 'void' AND -b.amount = e.amount AND abs(b.txn_date - e.entry_date) <= 7
                      AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.bank_txn_id = b.txn_id)
+                     AND NOT srm.source_disconnected('bank', a.code)
               ) m ORDER BY abs(m.txn_date - e.entry_date), m.txn_id LIMIT 3) c ON true
          WHERE e.status = 'actual' AND e.kind IN ('expense', 'refund') AND e.card_txn_id IS NULL AND e.bank_txn_id IS NULL
+           AND NOT srm.source_disconnected('ledger', l.code)
          ORDER BY e.entry_date, e.entry_id, days, c.txn_id""")
     out = {}
     for r in rows:
@@ -1600,6 +1734,10 @@ def route(conn, method, parts, body, q):
         return sources(conn, q)
     if len(parts) == 4 and parts[1] == "sources" and method == "PUT":
         return set_source(conn, parts[2], parts[3], body, q)
+    if len(parts) == 5 and parts[1] == "sources" and parts[4] == "links" and method == "GET":
+        return source_links(conn, parts[2], parts[3])
+    if len(parts) == 5 and parts[1] == "sources" and parts[4] in ("disconnect", "reconnect") and method == "POST":
+        return (disconnect_source if parts[4] == "disconnect" else reconnect_source)(conn, parts[2], parts[3], body, q)
     if parts == ["spending", "amazon", "load"] and method == "POST":
         return load_amazon(conn, body, q)
     if parts == ["spending", "amazon", "known"] and method == "GET":

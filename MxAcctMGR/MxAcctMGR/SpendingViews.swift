@@ -1617,11 +1617,16 @@ private struct SpendingSourcesTab: View {
     @State private var problem: String?
     @State private var saving: String?
     @State private var loadingAmazon = false
+    /// The source whose Disconnect sheet is open.
+    @State private var disconnecting: SpendingSources.Source?
+    /// What Reconnect put back.
+    @State private var notice: String?
 
     var body: some View {
         if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+        if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(.secondary).font(.callout) }
         window
-        Box(title: "Spending Sources", symbol: "tray.full", help: "Each checking account, credit card and cash ledger that can feed the analysis: whether it does (the checkbox, kept in the security master for every Mac), where its data comes from (the drop folder and the downloads in it, or entries made by hand), the SRM tables it lands in, when it was last imported and edited, and what it spent in both periods.") {
+        Box(title: "Spending Sources", symbol: "tray.full", help: "Each checking account, credit card and cash ledger that can feed the analysis: whether it does (the checkbox, kept in the security master for every Mac), where its data comes from (a card's drop folder and the downloads in it; a checking account's or cash ledger's register in the security master, entered by hand), the SRM tables it lands in, when it was last imported and edited, and what it spent in both periods. Disconnect… takes one out of the analysis and undoes its links to the others (card payments to checks, cash-ledger links), keeping its register and those links to put back on Reconnect.") {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(sources.sources.enumerated()), id: \.element.id) { i, s in
                     if i > 0 { Divider() }
@@ -1632,6 +1637,9 @@ private struct SpendingSourcesTab: View {
         if let a = sources.amazon { amazonBox(a) }
         tablesBox
         loadsBox
+            .sheet(item: $disconnecting) { s in
+                DisconnectSourceSheet(source: s) { await connect(s, false) }
+            }
     }
 
     // MARK: Amazon's order export
@@ -1807,14 +1815,24 @@ private struct SpendingSourcesTab: View {
                     Label(s.name, systemImage: s.symbol).font(.body.weight(.semibold))
                 }
                 .toggleStyle(.checkbox)
-                .disabled(saving != nil)
-                .help(s.included ? "Included: its spending is in the analysis. Untick to leave it out (for every Mac)." : "Left out of the analysis. Tick to include it.")
+                .disabled(saving != nil || !s.connected)
+                .help(!s.connected ? "Disconnected: Reconnect brings it back." : s.included ? "Included: its spending is in the analysis. Untick to leave it out (for every Mac)." : "Left out of the analysis. Tick to include it.")
                 Text([s.kindTitle, s.code, s.institution, s.last4.map { "…\($0)" }].compactMap { $0 }.joined(separator: " · "))
                     .foregroundStyle(.secondary)
                 if s.closedDate != nil { Text("closed").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
                 if saving == s.id { ProgressView().controlSize(.small) }
-                if let by = s.choiceBy { Text("\(s.included ? "included" : "left out") by \(by), \(Freshness.when(s.choiceAt))").font(.caption).foregroundStyle(.secondary) }
+                if !s.connected {
+                    Text("disconnected\(s.disconnectedBy.map { " by \($0)" } ?? ""), \(Freshness.when(s.disconnectedAt))").font(.caption).foregroundStyle(.orange)
+                    Button("Reconnect") { Task { await connect(s, true) } }
+                        .controlSize(.small).disabled(saving != nil)
+                        .help("Back in the analysis from the security master, its links to the other sources put back")
+                } else {
+                    if let by = s.choiceBy { Text("\(s.included ? "included" : "left out") by \(by), \(Freshness.when(s.choiceAt))").font(.caption).foregroundStyle(.secondary) }
+                    Button("Disconnect…") { disconnecting = s }
+                        .controlSize(.small).disabled(saving != nil)
+                        .help("Take it out of Spending Analysis and undo its links to the other sources; its register stays, to reconnect")
+                }
             }
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                 GridRow {
@@ -1831,6 +1849,13 @@ private struct SpendingSourcesTab: View {
                         lastImport(s)
                     }
                 }
+                if s.remembered > 0 {
+                    GridRow {
+                        Text("Remembered").foregroundStyle(.secondary)
+                        Text("\(s.remembered.formatted()) line\(s.remembered == 1 ? "" : "s") of a removed card ending \(s.last4 ?? s.code) have tags, matches, notes or links that re-attach when this card reads them again")
+                            .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 GridRow {
                     Text("Register").foregroundStyle(.secondary)
                     Text(register(s)).foregroundStyle(s.source != "ledger" && s.included && Freshness.isStale(s.last) ? .orange : .primary)
@@ -1843,7 +1868,7 @@ private struct SpendingSourcesTab: View {
             .font(.callout)
             .padding(.leading, 22)
         }
-        .opacity(s.included ? 1 : 0.6)
+        .opacity(s.included && s.connected ? 1 : 0.6)
     }
 
     @ViewBuilder
@@ -1852,13 +1877,15 @@ private struct SpendingSourcesTab: View {
             switch s.source {
             case "ledger":
                 Text("Entered by hand in \(s.screen); an item that is also a card or check entry counts with that register instead")
+            case "bank":
+                Text("Its register in the security master, entered by hand in \(s.screen): the source is the database, not a download. PNC's downloads, when read there, only clear its entries.")
+                    .fixedSize(horizontal: false, vertical: true)
             default:
-                Text("\(s.source == "bank" ? "Entries made by hand in \(s.screen), cleared by the bank's downloads" : "The card company's downloads, posted to its register in \(s.screen); charges entered by hand are matched to them") — read by srm.py load \(s.loader ?? "") from:")
+                Text("The card company's downloads, posted to its register in \(s.screen); charges entered by hand are matched to them — read by srm.py load \(s.loader ?? "") from:")
                 ForEach(s.dropFolders, id: \.self) { f in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text("\(f)/\(s.code)/").font(.callout.monospaced()).textSelection(.enabled)
-                        Text(s.source == "bank" ? "for CSV downloads; a QFX / OFX anywhere in \(f) that names account …\(s.last4 ?? "")"
-                             : (s.institution ?? "").localizedCaseInsensitiveContains("chase")
+                        Text((s.institution ?? "").localizedCaseInsensitiveContains("chase")
                                 ? "or anywhere in \(f): a QFX / OFX or a Chase CSV (Chase\(s.last4 ?? "")_…) that names card …\(s.last4 ?? "")"
                                 : "or anywhere in \(f): a QFX / OFX that names card …\(s.last4 ?? "")")
                             .foregroundStyle(.secondary)
@@ -1937,6 +1964,28 @@ private struct SpendingSourcesTab: View {
         do { changed(try await SpendingClient.include(s, v, window: sources)); problem = nil } catch { problem = describe(error) }
     }
 
+    /// Disconnects or reconnects a source; answers why it couldn't, or nil.
+    @discardableResult
+    private func connect(_ s: SpendingSources.Source, _ on: Bool) async -> String? {
+        saving = s.id
+        defer { saving = nil }
+        do {
+            let out = try await SpendingClient.connect(s, on, window: sources)
+            changed(out)
+            problem = nil
+            if let r = out.reconnected {
+                notice = "\(s.name) is reconnected: \(r.restored) link\(r.restored == 1 ? "" : "s") put back"
+                    + (r.skipped > 0 ? ", \(r.skipped) not (one side is gone or linked to something else since)" : "") + "."
+            } else {
+                notice = nil
+            }
+            return nil
+        } catch {
+            problem = describe(error)
+            return describe(error)
+        }
+    }
+
     // MARK: Tables
 
     private var tablesBox: some View {
@@ -1991,6 +2040,62 @@ private struct SpendingSourcesTab: View {
 /// The page's tabs as a row of buttons, each as wide as its name. A segmented picker of seven tabs redrew every
 /// segment as wide as the widest name after a tab change; the row then outgrew the page and, centered, slid under
 /// the sidebar.
+/// Disconnect…: what taking a source out of Spending Analysis undoes and what stays with its register.
+private struct DisconnectSourceSheet: View {
+    let source: SpendingSources.Source
+    var disconnect: () async -> String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var links: SourceLinks?
+    @State private var error: String?
+    @State private var working = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Disconnect \u{201C}\(source.name)\u{201D}?").heading(.heading)
+            Text("It leaves Spending Analysis for every Mac. Its register stays in the security master as it is, with its tags, notes, Amazon matches and tax-year moves; Reconnect brings it back from there, with no download read.")
+                .fixedSize(horizontal: false, vertical: true)
+            if let l = links {
+                let undone = l.links.filter { $0.count > 0 }
+                if undone.isEmpty {
+                    Text("It has no links to the other sources.").foregroundStyle(.secondary)
+                } else {
+                    Text("Undone, and kept to put back on Reconnect:").font(.callout.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(undone, id: \.kind) { k in Text("• \(k.count.formatted()) \(k.what)") }
+                    }
+                    .font(.callout)
+                    Text("While it is disconnected the payment and funding matches leave it alone, and Admin's Counted Twice finder doesn't offer its entries.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Text("\(l.spendingEntries.formatted()) of its entries count as spending now; disconnected, none does.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else if error == nil {
+                ProgressView().controlSize(.small)
+            }
+            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            HStack {
+                Spacer()
+                if working { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Disconnect", role: .destructive) {
+                    Task {
+                        working = true
+                        defer { working = false }
+                        if let e = await disconnect() { error = e } else { dismiss() }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(working || links == nil)
+            }
+        }
+        .padding(18)
+        .frame(width: 480)
+        .task {
+            do { links = try await SpendingClient.sourceLinks(source) } catch { self.error = describe(error) }
+        }
+    }
+}
+
 private struct SpendingTabBar: View {
     var tabs: [(String, String)]
     @Binding var selection: String

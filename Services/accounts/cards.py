@@ -485,7 +485,9 @@ def import_downloads(conn, code, body):
 def removal(conn, code):
     """What removing the card would clean up: its register entries (and how many were entered here, not from a
     download), the card company's lines, its statements and its drop folder's files; and what stays, unlinked: the
-    checking entries that paid it and the cash-ledger entries naming its charges."""
+    checking entries that paid it and the cash-ledger entries naming its charges. `remembered`: what was made on its
+    downloaded lines — tags, Amazon matches, family-page notes, tax-year moves, edited entries — kept to re-attach when
+    a card with the same last four digits reads those lines again (V049)."""
     card = _card(conn, code)
     counts = fetch(conn, """
         SELECT (SELECT count(*) FROM srm.card_txn WHERE card_account_id = %(a)s) AS entries,
@@ -497,6 +499,19 @@ def removal(conn, code):
                  WHERE t.card_account_id = %(a)s) AS "expenseLinked",
                %(p)s AS payee""",
                    {"a": card["card_account_id"], "p": card["payment_name"]})[0]
+    counts["remembered"] = fetch(conn, """
+        SELECT count(g.*) AS tags, (SELECT count(*) FROM srm.amazon_match m JOIN srm.card_txn x ON x.txn_id = m.card_txn_id
+                                     WHERE x.card_account_id = %(a)s AND x.card_line_id IS NOT NULL) AS "amazonMatches",
+               (SELECT count(*) FROM srm.spending_feedback f JOIN srm.card_txn x ON x.txn_id = f.entry_id
+                 WHERE f.entry_source = 'card' AND x.card_account_id = %(a)s AND x.card_line_id IS NOT NULL) AS notes,
+               (SELECT count(*) FROM srm.tax_assignment s JOIN srm.card_txn x ON x.txn_id = s.entry_id
+                 WHERE s.source = 'card' AND x.card_account_id = %(a)s AND x.card_line_id IS NOT NULL) AS "taxMoves",
+               (SELECT count(*) FROM srm.card_txn x WHERE x.card_account_id = %(a)s AND x.card_line_id IS NOT NULL
+                   AND coalesce(x.updated_by, '') NOT IN ('card download', 'card match', 'payment match', '')) AS edited,
+               coalesce(nullif(btrim(%(l)s), ''), %(c)s) AS "cardKey"
+          FROM srm.spending_tag g JOIN srm.card_txn t ON t.txn_id = g.card_txn_id
+         WHERE t.card_account_id = %(a)s AND t.card_line_id IS NOT NULL""",
+                                 {"a": card["card_account_id"], "l": card["account_last4"], "c": card["code"]})[0]
     folder = _drop_folder(card["code"], create=False)
     files = sorted(n for n in os.listdir(folder) if not n.startswith(".")) if os.path.isdir(folder) else []
     return {"removal": dict(counts, code=card["code"], name=card["name"], folder=folder, files=files)}
@@ -504,13 +519,19 @@ def removal(conn, code):
 
 def remove_account(conn, code, q):
     """Removes the card with its register entries, the card company's lines and its statements (they go with it:
-    ON DELETE CASCADE); checking and cash-ledger entries linked to its entries stay, unlinked. Its drop folder is
-    moved to the drop folder's _removed folder (card-downloads doesn't read there), not deleted."""
+    ON DELETE CASCADE); checking and cash-ledger entries linked to its entries stay, unlinked. First, what was made on
+    its downloaded lines is kept to re-attach (srm.remember_card_lines, V049). Its drop folder is moved to the drop
+    folder's _removed folder (card-downloads doesn't read there), not deleted."""
     card = _card(conn, code)
     if (q.get("confirm") or "").upper() != card["code"].upper():
         raise ValueError("removing a credit card account needs confirm=%s (its code)" % card["code"])
     gone = removal(conn, code)["removal"]
+    gone["rememberedLines"] = fetch(conn, "SELECT srm.remember_card_lines(%s, %s) AS n",
+                                    (card["card_account_id"], str(q.get("by") or "MxAcctMGR")[:80]))[0]["n"]
     fetch(conn, "DELETE FROM srm.card_account WHERE card_account_id = %s", (card["card_account_id"],))
+    # Its place in Spending Analysis's sources goes too: a card added again with this code starts connected.
+    fetch(conn, "DELETE FROM srm.spending_source WHERE source = 'card' AND register = %s", (card["code"],))
+    fetch(conn, "DELETE FROM srm.source_link WHERE source = 'card' AND register = %s", (card["code"],))
     conn.commit()
     folder, moved = gone["folder"], None
     if os.path.isdir(folder):

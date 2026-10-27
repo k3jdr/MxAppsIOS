@@ -428,7 +428,15 @@ lines read from the card company's downloads, the statements entered, and the do
 stays: the checking entries that paid it and the cash-ledger entries naming its charges (both unlinked), and the
 activity log. **Cancel** is the default; **Remove
 *card*** takes it away (`DELETE /cards/accounts/<code>?confirm=<code>`), which can't be undone. Its drop folder is moved
-to `src-cards/_removed/<CODE>-<date-time>/`, not deleted, where card-downloads doesn't read it.
+to `src-cards/_removed/<CODE>-<date-time>/`, not deleted, where card-downloads doesn't read it. Its place on
+Spending Analysis ▸ Sources goes with it, so a card added again with the same code starts included and connected.
+
+What was made on its downloaded lines is **remembered** first (V049, `srm.card_line_memory`, by the card's last four
+digits and the card company's line id): each line's tag, Amazon order matches, family-page notes, tax-year move, the
+cash-ledger entry and the check linked to it, and a payee, memo or expense account changed by hand. The sheet lists
+what will be kept. When a card with the same last four digits — under any code — reads those lines again (Import
+File…, or the daily refresh), they re-attach to the new entries and the memory goes; until then Sources shows how many
+lines wait. Charges entered by hand that no download has are not kept.
 
 ### Removing cash ledger entries (Banking ▸ Cash Ledger ▸ Register)
 
@@ -611,7 +619,15 @@ from one year to the next and forecasts what the children's ages bring. Everythi
     CPI months compared.
   - **Spending Sources:** each checking account, credit card and cash ledger, with a checkbox that includes it or
     leaves it out. The choice is kept in the security master (`srm.spending_source`, V038), shared by every Mac, with
-    who changed it and when. For each source:
+    who changed it and when. **Disconnect…** (V049) takes a source out of the analysis without deleting anything: its
+    register stays in the security master with its tags, notes, Amazon matches and tax-year moves, and its links to
+    the other sources — card payments linked to the checks that paid them, cash-ledger entries linked to its charges
+    or checks — are undone and kept (`srm.source_link`); the sheet lists them first. While it is disconnected, the
+    payment and funding matches leave it alone and Admin's Counted Twice finder doesn't offer its entries.
+    **Reconnect** brings it back from the security master — no download is read — and puts each kept link back where
+    both sides are still there and free, saying how many it could. A checking account's source is its register,
+    entered by hand on Banking ▸ Checking Accounts: Sources shows no drop folder, downloads or loader for it (PNC's
+    downloads, read on the Checking screen, only clear its entries). For each source:
     - where its data comes from: the loader (`pnc-bank`, `card-downloads`), its drop folders (`bank_accounts.local.json`
       / `card_accounts.local.json`, else `src-bank`, `src-cards`) and the downloads there for the account, newest first,
       with their dates and sizes; or, for a ledger, entries made by hand;

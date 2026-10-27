@@ -143,6 +143,16 @@ struct CardRemoval: Decodable, Identifiable {
     var checkingLinked: Int
     var expenseLinked: Int
     var payee: String?
+    /// What was made on its downloaded lines, kept to re-attach when a card ending the same reads them again (V049).
+    var remembered: Remembered?
+    struct Remembered: Decodable, Hashable {
+        var tags: Int
+        var amazonMatches: Int
+        var notes: Int
+        var taxMoves: Int
+        var edited: Int
+        var cardKey: String
+    }
     var folder: String
     var files: [String]
     /// Where its drop folder went, once removed.
@@ -1265,6 +1275,13 @@ struct CardRemovalSheet: View {
         if let p = r.payee { k.append("The checking entries paid to \(p)" + (r.checkingLinked > 0 ? " (\(count(r.checkingLinked, "payment", "payments")) linked, now unlinked)" : "")) }
         else if r.checkingLinked > 0 { k.append("The checking entries that paid it (\(count(r.checkingLinked, "payment", "payments")) linked, now unlinked)") }
         if r.expenseLinked > 0 { k.append(count(r.expenseLinked, "cash-ledger entry", "cash-ledger entries") + " naming its charges, now unlinked") }
+        if let m = r.remembered {
+            let parts = [m.tags > 0 ? count(m.tags, "tag", "tags") : nil, m.amazonMatches > 0 ? count(m.amazonMatches, "Amazon match", "Amazon matches") : nil,
+                         m.notes > 0 ? count(m.notes, "note", "notes") : nil, m.taxMoves > 0 ? count(m.taxMoves, "tax-year move", "tax-year moves") : nil,
+                         m.edited > 0 ? count(m.edited, "edited entry", "edited entries") : nil].compactMap { $0 }
+            k.append("Remembered for its downloaded lines" + (parts.isEmpty ? "" : " — " + parts.joined(separator: ", ")) + (r.checkingLinked + r.expenseLinked > 0 ? ", with their links" : "")
+                     + ": when a card ending \(m.cardKey) reads those lines again, they re-attach")
+        }
         k.append("The activity log of its downloads")
         return k
     }
