@@ -180,6 +180,7 @@ struct SpendingAnalysisView: View {
                 newest.map { "spending through \(shortDay($0)) (\(Freshness.age($0)))" },
                 cards?.finishedAt.map { "cards read \(Freshness.when($0))" },
                 bank?.finishedAt.map { "checking downloads read \(Freshness.when($0))" },
+                o.amazon?.lastOrder.map { "Amazon orders to \(shortDay($0))" },
                 cpi.map { "CPI through \(Freshness.date($0)?.formatted(.dateTime.month(.abbreviated).year()) ?? $0)" },
             ] as [String?]).compactMap { $0 }.joined(separator: " · "))
                 .font(.callout).foregroundStyle(stale ? Color.orange : .secondary).fixedSize(horizontal: false, vertical: true)
@@ -557,19 +558,21 @@ private struct SpendingEntriesTab: View {
             (period == "both" || (period == "current") == (e.date >= data.start && e.date <= data.end))
                 && (!onlyUnassigned || e.driver == nil)
                 && ((lockedCategory ?? category).isEmpty || (e.category ?? SpendingEngine.unassigned) == (lockedCategory ?? category))
-                && (q.isEmpty || [e.payee, e.description, e.expenseAccount, e.event, e.register].contains { ($0 ?? "").lowercased().contains(q) })
+                && (q.isEmpty || [e.payee, e.description, e.expenseAccount, e.event, e.register, e.amazonItems?.map(\.name).joined(separator: "\n")]
+                    .contains { ($0 ?? "").lowercased().contains(q) })
         }
         .sorted { $0.date > $1.date }
     }
 
     static let text = TableText<SpendingEntry>(
-        titles: ["Date", "From", "Payee", "Description", "Expense account", "Amount", "Category", "Driver", "Family member", "Event"],
-        cells: { e in [e.date, e.register ?? e.sourceTitle, e.payee ?? "", e.description ?? "", e.expenseAccount ?? "",
+        titles: ["Date", "From", "Payee", "Description", "Bought", "Expense account", "Amount", "Category", "Driver", "Family member", "Event"],
+        cells: { e in [e.date, e.register ?? e.sourceTitle, e.payee ?? "", e.description ?? "",
+                       (e.amazonItems ?? []).map(\.label).joined(separator: "; "), e.expenseAccount ?? "",
                        String(format: "%.2f", e.amount), e.category ?? "", SpendingDriver.title(e.driver), e.memberId.map(String.init) ?? "", e.event ?? ""] })
 
     var body: some View {
         let rows = shown
-        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, a statement text rule, its expense account's rule). Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to set the rule for their target account, statement text or expense account, or to file them under another expense account (Change Expense Account…), with the charges to come.") {
+        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, a statement text rule, its expense account's rule). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to set the rule for their target account, statement text or expense account, or to file them under another expense account (Change Expense Account…), with the charges to come.") {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) { entryFilters; Spacer(); entryCount(rows) }
                 VStack(alignment: .leading, spacing: 6) {
@@ -580,8 +583,9 @@ private struct SpendingEntriesTab: View {
             Table(rows, selection: $selected, columnCustomization: $columns) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 80).customizationID("date")
                 TableColumn("From") { e in Text(e.register ?? e.sourceTitle).foregroundStyle(.secondary).help(e.sourceTitle) }.width(min: 60, ideal: 100).customizationID("from")
-                TableColumn("Payee") { e in Text(e.payee ?? "").help([e.payee, e.description].compactMap { $0 }.joined(separator: "\n")) }
+                TableColumn("Payee") { e in Text(e.payee ?? "").help([e.payee, e.description, e.boughtDetail].compactMap { $0 }.joined(separator: "\n")) }
                     .width(min: 80, ideal: 220, max: 900).customizationID("payee")
+                TableColumn("Bought") { e in boughtCell(e) }.width(min: 60, ideal: 200, max: 900).customizationID("bought")
                 TableColumn("Expense account") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 130).customizationID("account")
                 TableColumn("Amount") { e in Text(money2(e.amount)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(min: 70, ideal: 90).customizationID("amount")
                 TableColumn("Category") { e in
@@ -601,7 +605,16 @@ private struct SpendingEntriesTab: View {
                     .help(e.notes ?? "")
                 }.width(min: 60, ideal: 110).customizationID("event")
             }
-            .onAppear { columns = (try? JSONDecoder().decode(TableColumnCustomization<SpendingEntry>.self, from: columnsStore)) ?? columns }
+            .onAppear {
+                columns = (try? JSONDecoder().decode(TableColumnCustomization<SpendingEntry>.self, from: columnsStore)) ?? columns
+                #if DEBUG
+                if lockedCategory == nil, !Self.amazonTestDone, let ids = UserDefaults.standard.string(forKey: "amazonLookupTest") {
+                    let wanted = Set(ids.split(separator: ",").map { $0.replacingOccurrences(of: ":", with: "-") })
+                    let picked = entries.filter { wanted.contains($0.id) }
+                    if !picked.isEmpty { Self.amazonTestDone = true; lookUp(picked, scan: !UserDefaults.standard.bool(forKey: "amazonLookupBrowse")) }
+                }
+                #endif
+            }
             .onChange(of: columns) { columnsStore = (try? JSONEncoder().encode(columns)) ?? columnsStore }
             .tableText()
             .copiesSelectedRows(rows, selected: selected, as: Self.text)
@@ -613,6 +626,15 @@ private struct SpendingEntriesTab: View {
                 }
                 Button(picked.count > 1 ? "Change Expense Account of \(picked.count) Entries…" : "Change Expense Account…") { refiling = picked }
                     .disabled(!picked.contains { $0.source != "ledger" })
+                if picked.contains(where: \.isAmazonOrderCharge) {
+                    Button(picked.count == 1 ? "Look Up Amazon Order…" : "Look Up Amazon Orders…") { lookUp(picked) }
+                        .help("Find what these Amazon charges bought on amazon.com, in a window where you sign in yourself")
+                    Button(picked.count == 1 ? "Attach an Amazon Order…" : "Attach Amazon Orders One by One…") { lookUp(picked, scan: false) }
+                        .help("Type or paste an order number for a charge, or open the order in the window and attach it")
+                }
+                if picked.contains(where: { $0.amazonItems != nil }) {
+                    Button("Take Amazon Orders Off") { Task { for e in picked where e.amazonItems != nil { await unlink(e) } } }
+                }
                 if picked.count == 1, let e = picked.first {
                     Divider()
                     if let id = e.payeeId { Button("Rule for Target Account \(e.payee ?? "")…") { ruleFor = RuleTarget(payeeId: id, name: e.payee ?? "") } }
@@ -622,6 +644,12 @@ private struct SpendingEntriesTab: View {
                         Button("Rule for Statement Text…") { ruleFor = RuleTarget(pattern: e.statementKey, name: e.statementKey) }
                     }
                     if let id = e.expenseAccountId { Button("Rule for Expense Account \(e.expenseAccount ?? "")…") { ruleFor = RuleTarget(expenseAccountId: id, name: e.expenseAccount ?? "") } }
+                    if !e.amazonOrderIds.isEmpty {
+                        Divider()
+                        ForEach(e.amazonOrderIds, id: \.self) { o in
+                            Button("Open Amazon Order \(o)") { if let url = AmazonItem.orderURL(o) { NSWorkspace.shared.open(url) } }
+                        }
+                    }
                 }
                 Divider()
                 CopyRowsButton(rows: rows, ids: ids, text: Self.text)
@@ -659,7 +687,7 @@ private struct SpendingEntriesTab: View {
             .frame(maxWidth: 220)
         }
         Toggle("No driver yet", isOn: $onlyUnassigned).toggleStyle(.checkbox)
-        TextField("Search payee, description, event", text: $search).textFieldStyle(.roundedBorder).frame(minWidth: 160, maxWidth: 240)
+        TextField("Search payee, item bought, event", text: $search).textFieldStyle(.roundedBorder).frame(minWidth: 160, maxWidth: 240)
     }
 
     @ViewBuilder
@@ -677,6 +705,35 @@ private struct SpendingEntriesTab: View {
 
     private func clear(_ picked: [SpendingEntry]) async {
         _ = await tag(picked, [:])
+    }
+
+    /// What an Amazon charge bought, as a link to its order on amazon.com: the items and their costs on hover. Edit
+    /// Link… looks the charge up again; Remove Link takes its orders off (for good: the export won't match it again).
+    @ViewBuilder
+    private func boughtCell(_ e: SpendingEntry) -> some View {
+        if let bought = e.bought, let order = e.amazonOrderIds.first, let url = AmazonItem.orderURL(order) {
+            LinkedWords(link: SecurityLink(address: url.absoluteString, text: bought,
+                                           tip: LinkRichText.data(NSAttributedString(string: e.boughtDetail ?? "")),
+                                           title: "Amazon order \(e.amazonOrderIds.joined(separator: ", "))"),
+                        words: bought, testID: "bought:\(e.id)",
+                        edit: { lookUp([e]) }, remove: { Task { await unlink(e) } })
+        } else {
+            Text("")
+        }
+    }
+
+    #if DEBUG
+    /// Self-tests (-amazonLookupTest card:3601,card:3592): the lookup opens once.
+    static var amazonTestDone = false
+    #endif
+
+    /// The Amazon Order Lookup for these charges, in its own window; what it attaches comes back to the table.
+    private func lookUp(_ picked: [SpendingEntry], scan: Bool = true) {
+        AmazonLookupWindow.open(picked, scan: scan) { found in for e in found { changed(e) } }
+    }
+
+    private func unlink(_ e: SpendingEntry) async {
+        do { if let updated = try await SpendingClient.unlinkAmazon(e) { changed(updated) } } catch { NSSound.beep() }
     }
 }
 
@@ -743,6 +800,9 @@ private struct SpendingTagSheet: View {
             Text(entries.count == 1 ? "Tag Entry" : "Tag \(entries.count) Entries").heading(.heading)
             Text(entries.count == 1 ? "\(shortDay(entries[0].date)) \(entries[0].payee ?? "") \(money2(entries[0].amount))"
                  : "\(entries.count) entries, \(money2(entries.map(\.amount).reduce(0, +)))").foregroundStyle(.secondary)
+            if entries.count == 1, let bought = entries[0].boughtDetail {
+                Text(bought).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            }
             Form {
                 DimensionPickers(setup: setup, category: $category, driver: $driver, member: $member)
                 TextField("Event", text: $event, prompt: Text("Philmont 2026, a wedding, a roof repair"))
@@ -1543,6 +1603,7 @@ private struct SpendingSourcesTab: View {
     var changed: (SpendingSources) -> Void
     @State private var problem: String?
     @State private var saving: String?
+    @State private var loadingAmazon = false
 
     var body: some View {
         if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
@@ -1555,8 +1616,137 @@ private struct SpendingSourcesTab: View {
                 }
             }
         }
+        if let a = sources.amazon { amazonBox(a) }
         tablesBox
         loadsBox
+    }
+
+    // MARK: Amazon's order export
+
+    private func amazonBox(_ a: AmazonOrders) -> some View {
+        let y = String(sources.start.prefix(4))
+        return Box(title: "Amazon Orders", symbol: "shippingbox", help: "What was bought behind the Amazon charges. Amazon has no way for a program to read a personal account's orders, so they come from Amazon's own export: amazon.com ▸ Account ▸ Request Your Data ▸ Your Orders. When Amazon's e-mail arrives, download the zip and import it here (Import Export…), or drop it in the folder below and press Read Again. srm.py load amazon-orders reads its orders, shipments and items (not addresses or gift messages) and matches each Amazon charge to the shipment it paid for — Amazon charges the card when a shipment leaves, for its items and their tax — or to a whole order, and each credit to the item returned, by amount and date. The Entries tab then shows what each charge bought.") {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+                GridRow {
+                    Text("Comes from").foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Amazon's Request Your Data ▸ Your Orders export — the zip as downloaded, or its Retail.OrderHistory CSV files — read by srm.py load \(a.loader)\(a.foldersListed ? " from:" : "")")
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(a.dropFolders ?? [], id: \.self) { f in Text("\(f)/").font(.callout.monospaced()).textSelection(.enabled) }
+                        if a.foldersListed && a.downloads.isEmpty {
+                            Text("No export there now.").foregroundStyle(.secondary)
+                        }
+                        ForEach(a.downloads.prefix(4), id: \.path) { d in
+                            HStack(spacing: 6) {
+                                Image(systemName: "doc.zipper").foregroundStyle(.secondary)
+                                Text(d.path).font(.callout.monospaced()).textSelection(.enabled)
+                                Text("\(Freshness.when(d.modified)) · \(ByteCountFormatter.string(fromByteCount: Int64(d.bytes), countStyle: .file))").foregroundStyle(.secondary)
+                            }
+                        }
+                        if a.downloads.count > 4 { Text("and \(a.downloads.count - 4) older").foregroundStyle(.secondary) }
+                    }
+                }
+                GridRow {
+                    Text("Lands in").foregroundStyle(.secondary)
+                    Text("srm.amazon_order (\(a.orders.formatted()) orders\(a.firstOrder.map { ", \(shortDay($0)) – \(shortDay(a.lastOrder))" } ?? "")) → srm.amazon_shipment, srm.amazon_item (\(a.items.formatted()) items) → srm.amazon_match (each charge's shipment or order) → srm.v_amazon_charge (what each entry bought)")
+                        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                }
+                GridRow {
+                    Text("Last import").foregroundStyle(.secondary)
+                    if let r = a.lastImport {
+                        Text("\(Freshness.when(r.finishedAt)) (\(Freshness.age(r.finishedAt))), load \(r.loadId) \(r.status)\(r.message.map { ": \($0)" } ?? "")")
+                            .foregroundStyle(r.status == "succeeded" ? .primary : Color.orange).fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("Never: request Your Orders at amazon.com ▸ Request Your Data, then Import Export…").foregroundStyle(.orange)
+                    }
+                }
+                GridRow {
+                    Text("Orders").foregroundStyle(.secondary)
+                    if a.orders == 0 {
+                        Text("None yet").foregroundStyle(.secondary)
+                    } else {
+                        Text("To \(shortDay(a.lastOrder)) (\(Freshness.age(a.lastOrder)))" + (a.afterExport > 0
+                             ? "; \(a.afterExport) Amazon charge\(a.afterExport == 1 ? "" : "s") since (newest \(shortDay(a.newestCharge))): request a newer export to match \(a.afterExport == 1 ? "it" : "them")" : ""))
+                            .foregroundStyle(a.afterExport > 0 ? .orange : .primary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                GridRow {
+                    Text("Matched").foregroundStyle(.secondary)
+                    Text("\(y): \(a.matchedNow.formatted()) of \(a.chargesNow.formatted()) Amazon charges, \(money(a.matchedSpentNow)) of \(money(a.spentNow)) · all years: \(a.matched.formatted()) of \(a.charges.formatted())")
+                        .monospacedDigit().fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .font(.callout)
+            HStack {
+                Button("Import Export…") { pickAmazonExport() }
+                    .help("Choose the zip Amazon's Request Your Data e-mail links to (or a Retail.OrderHistory CSV): it is saved in the drop folder and read")
+                Button("Read Again") { Task { await loadAmazon(nil) } }
+                    .help("Read the exports in the drop folder again and match the Amazon charges loaded since")
+                if loadingAmazon { ProgressView().controlSize(.small) }
+            }
+            .disabled(loadingAmazon)
+            if !a.unmatchedCharges.isEmpty || !a.unmatchedShipments.isEmpty {
+                DisclosureGroup("Not matched in \(y): \(a.unmatchedCharges.count) Amazon charge\(a.unmatchedCharges.count == 1 ? "" : "s"), \(a.unmatchedShipments.count) shipment\(a.unmatchedShipments.count == 1 ? "" : "s")") {
+                    unmatchedLists(a)
+                }
+                .font(.callout)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func unmatchedLists(_ a: AmazonOrders) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !a.unmatchedCharges.isEmpty {
+                Text("Charges and credits no order matched: an order outside the export (another account, a gift card, Whole Foods), or a charge for several orders at once")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 2) {
+                    ForEach(a.unmatchedCharges.prefix(40)) { c in
+                        GridRow {
+                            Text(shortDay(c.date)).monospacedDigit().foregroundStyle(.secondary)
+                            Text(c.register ?? c.source).foregroundStyle(.secondary)
+                            Text(c.payee ?? "").lineLimit(1)
+                            Text(money2(c.amount)).monospacedDigit().gridColumnAlignment(.trailing)
+                        }
+                    }
+                }
+                if a.unmatchedCharges.count > 40 { Text("and \(a.unmatchedCharges.count - 40) more").foregroundStyle(.secondary) }
+            }
+            if !a.unmatchedShipments.isEmpty {
+                Text("Shipments no charge paid: paid by another card, a gift card or points, or charged with others in a way not matched")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 2) {
+                    ForEach(a.unmatchedShipments.prefix(40)) { s in
+                        GridRow {
+                            Text(shortDay(s.shipped ?? s.ordered)).monospacedDigit().foregroundStyle(.secondary)
+                            Button(s.orderId) { if let url = AmazonItem.orderURL(s.orderId) { NSWorkspace.shared.open(url) } }
+                                .buttonStyle(.link).help("Open the order on amazon.com")
+                            Text((s.items ?? "").replacingOccurrences(of: "\n", with: "; ")).lineLimit(1).help(s.items ?? "")
+                            Text(money2(s.amount)).monospacedDigit().gridColumnAlignment(.trailing)
+                            Text(s.payment ?? "").foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }
+                if a.unmatchedShipments.count > 40 { Text("and \(a.unmatchedShipments.count - 40) more").foregroundStyle(.secondary) }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func pickAmazonExport() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Amazon's Order Export"
+        panel.message = "Choose the zip from Amazon's Request Your Data ▸ Your Orders e-mail, or a Retail.OrderHistory CSV"
+        panel.allowedContentTypes = [.zip, .commaSeparatedText]
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await loadAmazon(url) }
+    }
+
+    private func loadAmazon(_ file: URL?) async {
+        loadingAmazon = true
+        defer { loadingAmazon = false }
+        do { changed(try await SpendingClient.loadAmazon(file, window: sources)); problem = nil } catch { problem = describe(error) }
     }
 
     // MARK: Time window
@@ -1764,7 +1954,7 @@ private struct SpendingSourcesTab: View {
     }
 
     private var loadsBox: some View {
-        Box(title: "Last Loads", symbol: "arrow.down.doc", help: "The loaders that bring outside data into these tables, each run through srm-loader and audited in srm.load_run: pnc-bank and card-downloads read the drop folders' downloads, fred-yields the CPI from FRED. A run reads every download in the folders and keeps each line once. Banking ▸ Checking Accounts and Credit Card Accounts run them (Import File…), as do MxJobsMGR's and MxDataHUB's refreshes.") {
+        Box(title: "Last Loads", symbol: "arrow.down.doc", help: "The loaders that bring outside data into these tables, each run through srm-loader and audited in srm.load_run: pnc-bank and card-downloads read the drop folders' downloads, amazon-orders Amazon's order export, fred-yields the CPI from FRED. A run reads every download in the folders and keeps each line once. Banking ▸ Checking Accounts and Credit Card Accounts run them (Import File…), as do MxJobsMGR's and MxDataHUB's refreshes.") {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 GridRow { Text("Loader"); Text("Last run"); Text("Status"); Text("Result") }
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -2162,7 +2352,8 @@ private struct SpendingDeepDiveTab: View {
                 ForEach(Array(top)) { e in
                     GridRow {
                         Text(shortDay(e.date)).monospacedDigit().foregroundStyle(.secondary)
-                        Text(e.payee ?? e.description ?? "—").lineLimit(1)
+                        Text(e.bought ?? e.payee ?? e.description ?? "—").lineLimit(1)
+                            .help([e.payee, e.description, e.boughtDetail].compactMap { $0 }.joined(separator: "\n"))
                         Text(money2(e.amount)).monospacedDigit().gridColumnAlignment(.trailing)
                         Text(e.event ?? SpendingDriver.title(e.driver)).foregroundStyle(.secondary).lineLimit(1)
                     }

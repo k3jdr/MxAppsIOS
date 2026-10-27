@@ -1,0 +1,4 @@
+{
+  "_comment": "Copy to amazon_orders.local.json (not in git). dropFolders: where you save Amazon's Request Your Data ▸ Your Orders export — the zip as downloaded, or its Retail.OrderHistory.*.csv files unpacked (sub-folders are read too). srm.py load amazon-orders reads them and matches the orders to the Amazon card charges.",
+  "dropFolders": ["~/MyCodeGIT/MxDataSRM/src-amazon"]
+}

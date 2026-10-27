@@ -21,16 +21,35 @@
     GET    /spending/analysis?start=&end=&priorStart=&priorEnd=
                                                    every spending dollar of both periods (srm.v_spending_entry) from
                                                    the registers included (V038), each category's inflation between
-                                                   them (CPI, else its assumption) and the dates each register covers
+                                                   them (CPI, else its assumption) and the dates each register covers;
+                                                   an Amazon charge or credit matched to its order (V046) carries
+                                                   amazonOrders and amazonItems [{name, asin, quantity, amount,
+                                                   orderId, orderedAt}] — what was bought
     GET    /spending/sources?start=&end=&priorStart=&priorEnd=
                                                    the spending sources — each checking account, credit card and
                                                    expense ledger: included or not, where its data comes from (drop
                                                    folders, the downloads there, the line and register tables), its
                                                    last import, its entries' dates and its spending in both periods —
+                                                   Amazon's order export (amazon: its drop folders and downloads, the
+                                                   orders it holds, its last load, how many Amazon charges it matched,
+                                                   those it didn't and the shipments no charge paid) —
                                                    and every SRM table and view the analysis reads, with its rows,
                                                    newest data and last change
     PUT    /spending/sources/<source>/<code>       include or leave out a register {included, by} (source bank, card
                                                    or ledger); answers with the sources
+    POST   /spending/amazon/load                   read Amazon's order export again (srm-loader amazon-orders); with
+                                                   {filename, data (base64)}, first save that export — the zip as
+                                                   downloaded or a Retail.OrderHistory CSV — in its drop folder;
+                                                   answers with the sources and the load {status, message, file}
+    GET    /spending/amazon/known?ids=A,B          which of these Amazon orders are kept, with items, and where from
+    POST   /spending/amazon/attach                 MxAcctMGR's Amazon Order Lookup: {charges: [{source, entryId,
+                                                   orderIds}], orders: [{orderId, orderedAt, total, payment, items:
+                                                   [{name, asin, quantity, price}]}], by} — keeps each order its page
+                                                   gave (an order read from the export stays as it is) and attaches
+                                                   the orders Amazon's Transactions list names to each charge, in
+                                                   place of what it had; answers with the entries
+    POST   /spending/amazon/unlink/<source>/<id>   take the orders off a charge for good (the export doesn't match it
+                                                   again); answers with the entry
     GET    /spending/feedback?author=&status=      notes on the page from its read-only web page (V039), newest first
     POST   /spending/feedback                      add one {author, kind, tab, section, category, entrySource, entryId,
                                                    suggestion, message, context}
@@ -62,9 +81,13 @@ Every setup change answers with the setup. Drivers: inflation, family_growth, ne
 lifestyle (V045), one_time, taxes (V044).
 """
 
+import base64
 import datetime as dt
+import hashlib
 import json
 import os
+import re
+import urllib.request
 
 from bank import fetch, nest_link, _date, _num, Conflict
 
@@ -355,7 +378,7 @@ def save_tag(conn, source, entry_id, body):
                               updated_by = excluded.updated_by, updated_at = now()""" % (column, column),
               (entry_id, category, driver, member, event, notes, _by(body)))
     conn.commit()
-    rows = fetch(conn, ENTRY_SQL + " WHERE source = %s AND entry_id = %s", (source, entry_id))
+    rows = fetch(conn, _entry_sql(conn) + " WHERE source = %s AND entry_id = %s", (source, entry_id))
     return {"entry": rows[0] if rows else None}
 
 
@@ -367,6 +390,24 @@ ENTRY_SQL = """
            category_code AS category, category_from AS "categoryFrom", driver, driver_from AS "driverFrom",
            member_id AS "memberId", event, notes, tagged, rule_pattern AS "rulePattern"
       FROM srm.v_spending_entry"""
+# The same, with what each matched Amazon charge or credit bought (V046).
+AMAZON_ENTRY_SQL = ENTRY_SQL.replace("""
+      FROM srm.v_spending_entry""", """, amazon_orders AS "amazonOrders", amazon_items AS "amazonItems",
+           amazon_matched_by AS "amazonMatchedBy"
+      FROM (SELECT e.*, a.orders AS amazon_orders, a.items AS amazon_items, a.matched_by AS amazon_matched_by
+              FROM srm.v_spending_entry e LEFT JOIN srm.v_amazon_charge a USING (source, entry_id)) e""")
+
+
+def _readable(conn, name):
+    """The security master has this table or view and the role may read it."""
+    return fetch(conn, """SELECT CASE WHEN to_regclass(%s) IS NULL THEN false
+                                      ELSE has_table_privilege(to_regclass(%s), 'SELECT') END AS ok""", (name, name))[0]["ok"]
+
+
+def _entry_sql(conn):
+    """The entry query: with what Amazon charges bought where the security master has the Amazon orders (V046) and
+    this role may read them (a REVOKE keeps them off the family page)."""
+    return AMAZON_ENTRY_SQL if _readable(conn, "srm.v_amazon_charge") else ENTRY_SQL
 
 
 def _year_back(d):
@@ -418,7 +459,7 @@ def _left_out(conn):
 def analysis(conn, q):
     start, end, prior_start, prior_end = _window(q)
     out = _left_out(conn)
-    entries = [e for e in fetch(conn, ENTRY_SQL + """ WHERE txn_date BETWEEN %s AND %s OR txn_date BETWEEN %s AND %s
+    entries = [e for e in fetch(conn, _entry_sql(conn) + """ WHERE txn_date BETWEEN %s AND %s OR txn_date BETWEEN %s AND %s
                                                       ORDER BY txn_date, source, entry_id""",
                                 (prior_start, prior_end, start, end))
                if (e["source"], e["register"]) not in out]
@@ -577,6 +618,84 @@ LANDS_IN = {"bank": ("srm.bank_line", "srm.bank_txn"), "card": ("srm.card_line",
             "ledger": (None, "srm.expense_entry")}
 LOADER = {"bank": ("pnc-bank", "pnc_bank"), "card": ("card-downloads", "card_downloads")}
 
+# Amazon's order export (V046), in the tables list when the security master has it.
+AMAZON_TABLES = [
+    ("srm.amazon_order", "table", "Amazon orders from the Request Your Data export (amazon-orders), with their shipments and items: what was bought behind the Amazon charges",
+     """SELECT count(*) AS rows, max(ordered_at)::date AS newest,
+               (SELECT finished_at FROM srm.load_run WHERE load_id = max(o.load_id)) AS changed FROM srm.amazon_order o"""),
+    ("srm.amazon_match", "table", "Which Amazon charge paid which shipment or order, and which credit refunded which item (amazon-orders matches them by amount and date)",
+     "SELECT count(*) AS rows, NULL::date AS newest, max(matched_at) AS changed FROM srm.amazon_match"),
+]
+# Amazon charges that are orders: not memberships, video, e-books, audiobooks or AWS (as amazon_orders.is_order_charge).
+AMAZON_TEXT = "concat_ws(' ', e.payee, e.description)"
+AMAZON_ORDER_CHARGE = (AMAZON_TEXT + " ~* 'amazon|amzn' AND " + AMAZON_TEXT + " !~* 'prime video|amazon prime|primevideo|"
+                       "prime membership|kindle|audible|web services|\\maws\\M|amazon music|amazon digital|amzn digital'")
+
+
+def _amazon_downloads(folders):
+    """The zips and CSV files in Amazon's drop folders (and below, as the loader reads them), newest first."""
+    found = []
+    for folder in folders:
+        root = os.path.expanduser(folder)
+        for d, dirs, names in os.walk(root):
+            dirs[:] = [x for x in dirs if not x.startswith((".", "_"))]
+            for n in names:
+                p = os.path.join(d, n)
+                if n.lower().endswith((".zip", ".csv")) and not n.startswith(".") and os.path.isfile(p):
+                    st = os.stat(p)
+                    found.append({"path": _home(p), "name": n, "bytes": st.st_size,
+                                  "modified": dt.datetime.fromtimestamp(st.st_mtime).astimezone().isoformat(timespec="seconds")})
+    return sorted(found, key=lambda f: f["modified"], reverse=True)
+
+
+def _amazon(conn, start, end, folders):
+    """Amazon's order export (V046): where it comes from, what it holds and its last load; the period's Amazon charges
+    in the analysis, how many it matched and the newest one after its last order (a newer export is due); and the
+    period's charges and credits no order matched and shipments no charge paid. None before V046 (or when the role
+    may not read them)."""
+    if not (_readable(conn, "srm.amazon_order") and _readable(conn, "srm.v_amazon_charge")):
+        return None
+    o = fetch(conn, """SELECT count(*) AS orders, min(ordered_at)::date AS "firstOrder", max(ordered_at)::date AS "lastOrder",
+                              (SELECT count(*) FROM srm.amazon_item) AS items
+                         FROM srm.amazon_order""")[0]
+    c = fetch(conn, """
+        SELECT count(*) FILTER (WHERE e.txn_date BETWEEN %s AND %s) AS "chargesNow",
+               count(a.entry_id) FILTER (WHERE e.txn_date BETWEEN %s AND %s) AS "matchedNow",
+               coalesce(sum(e.amount) FILTER (WHERE e.txn_date BETWEEN %s AND %s), 0) AS "spentNow",
+               coalesce(sum(e.amount) FILTER (WHERE e.txn_date BETWEEN %s AND %s AND a.entry_id IS NOT NULL), 0) AS "matchedSpentNow",
+               count(*) AS charges, count(a.entry_id) AS matched, max(e.txn_date) AS "newestCharge",
+               count(*) FILTER (WHERE a.entry_id IS NULL AND e.txn_date > %s) AS "afterExport"
+          FROM srm.v_spending_entry e
+          LEFT JOIN srm.v_amazon_charge a USING (source, entry_id)
+         WHERE e.source IN ('card', 'bank') AND """ + AMAZON_ORDER_CHARGE,
+              (start, end) * 4 + (o["lastOrder"] or dt.date(1900, 1, 1),))[0]
+    unmatched = fetch(conn, """
+        SELECT e.source, e.entry_id AS "entryId", e.txn_date AS date, e.register, e.payee, e.amount
+          FROM srm.v_spending_entry e
+         WHERE e.source IN ('card', 'bank') AND e.txn_date BETWEEN %s AND %s AND """ + AMAZON_ORDER_CHARGE + """
+           AND NOT EXISTS (SELECT FROM srm.v_amazon_charge a WHERE a.source = e.source AND a.entry_id = e.entry_id)
+         ORDER BY e.txn_date DESC LIMIT 200""", (start, end))
+    shipments = fetch(conn, """
+        SELECT s.shipment_id AS "shipmentId", s.order_id AS "orderId", o.ordered_at::date AS ordered,
+               s.shipped_at::date AS shipped, s.charge_amount AS amount, s.shipment_status AS status, o.payment,
+               string_agg(CASE WHEN i.quantity > 1 THEN i.quantity || ' × ' ELSE '' END || i.product_name, E'\n'
+                          ORDER BY i.item_id) AS items
+          FROM srm.amazon_shipment s
+          JOIN srm.amazon_order o USING (order_id)
+          JOIN srm.amazon_item i USING (shipment_id)
+         WHERE coalesce(s.shipped_at, o.ordered_at)::date BETWEEN %s AND %s AND s.charge_amount > 0
+           AND coalesce(o.currency, 'USD') = 'USD' AND coalesce(o.order_status, '') !~* 'cancel'
+           AND coalesce(s.shipment_status, '') !~* 'cancel'
+           AND NOT EXISTS (SELECT FROM srm.amazon_match m WHERE m.shipment_id = s.shipment_id AND m.how IN ('shipment', 'shipments'))
+           AND NOT EXISTS (SELECT FROM srm.amazon_match m WHERE m.order_id = s.order_id AND m.how = 'order')
+         GROUP BY s.shipment_id, o.order_id
+         ORDER BY coalesce(s.shipped_at, o.ordered_at) DESC LIMIT 200""", (start, end))
+    return dict(o, **c,
+                loader="amazon-orders", dropFolders=folders, foldersListed=folders is not None,
+                downloads=_amazon_downloads(folders) if folders else [],
+                lastImport=_run(conn, loader="amazon_orders"),
+                unmatchedCharges=unmatched, unmatchedShipments=shipments)
+
 
 def sources(conn, q):
     start, end, prior_start, prior_end = _window(q)
@@ -585,6 +704,11 @@ def sources(conn, q):
         folders = {"bank": _drop_folders(pnc_bank), "card": _drop_folders(card_downloads)}
     except ImportError:
         folders = {}    # a machine without the loaders (the web page's server): no drop folders to list
+    try:
+        from srmlib.loaders import amazon_orders
+        amazon_folders = _drop_folders(amazon_orders)
+    except ImportError:
+        amazon_folders = None
     choice = {(r["source"], r["register"]): r for r in fetch(conn, """
         SELECT source, register, included, updated_by AS "updatedBy", updated_at AS "updatedAt" FROM srm.spending_source""")}
     spent = {(r["source"], r["register"]): r for r in fetch(conn, """
@@ -611,13 +735,159 @@ def sources(conn, q):
                 spendingFirst=s.get("first"), spendingLast=s.get("last"),
                 entriesNow=s.get("entriesNow", 0), spentNow=s.get("spentNow", 0),
                 entriesBefore=s.get("entriesBefore", 0), spentBefore=s.get("spentBefore", 0)))
+    amazon = _amazon(conn, start, end, amazon_folders)
     tables = []
-    for name, kind, role, sql in TABLES:
+    for name, kind, role, sql in TABLES + (AMAZON_TABLES if amazon is not None else []):
         row = fetch(conn, sql)[0]
         tables.append(dict(name=name, kind=kind, role=role, **row))
-    loaders = [r for r in (_run(conn, loader=n) for n in ("pnc_bank", "card_downloads", "fred_yields")) if r]
+    loaders = [r for r in (_run(conn, loader=n) for n in ("pnc_bank", "card_downloads", "amazon_orders", "fred_yields")) if r]
     return {"start": start, "end": end, "priorStart": prior_start, "priorEnd": prior_end, "sources": out,
-            "tables": tables, "loaders": loaders, "now": dt.datetime.now().astimezone()}
+            "tables": tables, "loaders": loaders, "amazon": amazon, "now": dt.datetime.now().astimezone()}
+
+
+# srm-loader runs the loader, so the load shows in the shared activity log (MxDataHUB Activity, MxJobsMGR).
+AMAZON_LOADER = os.environ.get("SRM_LOADER_URL", "http://127.0.0.1:8770") + "/load/amazon-orders"
+
+
+def load_amazon(conn, body, q):
+    """Saves an Amazon order export in the first drop folder (when one is sent), then runs srm.py load amazon-orders
+    through srm-loader; answers with the sources and how the load went."""
+    from srmlib.loaders import amazon_orders   # SRM's folder is on sys.path (accounts_service.SRM)
+    saved = None
+    if body.get("data"):
+        name = os.path.basename(str(body.get("filename") or "")).strip()
+        if not name.lower().endswith((".zip", ".csv")) or name.startswith("."):
+            raise ValueError("an Amazon order export is a .zip (as downloaded) or a Retail.OrderHistory .csv")
+        try:
+            data = base64.b64decode(body["data"], validate=True)
+        except ValueError:
+            raise ValueError("data must be the file in base64")
+        folder = os.path.expanduser(_drop_folders(amazon_orders)[0])
+        os.makedirs(folder, exist_ok=True)
+        saved = os.path.join(folder, name)
+        tmp = os.path.join(folder, ".part-" + name)    # the loader doesn't read dot files
+        with open(tmp, "wb") as f:
+            f.write(data)
+        try:
+            found = [t for _, t in amazon_orders.texts(tmp) if amazon_orders.read_csv(t) is not None]
+        except Exception:
+            found = []
+        if not found:
+            os.remove(tmp)
+            raise ValueError("%s holds no Amazon order history (Retail.OrderHistory CSV with Order ID, Order Date, "
+                             "Product Name and Total Owed columns)" % name)
+        os.replace(tmp, saved)
+    req = urllib.request.Request(AMAZON_LOADER, data=b"", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            out = json.load(r)
+    except Exception as e:
+        raise ValueError("srm-loader didn't run amazon-orders: %s" % e)
+    run = (out.get("runs") or [{}])[-1]
+    return dict(sources(conn, q), load={"status": run.get("status") or out.get("status"),
+                                        "message": run.get("message") or out.get("error"),
+                                        "file": saved and _home(saved)})
+
+
+AMAZON_ORDER_ID = re.compile(r"^[0-9D]\d{2}-\d{7}-\d{7}$")
+
+
+def _amazon_ids(values):
+    ids = [str(v).strip() for v in values or [] if str(v).strip()]
+    bad = [i for i in ids if not AMAZON_ORDER_ID.match(i)]
+    if bad:
+        raise ValueError("not an Amazon order number: %s" % ", ".join(bad[:3]))
+    return ids
+
+
+def amazon_known(conn, q):
+    """Which of these orders are kept (so the lookup reads only the others' pages)."""
+    ids = _amazon_ids((q.get("ids") or "").split(","))
+    rows = fetch(conn, """SELECT order_id AS "orderId", origin, items FROM srm.amazon_order WHERE order_id = ANY(%s)""", (ids,))
+    return {"known": rows}
+
+
+def _entry(conn, source, entry_id):
+    rows = fetch(conn, _entry_sql(conn) + " WHERE source = %s AND entry_id = %s", (source, entry_id))
+    return rows[0] if rows else None
+
+
+def attach_amazon(conn, body):
+    """The Amazon Order Lookup's results: each order its page gave (unless the export has it), and each charge's orders
+    from Amazon's Transactions list, in place of the matches it had."""
+    orders = body.get("orders") or []
+    for o in orders:
+        oid = _amazon_ids([o.get("orderId")])[0]
+        known = fetch(conn, "SELECT origin FROM srm.amazon_order WHERE order_id = %s", (oid,))
+        if known and known[0]["origin"] == "export":
+            continue     # the export's rows are fuller (shipments, tax): they stay
+        items = [i for i in (o.get("items") or []) if str(i.get("name") or "").strip()]
+        if not items:
+            continue
+        ordered = o.get("orderedAt")
+        try:
+            ordered = dt.date.fromisoformat(str(ordered)[:10]) if ordered else None
+        except ValueError:
+            ordered = None
+        total = round(float(o["total"]), 2) if o.get("total") is not None else None
+        payment = str(o.get("payment") or "").strip()[:120] or None
+        last4 = payment[-4:] if payment and payment[-4:].isdigit() else None
+        digest = "order page:" + hashlib.sha1(json.dumps(o, sort_keys=True, default=str).encode()).hexdigest()
+        fetch(conn, """INSERT INTO srm.amazon_order (order_id, website, ordered_at, origin, payment, payment_last4, items,
+                                                     total_owed, content_hash, file_name)
+                       VALUES (%s, 'Amazon.com', coalesce(%s::date, now()::date), 'order page', %s, %s, %s, %s, %s,
+                               'amazon.com order page')
+                       ON CONFLICT (order_id) DO UPDATE SET ordered_at = excluded.ordered_at, payment = excluded.payment,
+                              payment_last4 = excluded.payment_last4, items = excluded.items,
+                              total_owed = excluded.total_owed, content_hash = excluded.content_hash, updated_at = now()""",
+              (oid, ordered, payment, last4, len(items), total, digest))
+        fetch(conn, "DELETE FROM srm.amazon_item WHERE order_id = %s", (oid,))
+        for i in items:
+            qty = int(i.get("quantity") or 1)
+            price = round(float(i["price"]), 2) if i.get("price") is not None else None
+            fetch(conn, """INSERT INTO srm.amazon_item (order_id, product_name, asin, quantity, unit_price, total_owed)
+                           VALUES (%s, %s, %s, %s, %s, %s)""",
+                  (oid, str(i["name"]).strip()[:500], (str(i.get("asin") or "").strip() or None), qty, price,
+                   round(price * qty, 2) if price is not None else None))
+    out = []
+    for c in body.get("charges") or []:
+        source, entry_id = c.get("source"), int(c.get("entryId") or 0)
+        if source not in ("card", "bank"):
+            raise ValueError("source must be card or bank")
+        ids = _amazon_ids(c.get("orderIds"))
+        column = "card_txn_id" if source == "card" else "bank_txn_id"
+        kept = [r["order_id"] for r in fetch(conn, "SELECT order_id FROM srm.amazon_order WHERE order_id = ANY(%s)", (ids,))]
+        if ids and not kept:
+            raise LookupError("none of %s is kept: its page gave no items" % ", ".join(ids))
+        txn = fetch(conn, "SELECT txn_date FROM srm.%s WHERE txn_id = %%s" % ("card_txn" if source == "card" else "bank_txn"),
+                    (entry_id,))
+        if not txn:
+            raise LookupError("no %s entry %s" % (source, entry_id))
+        fetch(conn, "DELETE FROM srm.amazon_match WHERE %s = %%s" % column, (entry_id,))
+        for oid in kept:
+            fetch(conn, """INSERT INTO srm.amazon_match (%s, order_id, how, days, matched_by)
+                           SELECT %%s, %%s, 'transaction', %%s - ordered_at::date, 'amazon-lookup'
+                             FROM srm.amazon_order WHERE order_id = %%s""" % column,
+                  (entry_id, oid, txn[0]["txn_date"], oid))
+        out.append((source, entry_id))
+    conn.commit()
+    return {"entries": [e for e in (_entry(conn, s_, i) for s_, i in out) if e]}
+
+
+def unlink_amazon(conn, source, entry_id, body):
+    """Takes the orders off a charge, for good: an 'unlinked' row keeps the loader from matching it again (the lookup
+    can still attach orders to it)."""
+    if source not in ("card", "bank"):
+        raise ValueError("source must be card or bank")
+    entry_id = int(entry_id)
+    column = "card_txn_id" if source == "card" else "bank_txn_id"
+    had = fetch(conn, "SELECT order_id FROM srm.amazon_match WHERE %s = %%s AND how <> 'unlinked' LIMIT 1" % column, (entry_id,))
+    if had:
+        fetch(conn, "DELETE FROM srm.amazon_match WHERE %s = %%s" % column, (entry_id,))
+        fetch(conn, """INSERT INTO srm.amazon_match (%s, order_id, how, matched_by) VALUES (%%s, %%s, 'unlinked', %%s)"""
+              % column, (entry_id, had[0]["order_id"], _by(body) or "MxAcctMGR"))
+    conn.commit()
+    return {"entry": _entry(conn, source, entry_id)}
 
 
 def set_source(conn, source, code, body, q):
@@ -946,7 +1216,7 @@ def change_entry(conn, source, entry_id, body, client=None):
     if not fields:
         raise ValueError("a change sets category or driver")
     entry_id = int(entry_id)
-    rows = fetch(conn, ENTRY_SQL + " WHERE source = %s AND entry_id = %s", (source, entry_id))
+    rows = fetch(conn, _entry_sql(conn) + " WHERE source = %s AND entry_id = %s", (source, entry_id))
     if not rows:
         raise LookupError("no spending entry %s %s" % (source, entry_id))
     entry = rows[0]
@@ -958,7 +1228,7 @@ def change_entry(conn, source, entry_id, body, client=None):
     if "driver" in fields:
         values["driver"] = _driver(body)
     _write_tag(conn, column, entry_id, values, _signed(author))
-    after = fetch(conn, ENTRY_SQL + " WHERE source = %s AND entry_id = %s", (source, entry_id))[0]
+    after = fetch(conn, _entry_sql(conn) + " WHERE source = %s AND entry_id = %s", (source, entry_id))[0]
     names = _names(conn)
     show = {"category": lambda v: names.get(v, "Not assigned") if v else "Not assigned",
             "driver": lambda v: DRIVER_TITLES.get(v, "no driver") if v else "no driver"}
@@ -1167,6 +1437,14 @@ def route(conn, method, parts, body, q):
         return sources(conn, q)
     if len(parts) == 4 and parts[1] == "sources" and method == "PUT":
         return set_source(conn, parts[2], parts[3], body, q)
+    if parts == ["spending", "amazon", "load"] and method == "POST":
+        return load_amazon(conn, body, q)
+    if parts == ["spending", "amazon", "known"] and method == "GET":
+        return amazon_known(conn, q)
+    if parts == ["spending", "amazon", "attach"] and method == "POST":
+        return attach_amazon(conn, body)
+    if len(parts) == 5 and parts[1:3] == ["amazon", "unlink"] and method == "POST":
+        return unlink_amazon(conn, parts[3], parts[4], body)
     if parts == ["spending", "feedback"]:
         if method == "GET":
             return feedback(conn, q)

@@ -119,6 +119,13 @@ CATEGORIES = [
                     "(also when a CSV and a QFX overlap), posted to the card's register, with its payments linked to "
                     "the checking entries that paid them.",
      "cadence": "daily", "continueAfterFailure": ["card-downloads"]},
+    {"id": "amazon-orders", "name": "Amazon orders", "loaders": ["amazon-orders"],
+     "description": "What was bought behind the Amazon card charges: Amazon's Request Your Data ▸ Your Orders export "
+                    "(the zip, or its Retail.OrderHistory CSV files) in the drop folders of amazon_orders.local.json, "
+                    "each order's shipments and items, matched to the card and checking entries by amount and date "
+                    "(a shipment's subtotal and tax, a whole order, or a returned item). Runs after the card "
+                    "downloads, so new charges find their orders.",
+     "cadence": "monthly", "continueAfterFailure": ["amazon-orders"]},
     {"id": "corporate-actions", "name": "Corporate actions", "loaders": ["fmp-corporate-actions"],
      "description": "Dividends, splits, symbol changes and delistings.", "cadence": "daily"},
     {"id": "bonds", "name": "Bonds: U.S. Treasuries", "loaders": ["treasuries"],
@@ -150,7 +157,7 @@ RUN_NAMES = {
     "vanguard-holdings": ["vanguard_holdings_vti", "vanguard_holdings_bnd", "vanguard_holdings_vxus", "vanguard_holdings_bndx"],
     "openfigi": ["openfigi_mapping"], "fmp-profiles": ["fmp_profiles"], "sec-submissions": ["sec_submissions"],
     "gleif": ["gleif"], "fmp-prices": ["fmp_prices"], "fmp-otc-prices": ["fmp_otc_prices"], "nasdaq-prices": ["nasdaq_prices"],
-    "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "vanguard-plan": ["vanguard_plan"], "pnc-bank": ["pnc_bank"], "card-downloads": ["card_downloads"], "mutual-funds": ["mutual_funds"],
+    "fmp-index-levels": ["fmp_index_levels"], "trust-navs": ["trust_navs"], "vanguard-plan": ["vanguard_plan"], "pnc-bank": ["pnc_bank"], "card-downloads": ["card_downloads"], "amazon-orders": ["amazon_orders"], "mutual-funds": ["mutual_funds"],
     "fmp-corporate-actions": ["fmp_corporate_actions"], "portfolio-snapshots": ["portfolio_snapshots"],
     "cboe-vix": ["cboe_vix"], "fred-yields": ["fred_yields"], "fmp-fundamentals": ["fmp_fundamentals"],
     "vanguard-funds": ["vanguard_funds"], "earnings-symbols": ["earnings_symbols"],

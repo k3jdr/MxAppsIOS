@@ -145,7 +145,39 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     var tagged: Bool
     /// The statement text rule it matches (V042), the longest when several do.
     var rulePattern: String?
+    /// An Amazon charge or credit matched to its orders (V046): the order numbers and what was bought.
+    var amazonOrders: String?
+    var amazonItems: [AmazonItem]?
+    /// amazon-orders (the export, by amount and date) or amazon-lookup (Amazon's own Transactions list).
+    var amazonMatchedBy: String?
     var id: String { "\(source)-\(entryId)" }
+
+    /// What an Amazon charge bought, in a line: "Kids' Swim Goggles, 3 Pack and 1 more".
+    var bought: String? {
+        guard let items = amazonItems, let first = items.first else { return nil }
+        return items.count == 1 ? first.label : "\(first.label) and \(items.count - 1) more"
+    }
+    /// Every item with its cost, and the orders: hover text.
+    var boughtDetail: String? {
+        guard let items = amazonItems, !items.isEmpty else { return nil }
+        let lines = items.map { i in i.amount.map { "\(i.label) — \(money2($0))" } ?? i.label }
+        let orders = Array(Set(items.map(\.orderId))).sorted()
+        return (amount < 0 ? "Refunded:\n" : "Bought:\n") + lines.joined(separator: "\n")
+            + "\nAmazon order\(orders.count == 1 ? "" : "s") " + orders.joined(separator: ", ")
+            + (amazonMatchedBy == "amazon-lookup" ? " — from Amazon's Transactions list" : amazonMatchedBy == "amazon-orders" ? " — matched by amount and date" : "")
+    }
+    var amazonOrderIds: [String] { Array(Set((amazonItems ?? []).map(\.orderId))).sorted() }
+
+    /// A card charge or checking debit (or credit) from Amazon for an order: not a membership, video, e-book, audiobook or
+    /// AWS bill (as the amazon-orders loader tells them).
+    var isAmazonOrderCharge: Bool {
+        guard source != "ledger" else { return false }
+        let text = [payee, description].compactMap { $0 }.joined(separator: " ").lowercased()
+        return (text.contains("amazon") || text.contains("amzn"))
+            && !["prime video", "amazon prime", "primevideo", "prime membership", "kindle", "audible", "web services",
+                 "amazon music", "amazon digital", "amzn digital"].contains { text.contains($0) }
+            && text.range(of: #"\baws\b"#, options: .regularExpression) == nil
+    }
     var sourceTitle: String { source == "bank" ? "Checking" : source == "card" ? "Card" : "Expense ledger" }
 
     /// Statement text to start a rule from: the payee's first words, without a card processor's prefix ("SQ *",
@@ -167,6 +199,23 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     func contains(statement text: String) -> Bool {
         let t = text.lowercased()
         return !t.isEmpty && [payee, description].contains { ($0 ?? "").lowercased().contains(t) }
+    }
+}
+
+/// Something bought in the Amazon order a card charge or checking debit paid, or a credit refunded (V046).
+struct AmazonItem: Decodable, Hashable {
+    var name: String
+    var asin: String?
+    var quantity: Int?
+    var amount: Double?
+    var orderId: String
+    var orderedAt: String?
+    /// "2 × Dog Chew Toys"
+    var label: String { (quantity ?? 1) > 1 ? "\(quantity ?? 1) × \(name)" : name }
+
+    /// The order on amazon.com (the user signs in there).
+    static func orderURL(_ id: String) -> URL? {
+        URL(string: "https://www.amazon.com/gp/your-account/order-details?orderID=\(id)")
     }
 }
 
@@ -492,10 +541,58 @@ struct SpendingSources: Decodable {
     var sources: [Source]
     var tables: [Table]
     var loaders: [Run]
+    /// Amazon's order export (V046); nil before it.
+    var amazon: AmazonOrders?
     var now: String?
 
     func table(_ name: String) -> Table? { tables.first { $0.name == name } }
     func run(_ loader: String) -> Run? { loaders.first { $0.loader == loader } }
+}
+
+/// Amazon's Request Your Data ▸ Your Orders export (V046): where it comes from, what it holds and its last load; the
+/// period's Amazon charges and how many it matched; and the period's charges no order matched and shipments no charge
+/// paid.
+struct AmazonOrders: Decodable, Hashable {
+    struct Charge: Decodable, Hashable, Identifiable {
+        var source: String
+        var entryId: Int
+        var date: String
+        var register: String?
+        var payee: String?
+        var amount: Double
+        var id: String { "\(source)-\(entryId)" }
+    }
+    struct Shipment: Decodable, Hashable, Identifiable {
+        var shipmentId: Int
+        var orderId: String
+        var ordered: String?
+        var shipped: String?
+        var amount: Double
+        var status: String?
+        var payment: String?
+        var items: String?
+        var id: Int { shipmentId }
+    }
+    var orders: Int
+    var firstOrder: String?
+    var lastOrder: String?
+    var items: Int
+    var chargesNow: Int
+    var matchedNow: Int
+    var spentNow: Double
+    var matchedSpentNow: Double
+    var charges: Int
+    var matched: Int
+    var newestCharge: String?
+    /// Amazon charges after the export's last order, not matched: a newer export is due.
+    var afterExport: Int
+    var loader: String
+    var dropFolders: [String]?
+    var foldersListed: Bool
+    var downloads: [SpendingSources.Download]
+    var lastImport: SpendingSources.Run?
+    var unmatchedCharges: [Charge]
+    var unmatchedShipments: [Shipment]
 }
 
 /// A note on the page from its read-only web page on the home network (Services/spending-web, V039), and the answer.
@@ -756,6 +853,35 @@ nonisolated enum SpendingClient {
     static func include(_ s: SpendingSources.Source, _ included: Bool, window: SpendingSources) async throws -> SpendingSources {
         try await AccountsClient.request("PUT", "/spending/sources/\(s.source)/\(s.code)?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          body: signed(["included": included]), as: SpendingSources.self)
+    }
+    /// Reads Amazon's order export again (srm-loader amazon-orders); with a file, first saves it — the zip as
+    /// downloaded, or a Retail.OrderHistory CSV — in the export's drop folder.
+    static func loadAmazon(_ file: URL?, window: SpendingSources) async throws -> SpendingSources {
+        var body: [String: Any] = [:]
+        if let file {
+            body = ["filename": file.lastPathComponent, "data": try Data(contentsOf: file).base64EncodedString()]
+        }
+        return try await AccountsClient.request("POST", "/spending/amazon/load?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
+                                                body: signed(body), as: SpendingSources.self)
+    }
+    /// Which of these Amazon orders the security master keeps, with how many items.
+    static func amazonKnown(_ ids: [String]) async throws -> [String: Int] {
+        struct Known: Decodable { var orderId: String; var items: Int }
+        struct Answer: Decodable { var known: [Known] }
+        guard !ids.isEmpty else { return [:] }
+        let list = ids.joined(separator: ",").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let known = try await AccountsClient.request("GET", "/spending/amazon/known?ids=\(list)", as: Answer.self).known
+        return Dictionary(known.map { ($0.orderId, $0.items) }, uniquingKeysWith: { a, _ in a })
+    }
+    /// The Amazon Order Lookup's results: the orders its pages gave, and each charge's orders; answers with the entries.
+    static func attachAmazon(charges: [[String: Any]], orders: [[String: Any]]) async throws -> [SpendingEntry] {
+        struct Answer: Decodable { var entries: [SpendingEntry] }
+        return try await AccountsClient.request("POST", "/spending/amazon/attach", body: signed(["charges": charges, "orders": orders]),
+                                                as: Answer.self).entries
+    }
+    /// Takes the Amazon orders off a charge for good (the export doesn't match it again).
+    static func unlinkAmazon(_ e: SpendingEntry) async throws -> SpendingEntry? {
+        try await AccountsClient.request("POST", "/spending/amazon/unlink/\(e.source)/\(e.entryId)", body: signed([:]), as: TagAnswer.self).entry
     }
     private struct Notes: Decodable { var feedback: [SpendingFeedback] }
     static func feedback() async throws -> [SpendingFeedback] {

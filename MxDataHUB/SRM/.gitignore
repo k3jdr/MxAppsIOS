@@ -4,3 +4,4 @@ __pycache__/
 trusts.local.json
 vanguard_plans.local.json
 bank_accounts.local.json
+amazon_orders.local.json

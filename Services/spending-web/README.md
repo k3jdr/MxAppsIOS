@@ -36,7 +36,9 @@ The tabs are Overview (the attribution), Deep Dive, Forward Curve, Year-End Tax 
 the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution and forward curve
 (`SpendingModel.swift`), and the Deep Dive charts a category's lifecycle triggers ahead. Rules shows the expense
 account, target account and statement text rules read-only, with both years' spending and *Suggest a change* on each;
-MxAcctMGR's Admin tab stays MxAcctMGR's only. They read the
+MxAcctMGR's Admin tab stays MxAcctMGR's only. The entries tables' *Bought* column shows what an Amazon charge bought
+(V046; every item and its cost on hover), and the search finds items; `REVOKE SELECT ON srm.v_amazon_charge FROM
+spending_web` takes the items off the page (the rest works without them). They read the
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, the entry filters, and the
 entries tables' Payee width (drag the grip at its header's right edge, with a mouse or a finger; double-click it for the

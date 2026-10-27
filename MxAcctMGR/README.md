@@ -587,6 +587,33 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   account get one (named in the sheet, found or made) that carries their statement names, so the next card and
   checking downloads post to it, under that expense account. Expense-ledger entries take their budget line's expense
   account and don't change.
+* **What Amazon charges bought.** An Amazon charge reads only "AMAZON MKTPL*BD9ZG3640". Once Amazon's order export is
+  read (Sources ▸ Amazon Orders), each charge matched to its order shows what was bought: the *Bought* column of the
+  entries tables (Entries and the Deep Dive; "Kids' Swim Goggles, 3 Pack and 1 more", every item with its cost and the
+  order number on hover, and on the Payee's hover), the Tag Entry sheet, and the Deep Dive's Largest This Year. The
+  search finds entries by an item's name. The context menu opens the order on amazon.com (you sign in there). A credit
+  matched to a return shows the item refunded. The Bought words are a link to the order: hover shows the items and
+  whether Amazon's Transactions list or the export (by amount and date) matched it; *Edit Link…* on the card looks
+  the charge up again, *Remove Link* (or *Take Amazon Orders Off*) takes its orders off for good — the export doesn't
+  match it again.
+* **Look Up Amazon Orders…** (Entries, right-click selected Amazon charges; `AmazonLookup.swift`): finds what they
+  bought on amazon.com without waiting for an export. It opens its own window with Amazon's pages in it (WebKit); you
+  sign in there yourself, the first time and whenever Amazon asks — MxAcctMGR never sees, types or keeps the password,
+  and leaves sign-in, two-step and robot checks to you (the lookup waits up to ten minutes, the page yours meanwhile;
+  while it reads, the page is the lookup's). It reads Your Payments ▸ Transactions, which pairs each card charge with
+  its orders (the same amount and sign within 4 days, the closest first, the card's name breaking ties); for charges
+  not there, Your Orders for their year (an order whose total is the charge, placed up to 30 days before it); then each
+  order's page for its items, unless the security master has them. One page every 3 seconds, at most 10 Transactions
+  pages, 12 Your Orders pages a year (back to a month before the charges) and 25 orders a run. The window lists the
+  charges and the orders found (*Steps* shows each page read). **One order at a time:** each charge's row takes an
+  order number typed or pasted (several, comma-separated, or an order page's link) — *Attach* reads only that order's
+  page (none when the security master has it) and attaches it in place of what the charge had — and *This Order*
+  attaches the order the window shows (*Your Orders* opens the list to find it). *Attach an Amazon Order…* in the
+  Entries menu opens the window that way, without the full lookup. Amazon's card offers on order pages aren't items. The results attach as the export's do (`POST /spending/amazon/attach`); an export read later
+  replaces what an order's page gave and narrows the charge to its shipment. *Sign Out of Amazon* clears amazon.com's
+  cookies from the window. Amazon's Conditions of Use don't allow robots: it runs only when you ask, at your own risk,
+  and may stop working when Amazon changes its pages (its scripts read the pages' words, not their layout, to last
+  longer).
 * **Rules.** *Expense Account Rules*: one row per expense account. *Target Account Rules*: the target accounts with a
   rule first (bold, ✕ removes it), then every target account with spending in either year, most spent this year first;
   *Only rules* hides the rest. Picking a category, driver or member on a row gives it a rule. Only entries linked to a
@@ -625,7 +652,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - its entries, to tag. The entries tables (here and on Entries) keep their column widths, order and shown columns
     across reloads and launches: drag a header's edge to widen Payee.
 * **Sources.** A strip above every tab names the sources included and how fresh they are: the newest spending date,
-  when the card and checking downloads were last read, and the CPI's latest month. It turns orange when a register's
+  when the card and checking downloads were last read, the last Amazon order read, and the CPI's latest month. It turns orange when a register's
   newest spending is more than 14 days old or the CPI more than 75. Its *Sources…* button opens the **Sources** tab,
   which shows:
   - **Time Window:** the two periods' dates, year to date or whole years, how partial registers are treated, and the
@@ -643,9 +670,18 @@ from one year to the next and forecasts what the children's ages bring. Everythi
 
     A checking account none of whose entries is in an expense account says that none of it counts as spending (card
     payments and transfers aren't).
+  - **Amazon Orders** (V046): where Amazon's order export comes from — amazon.com ▸ Account ▸ Request Your Data ▸
+    Your Orders; Amazon e-mails a link to a zip — its drop folder (`amazon_orders.local.json`, else `src-amazon`) and
+    the exports there; the tables it lands in (`srm.amazon_order` → shipments, items → `srm.amazon_match` →
+    `srm.v_amazon_charge`); its last load; the orders' dates, orange when Amazon charges came after the export's last
+    order (a newer export is due); and how many of the period's Amazon charges it matched. **Import Export…** picks the
+    zip (or a `Retail.OrderHistory` CSV), saves it in the drop folder and runs `amazon-orders` through srm-loader;
+    **Read Again** runs it again (new card charges then find their orders). *Not matched* lists the period's Amazon
+    charges no order matched and the shipments no charge paid (another card, a gift card), each order opening on
+    amazon.com.
   - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
     rows, its newest data and its last change.
-  - **Last Loads:** the latest `pnc-bank`, `card-downloads` and `fred-yields` runs.
+  - **Last Loads:** the latest `pnc-bank`, `card-downloads`, `amazon-orders` and `fred-yields` runs.
 * **Admin.** Guidance and tools for the two relationships the analysis rests on (MxAcctMGR only, not the family
   page):
   - **Driver & Category**: a category is what the money bought (its CPI decides the inflation part), a driver why the
