@@ -580,7 +580,13 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   text** rule (V042: every entry whose payee, statement name or description contains the text, ignoring case — the
   longest text wins when several match); and overriding both, a target account's. A **tag** on a single entry
   overrides them all, and can name an event ("Philmont 2026"). Rules are set on *Rules*; tags on *Entries*
-  (double-click, or select several and right-click). The *Entries* context menu also opens the rule for an entry's
+  (double-click, or select several and right-click). Each *Entries* column header has an Excel-style sort and filter
+  button (the banking registers' `LocalGridFilters`: a checklist of its values or a condition; Amount by value, Date
+  by day), on top of the period, category and search above the table; *Clear Sort & Filters* puts the table back to
+  newest first. With entries selected, a bar above the table shows how many and how much, with **Category** and
+  **Driver** menus — also *Set Category* / *Set Driver* in the context menu — that change just that on all of them
+  (*Follow the Rules* takes it off): each keeps the rest of its own tag, through the tag endpoint's `merge: true`. The
+  *Entries* context menu also opens the rule for an entry's
   target account, statement text or expense account, and **Change Expense Account…** files the selected card and
   check entries under another expense account (NJM INSURANCE from Subscriptions & Services to Insurance). With *Also
   file future charges under it* (on at first), their target account is filed under it too; entries with no target
@@ -740,7 +746,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   *My Notes*. The page can also change an entry's category or driver, and a lifecycle trigger's category or kind
   (V041). Each change applies at once and is listed here as *A change on the family page*, saying what it was before;
   **Undo** puts it back. *Tag Entry…* tags the purchase a note is about, and *Deep Dive* opens its category.
-* **Layout.** The tabs are a row of buttons, each as wide as its name. When the window is too narrow for the page, the page scrolls sideways from its left edge instead of growing under the sidebar (`StepPage(scrollsHorizontally:)`, available to any page). The year controls and the Entries filters wrap to a second line when narrow.
+* **Layout.** The tabs are a row of buttons, each as wide as its name. When the window is too narrow for the page, the page scrolls sideways from its left edge instead of growing under the sidebar (`StepPage(scrollsHorizontally:)`, available to any page). The year controls and the Entries filters wrap to a second line when narrow. Spending Analysis fills the window rather than stopping at the other pages' 1180-point column (`StepPage(widest: .infinity)`): as the window widens, so do its boxes, charts and tables; the tab bar spreads its tabs across the row (never narrower than their names), and the grid tables (Key Metrics, Inflation, the three rule tables, lifecycle triggers, categories) give one column the width left over (`fillsGridColumn()`).
 * **Periods.** A year against the year before, year to date by default (January 1 to today's date in both).
   *Only registers covering both years* leaves out a register whose entries start after the earlier year does, so
   its whole spending isn't counted as growth (the TECH_2026 ledger starts in December 2025).

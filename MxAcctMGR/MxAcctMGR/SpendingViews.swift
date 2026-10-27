@@ -38,15 +38,14 @@ struct SpendingAnalysisView: View {
             "Every dollar the check register, the credit cards and the expense ledgers spend has two dimensions: a spending category (Food, Housing, Transportation, Education, Activities, Technology, Healthcare, Clothing, Travel) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event). Rules on expense and target accounts set them; tag a single entry (Philmont as a one-time event) on Entries.",
             "Each category's change splits as in performance attribution: change = inflation + usage + lifecycle + behavior + one-time + taxes. Inflation is last year's spending times the category's CPI change (FRED, in the security master); each driver's effect is what its spending grew beyond inflation. Inflation and lifecycle are the unavoidable part; behavior is habit.",
             "The forward curve stacks each child's lifecycle costs — club sports at 10, a phone at 12, a laptop at 13, tutors at 14, driving at 16, college visits and applications at 16–17, college at 18 — so the waves show three to five years ahead.",
-        ], scrollsHorizontally: true) {
+        ], scrollsHorizontally: true, widest: .infinity) {
             periodBar
             if let sources { sourcesStrip(sources) }
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
-            HStack(alignment: .center) {
+            HStack(alignment: .center, spacing: 12) {
                 SpendingTabBar(tabs: Self.tabs + [("feedback", newNotes > 0 ? "Feedback (\(newNotes))" : "Feedback")], selection: $tab)
-                Spacer(minLength: 12)
                 Menu {
                     Button("Email…") { send(.composeEmail) }
                     Button("Message…") { send(.composeMessage) }
@@ -288,7 +287,7 @@ struct SpendingAnalysisView: View {
                     Text("Category").gridColumnAlignment(.leading)
                     Text("Earlier"); Text("This year"); Text("Change"); Text("Growth")
                     ForEach(SpendingEffect.allCases) { e in Text(e.rawValue).foregroundStyle(e.color).help(e.help) }
-                    Text("CPI"); Text("Reading").gridColumnAlignment(.leading)
+                    Text("CPI"); Text("Reading").gridColumnAlignment(.leading).fillsGridColumn()
                 }
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Divider()
@@ -322,7 +321,7 @@ struct SpendingAnalysisView: View {
             ForEach(SpendingEffect.allCases) { e in Text(r.share(e).map { pct($0, 0) } ?? "—").help(money(r.effect(e))) }
             Text(r.code == "TOTAL" ? signedPct(r.inflationRate, 1) : "\(signedPct(r.inflationRate, 1))\(r.basis == "CPI" ? "" : "*")")
                 .foregroundStyle(.secondary).help(r.basis == "CPI" ? "From the CPI" : "Assumed: the CPI series has no values for these months")
-            Text(r.reading).gridColumnAlignment(.leading).foregroundStyle(.secondary)
+            Text(r.reading).gridColumnAlignment(.leading).foregroundStyle(.secondary).fillsGridColumn()
         }
     }
 
@@ -376,7 +375,7 @@ struct SpendingAnalysisView: View {
     private func inflationBox(_ data: SpendingAnalysisData, _ setup: SpendingSetup) -> some View {
         Box(title: "Inflation by Category", symbol: "percent", help: "Each category's price change from the earlier year to this one: the CPI series' months in this period over the same months a year before (FRED, loaded into the security master by srm.py load fred-yields), else the category's assumed rate. Change the series or the assumption on Family & Lifecycle.") {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
-                GridRow { Text("Category"); Text("Change"); Text("Basis"); Text("Series") }
+                GridRow { Text("Category"); Text("Change"); Text("Basis"); Text("Series").fillsGridColumn() }
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(data.inflation, id: \.category) { i in
                     GridRow {
@@ -384,7 +383,7 @@ struct SpendingAnalysisView: View {
                         Text(signedPct(i.rate, 1)).monospacedDigit().gridColumnAlignment(.trailing)
                         Text(i.basis == "CPI" ? "CPI, \(i.months) month\(i.months == 1 ? "" : "s") to \(shortDay(i.through))" : "assumed \(pct(i.assumed, 1)) a year")
                             .foregroundStyle(i.basis == "CPI" ? .primary : .secondary)
-                        Text(setup.category(i.category)?.cpiName ?? "—").foregroundStyle(.secondary)
+                        Text(setup.category(i.category)?.cpiName ?? "—").foregroundStyle(.secondary).fillsGridColumn()
                     }
                 }
             }
@@ -551,6 +550,11 @@ private struct SpendingEntriesTab: View {
     /// Dive builds a new table for each category, which would otherwise start from the standard widths.
     @AppStorage("spendingEntriesColumns") private var columnsStore = Data()
     @State private var columns = TableColumnCustomization<SpendingEntry>()
+    /// Each column header's sort and filter (Excel-style), on top of the period, category and search above the table.
+    @State private var grid = GridQueryOptions()
+    /// Set Category / Set Driver on the selected entries: saving, and what went wrong.
+    @State private var bulkSaving = false
+    @State private var bulkError: String?
 
     private var shown: [SpendingEntry] {
         let q = search.lowercased()
@@ -570,9 +574,29 @@ private struct SpendingEntriesTab: View {
                        (e.amazonItems ?? []).map(\.label).joined(separator: "; "), e.expenseAccount ?? "",
                        String(format: "%.2f", e.amount), e.category ?? "", SpendingDriver.title(e.driver), e.memberId.map(String.init) ?? "", e.event ?? ""] })
 
+    /// The table's columns for sorting and filtering, by their titles: each filters on what it shows (a category's
+    /// and a member's name, a driver's title), Amount by value and Date by day.
+    static func gridColumns(_ setup: SpendingSetup) -> [String: LocalGridColumn<SpendingEntry>] {
+        [
+            "Date": .date({ $0.date }, display: { shortDay($0.date) }),
+            "From": .text { $0.register ?? $0.sourceTitle },
+            "Payee": .text { $0.payee },
+            "Bought": .text { $0.bought },
+            "Expense account": .text { $0.expenseAccount },
+            "Amount": .number({ $0.amount }, display: { money2($0.amount) }),
+            "Category": .text { setup.category($0.category)?.name ?? "Not assigned" },
+            "Driver": .text { SpendingDriver.title($0.driver) },
+            "Family member": .text { setup.member($0.memberId)?.name },
+            "Event": .text { $0.event },
+        ]
+    }
+
     var body: some View {
-        let rows = shown
-        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, a statement text rule, its expense account's rule). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to set the rule for their target account, statement text or expense account, or to file them under another expense account (Change Expense Account…), with the charges to come.") {
+        let base = shown
+        let gridColumns = Self.gridColumns(setup)
+        let rows = LocalGrid.rows(base, grid, gridColumns)
+        let picked = rows.filter { selected.contains($0.id) }
+        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and debits in an expense account, card charges and credits, and expense-ledger items not already a card or check entry. Each shows its category and driver and where they came from (the entry's own tag, its target account's rule, a statement text rule, its expense account's rule). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Each column header's button sorts and filters it, as in Excel. Select several entries (⇧ / ⌘ click, ⌘A) and use Category or Driver above the table, or right-click, to change just that for all of them; each keeps the rest of its own tag. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to set the rule for their target account, statement text or expense account, or to file them under another expense account (Change Expense Account…), with the charges to come.") {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) { entryFilters; Spacer(); entryCount(rows) }
                 VStack(alignment: .leading, spacing: 6) {
@@ -580,6 +604,8 @@ private struct SpendingEntriesTab: View {
                     HStack(spacing: 10) { Spacer(); entryCount(rows) }
                 }
             }
+            GridFilterStatus(shown: rows.count, of: base.count, options: $grid)
+            if !picked.isEmpty { selectionBar(picked) }
             Table(rows, selection: $selected, columnCustomization: $columns) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 80).customizationID("date")
                 TableColumn("From") { e in Text(e.register ?? e.sourceTitle).foregroundStyle(.secondary).help(e.sourceTitle) }.width(min: 60, ideal: 100).customizationID("from")
@@ -618,9 +644,14 @@ private struct SpendingEntriesTab: View {
             .onChange(of: columns) { columnsStore = (try? JSONEncoder().encode(columns)) ?? columnsStore }
             .tableText()
             .copiesSelectedRows(rows, selected: selected, as: Self.text)
+            .columnHeaderFilters(types: LocalGrid.types(gridColumns), options: grid,
+                                 loadValues: { (LocalGrid.values(base, column: $0, grid, gridColumns), false) },
+                                 apply: { grid = $0 })
             .contextMenu(forSelectionType: SpendingEntry.ID.self) { ids in
                 let picked = rows.filter { ids.contains($0.id) }
                 Button(picked.count > 1 ? "Tag \(picked.count) Entries…" : "Tag Entry…") { tagging = picked }.disabled(picked.isEmpty)
+                categoryMenu(picked, label: picked.count > 1 ? "Set Category of \(picked.count) Entries" : "Set Category")
+                driverMenu(picked, label: picked.count > 1 ? "Set Driver of \(picked.count) Entries" : "Set Driver")
                 if picked.contains(where: \.tagged) {
                     Button("Clear Tags") { Task { await clear(picked.filter(\.tagged)) } }
                 }
@@ -670,6 +701,73 @@ private struct SpendingEntriesTab: View {
         .sheet(isPresented: Binding(get: { refiling != nil }, set: { if !$0 { refiling = nil } })) {
             if let picked = refiling { RefileSheet(setup: setup, entries: picked) { ruleSaved($0) } }
         }
+        .alert("Some entries weren't changed", isPresented: Binding(get: { bulkError != nil }, set: { if !$0 { bulkError = nil } })) {
+            Button("OK") { bulkError = nil }
+        } message: {
+            Text(bulkError ?? "")
+        }
+    }
+
+    /// Above the table while entries are selected: how many and how much, and Category and Driver menus that change
+    /// just that for all of them.
+    private func selectionBar(_ picked: [SpendingEntry]) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
+            Text("\(picked.count) selected, \(money2(picked.map(\.amount).reduce(0, +)))").monospacedDigit().foregroundStyle(.secondary)
+            categoryMenu(picked, label: "Category")
+                .fixedSize()
+                .help("Set the category of the selected entries; each keeps its own driver, family member and event")
+            driverMenu(picked, label: "Driver")
+                .fixedSize()
+                .help("Set the driver of the selected entries; each keeps its own category, family member and event")
+            if bulkSaving { ProgressView().controlSize(.small) }
+            Spacer()
+            Button("Deselect") { selected = [] }.buttonStyle(.link)
+        }
+        .font(.callout)
+    }
+
+    private func categoryMenu(_ picked: [SpendingEntry], label: String) -> some View {
+        Menu(label) {
+            ForEach(setup.categories) { c in
+                Button(c.name) { Task { await setField(picked, "category", c.code) } }
+            }
+            Divider()
+            Button("Follow the Rules") { Task { await setField(picked, "category", "") } }
+                .help("Take the entries' own category off: their rules set it again")
+        }
+        .disabled(picked.isEmpty || bulkSaving)
+    }
+
+    private func driverMenu(_ picked: [SpendingEntry], label: String) -> some View {
+        Menu(label) {
+            ForEach(SpendingDriver.allCases) { d in
+                Button(d.title) { Task { await setField(picked, "driver", d.rawValue) } }.help(d.help)
+            }
+            Divider()
+            Button("Follow the Rules") { Task { await setField(picked, "driver", "") } }
+                .help("Take the entries' own driver off: their rules set it again")
+        }
+        .disabled(picked.isEmpty || bulkSaving)
+    }
+
+    /// Sets one dimension (category or driver; "" follows the rules again) on each entry, leaving the rest of its own tag
+    /// as it is (the service's merge). Entries already tagged that way are skipped.
+    private func setField(_ picked: [SpendingEntry], _ field: String, _ value: String) async {
+        let todo = picked.filter { e in
+            let (current, from) = field == "category" ? (e.category, e.categoryFrom) : (e.driver, e.driverFrom)
+            return value.isEmpty ? from == "entry" : !(from == "entry" && current == value)
+        }
+        guard !todo.isEmpty else { return }
+        bulkSaving = true
+        defer { bulkSaving = false }
+        var failed = 0
+        var last: String?
+        for e in todo {
+            do { if let updated = try await SpendingClient.tag(e, [field: value, "merge": true]) { changed(updated) } }
+            catch { failed += 1; last = describe(error) }
+        }
+        if let last { bulkError = failed == todo.count ? last : "\(failed) of \(todo.count) entries: \(last)" }
     }
 
     @ViewBuilder
@@ -687,7 +785,7 @@ private struct SpendingEntriesTab: View {
             .frame(maxWidth: 220)
         }
         Toggle("No driver yet", isOn: $onlyUnassigned).toggleStyle(.checkbox)
-        TextField("Search payee, item bought, event", text: $search).textFieldStyle(.roundedBorder).frame(minWidth: 160, maxWidth: 240)
+        TextField("Search payee, item bought, event", text: $search).textFieldStyle(.roundedBorder).frame(minWidth: 160, maxWidth: 420)
     }
 
     @ViewBuilder
@@ -1297,7 +1395,7 @@ private struct SpendingRulesTab: View {
 
     private func header(_ title: String, trailing: Bool) -> some View {
         GridRow {
-            Text(title); Text(priorYear).gridColumnAlignment(.trailing); Text(year).gridColumnAlignment(.trailing)
+            Text(title).fillsGridColumn(); Text(priorYear).gridColumnAlignment(.trailing); Text(year).gridColumnAlignment(.trailing)
             Text("Category"); Text("Driver"); Text("Family member")
             if trailing { Text("") }
         }
@@ -1318,7 +1416,7 @@ private struct SpendingRulesTab: View {
             }
         }
         return GridRow {
-            label
+            label.fillsGridColumn()
             Text(money(spent.before)).monospacedDigit().foregroundStyle(.secondary)
             Text(money(spent.now)).monospacedDigit().foregroundStyle(.secondary)
             Picker("", selection: Binding(get: { rule?.category ?? "" }, set: { save(category: $0) })) {
@@ -1404,11 +1502,11 @@ private struct SpendingFamilyTab: View {
                 Spacer()
             }
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                GridRow { Text("Trigger"); Text("Category"); Text("Kind"); Text("Ages"); Text("A year").gridColumnAlignment(.trailing); Text("") }
+                GridRow { Text("Trigger").fillsGridColumn(); Text("Category"); Text("Kind"); Text("Ages"); Text("A year").gridColumnAlignment(.trailing); Text("") }
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(setup.triggers) { t in
                     GridRow {
-                        Text(t.name).foregroundStyle(t.active ? .primary : .secondary).help(t.notes ?? "")
+                        Text(t.name).foregroundStyle(t.active ? .primary : .secondary).help(t.notes ?? "").fillsGridColumn()
                         Text(setup.category(t.category)?.name ?? t.category)
                         Text(t.kind.capitalized).foregroundStyle(.secondary)
                         Text(t.ages)
@@ -1424,7 +1522,7 @@ private struct SpendingFamilyTab: View {
         }
         Box(title: "Categories and Inflation", symbol: "percent", help: "The CPI series each category's inflation follows (FRED, in the security master) and the rate assumed when the series has no values for the months compared.") {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                GridRow { Text("Category"); Text("CPI series"); Text("Assumed a year"); Text("This year") }
+                GridRow { Text("Category").fillsGridColumn(); Text("CPI series"); Text("Assumed a year"); Text("This year") }
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(setup.categories) { c in
                     GridRow {
@@ -2010,7 +2108,9 @@ private struct SpendingTabBar: View {
             ForEach(tabs, id: \.0) { id, title in
                 Button { selection = id } label: {
                     Text(title)
+                        .fixedSize()
                         .padding(.horizontal, 10).padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
                         .foregroundStyle(selection == id ? Color.white : .primary)
                         .background(selection == id ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 6))
                         .contentShape(Rectangle())
@@ -2021,7 +2121,7 @@ private struct SpendingTabBar: View {
         }
         .padding(2)
         .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-        .fixedSize()
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

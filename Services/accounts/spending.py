@@ -17,7 +17,8 @@
                                                    ageFrom, ageTo, everyYears, annualCost, notes, active, by}
     DELETE /spending/triggers/<id>                 take one off
     PUT    /spending/tags/<source>/<entryId>       one entry's own {category, driver, memberId, event, notes, by}
-                                                   (source bank, card or ledger); nothing set removes the tag
+                                                   (source bank, card or ledger); nothing set removes the tag. With
+                                                   merge: true only the fields sent change, the rest of its tag stays
     GET    /spending/analysis?start=&end=&priorStart=&priorEnd=
                                                    every spending dollar of both periods (srm.v_spending_entry) from
                                                    the registers included (V038), each category's inflation between
@@ -369,6 +370,17 @@ def save_tag(conn, source, entry_id, body):
     entry_id = int(entry_id)
     category, driver, member = _category(conn, body), _driver(body), _opt_int(body, "memberId")
     event, notes = _text(body, "event", 120), _text(body, "notes", 1000)
+    if body.get("merge"):
+        # Only the fields sent change; the rest of the entry's own tag stays (MxAcctMGR's Entries: Set Category or
+        # Set Driver on several entries keeps each one's other tagged values). An empty value follows the rules again.
+        tag = fetch(conn, "SELECT category_code, driver, member_id, event, notes FROM srm.spending_tag WHERE %s = %%s"
+                    % column, (entry_id,))
+        before = tag[0] if tag else {}
+        if "category" not in body: category = before.get("category_code")
+        if "driver" not in body: driver = before.get("driver")
+        if "memberId" not in body: member = before.get("member_id")
+        if "event" not in body: event = before.get("event")
+        if "notes" not in body: notes = before.get("notes")
     if not (category or driver or member or event or notes):
         fetch(conn, "DELETE FROM srm.spending_tag WHERE %s = %%s" % column, (entry_id,))
     else:

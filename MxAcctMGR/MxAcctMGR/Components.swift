@@ -97,6 +97,11 @@ struct Box<Content: View>: View {
 }
 
 extension View {
+    /// A Grid column that takes the width left over, so the table spans its box as the page widens (one per grid).
+    func fillsGridColumn(_ alignment: Alignment = .leading) -> some View {
+        frame(maxWidth: .infinity, alignment: alignment)
+    }
+
     /// A button drawn as its label alone (a card, a day, a heading that folds): the screens' text is selectable, but
     /// not a button's, so a click on its words still presses it.
     func plainButton() -> some View {
@@ -183,6 +188,8 @@ struct StepPage<Content: View>: View {
     /// Scrolls sideways when the content is wider than the window gives it, from its left edge, instead of making
     /// the page wider than its column (which pushes it under the sidebar or past the window's edge).
     var scrollsHorizontally = false
+    /// The widest the page's column grows (centered beyond it); `.infinity` fills the window, as Spending Analysis does.
+    var widest: CGFloat = 1180
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -190,13 +197,13 @@ struct StepPage<Content: View>: View {
             // The reader is flexible, so the page never asks the window for more width than it has.
             GeometryReader { geo in
                 ScrollView([.vertical, .horizontal]) {
-                    PageWidth(available: geo.size.width, widest: 1180) { column }
+                    PageWidth(available: geo.size.width, widest: widest) { column }
                 }
             }
         } else {
             ScrollView {
                 column
-                    .frame(maxWidth: 1180, alignment: .leading)
+                    .frame(maxWidth: widest, alignment: .leading)
                     .frame(maxWidth: .infinity)
             }
         }
