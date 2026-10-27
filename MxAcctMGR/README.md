@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Cash Ledger — funded ledgers of purpose spending (a Mac and its software, a home office build-out), each item on a budget line, with the transfers that fund it; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (Spending Analysis — why the family's spending changed and the children's forward curve; SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (Spending Analysis — why the family's spending changed and the children's forward curve; SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -449,11 +449,12 @@ entry.
 
 ### Target accounts (Banking ▸ Target Accounts)
 
-**Checks reach Spending Analysis through their target account.** A check with no expense account of its own is filed
-under its target account's category (expense account), and only checks in an expense account (kind *expense*) count
-as spending. So give the target accounts the Checking register pays a category here — Peco → Utilities, Aqua →
-Utilities — and their checks join the analysis; a target account's spending rule (Spending Analysis ▸ Rules) can then
-set their spending category and driver. Target accounts were taken out on 10/27/26 (V048) and put back the same day
+**Spending is allocated on target accounts (V052).** Every payment from the checking accounts and the credit cards
+goes to a target account — the provider, merchant or vendor paid — and only payments to a target account whose role is
+*Spending* count in Spending Analysis; *Transfer* and *Income* target accounts are cash flow. A target account's
+category, driver and family member (Spending Analysis ▸ Allocation) allocate its spending, and its *statement names
+containing* patterns make one target account cover every way a statement spells it. Its expense account is Banking's
+bookkeeping only. Target accounts were taken out on 10/27/26 (V048) and put back the same day
 (V050), restored from the backup saved before: every account, link, check, cash-ledger entry, funding account and tax
 item, with card charges given their target accounts by name as posting does.
 
@@ -586,25 +587,27 @@ Household spending attribution: performance attribution for the family's spendin
 from one year to the next and forecasts what the children's ages bring. Everything is kept in the security master
 (V037) through the accounts service (`/spending/…`, `Services/accounts/spending.py`).
 
-* **Two dimensions on every dollar.** The spending is every entry of the check register in an expense account, the
-  credit cards' charges and credits, and the cash ledgers' items that aren't already a card or check entry
-  (`srm.v_spending_entry`). Each gets a **spending category** (Food, Housing, Transportation, Education, Activities,
-  Technology, Healthcare, Clothing, Travel, Other) and a **primary driver** (Inflation, Family Growth, New Activity,
-  Lifecycle Transition, Preference Change, Lifestyle & Hobbies — V045, One-Time Event, Taxes — V044), and optionally a
-  family member. They come from **rules**:
-  an expense account's (V037 seeds the categories from the expense accounts' names); overriding it, a **statement
-  text** rule (V042: every entry whose payee, statement name or description contains the text, ignoring case — the
-  longest text wins when several match); and overriding both, a target account's. A **tag** on a single entry
-  overrides them all, and can name an event ("Philmont 2026"). Rules are set on *Rules*; tags on *Entries*
-  (double-click, or select several and right-click). Each *Entries* column header has an Excel-style sort and filter
+* **Spending is what was paid to target accounts (V052).** Every payment from a checking account or a credit card goes
+  to a **target account** — the service provider, merchant or vendor paid — and the spending is the checks and card
+  charges and credits to target accounts whose role is *Spending* (`srm.v_spending_entry`). Everything else is cash
+  flow: transfers between your own accounts, card payments, income. A payment no target account matches yet is
+  *unallocated* and not in the analysis (Sources ▸ Unallocated Payments). The **cash ledgers** (Banking ▸ Cash Ledger)
+  are stand-alone scratch pads for planning a project — a pool renovation's deposits and payments over two seasons —
+  with the arithmetic but no reconciliation, and don't feed the analysis.
+* **Two dimensions on every dollar.** Each spending dollar gets a **spending category** (Food, Housing,
+  Transportation, Education, Activities, Technology, Healthcare, Clothing, Travel, Other) and a **primary driver**
+  (Inflation, Family Growth, New Activity, Lifecycle Transition, Preference Change, Lifestyle & Hobbies — V045,
+  One-Time Event, Taxes — V044), and optionally a family member, from its **target account's allocation** (set on
+  *Allocation*). A **tag** on a single entry overrides it — a mixed merchant's one purchase, or an event ("Philmont
+  2026") — set on *Entries* (double-click, or select several and right-click). Each *Entries* column header has an Excel-style sort and filter
   button (the banking registers' `LocalGridFilters`: a checklist of its values or a condition; Amount by value, Date
   by day), on top of the period, category and search above the table; *Clear Sort & Filters* puts the table back to
   newest first. With entries selected, a bar above the table shows how many and how much, with **Category** and
   **Driver** menus — also *Set Category* / *Set Driver* in the context menu — that change just that on all of them
-  (*Follow the Rules* takes it off): each keeps the rest of its own tag, through the tag endpoint's `merge: true`. The
-  *Entries* context menu also opens the rule for an entry's
-  target account, statement text or expense account, and **Change Expense Account…** files the selected card and
-  check entries under another expense account (NJM INSURANCE from Subscriptions & Services to Insurance). With *Also
+  (*Follow the Target Account* takes it off): each keeps the rest of its own tag, through the tag endpoint's `merge: true`. The
+  *Entries* context menu also has **Allocate *target account*…** for an entry's target account, and **Change Expense
+  Account…** files the selected card and check entries under another expense account (bookkeeping only; it doesn't
+  change their spending category) — NJM INSURANCE from Subscriptions & Services to Insurance. With *Also
   file future charges under it* (on at first), their target account is filed under it too; entries with no target
   account get one (named in the sheet, found or made) that carries their statement names, so the next card and
   checking downloads post to it, under that expense account. Cash-ledger entries take their budget line's expense
@@ -641,23 +644,15 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   cookies from the window. Amazon's Conditions of Use don't allow robots: it runs only when you ask, at your own risk,
   and may stop working when Amazon changes its pages (its scripts read the pages' words, not their layout, to last
   longer).
-* **Rules.** *Expense Account Rules*: one row per expense account. **New Expense Account…** adds one (Home Office,
-  Studio) with, if you pick them, its spending category and driver; right-click an expense account for **Edit Expense
-  Account…** (name, description) or **Remove Expense Account…**: one in use (card and checking entries, target accounts,
-  cash-ledger lines, the card companies' categories mapped to it) moves all of it to the expense account you choose
-  first, and its own spending rule goes. Names are unique, ignoring case. *Target Account Rules*: the target accounts with a
-  rule first (bold, ✕ removes it), then every target account with spending in either year, most spent this year first;
-  *Only rules* hides the rest. Picking a category, driver or member on a row gives it a rule. Only entries linked to a
-  target account (the check register, Chase) have one — Discover's charges and the cash-ledger lines carry only the
-  statement's words — so *Statement Text Rules* covers those: *Add Statement Text Rule…* (the sheet shows what the
-  text matches as you type), ✎ to change a rule's text, ✕ to remove it, and *Largest statement names no rule reaches*
-  with *Add Rule…* for each. Every row shows both years' spending. Target account and statement text names carry
-  links as Banking's target accounts do (the Link dialog: Text to display, Address, Hover text): right-click a name
-  for *Add Link…* / *Edit Link…*, *Open Link*, and its rule; a linked name opens on a click and shows its hover card,
-  and an unlinked one shows its details (bank, last four digits, category, notes, what its rule says) or what the text
-  matches. A target account's link is the one Banking shows (`srm.payee_link`); a statement text's is kept with its
-  rule (`srm.spending_rule_link`, V043). A family member can be picked once the family is
-  set up on *Family & Lifecycle*.
+* **Allocation.** *Spending Allocation by Target Account*: every target account with spending in either year, most
+  spent first (*Every target account* shows the rest; *Only without a category or driver* the ones still to do; the
+  search finds names and patterns), each with both years' spending and its **role** (Spending, Transfer, Income),
+  **category**, **driver** and **family member**, saved as you pick them. ✎ opens **Allocate…**: the same, plus its
+  **statement names containing** patterns, one a line — a card's or bank's line whose name contains one is its
+  payment, ignoring case, the longest pattern winning when several target accounts' do (`srm.payee_for`), so "GIANT"
+  covers "GIANT 6505" and "GIANT WEST CHESTER #6505". New card lines post to the target account they match. A family
+  member can be picked once the family is set up on *Family & Lifecycle*. The expense accounts and their rules, the
+  target account and statement text rules (V037–V043) are gone: an expense account is bookkeeping only.
 * **Overview (the attribution).** For each category, `change = inflation + usage + lifecycle + behavior + one-time + taxes`. Inflation is
   the earlier year's spending times the category's CPI change, plus whatever spending tagged Inflation grew beyond it.
   Each other driver's effect is what its spending grew beyond inflation: Family Growth and New Activity (and spending
@@ -674,10 +669,9 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - its spending month by month in both years;
   - **By Driver**: each driver's spending in both years and what it grew beyond prices, adding up to the change with
     the price change on last year's spending;
-  - **How Entries Got Here**: which expense-account, statement-text and target-account rules and entry tags put its
-    entries in it,
-    each with the rule's category, driver and member, both years' spending and *Rule…* to change it;
-  - **Where It Went**: by expense account, with the target accounts whose spending changed most;
+  - **How Entries Got Here**: which target accounts and entry tags put its entries in it, each with the target
+    account's allocation, both years' spending and *Allocate…*;
+  - **Where It Went**: the target accounts paid, the 15 largest this year;
   - the ten largest entries this year, and spending by family member;
   - its lifecycle triggers and what they bring each child in the next ten years;
   - its entries, to tag. The entries tables (here and on Entries) keep their column widths, order and shown columns
@@ -688,13 +682,13 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   which shows:
   - **Time Window:** the two periods' dates, year to date or whole years, how partial registers are treated, and the
     CPI months compared.
-  - **Spending Sources:** each checking account, credit card and cash ledger, with a checkbox that includes it or
+  - **Spending Sources:** each checking account and credit card, with a checkbox that includes it or
     leaves it out. The choice is kept in the security master (`srm.spending_source`, V038), shared by every Mac, with
     who changed it and when. **Disconnect…** (V049) takes a source out of the analysis without deleting anything: its
     register stays in the security master with its tags, notes, Amazon matches and tax-year moves, and its links to
     the other sources — card payments linked to the checks that paid them, cash-ledger entries linked to its charges
     or checks — are undone and kept (`srm.source_link`); the sheet lists them first. While it is disconnected, the
-    payment and funding matches leave it alone and Admin's Counted Twice finder doesn't offer its entries.
+    payment and funding matches leave it alone.
     **Reconnect** brings it back from the security master — no download is read — and puts each kept link back where
     both sides are still there and free, saying how many it could. A checking account's source is its register,
     entered by hand on Banking ▸ Checking Accounts: Sources shows no drop folder, downloads or loader for it (PNC's
@@ -706,20 +700,23 @@ from one year to the next and forecasts what the children's ages bring. Everythi
     - its last import (the `srm.load_run` that wrote its newest lines);
     - its register: entries, dates, how many came from downloads, the last edit;
     - its spending in both periods.
-
-    A checking account none of whose entries is in an expense account says that none of it counts as spending (card
-    payments and transfers aren't).
+  - **Unallocated Payments** (V052): the checks and card charges no target account matches, so not in the analysis
+    (`srm.v_unallocated_payment`), grouped by the statement's own words (a processor's "SQ *" and store numbers off:
+    426 GIANT lines are one group), the largest this year first, each with its statement names, the pattern it
+    suggests, both years' amounts and how many. **Allocate…** makes a **new target account** for the group (name,
+    patterns, role, category, driver, member) or files it under an **existing** one (the ones like it first), with
+    *Add "GIANT" to its patterns, so the next ones follow* — every payment the patterns match is assigned, and the
+    analysis reads again (`GET /spending/unallocated`, `POST /spending/targets`, `POST /spending/targets/<id>/assign`).
   - **Transfers & Income (Not Spending):** money moved between your own accounts, or coming in, isn't spending and
-    would count a dollar twice: the check that pays a card (its charges count on the card), the transfer that funds a
-    cash ledger (its items count), a move to savings or an investment, pay and deposits. A target account filed under
-    a *transfer* or *income* expense account (Transfers; Salary & Wages, Interest & Dividends, Other Income) is left
-    out with its checks and card entries. The box lists those (*Put Back Under…* an expense account brings one back),
-    and suggests the target accounts still in the analysis that look like they should be left out — certain, in bold,
-    when a card is paid with it or a cash ledger is funded from it; else by its name (Tx to / Tx fr, ACH, Vanguard
-    buys and sells, HYSA, Venmo, Zelle, Pay [x…] as income, deposits) — with both periods' amounts and why. *File
-    Under…* files the target account and its entries (a card's payments aside) under the account picked, the
-    suggested one marked; *File the N Certain Under Transfers* does the certain ones at once. The analysis reads again
-    after each (`GET` / `PUT /spending/transfers`).
+    would count a dollar twice: the check that pays a card (its charges count on the card), a move to savings or an
+    investment, pay and deposits. A target account whose role is *Transfer* or *Income* is left out with its checks
+    and card entries. The box lists those (*Put Back* as Spending, or the other role), and suggests the target
+    accounts still in the analysis that look like they should be left out — certain, in bold, when a card is paid
+    with it or a cash ledger is funded from it; else by its name (Tx to / Tx fr, ACH, Vanguard buys and sells, HYSA,
+    Venmo, Zelle, card payments, Pay and Bonus as income, deposits) or because money only ever comes in from it (as
+    income) — with both periods' amounts and why. *File as* Transfer or Income sets its role, the suggested one
+    marked; *File the N Certain as Transfers* does the certain ones at once. The analysis reads again after each
+    (`GET` / `PUT /spending/transfers`).
   - **Amazon Orders** (V046): where Amazon's order export comes from — amazon.com ▸ Account ▸ Request Your Data ▸
     Your Orders; Amazon e-mails a link to a zip — its drop folder (`amazon_orders.local.json`, else `src-amazon`) and
     the exports there; the tables it lands in (`srm.amazon_order` → shipments, items → `srm.amazon_match` →
@@ -732,40 +729,34 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
     rows, its newest data and its last change.
   - **Last Loads:** the latest `pnc-bank`, `card-downloads`, `amazon-orders` and `fred-yields` runs.
-* **Admin.** The expense accounts, and guidance and tools for the two relationships the analysis rests on (MxAcctMGR
-  only, not the family page):
-  - **Expense Accounts**: every expense account with its description, its rule (category · driver · family member;
-    orange when it has none) and this year's spending and entries, with **Edit…** (name, description), **Rule…** and
-    **Remove…** on each and **New Expense Account…**, the same sheets as the Rules tab's;
+* **Admin.** The expense accounts, the categories and drivers, and guidance (MxAcctMGR only, not the family page):
+  - **Expense Accounts**: every expense account with its description and this year's entries, with **Edit…** (name,
+    description) and **Remove…** on each and **New Expense Account…**: Banking's bookkeeping, not the spending
+    category;
   - **Spending Categories** (V047): every category in order with what it covers, its CPI series, its assumed rate, this
-    year's spending and entries and the rules and lifecycle triggers that set it, with **Edit…** (name, what it covers,
-    CPI series, assumed rate) and **Remove…** on each, **New Category…** (it goes before Other) and arrows that set the
-    order the page lists them in. A new category's code (what rules, tags and triggers store: letters and _) is made
-    from its name unless one is typed, and never changes. **Remove…** says what sets it and what is in it now and moves
-    its rules, tags, lifecycle triggers and family-page notes to the category chosen (required when it has triggers;
-    with *Not assigned* its rules and tags lose their category). Not assigned spending shows in orange;
+    year's spending and entries and the target accounts and lifecycle triggers that set it, with **Edit…** (name, what
+    it covers, CPI series, assumed rate) and **Remove…** on each, **New Category…** (it goes before Other) and arrows
+    that set the order the page lists them in. A new category's code (what target accounts, tags and triggers store:
+    letters and _) is made from its name unless one is typed, and never changes. **Remove…** says what sets it and
+    what is in it now and moves its target accounts, tags, lifecycle triggers and family-page notes to the category
+    chosen (required when it has triggers; with *Not assigned* they lose their category). Not assigned spending shows
+    in orange;
   - **Spending Drivers** (V047): every driver in order with what it means, the effect it **counts as** (Inflation,
     Usage, Lifecycle, Behavior, One-Time or Taxes: the formula's terms, which stay fixed) and this year's spending,
-    entries and rules, with **Edit…** (title, meaning, effect), **Remove…**, **New Driver…** and the arrows; *No
-    driver* counts as Usage. **Remove…** moves its rules and tags to the driver chosen, or to none. Every menu, table
-    and chart of drivers (Entries, Rules, the Tag sheet, Deep Dive, the family page) lists the drivers as they are kept
-    here, in this order;
+    entries and target accounts, with **Edit…** (title, meaning, effect), **Remove…**, **New Driver…** and the arrows;
+    *No driver* counts as Usage. **Remove…** moves its target accounts and tags to the driver chosen, or to none.
+    Every menu, table and chart of drivers (Entries, Allocation, the Tag sheet, Deep Dive, the family page) lists the
+    drivers as they are kept here, in this order;
   - **Driver & Category**: a category is what the money bought (its CPI decides the inflation part), a driver why the
-    spending changed (it decides the effect); they are independent, and each comes from the first of the entry's tag,
-    its target account's rule, a statement text rule and its expense account's rule. **This Year: Category × Driver** shows this year's spending in both, spending with no driver or category
-    in orange; a click on a cell lists what put its entries there (category from, driver from) with *Rule…* to change
-    it, and its largest entries.
-  - **Target Accounts & Cash Ledger**: a target account is who was paid, a cash ledger what it was for; one
-    purchase can be both a card charge and a ledger entry. Linked (Add from Card Charges, or *Link*), it counts once,
-    as the charge; unlinked, the ledger entry is spending of its own and the purchase counts twice while the ledger is
-    in the analysis. **Counted Twice** lists the ledger entries that match an unlinked card charge or check (the same
-    amount within a week), with the nearest match (or a choice of up to three), *Link* and *Link All…*. Void and
-    Restore a ledger entry to undo its link.
+    spending changed (it decides the effect); they are independent, and each comes from the entry's tag, else its
+    target account's allocation. **This Year: Category × Driver** shows this year's spending in both, spending with no
+    driver or category in orange; a click on a cell lists what put its entries there (target account, the entry's own
+    tag, not allocated) with *Allocate…*, and its largest entries.
 * **Year-End Tax.** A tax year's tax-applicable expenses, tax payments, real estate taxes, refunds and tax savings
   account, built from **tax items** (V040). A tax item is a target account (Peco, H Federal Taxes …), an
   cash-ledger line (Home Office Desk Buildout) or a name the card companies use (TURBOTAX). V040 seeds them from
-  the target accounts there are. Most of these payments are checking entries with no expense account, so they aren't
-  spending: the report reads the registers for them directly. The tab shows:
+  the target accounts there are. Many of these payments are checking entries, and taxes may be filed as Transfer or Income
+  target accounts: the report reads the registers for them directly, whatever their role. The tab shows:
   - the expenses by category, each with what it cost and its deductible share (type a percent, e.g. 15% of
     utilities for a home office) and the deductible amount;
   - estimated and local tax payments by jurisdiction and quarter. Estimated payments follow their quarter: January
@@ -793,10 +784,10 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   *My Notes*. The page can also change an entry's category or driver, and a lifecycle trigger's category or kind
   (V041). Each change applies at once and is listed here as *A change on the family page*, saying what it was before;
   **Undo** puts it back. *Tag Entry…* tags the purchase a note is about, and *Deep Dive* opens its category.
-* **Layout.** The tabs are a row of buttons, each as wide as its name. When the window is too narrow for the page, the page scrolls sideways from its left edge instead of growing under the sidebar (`StepPage(scrollsHorizontally:)`, available to any page). The year controls and the Entries filters wrap to a second line when narrow. Spending Analysis fills the window rather than stopping at the other pages' 1180-point column (`StepPage(widest: .infinity)`): as the window widens, so do its boxes, charts and tables; the tab bar spreads its tabs across the row (never narrower than their names), and the grid tables (Key Metrics, Inflation, the three rule tables, lifecycle triggers, categories) give one column the width left over (`fillsGridColumn()`).
+* **Layout.** The tabs are a row of buttons, each as wide as its name. When the window is too narrow for the page, the page scrolls sideways from its left edge instead of growing under the sidebar (`StepPage(scrollsHorizontally:)`, available to any page). The year controls and the Entries filters wrap to a second line when narrow. Spending Analysis fills the window rather than stopping at the other pages' 1180-point column (`StepPage(widest: .infinity)`): as the window widens, so do its boxes, charts and tables; the tab bar spreads its tabs across the row (never narrower than their names), and the grid tables (Key Metrics, Inflation, the allocation table, lifecycle triggers, categories) give one column the width left over (`fillsGridColumn()`).
 * **Periods.** A year against the year before, year to date by default (January 1 to today's date in both).
   *Only registers covering both years* leaves out a register whose entries start after the earlier year does, so
-  its whole spending isn't counted as growth (the TECH_2026 ledger starts in December 2025).
+  its whole spending isn't counted as growth (PNC Checking's register starts in December 2025).
 * **Inflation.** It comes from FRED's CPI-U series in the security master (`market_series` family INFLATION, loaded by
   `srm.py load fred-yields`): food, shelter, transportation, tuition and childcare, recreation, information
   technology, medical care, apparel, airline fares, and all items for Other. A category's change is its months in
@@ -918,8 +909,8 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingExpenseAccounts.swift` | Spending Analysis ▸ Rules: New Expense Account… and Edit Expense Account… (with a new one's spending rule), and Remove Expense Account… with what files under it and where it moves |
-| `SpendingCategoriesDrivers.swift` | Spending Analysis ▸ Admin: New / Edit Category… and New / Edit Driver… (a new one's code made from its name), and Remove Category… / Remove Driver… with what sets it, what is in it now and where its rules, tags and triggers move |
-| `SpendingAdminView.swift` | Spending Analysis ▸ Admin: the Expense Accounts list with Edit…, Rule… and Remove…, the Spending Categories and Spending Drivers lists with Edit…, Remove…, New… and their order, the Driver & Category guide with the Category × Driver table and its cells' origins, and the Target Accounts & Cash Ledger guide with the Counted Twice finder and its links |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
+| `SpendingExpenseAccounts.swift` | Spending Analysis ▸ Admin: New Expense Account… and Edit Expense Account…, and Remove Expense Account… with what files under it and where it moves |
+| `SpendingCategoriesDrivers.swift` | Spending Analysis ▸ Admin: New / Edit Category… and New / Edit Driver… (a new one's code made from its name), and Remove Category… / Remove Driver… with what sets it, what is in it now and where its target accounts, tags and triggers move |
+| `SpendingAdminView.swift` | Spending Analysis ▸ Admin: the Expense Accounts list with Edit… and Remove…, the Spending Categories and Spending Drivers lists with Edit…, Remove…, New… and their order, and the Driver & Category guide with the Category × Driver table and its cells' origins |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, target accounts with their allocation, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Allocation, Family & Lifecycle, Sources (with Unallocated Payments and Transfers & Income) and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

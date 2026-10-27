@@ -5,7 +5,7 @@
 //  Adding, editing and removing spending categories and drivers from Spending Analysis ▸ Admin (V047): the two
 //  dimensions on every dollar. A category is what the money bought, with the CPI series its inflation follows; a
 //  driver is why the spending changed, with the attribution effect its growth beyond inflation counts as. Both are
-//  stored by a code made from the name when added, which never changes. Removing one in use moves its rules, tags (and
+//  stored by a code made from the name when added, which never changes. Removing one in use moves its target accounts, tags (and
 //  a category's lifecycle triggers) to another first (the accounts service's DELETE /spending/categories/<code> and
 //  /spending/drivers/<code>, ?moveTo=).
 //
@@ -16,7 +16,7 @@ import SwiftUI
 struct SpendingUsage: Decodable {
     var code: String
     var name: String
-    /// rules, tags, lifecycle triggers (a category's) → how many.
+    /// target accounts, tags, lifecycle triggers (a category's) → how many.
     var uses: [String: Int]
     var inUse: Int
     /// Entries of every year whose category or driver it is now.
@@ -24,7 +24,7 @@ struct SpendingUsage: Decodable {
     var amount: Double
 
     func list(_ order: [String]) -> String {
-        let one = ["rules": "rule", "tags": "tag", "lifecycle triggers": "lifecycle trigger"]
+        let one = ["target accounts": "target account", "tags": "tag", "lifecycle triggers": "lifecycle trigger"]
         let parts = order.compactMap { w in uses[w].flatMap { $0 > 0 ? "\($0) \($0 == 1 ? one[w] ?? w : w)" : nil } }
         return parts.count > 1 ? parts.dropLast().joined(separator: ", ") + " and " + parts.last! : parts.first ?? ""
     }
@@ -67,17 +67,17 @@ struct CategoryEditor: View {
         let made = spendingCode(from: name, upper: true)
         VStack(alignment: .leading, spacing: 12) {
             Text(category == nil ? "New Category" : "Edit Category").heading(.heading)
-            Text("A spending category is what the money bought. Rules on expense accounts, target accounts and statement text put entries in it; its consumer price index decides how much of its change is inflation.")
+            Text("A spending category is what the money bought. Target accounts are allocated to it, and an entry's tag can put a single purchase in it; its consumer price index decides how much of its change is inflation.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
                 TextField("Name", text: $name, prompt: Text("Pets, Gifts, Insurance"))
                 TextField("Covers", text: $description, prompt: Text("What spending goes here"))
                 if let category {
                     LabeledContent("Code", value: category.code)
-                        .help("What rules, tags and lifecycle triggers store; it doesn't change")
+                        .help("What target accounts, tags and lifecycle triggers store; it doesn't change")
                 } else {
                     TextField("Code", text: $code, prompt: Text(made.isEmpty ? "Made from the name" : made))
-                        .help("What rules, tags and lifecycle triggers store: letters and _ only, made from the name unless you type one. It can't change later.")
+                        .help("What target accounts, tags and lifecycle triggers store: letters and _ only, made from the name unless you type one. It can't change later.")
                 }
                 Picker("CPI series", selection: $series) {
                     Text("None: use the assumed rate").tag("")
@@ -123,7 +123,7 @@ struct CategoryEditor: View {
     }
 }
 
-/// Remove Category…: what sets it and what is in it now, and where its rules, tags and triggers move.
+/// Remove Category…: what sets it and what is in it now, and where its target accounts, tags and triggers move.
 struct RemoveCategorySheet: View {
     var setup: SpendingSetup
     var category: SpendingCategory
@@ -141,10 +141,10 @@ struct RemoveCategorySheet: View {
             if let u = usage {
                 Text(u.entries == 0 ? "No entry is in it now." : "\(u.entries) \(u.entries == 1 ? "entry" : "entries"), \(money(u.amount)) in all years, \(u.entries == 1 ? "is" : "are") in it now.")
                 if u.inUse == 0 {
-                    Text("No rule, tag or lifecycle trigger sets it.").fixedSize(horizontal: false, vertical: true)
+                    Text("No target account, tag or lifecycle trigger sets it.").fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("It is set by \(u.list(["rules", "tags", "lifecycle triggers"])). They move to the category you choose"
-                         + (triggers > 0 ? " (a lifecycle trigger always has one)." : "; with Not assigned they lose their category, and their entries are Not assigned until another rule gives them one."))
+                    Text("It is set by \(u.list(["target accounts", "tags", "lifecycle triggers"])). They move to the category you choose"
+                         + (triggers > 0 ? " (a lifecycle trigger always has one)." : "; with Not assigned they lose their category, and their entries are Not assigned until a target account or tag gives them one."))
                         .fixedSize(horizontal: false, vertical: true)
                     Picker("Move them to", selection: $moveTo) {
                         Text(triggers > 0 ? "Choose…" : "Not assigned").tag("")
@@ -208,10 +208,10 @@ struct DriverEditor: View {
                 TextField("Means", text: $help, prompt: Text("When to pick it: an illness or injury, a hospital stay"))
                 if let driver {
                     LabeledContent("Code", value: driver.code)
-                        .help("What rules and tags store; it doesn't change")
+                        .help("What target accounts and tags store; it doesn't change")
                 } else {
                     TextField("Code", text: $code, prompt: Text(made.isEmpty ? "Made from the title" : made))
-                        .help("What rules and tags store: letters and _ only, made from the title unless you type one. It can't change later.")
+                        .help("What target accounts and tags store: letters and _ only, made from the title unless you type one. It can't change later.")
                 }
                 Picker("Counts as", selection: $effect) {
                     ForEach(SpendingEffect.allCases) { e in Text(e.rawValue).tag(e) }
@@ -253,7 +253,7 @@ struct DriverEditor: View {
     }
 }
 
-/// Remove Driver…: what sets it and what is in it now, and where its rules and tags move (or no driver).
+/// Remove Driver…: what sets it and what is in it now, and where its target accounts and tags move (or no driver).
 struct RemoveDriverSheet: View {
     var setup: SpendingSetup
     var driver: SpendingDriver
@@ -270,9 +270,9 @@ struct RemoveDriverSheet: View {
             if let u = usage {
                 Text(u.entries == 0 ? "No entry has it now." : "\(u.entries) \(u.entries == 1 ? "entry" : "entries"), \(money(u.amount)) in all years, \(u.entries == 1 ? "has" : "have") it now.")
                 if u.inUse == 0 {
-                    Text("No rule or tag sets it.").fixedSize(horizontal: false, vertical: true)
+                    Text("No target account or tag sets it.").fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("It is set by \(u.list(["rules", "tags"])). They move to the driver you choose; with No driver they lose theirs, and their growth counts as Usage until another rule gives them one.")
+                    Text("It is set by \(u.list(["target accounts", "tags"])). They move to the driver you choose; with No driver they lose theirs, and their growth counts as Usage until a target account or tag gives them one.")
                         .fixedSize(horizontal: false, vertical: true)
                     Picker("Move them to", selection: $moveTo) {
                         Text("No driver").tag("")

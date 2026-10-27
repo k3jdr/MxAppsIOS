@@ -2,20 +2,16 @@
 //  SpendingAdminView.swift
 //  MxAcctMGR
 //
-//  Spending Analysis ▸ Admin: the expense accounts, and guidance and tools for the two relationships the analysis
-//  rests on.
+//  Spending Analysis ▸ Admin: the bookkeeping expense accounts, the spending categories and drivers, and a guide to
+//  how spending is allocated.
 //
-//  * Expense accounts: every one with its description, its rule and this year's spending, to add, edit, re-rule or
-//    remove (SpendingExpenseAccounts.swift's sheets, as on Rules).
-//  * Spending categories and drivers (V047): every one with this year's spending and what sets it, to add, edit,
-//    remove or put in order (SpendingCategoriesDrivers.swift's sheets). A driver shows the effect it counts as.
-//  * Driver and category: two dimensions on every dollar, set by the same rules. The guide says what each means and
-//    where they come from; the Category × Driver table shows this year's spending in both, a click on a cell shows
-//    what put its entries there, with Rule… to change it.
-//  * Target accounts and cash ledgers: who was paid, and what it was for. One purchase can be in both — a card
-//    charge to a target account and an entry in a ledger — and counts twice unless the entry is linked to the charge.
-//    The overlap finder lists the ledger entries that match an unlinked card charge or check (the accounts service's
-//    GET /spending/overlaps) and links them (POST /expense-entries/<id>/link).
+//  * Expense accounts: every one with its description and this year's spending, to add, edit or remove
+//    (SpendingExpenseAccounts.swift's sheets). They are Banking's bookkeeping categories, not the allocation.
+//  * Spending categories and drivers (V047): every one with this year's spending and the target accounts allocated to
+//    it, to add, edit, remove or put in order (SpendingCategoriesDrivers.swift's sheets).
+//  * Driver and category: two dimensions on every dollar, allocated on target accounts (V052) and overridden by an
+//    entry's own tag. The Category × Driver table shows this year's spending in both; a click on a cell shows which
+//    target accounts put its entries there, with Allocate… to change one.
 //
 
 import SwiftUI
@@ -25,26 +21,23 @@ struct SpendingAdminTab: View {
     var data: SpendingAnalysisData
     /// Both periods' entries, of the registers in the analysis.
     var entries: [SpendingEntry]
-    /// Opens another Spending Analysis tab (rules, entries, sources).
+    /// Opens another Spending Analysis tab (allocation, entries, sources).
     var openTab: (String) -> Void
-    /// Opens another screen (Cash Ledger, Target Accounts).
+    /// Opens another screen (Target Accounts).
     var go: (Screen) -> Void
     var ruleSaved: (SpendingSetup) -> Void
-    /// A ledger entry was linked: the analysis is read again.
-    var linked: () -> Void
 
     var body: some View {
         ExpenseAccountsAdmin(setup: setup, data: data, entries: entries, ruleSaved: ruleSaved)
         CategoriesAdmin(setup: setup, data: data, entries: entries, saved: ruleSaved)
         DriversAdmin(setup: setup, data: data, entries: entries, saved: ruleSaved)
-        DriverCategoryGuide(setup: setup, data: data, entries: entries, openTab: openTab, ruleSaved: ruleSaved)
-        LedgerTargetGuide(entries: entries, openTab: openTab, go: go, linked: linked)
+        DriverCategoryGuide(setup: setup, data: data, entries: entries, openTab: openTab, go: go, ruleSaved: ruleSaved)
     }
 }
 
 // MARK: - Expense accounts
 
-/// The expense accounts with Edit…, Rule… and Remove… on each, and New Expense Account….
+/// The expense accounts with Edit… and Remove… on each, and New Expense Account….
 private struct ExpenseAccountsAdmin: View {
     var setup: SpendingSetup
     var data: SpendingAnalysisData
@@ -62,7 +55,7 @@ private struct ExpenseAccountsAdmin: View {
             now[id, default: (0, 0)].amount += e.amount
             now[id, default: (0, 0)].count += 1
         }
-        return Box(title: "Expense Accounts", symbol: "folder", help: "The bookkeeping categories the card and checking registers, target accounts and cash-ledger lines file entries under. Each has a rule that puts its entries in a spending category (Rule…). Edit… renames one or changes its description; Remove… moves what files under it to another first.") {
+        return Box(title: "Expense Accounts", symbol: "folder", help: "The bookkeeping categories the card and checking registers and target accounts file entries under (Banking's yearly totals). Spending Analysis doesn't use them to allocate spending: target accounts do (Allocation). Edit… renames one or changes its description; Remove… moves what files under it to another first.") {
             HStack {
                 Button("New Expense Account…") { editing = .some(nil) }
                 Spacer()
@@ -70,7 +63,7 @@ private struct ExpenseAccountsAdmin: View {
             }
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
                 GridRow {
-                    Text("Expense account"); Text("Its rule"); Text("This year").gridColumnAlignment(.trailing)
+                    Text("Expense account"); Text("This year").gridColumnAlignment(.trailing)
                     Text("Entries").gridColumnAlignment(.trailing); Text("")
                 }
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -81,12 +74,10 @@ private struct ExpenseAccountsAdmin: View {
                             Text(a.name)
                             if let d = a.description, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
-                        Text(ruleText(a)).foregroundStyle(setup.rule(expenseAccount: a.id)?.category == nil ? .orange : .secondary).lineLimit(1)
                         Text(money(spent?.amount ?? 0)).monospacedDigit()
                         Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
                         HStack(spacing: 4) {
                             Button("Edit…") { editing = .some(a) }
-                            Button("Rule…") { ruleFor = RuleTarget(expenseAccountId: a.id, name: a.name) }
                             Button("Remove…") { removing = a }
                         }
                         .controlSize(.small)
@@ -99,13 +90,6 @@ private struct ExpenseAccountsAdmin: View {
             ExpenseAccountEditor(setup: setup, account: editing ?? nil) { ruleSaved($0) }
         }
         .sheet(item: $removing) { a in RemoveExpenseAccountSheet(setup: setup, account: a) { ruleSaved($0) } }
-        .sheet(item: $ruleFor) { t in SpendingRuleSheet(setup: setup, target: t, entries: entries) { ruleSaved($0) } }
-    }
-
-    private func ruleText(_ a: SpendingSetup.Named) -> String {
-        guard let r = setup.rule(expenseAccount: a.id) else { return "No rule: its entries are Not assigned" }
-        return [setup.category(r.category)?.name ?? "No category", r.driver.map { setup.driverTitle($0) }, setup.member(r.memberId)?.name]
-            .compactMap { $0 }.joined(separator: " · ")
     }
 }
 
@@ -136,7 +120,7 @@ private struct CategoriesAdmin: View {
     var body: some View {
         let now = thisYear(entries, data) { $0.category }
         let last = setup.categories.count - 1
-        return Box(title: "Spending Categories", symbol: "cart", help: "What the money bought. Each follows a consumer price index (or an assumed rate), which decides how much of its change is inflation; the CPI series and the rate can also be changed on Family & Lifecycle. The arrows set the order the page lists them in. Remove… moves the rules, tags and lifecycle triggers that set a category to another first.") {
+        return Box(title: "Spending Categories", symbol: "cart", help: "What the money bought. Each follows a consumer price index (or an assumed rate), which decides how much of its change is inflation; the CPI series and the rate can also be changed on Family & Lifecycle. The arrows set the order the page lists them in. Remove… moves the target accounts, tags and lifecycle triggers allocated to a category to another first.") {
             HStack {
                 Button("New Category…") { editing = .some(nil) }
                 Spacer()
@@ -153,7 +137,7 @@ private struct CategoriesAdmin: View {
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(Array(setup.categories.enumerated()), id: \.element.id) { i, c in
                     let spent = now[c.code]
-                    let rules = setup.rules.filter { $0.category == c.code }.count
+                    let rules = setup.payees.filter { $0.category == c.code }.count
                     let triggers = setup.triggers.filter { $0.category == c.code }.count
                     GridRow {
                         OrderButtons(up: i > 0 ? { move(i, -1) } : nil, down: i < last ? { move(i, 1) } : nil).disabled(moving)
@@ -167,7 +151,7 @@ private struct CategoriesAdmin: View {
                         Text(money(spent?.amount ?? 0)).monospacedDigit()
                         Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
                         Text(setBy(rules: rules, triggers: triggers)).foregroundStyle(.secondary)
-                            .help("Rules and lifecycle triggers that put spending in it (single entries' tags not counted)")
+                            .help("Target accounts allocated to it and lifecycle triggers in it (single entries' tags not counted)")
                         HStack(spacing: 4) {
                             Button("Edit…") { editing = .some(c) }
                             Button("Remove…") { removing = c }.disabled(setup.categories.count <= 1)
@@ -184,7 +168,7 @@ private struct CategoriesAdmin: View {
                         Text("\(spent.count)").monospacedDigit().foregroundStyle(.secondary)
                         Text(""); Text("")
                     }
-                    .help("Entries no rule or tag gives a category")
+                    .help("Entries whose target account has no category and no tag gives one")
                 }
             }
             .font(.callout)
@@ -196,7 +180,7 @@ private struct CategoriesAdmin: View {
     }
 
     private func setBy(rules: Int, triggers: Int) -> String {
-        let parts = [rules > 0 ? "\(rules) rule\(rules == 1 ? "" : "s")" : nil, triggers > 0 ? "\(triggers) trigger\(triggers == 1 ? "" : "s")" : nil]
+        let parts = [rules > 0 ? "\(rules) target\(rules == 1 ? "" : "s")" : nil, triggers > 0 ? "\(triggers) trigger\(triggers == 1 ? "" : "s")" : nil]
         return parts.compactMap { $0 }.joined(separator: ", ")
     }
 
@@ -244,7 +228,7 @@ private struct DriversAdmin: View {
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(Array(setup.drivers.enumerated()), id: \.element.id) { i, d in
                     let spent = now[d.code]
-                    let rules = setup.rules.filter { $0.driver == d.code }.count
+                    let rules = setup.payees.filter { $0.driver == d.code }.count
                     GridRow {
                         OrderButtons(up: i > 0 ? { move(i, -1) } : nil, down: i < last ? { move(i, 1) } : nil).disabled(moving)
                         VStack(alignment: .leading, spacing: 0) {
@@ -255,8 +239,8 @@ private struct DriversAdmin: View {
                         Text(d.effect.rawValue).foregroundStyle(d.effect.color).help(d.effect.help)
                         Text(money(spent?.amount ?? 0)).monospacedDigit()
                         Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
-                        Text(rules > 0 ? "\(rules) rule\(rules == 1 ? "" : "s")" : "").foregroundStyle(.secondary)
-                            .help("Rules that give spending this driver (single entries' tags not counted)")
+                        Text(rules > 0 ? "\(rules) target\(rules == 1 ? "" : "s")" : "").foregroundStyle(.secondary)
+                            .help("Target accounts whose spending this driver is allocated to (single entries' tags not counted)")
                         HStack(spacing: 4) {
                             Button("Edit…") { editing = .some(d) }
                             Button("Remove…") { removing = d }
@@ -272,7 +256,7 @@ private struct DriversAdmin: View {
                     Text("\(now[""]?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
                     Text(""); Text("")
                 }
-                .help("Entries no rule or tag gives a driver: their growth counts as Usage")
+                .help("Entries whose target account has no driver and no tag gives one: their growth counts as Usage")
             }
             .font(.callout)
         }
@@ -315,6 +299,7 @@ private struct DriverCategoryGuide: View {
     var data: SpendingAnalysisData
     var entries: [SpendingEntry]
     var openTab: (String) -> Void
+    var go: (Screen) -> Void
     var ruleSaved: (SpendingSetup) -> Void
     @State private var cell: Cell?
     @State private var ruleFor: RuleTarget?
@@ -335,24 +320,24 @@ private struct DriverCategoryGuide: View {
                 AdminCard(title: "Driver: why the spending changed", symbol: "arrow.up.right",
                           text: "\(Self.either(setup.drivers.map(\.title))). The driver decides which effect the growth beyond inflation counts as (Spending Drivers, above); with no driver it counts as Usage.")
             }
-            Text("They are independent: any category can have any driver. Food can grow with Family Growth, Activities with Lifestyle & Hobbies, Housing with Taxes. Each entry gets its category and its driver separately, from the first of these that sets it:")
+            Text("They are independent: any category can have any driver. Food can grow with Family Growth, Activities with Lifestyle & Hobbies, Housing with Taxes. Spending is the payments from the checking accounts and credit cards to target accounts whose role is Spending — the providers, merchants and vendors paid — and each gets its category and driver:")
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("1. The entry's own tag (Entries: double-click, or select several and right-click).")
-                Text("2. Its target account's rule (Rules ▸ Target Account Rules).")
-                Text("3. The longest statement text rule its payee or description contains (Rules ▸ Statement Text Rules).")
-                Text("4. Its expense account's rule (Rules ▸ Expense Account Rules): the default for everything filed there.")
+                Text("1. From the entry's own tag, when it has one (Entries: double-click, or select several and right-click) — a mixed merchant's purchase, a one-time event.")
+                Text("2. Else from its target account's allocation (Allocation): every payment to it.")
             }
             .font(.callout).padding(.leading, 8)
-            Text("So a target account's rule can set only the driver and leave the category to the expense account's rule, or the other way round.")
+            Text("Transfers between your own accounts and income aren't spending (Sources ▸ Transfers & Income), and a payment no target account matches isn't in the analysis until it is allocated (Sources ▸ Unallocated Payments). Cash ledgers are stand-alone project scratch pads: they don't feed the analysis.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Open Rules") { openTab("rules") }
+                Button("Open Allocation") { openTab("rules") }
                 Button("Open Entries") { openTab("entries") }
+                Button("Open Sources") { openTab("sources") }
+                Button("Open Target Accounts") { go(.expenses) }
             }
         }
         matrix
-            .sheet(item: $ruleFor) { t in SpendingRuleSheet(setup: setup, target: t, entries: entries) { ruleSaved($0) } }
+            .sheet(item: $ruleFor) { t in TargetAllocationSheet(setup: setup, target: t, entries: entries) { ruleSaved($0) } }
     }
 
     /// "A, B or C".
@@ -415,34 +400,23 @@ private struct DriverCategoryGuide: View {
 
     // MARK: A cell's entries
 
-    /// What set an entry's category or driver: the kind of rule (or tag), its name, and the rule to open.
+    /// What set an entry's category or driver: its target account's allocation or its own tag, and the target account.
     private struct Origin: Hashable {
         var kind: String
         var label: String
-        var target: String?
+        var target: Int?
     }
 
     private func origin(_ e: SpendingEntry, from kind: String?) -> (Origin, RuleTarget?) {
+        let t = e.payeeId.map { RuleTarget(payeeId: $0, name: e.payee ?? "") }
         switch kind {
-        case "expense account":
-            let t = e.expenseAccountId.map { RuleTarget(expenseAccountId: $0, name: e.expenseAccount ?? "") }
-            return (Origin(kind: "expense account rule", label: e.expenseAccount ?? "—", target: t?.id), t)
-        case "target account":
-            let t = e.payeeId.map { RuleTarget(payeeId: $0, name: e.payee ?? "") }
-            return (Origin(kind: "target account rule", label: e.payee ?? "—", target: t?.id), t)
-        case "statement text":
-            let text = e.rulePattern ?? ""
-            let t = RuleTarget(pattern: text, ruleId: setup.rule(pattern: text)?.id, name: text)
-            return (Origin(kind: "statement text rule", label: text, target: t.id), t)
         case "entry":
             return (Origin(kind: "the entry's own tag", label: "Tagged on the entry", target: nil), nil)
+        case "target account":
+            return (Origin(kind: "target account", label: e.payee ?? "—", target: t?.id), t)
         default:
-            // Nothing sets it: offer the rule most likely to — the expense account's, else the target account's,
-            // else a statement text rule for its words.
-            let t = e.expenseAccountId.map { RuleTarget(expenseAccountId: $0, name: e.expenseAccount ?? "") }
-                ?? e.payeeId.map { RuleTarget(payeeId: $0, name: e.payee ?? "") }
-                ?? RuleTarget(pattern: e.statementKey, name: e.statementKey)
-            return (Origin(kind: "no rule or tag", label: e.expenseAccount.map { "\($0) (its rule sets none)" } ?? "Nothing sets it", target: t.id), t)
+            // Its target account allocates nothing for it yet: Allocate… sets it.
+            return (Origin(kind: "not allocated", label: e.payee ?? "—", target: t?.id), t)
         }
     }
 
@@ -481,7 +455,7 @@ private struct DriverCategoryGuide: View {
                         Text("\(g.entries.count)").monospacedDigit().foregroundStyle(.secondary)
                         HStack(spacing: 4) {
                             ForEach(g.targets) { t in
-                                Button(g.targets.count > 1 ? "Rule for \(t.name.isEmpty ? "it" : t.name)…" : "Rule…") { ruleFor = t }.controlSize(.small)
+                                Button(g.targets.count > 1 ? "Allocate \(t.name.isEmpty ? "it" : t.name)…" : "Allocate…") { ruleFor = t }.controlSize(.small)
                             }
                         }
                     }
@@ -507,142 +481,8 @@ private struct DriverCategoryGuide: View {
     private func originText(_ o: Origin) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(o.label).lineLimit(1)
-            Text(o.kind).font(.caption).foregroundStyle(o.kind == "no rule or tag" ? .orange : .secondary)
+            Text(o.kind).font(.caption).foregroundStyle(o.kind == "not allocated" ? .orange : .secondary)
         }
-    }
-}
-
-// MARK: - Target accounts and cash ledgers
-
-private struct LedgerTargetGuide: View {
-    var entries: [SpendingEntry]
-    var openTab: (String) -> Void
-    var go: (Screen) -> Void
-    var linked: () -> Void
-    @State private var overlaps: [SpendingOverlap]?
-    /// The match picked for each entry (index into its matches); the nearest by default.
-    @State private var picked: [Int: Int] = [:]
-    @State private var busy = false
-    @State private var confirmAll = false
-    @State private var problem: String?
-
-    var body: some View {
-        Box(title: "Target Accounts & Cash Ledger", symbol: "arrow.triangle.branch", help: "How a purchase is recorded as a payment to someone and as an item bought for a purpose, and how to keep it from counting twice.") {
-            HStack(alignment: .top, spacing: 14) {
-                AdminCard(title: "Target account: who was paid", symbol: "arrow.left.arrow.right.square",
-                          text: "Every check and card charge names the account the money went to (Banking ▸ Target Accounts), filed under an expense account. Discover's charges carry only the statement's words (APPLE.COM/US 800-692-7753) and have no target account.")
-                AdminCard(title: "Cash ledger: what it was for", symbol: "briefcase",
-                          text: "A funded budget for a purpose (Banking ▸ Cash Ledger): Mac, Software & Home Office 2026, each item on a budget line (Mac & Software, Home Office Desk Buildout), with the transfers that fund it.")
-            }
-            Text("One purchase can be in both: the MacBook charged on Discover to APPLE.COM/US is also the ledger's \u{201C}Mac Book Pro\u{201D}. When the ledger entry is linked to the charge or check that paid it (Add from Card Charges on the ledger, or Link below), Spending Analysis counts the purchase once, as the charge, with the charge's rules. A ledger entry with no link is spending of its own, so while its ledger is in the analysis (Sources) the purchase counts twice.")
-                .fixedSize(horizontal: false, vertical: true)
-            Text("A linked entry shows a card or bank mark in the ledger's register. Linking changes nothing in the ledger's balance: the item is still bought on its budget line.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text("Checks can count twice too: the one that pays a card (its charges count on the card), a transfer that funds a cash ledger, a move to savings or an investment. Sources ▸ Transfers & Income leaves them out by filing their target accounts under Transfers or an income account.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Button("Open Cash Ledger") { go(.expenseLedgers) }
-                Button("Open Target Accounts") { go(.expenses) }
-                Button("Open Sources") { openTab("sources") }
-            }
-        }
-        finder
-            .task { await load() }
-    }
-
-    // MARK: The overlap finder
-
-    private var finder: some View {
-        let list = overlaps ?? []
-        let inAnalysis = Set(entries.filter { $0.source == "ledger" }.compactMap(\.register))
-        let twiceNow = list.filter { inAnalysis.contains($0.ledger) }
-        return Box(title: "Counted Twice: Ledger Entries That Match a Card Charge or Check", symbol: "link",
-                   help: "Cash-ledger entries not linked to a card charge or check that match one: the same amount within a week, the charge or check linked to no entry yet. Link counts the purchase once, as the charge; check the match first — the same amount can be a different purchase.") {
-            if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
-            if overlaps == nil {
-                ProgressView().controlSize(.small)
-            } else if list.isEmpty {
-                Text("No ledger entry matches an unlinked card charge or check: nothing counts twice.").foregroundStyle(.secondary)
-            } else {
-                HStack {
-                    Text("\(list.count) \(list.count == 1 ? "entry" : "entries"), \(money(list.map(\.amount).reduce(0, +))): "
-                         + (twiceNow.isEmpty ? "their ledgers are left out of the analysis now, so they count twice only once included."
-                            : "\(money(twiceNow.map(\.amount).reduce(0, +))) of it counts twice in the analysis now."))
-                        .foregroundStyle(twiceNow.isEmpty ? Color.secondary : .orange)
-                    Spacer()
-                    if busy { ProgressView().controlSize(.small) }
-                    Button("Link All \(list.count)…") { confirmAll = true }.disabled(busy)
-                }
-                .font(.callout)
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                    GridRow {
-                        Text("Ledger"); Text("Date"); Text("Item"); Text("Amount").gridColumnAlignment(.trailing); Text("Matches"); Text("")
-                    }
-                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(list) { o in row(o) }
-                }
-                .font(.callout)
-            }
-        }
-        .confirmationDialog("Link \(list.count) ledger entries to their card charges and checks?", isPresented: $confirmAll, titleVisibility: .visible) {
-            Button("Link All \(list.count)") { Task { await linkAll(list) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Each entry is linked to the match shown on its row. Linked, each purchase counts once in Spending Analysis, as the card charge or check. To undo a link, Void the ledger entry and Restore it.")
-        }
-    }
-
-    private func row(_ o: SpendingOverlap) -> some View {
-        let i = min(picked[o.entryId] ?? 0, o.matches.count - 1)
-        return GridRow {
-            Text(o.ledger).foregroundStyle(.secondary)
-            Text(shortDay(o.date)).monospacedDigit()
-            Text([o.vendor, o.description].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")).lineLimit(1)
-            Text(money2(o.amount)).monospacedDigit()
-            if o.matches.count > 1 {
-                Picker("", selection: Binding(get: { i }, set: { picked[o.entryId] = $0 })) {
-                    ForEach(Array(o.matches.enumerated()), id: \.offset) { n, m in Text(matchText(m)).tag(n) }
-                }
-                .labelsHidden().frame(maxWidth: 360)
-            } else {
-                Text(matchText(o.matches[i])).lineLimit(1).foregroundStyle(.secondary)
-            }
-            Button("Link") { Task { await link(o, o.matches[i]) } }.controlSize(.small).disabled(busy)
-                .help("Link this entry to \(o.matches[i].payee ?? "the charge"): the purchase counts once")
-        }
-    }
-
-    private func matchText(_ m: SpendingOverlap.Match) -> String {
-        let when = m.days == 0 ? "same day" : "\(m.days) day\(m.days == 1 ? "" : "s") apart"
-        return "\(m.register) \(shortDay(m.txnDate)) \(m.payee ?? "—") (\(when))"
-    }
-
-    private func load() async {
-        do { overlaps = try await SpendingClient.overlaps(); problem = nil } catch { problem = describe(error) }
-    }
-
-    private func link(_ o: SpendingOverlap, _ m: SpendingOverlap.Match) async {
-        busy = true
-        defer { busy = false }
-        do {
-            try await SpendingClient.link(o, to: m)
-            problem = nil
-        } catch { problem = describe(error) }
-        await load()
-        linked()
-    }
-
-    private func linkAll(_ list: [SpendingOverlap]) async {
-        busy = true
-        defer { busy = false }
-        var failed: [String] = []
-        for o in list {
-            let m = o.matches[min(picked[o.entryId] ?? 0, o.matches.count - 1)]
-            do { try await SpendingClient.link(o, to: m) } catch { failed.append("\(o.description): \(describe(error))") }
-        }
-        problem = failed.isEmpty ? nil : "Not linked — " + failed.joined(separator: "; ")
-        await load()
-        linked()
     }
 }
 

@@ -47,7 +47,7 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          (observation_date, one column per series); format=ohlc with one id: as Cboe's
                                          history file (DATE,OPEN,HIGH,LOW,CLOSE with MM/DD/YYYY dates)
     /spending/...                        household spending attribution (V037, spending.py): the family, categories,
-                                         rules, lifecycle triggers and per-entry tags; GET /spending/analysis gives every
+                                         target accounts' allocation (V052), lifecycle triggers and per-entry tags; GET /spending/analysis gives every
                                          spending dollar of two periods with each category's CPI inflation between them
 
 The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
@@ -113,7 +113,8 @@ DESCRIBE = {
         {"method": "POST", "path": "/expense-ledgers/{code}/entries/delete", "summary": "Delete cash ledger entries for good (version-checked, all or none)"},
         {"method": "GET", "path": "/expense-accounts", "summary": "Expense accounts with their payees and this year's totals"},
         {"method": "GET", "path": "/secure-accounts", "summary": "Secure accounts: products and services held an account with, their subscription payment and renewal"},
-        {"method": "GET", "path": "/spending/setup", "summary": "Spending Analysis: the family, spending categories with their CPI series, rules and lifecycle triggers"},
+        {"method": "GET", "path": "/spending/setup", "summary": "Spending Analysis: the family, spending categories with their CPI series, target accounts with their allocation and lifecycle triggers"},
+        {"method": "GET", "path": "/spending/unallocated", "summary": "Checks and card charges no target account matches, grouped by their statement words"},
         {"method": "GET", "path": "/spending/analysis", "summary": "Every spending dollar of two periods with category, driver and member, and each category's inflation between them"},
         {"method": "PUT", "path": "/spending/tags/{source}/{entryId}", "summary": "One entry's own spending category, driver, family member or event"},
         {"method": "PUT", "path": "/secure-accounts/{id}", "summary": "Create (id 0) or change a secure account (version-checked; names unique); keys and passwords stay in the Mac's Keychain"},

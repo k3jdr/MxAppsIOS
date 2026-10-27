@@ -17,7 +17,7 @@ category or kind, each listed in MxAcctMGR's Feedback, which can undo it. Nothin
 cached, and links aren't sent as referrers.
 
     GET  /s/<key>/                       the page (static/index.html, app.js, app.css)
-    GET  /s/<key>/api/setup              categories, family, rules and lifecycle triggers
+    GET  /s/<key>/api/setup              categories, family, target account allocation and lifecycle triggers
     GET  /s/<key>/api/analysis?start=&end=&priorStart=&priorEnd=   every spending dollar of both periods
     GET  /s/<key>/api/sources?…          the sources, the SRM tables read and the last loads
     GET  /s/<key>/api/tax?year=          Year-End Tax: tax items, the year's payments and summary (V040)
@@ -142,8 +142,7 @@ class Handler(BaseHTTPRequestHandler):
             conn = psycopg2.connect(connect_timeout=10, application_name="spending-web", **Handler.conf["database"])
             try:
                 if method == "GET" and name == "setup":
-                    out = spending.setup(conn)
-                    out.pop("payees", None)     # names of every target account: not needed on the page
+                    out = spending.setup(conn)     # its target accounts carry the spending allocation (V052)
                 elif method == "GET" and name == "analysis":
                     out = spending.analysis(conn, q)
                 elif method == "GET" and name == "sources":

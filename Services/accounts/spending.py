@@ -1,8 +1,8 @@
 """Household spending attribution for the accounts service (V037): MxAcctMGR's Reporting ▸ Spending Analysis.
 
     GET    /spending/setup                         the family, the spending categories (with their CPI series), the
-                                                   rules, the lifecycle triggers, and the expense and target accounts
-                                                   rules can be set on
+                                                   drivers, the lifecycle triggers, the expense accounts, and the target
+                                                   accounts with their role and allocation
     PUT    /spending/members/<id>                  a family member, created (id 0) or changed {version, name, relation,
                                                    birthYear, birthMonth, notes, active, by}
     DELETE /spending/members/<id>                  take one off (their rules and tags keep no member)
@@ -23,12 +23,6 @@
     DELETE /spending/drivers/<code>?moveTo=&by=    take one off: its rules and tags move to moveTo first (none: they
                                                    lose their driver)
     PUT    /spending/driver-order                  {codes: [...]}: every driver, in the order shown
-    PUT    /spending/rules                         an expense account's, target account's or statement text's rule
-                                                   {expenseAccountId | payeeId | pattern, id (to change a statement
-                                                   text), category, driver, memberId, notes, by}; nothing set removes it
-    PUT    /spending/rules/<id>/link               a statement text rule's link (V043) {address, text, hoverText,
-                                                   hoverRtf, title, by}, as a target account's (PUT /payees/<id>/link)
-    DELETE /spending/rules/<id>/link               take it off
     PUT    /spending/triggers/<id>                 a lifecycle trigger, created (id 0) or changed {name, category, kind,
                                                    ageFrom, ageTo, everyYears, annualCost, notes, active, by}
     DELETE /spending/triggers/<id>                 take one off
@@ -60,9 +54,21 @@
                                                    look like they should be (each with why: a card is paid with it, a
                                                    cash ledger is funded from it, its name), and the accounts to file
                                                    them under
-    PUT    /spending/transfers/<payeeId>           file a target account and its checks and card entries under
-                                                   {expenseAccountId, by}: a transfer or income account leaves them out,
-                                                   an expense account puts them back; answers as GET, with `refiled`
+    PUT    /spending/transfers/<payeeId>           a target account's role {role: spending | transfer | income, by}:
+                                                   transfer or income leaves its payments out; answers as GET
+    PUT    /spending/targets/<payeeId>             a target account's spending allocation (V052) {role, category, driver,
+                                                   memberId, patterns: statement names containing any of them are its
+                                                   payments, by}: only the fields sent change; unallocated payments its
+                                                   patterns now match are given to it (`assigned`)
+    POST   /spending/targets                       a new target account {name, patterns, role, category, driver,
+                                                   memberId, entries: [{source, id}], by}, given those payments and
+                                                   every unallocated one it matches
+    POST   /spending/targets/<payeeId>/assign      give it these unallocated payments {entries: [{source, id}], by}
+    GET    /spending/unallocated?start=&end=&priorStart=&priorEnd=
+                                                   checks and card charges no target account matches (not in the
+                                                   analysis), grouped by their statement's own words, most money
+                                                   first: names, entries, both periods, a pattern to start from and
+                                                   target accounts like it
     GET    /spending/sources/<source>/<code>/links what disconnecting it undoes (its links to the other sources) and
                                                    what stays with its register
     POST   /spending/sources/<source>/<code>/disconnect
@@ -100,9 +106,6 @@
                                                    fileFuture, their target account (or a new one named targetName,
                                                    with their statement names) is filed under it too, so future
                                                    downloads land there; answers with the setup and how many changed
-    GET    /spending/overlaps                      Admin: cash-ledger entries not linked to a card charge or check that
-                                                   match one (same amount within a week, the charge or check linked to
-                                                   no entry): counted twice while the ledger is included
     GET    /spending/tax?year=                     Year-End Tax (V040): the tax items, every payment of theirs that
                                                    counts toward the year (with its tax year and quarter), and the
                                                    year's summary — expenses paid and deductible, estimated payments
@@ -175,9 +178,9 @@ def _drivers(conn):
 # ------------------------------------------------------------------------------------------------------------ setup
 
 def setup(conn, details=False):
-    """The family, categories, rules, triggers and what rules can be set on. With details (MxAcctMGR's, not the
-    family page's login): each target account's bank, last four digits, logon page, nickname, notes and link
-    (srm.payee_link, V032), and each statement text rule's link (V043)."""
+    """The family, categories, drivers, triggers, expense accounts and target accounts with their spending role and
+    allocation (V052). With details (MxAcctMGR's, not the family page's login): each target account's bank, last four
+    digits, logon page, nickname, notes and link (srm.payee_link, V032)."""
     members = fetch(conn, """
         SELECT member_id AS id, name, relation, birth_year AS "birthYear", birth_month AS "birthMonth", notes, active,
                version FROM srm.household_member ORDER BY relation DESC, birth_year, name""")
@@ -187,22 +190,6 @@ def setup(conn, details=False):
                (SELECT max(v.obs_date) FROM srm.market_series_value v WHERE v.series_code = c.cpi_series) AS "cpiThrough"
           FROM srm.spending_category c LEFT JOIN srm.market_series s ON s.series_code = c.cpi_series
          ORDER BY c.sort_order""")
-    link_columns, link_join = ("", "")
-    if details:
-        link_columns = ', rl.address AS "linkAddress", rl.display_text AS "linkText", rl.hover_rtf AS "linkTip", ' \
-                       'rl.link_title AS "linkTitle"'
-        link_join = " LEFT JOIN srm.spending_rule_link rl USING (rule_id)"
-    rules = fetch(conn, """
-        SELECT r.rule_id AS id, r.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount",
-               r.payee_id AS "payeeId", p.name AS payee, r.pattern, r.category_code AS category, r.driver,
-               r.member_id AS "memberId", r.notes, r.updated_by AS "updatedBy", r.updated_at AS "updatedAt"%s
-          FROM srm.spending_rule r
-          LEFT JOIN srm.expense_account e USING (expense_account_id)
-          LEFT JOIN srm.payee p USING (payee_id)%s
-         ORDER BY r.payee_id IS NOT NULL, r.pattern IS NOT NULL, coalesce(e.sort_order, 0),
-                  lower(coalesce(e.name, p.name, r.pattern))""" % (link_columns, link_join))
-    if details:
-        rules = [nest_link(r, "link") for r in rules]
     triggers = fetch(conn, """
         SELECT trigger_id AS id, name, category_code AS category, kind, age_from AS "ageFrom", age_to AS "ageTo",
                every_years AS "everyYears", annual_cost AS "annualCost", notes, active
@@ -210,23 +197,24 @@ def setup(conn, details=False):
     accounts = fetch(conn, """
         SELECT expense_account_id AS id, name, description FROM srm.expense_account WHERE kind = 'expense'
          ORDER BY sort_order, name""")
+    allocation = ('p.spending_role AS role, p.category_code AS category, p.driver, p.member_id AS "memberId", '
+                  'p.match_patterns AS patterns')
     if details:
         payees = [nest_link(p, "link") for p in fetch(conn, """
-            SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.institution,
-                   p.account_last4 AS last4, p.logon_url AS "logonUrl", p.nickname, p.notes,
+            SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", %s, p.institution,
+                   p.account_last4 AS last4, p.logon_url AS "logonUrl", p.nickname, p.notes, p.bank_names AS "bankNames",
                    pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip",
                    pl.link_title AS "linkTitle"
               FROM srm.payee p LEFT JOIN srm.payee_link pl USING (payee_id)
-             WHERE p.status <> 'closed' ORDER BY lower(p.name)""")]
+             WHERE p.status <> 'closed' ORDER BY lower(p.name)""" % allocation)]
     else:
         payees = fetch(conn, """
-            SELECT payee_id AS id, name, expense_account_id AS "expenseAccountId" FROM srm.payee
-             WHERE status <> 'closed' ORDER BY lower(name)""")
+            SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", %s FROM srm.payee p
+             WHERE p.status <> 'closed' ORDER BY lower(p.name)""" % allocation)
     series = fetch(conn, """
         SELECT series_code AS code, name FROM srm.market_series WHERE family = 'INFLATION' ORDER BY sort_order""")
-    return {"members": members, "categories": categories, "rules": rules, "triggers": triggers,
-            "expenseAccounts": accounts, "payees": payees, "cpiSeries": series, "drivers": _drivers(conn)}
-
+    return {"members": members, "categories": categories, "triggers": triggers, "expenseAccounts": accounts,
+            "payees": payees, "cpiSeries": series, "drivers": _drivers(conn)}
 
 def save_member(conn, mid, body):
     mid = int(mid)
@@ -358,8 +346,8 @@ def save_category(conn, code, body):
 
 
 # What stores a category, and the column that does.
-CATEGORY_USES = (("rules", "srm.spending_rule"), ("tags", "srm.spending_tag"), ("lifecycle triggers", "srm.lifecycle_trigger"))
-DRIVER_USES = (("rules", "srm.spending_rule"), ("tags", "srm.spending_tag"))
+CATEGORY_USES = (("target accounts", "srm.payee"), ("tags", "srm.spending_tag"), ("lifecycle triggers", "srm.lifecycle_trigger"))
+DRIVER_USES = (("target accounts", "srm.payee"), ("tags", "srm.spending_tag"))
 
 
 def category_usage(conn, code):
@@ -481,89 +469,6 @@ def set_order(conn, table, body):
         raise ValueError("codes must list each one once")
     for n, c in enumerate(codes, 1):
         fetch(conn, "UPDATE %s SET sort_order = %%s WHERE code = %%s" % table, (n, c))
-    conn.commit()
-    return setup(conn, details=True)
-
-
-def save_rule(conn, body):
-    account, payee = _opt_int(body, "expenseAccountId"), _opt_int(body, "payeeId")
-    pattern = " ".join(str(body.get("pattern") or "").split())[:200] or None
-    if [account, payee, pattern].count(None) != 2:
-        raise ValueError("a rule is for an expenseAccountId, a payeeId or a pattern")
-    if pattern is not None:
-        return _save_text_rule(conn, body, pattern)
-    key, value = ("expense_account_id", account) if account is not None else ("payee_id", payee)
-    category, driver, member = _category(conn, body), _driver(conn, body), _opt_int(body, "memberId")
-    notes = _text(body, "notes", 1000)
-    if not (category or driver or member or notes):
-        fetch(conn, "DELETE FROM srm.spending_rule WHERE %s = %%s" % key, (value,))
-    else:
-        fetch(conn, """INSERT INTO srm.spending_rule (%s, category_code, driver, member_id, notes, updated_by)
-                       VALUES (%%s, %%s, %%s, %%s, %%s, %%s)
-                       ON CONFLICT (%s) DO UPDATE SET category_code = excluded.category_code, driver = excluded.driver,
-                              member_id = excluded.member_id, notes = excluded.notes,
-                              updated_by = excluded.updated_by, updated_at = now()""" % (key, key),
-              (value, category, driver, member, notes, _by(body)))
-    conn.commit()
-    return setup(conn, details=True)
-
-
-def _save_text_rule(conn, body, pattern):
-    """A statement text's rule (V042): every entry whose payee, statement name or description contains the text,
-    ignoring case. With an id it changes that rule, its text included."""
-    if len(pattern) < 3:
-        raise ValueError("statement text is at least 3 characters")
-    category, driver, member = _category(conn, body), _driver(conn, body), _opt_int(body, "memberId")
-    notes = _text(body, "notes", 1000)
-    rid = _opt_int(body, "id")
-    if rid:
-        found = fetch(conn, "SELECT rule_id FROM srm.spending_rule WHERE rule_id = %s AND pattern IS NOT NULL", (rid,))
-        if not found:
-            raise LookupError("no statement text rule %s" % rid)
-    else:
-        found = fetch(conn, "SELECT rule_id FROM srm.spending_rule WHERE lower(pattern) = lower(%s)", (pattern,))
-    rid = found[0]["rule_id"] if found else None
-    if fetch(conn, "SELECT 1 FROM srm.spending_rule WHERE lower(pattern) = lower(%s) AND rule_id <> %s", (pattern, rid or 0)):
-        raise ValueError('there is already a rule for "%s"' % pattern)
-    if not (category or driver or member or notes):
-        if rid:
-            fetch(conn, "DELETE FROM srm.spending_rule WHERE rule_id = %s", (rid,))
-    elif rid:
-        fetch(conn, """UPDATE srm.spending_rule SET pattern = %s, category_code = %s, driver = %s, member_id = %s,
-                              notes = %s, updated_by = %s, updated_at = now() WHERE rule_id = %s""",
-              (pattern, category, driver, member, notes, _by(body), rid))
-    else:
-        fetch(conn, """INSERT INTO srm.spending_rule (pattern, category_code, driver, member_id, notes, updated_by)
-                       VALUES (%s, %s, %s, %s, %s, %s)""", (pattern, category, driver, member, notes, _by(body)))
-    conn.commit()
-    return setup(conn, details=True)
-
-
-def save_rule_link(conn, rid, body):
-    """A statement text rule's link (srm.spending_rule_link, V043), made or changed, as a target account's is
-    (bank.save_payee_link); answers with the setup."""
-    address = (body.get("address") or "").strip()
-    if not address:
-        raise ValueError("the link needs an address")
-    blank = lambda k, n: (body.get(k) or "").strip()[:n] or None
-    rows = fetch(conn, """
-        INSERT INTO srm.spending_rule_link (rule_id, address, display_text, hover_text, hover_rtf, link_title, updated_at,
-                                            updated_by)
-        SELECT rule_id, %s, %s, %s, %s, %s, now(), %s FROM srm.spending_rule WHERE rule_id = %s AND pattern IS NOT NULL
-        ON CONFLICT (rule_id) DO UPDATE SET address = excluded.address, display_text = excluded.display_text,
-            hover_text = excluded.hover_text, hover_rtf = excluded.hover_rtf, link_title = excluded.link_title,
-            updated_at = now(), updated_by = excluded.updated_by
-        RETURNING rule_id""",
-                 (address[:2000], blank("text", 200), blank("hoverText", 4000), body.get("hoverRtf") or None,
-                  blank("title", 300), _by(body), int(rid)))
-    if not rows:
-        raise LookupError("no statement text rule %s" % rid)
-    conn.commit()
-    return setup(conn, details=True)
-
-
-def delete_rule_link(conn, rid):
-    fetch(conn, "DELETE FROM srm.spending_rule_link WHERE rule_id = %s", (int(rid),))
     conn.commit()
     return setup(conn, details=True)
 
@@ -809,14 +714,12 @@ TABLES = [
      "SELECT count(*) AS rows, max(txn_date) AS newest, max(updated_at) AS changed FROM srm.card_txn WHERE status <> 'void'"),
     ("srm.card_line", "table", "The card companies' lines from their downloads (card-downloads), posted to the card registers",
      "SELECT count(*) AS rows, max(posted_date) AS newest, (SELECT finished_at FROM srm.load_run WHERE load_id = max(l.load_id)) AS changed FROM srm.card_line l"),
-    ("srm.expense_entry", "table", "The cash ledgers' items, entered by hand; those that are a card or check entry count there instead",
-     "SELECT count(*) AS rows, max(entry_date) AS newest, max(updated_at) AS changed FROM srm.expense_entry WHERE status = 'actual' AND kind IN ('expense', 'refund')"),
     ("srm.expense_account", "table", "The expense accounts entries are filed in: the expense-account rules hang on them",
      "SELECT count(*) AS rows, NULL::date AS newest, NULL::timestamptz AS changed FROM srm.expense_account WHERE kind = 'expense'"),
-    ("srm.payee", "table", "The target accounts: an entry's expense account when it has none of its own, and the target-account rules",
+    ("srm.payee", "table", "The target accounts: who each payment went to, its role (spending, transfer, income) and the category, driver and member its spending is allocated to",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.payee"),
-    ("srm.spending_rule", "table", "Category, driver and member of an expense account's, target account's or statement text's spending",
-     "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.spending_rule"),
+    ("srm.v_unallocated_payment", "view", "Checks and card charges with no target account yet: not in the analysis until allocated (Sources ▸ Unallocated Payments)",
+     "SELECT count(*) AS rows, max(txn_date) AS newest, NULL::timestamptz AS changed FROM srm.v_unallocated_payment"),
     ("srm.spending_tag", "table", "One entry's own category, driver, member or event, overriding the rules",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.spending_tag"),
     ("srm.spending_source", "table", "The registers left out of the analysis (no row: included)",
@@ -857,17 +760,7 @@ REGISTERS = {
           LEFT JOIN LATERAL (SELECT count(*) AS lines, min(coalesce(trans_date, posted_date)) AS first_line,
                                     max(posted_date) AS last_line, max(load_id) AS load_id
                                FROM srm.card_line WHERE card_account_id = a.card_account_id) l ON true
-         ORDER BY a.closed_date NULLS FIRST, a.name""",
-    "ledger": """
-        SELECT l.code, l.name, l.owner AS institution, NULL AS last4, l.opening_date AS "openingDate",
-               l.closed_date AS "closedDate", t.entries, t.first, t.last, t.edited, 0 AS "fromDownloads",
-               0 AS lines, NULL::date AS "firstLine", NULL::date AS "lastLine", NULL::bigint AS load_id
-          FROM srm.expense_ledger l
-          LEFT JOIN LATERAL (SELECT count(*) AS entries, min(entry_date) AS first, max(entry_date) AS last,
-                                    max(updated_at) AS edited
-                               FROM srm.expense_entry WHERE ledger_id = l.ledger_id AND status = 'actual'
-                                AND kind IN ('expense', 'refund')) t ON true
-         ORDER BY l.closed_date NULLS FIRST, l.name""",
+         ORDER BY a.closed_date NULLS FIRST, a.name"""
 }
 LANDS_IN = {"bank": ("srm.bank_line", "srm.bank_txn"), "card": ("srm.card_line", "srm.card_txn"),
             "ledger": (None, "srm.expense_entry")}
@@ -1171,13 +1064,15 @@ def set_source(conn, source, code, body, q):
 
 
 # ------------------------------------------------------------------------------------------------- transfers and income
-# A target account filed under a transfer or income account (srm.expense_account.kind) is not spending: the view leaves
-# its checks and card entries out. Sources ▸ Transfers & Income lists those and suggests the ones that would count a
+# A target account whose role is transfer or income (V052) is not spending: the view leaves its checks and card
+# entries out. Sources ▸ Transfers & Income lists those and suggests the ones that would count a
 # dollar twice — the target account checking pays a card with (its charges count), a cash ledger's funding account
-# (its items count), and names that look like moving money: transfers, investment buys and sells, pay and deposits.
+# (its items count), names that look like moving money (transfers, investment buys and sells, card payments, pay and
+# deposits) and the ones money only ever comes in from.
 
 TRANSFER_NAME = re.compile(r"^tx\b|\btransfer\b|\bach\b|\bvanguard (buy|sell)\b|\bzelle\b|\bvenmo\b|\bhysa\b", re.I)
-PAY_NAME = re.compile(r"\bpay \[|\bpayroll\b|\bsalary\b|\bdirect dep", re.I)
+PAY_NAME = re.compile(r"\bpay( \[|\s*$)|\bpayroll\b|\bsalary\b|\bbonus\b|\bdirect dep", re.I)
+CARD_NAME = re.compile(r"\bvisa\b|\bmastercard\b|\bamex\b|\bcard\b", re.I)
 DEPOSIT_NAME = re.compile(r"\bdeposit\b", re.I)
 # What each target account moved, signed as spending: a check out is positive, a deposit in negative.
 TARGET_ACTIVITY = """
@@ -1191,7 +1086,7 @@ def transfers(conn, q):
     rows = fetch(conn, """
         WITH act AS (%s)
         SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount",
-               e.kind, count(a.payee_id) AS entries, max(a.txn_date) AS "lastDate",
+               e.kind, p.spending_role AS role, count(a.payee_id) AS entries, max(a.txn_date) AS "lastDate",
                coalesce(sum(a.spent) FILTER (WHERE a.txn_date BETWEEN %%s AND %%s), 0) AS now,
                coalesce(sum(a.spent) FILTER (WHERE a.txn_date BETWEEN %%s AND %%s), 0) AS before,
                coalesce(sum(a.spent) FILTER (WHERE a.spent > 0), 0) AS "paidOut",
@@ -1207,7 +1102,7 @@ def transfers(conn, q):
     for r in rows:
         for k in ("now", "before", "paidOut", "cameIn"):
             r[k] = float(r[k])
-        if r["kind"] in ("transfer", "income"):
+        if r["role"] in ("transfer", "income"):
             left_out.append(r)
             continue
         why = []
@@ -1221,43 +1116,199 @@ def transfers(conn, q):
             why.append({"kind": "name", "text": "its name looks like money moved between accounts"})
         elif DEPOSIT_NAME.search(r["name"]):
             why.append({"kind": "deposit", "text": "its name looks like a deposit"})
+        elif CARD_NAME.search(r["name"]) and not r["cards"]:
+            why.append({"kind": "name", "text": "its name looks like a card payment: the card's charges count"})
+        elif r["cameIn"] > 0 and r["paidOut"] == 0:
+            why.append({"kind": "in", "text": "money only comes in from it"})
         if not why:
             continue
         kinds = {w["kind"] for w in why}
         r["why"] = why
         r["certain"] = bool(kinds & {"card", "ledger"})
-        r["suggest"] = "income" if kinds == {"pay"} else "transfer"
+        r["suggest"] = "income" if kinds <= {"pay", "in"} else "transfer"
         suggested.append(r)
     left_out.sort(key=lambda r: (-abs(r["now"]) - abs(r["before"]), r["name"].lower()))
     suggested.sort(key=lambda r: (not r["certain"], -(r["paidOut"] + r["cameIn"]), r["name"].lower()))
-    accounts = fetch(conn, """SELECT expense_account_id AS id, name, kind FROM srm.expense_account
-                               ORDER BY kind <> 'transfer', kind <> 'income', sort_order, name""")
     return {"start": start, "end": end, "priorStart": prior_start, "priorEnd": prior_end,
-            "leftOut": left_out, "suggested": suggested, "accounts": accounts}
+            "leftOut": left_out, "suggested": suggested}
 
 
 def file_target(conn, pid, body, q):
-    """Files a target account, and its checks and card entries (a card's payments aside), under an expense account:
-    a transfer or income account leaves them out of the analysis, an expense account puts them back."""
+    """A target account's role (V052): spending puts its payments in the analysis, transfer or income leaves them out."""
     pid = int(pid)
-    account = _opt_int(body, "expenseAccountId")
-    if account is None or not fetch(conn, "SELECT 1 FROM srm.expense_account WHERE expense_account_id = %s", (account,)):
-        raise ValueError("expenseAccountId must be an expense account")
-    by = _by(body)
-    if not fetch(conn, """UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now()
-                           WHERE payee_id = %s RETURNING payee_id""", (account, by, pid)):
+    role = body.get("role")
+    if role not in ROLES:
+        raise ValueError("role must be one of " + ", ".join(ROLES))
+    if not fetch(conn, """UPDATE srm.payee SET spending_role = %s, version = version + 1, updated_by = %s, updated_at = now()
+                           WHERE payee_id = %s RETURNING payee_id""", (role, _by(body), pid)):
         raise LookupError("no target account %s" % pid)
-    refiled = len(fetch(conn, """UPDATE srm.bank_txn SET expense_account_id = %s, version = version + 1, updated_by = %s,
-                                        updated_at = now()
-                                  WHERE payee_id = %s AND status <> 'void' AND expense_account_id IS DISTINCT FROM %s
-                              RETURNING txn_id""", (account, by, pid, account)))
-    refiled += len(fetch(conn, """UPDATE srm.card_txn SET expense_account_id = %s, version = version + 1, updated_by = %s,
-                                         updated_at = now()
-                                   WHERE payee_id = %s AND status <> 'void' AND kind <> 'payment'
-                                     AND expense_account_id IS DISTINCT FROM %s
-                               RETURNING txn_id""", (account, by, pid, account)))
     conn.commit()
-    return dict(transfers(conn, q), refiled={"id": pid, "entries": refiled})
+    return dict(transfers(conn, q), filed={"id": pid, "role": role})
+
+
+# ------------------------------------------------------------------------------------------------- allocation
+# Spending is allocated on target accounts (V052): a role, a category, a driver, a family member, and the statement
+# names it matches. A payment no target account matches is unallocated and not in the analysis.
+
+ROLES = ("spending", "transfer", "income")
+# A statement's own words, for grouping unallocated payments: a processor's prefix ("SQ *") and store numbers off.
+PROCESSOR = re.compile(r"^(sq|tst|sp|fsp|paypal|tm|pp|py|ckc|dd|bt|in|ec|pos|cke)\s*\*\s*", re.I)
+# Each unallocated payment's register entry and the name it has there.
+PAYMENT_NAME = {"bank": """UPDATE srm.bank_txn b SET payee_id = %s, version = version + 1, updated_by = %s, updated_at = now()
+                            WHERE b.payee_id IS NULL AND b.status <> 'void' AND b.txn_id = ANY (%s) RETURNING b.txn_id""",
+                "card": """UPDATE srm.card_txn c SET payee_id = %s, version = version + 1, updated_by = %s, updated_at = now()
+                            WHERE c.payee_id IS NULL AND c.status <> 'void' AND c.txn_id = ANY (%s) RETURNING c.txn_id"""}
+
+
+def _group_key(name):
+    n = PROCESSOR.sub("", (name or "").strip())
+    n = n.split("*")[0] if "*" in n else n
+    n = re.sub(r"[^A-Za-z& ]+", " ", n).lower()
+    return " ".join(n.split()[:2]) or (name or "").strip().lower()
+
+
+def _common_prefix(names):
+    """The words the names start with, for a pattern: "GIANT" for "GIANT 6505" and "GIANT WEST CHESTER #6505"."""
+    first = PROCESSOR.sub("", names[0]).strip()
+    words = []
+    for w in first.split():
+        test = " ".join(words + [w]).lower()
+        if all(PROCESSOR.sub("", n).strip().lower().startswith(test) for n in names):
+            words.append(w)
+        else:
+            break
+    if not words:
+        words = first.split("*")[0].split()
+    # The merchant's own words: up to the first with a digit (a store number, a phone), two at most.
+    kept = []
+    for w in words:
+        if any(ch.isdigit() for ch in w) or len(kept) == 2:
+            break
+        kept.append(w)
+    out = " ".join(kept or words[:1]).rstrip("*#-.,/ ")
+    return out if len(out) >= 3 else " ".join(words[:2])
+
+
+def _assign_matching(conn, by):
+    """Gives each unallocated payment the target account its name now matches (srm.payee_for); answers how many."""
+    n = 0
+    for source, sql in PAYMENT_NAME.items():
+        for r in fetch(conn, """SELECT srm.payee_for(name) AS pid, array_agg(entry_id) AS ids FROM srm.v_unallocated_payment
+                                 WHERE source = %s AND srm.payee_for(name) IS NOT NULL GROUP BY 1""", (source,)):
+            n += len(fetch(conn, sql, (r["pid"], by, r["ids"])))
+    return n
+
+
+def _patterns(body):
+    out = []
+    for x in body.get("patterns") or []:
+        x = " ".join(str(x).split())[:120]
+        if len(x) >= 3 and x.lower() not in [y.lower() for y in out]:
+            out.append(x)
+    return out
+
+
+def allocate_target(conn, pid, body):
+    """A target account's role, category, driver, member and patterns (only the fields sent change); unallocated
+    payments its patterns now match are given to it. Answers with the setup and how many were."""
+    pid = int(pid)
+    if not fetch(conn, "SELECT 1 FROM srm.payee WHERE payee_id = %s", (pid,)):
+        raise LookupError("no target account %s" % pid)
+    sets, params = [], []
+    if "role" in body:
+        if body["role"] not in ROLES:
+            raise ValueError("role must be one of " + ", ".join(ROLES))
+        sets.append("spending_role = %s"); params.append(body["role"])
+    if "category" in body:
+        sets.append("category_code = %s"); params.append(_category(conn, body))
+    if "driver" in body:
+        sets.append("driver = %s"); params.append(_driver(conn, body))
+    if "memberId" in body:
+        sets.append("member_id = %s"); params.append(_opt_int(body, "memberId"))
+    if "patterns" in body:
+        sets.append("match_patterns = %s"); params.append(_patterns(body))
+    by = _by(body)
+    if sets:
+        fetch(conn, "UPDATE srm.payee SET %s, version = version + 1, updated_by = %%s, updated_at = now() WHERE payee_id = %%s"
+              % ", ".join(sets), params + [by, pid])
+    assigned = _assign_matching(conn, by) if "patterns" in body else 0
+    conn.commit()
+    return dict(setup(conn, details=True), assigned=assigned)
+
+
+def add_target(conn, body):
+    """A new target account {name, patterns, role, category, driver, memberId, entries: [{source, id}]}: the entries
+    sent and every unallocated payment its name or patterns match are given to it."""
+    name = " ".join(str(body.get("name") or "").split())[:120]
+    if not name:
+        raise ValueError("name is required")
+    if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s)", (name,)):
+        raise Conflict("there is already a target account named %s" % name)
+    role = body.get("role") or "spending"
+    if role not in ROLES:
+        raise ValueError("role must be one of " + ", ".join(ROLES))
+    entries = body.get("entries") or []
+    sources = sorted({{"bank": "checking", "card": "card"}[e.get("source")] for e in entries if e.get("source") in ("bank", "card")}) or ["checking", "card"]
+    by = _by(body)
+    pid = fetch(conn, """INSERT INTO srm.payee (name, spending_role, category_code, driver, member_id, match_patterns,
+                                                funding_sources, updated_by)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING payee_id""",
+                (name, role, _category(conn, body), _driver(conn, body), _opt_int(body, "memberId"), _patterns(body),
+                 sources, by))[0]["payee_id"]
+    assigned = 0
+    for source in ("bank", "card"):
+        ids = [int(e["id"]) for e in entries if e.get("source") == source and str(e.get("id", "")).isdigit()]
+        if ids:
+            assigned += len(fetch(conn, PAYMENT_NAME[source], (pid, by, ids)))
+    assigned += _assign_matching(conn, by)
+    conn.commit()
+    return dict(setup(conn, details=True), created=pid, assigned=assigned)
+
+
+def assign_payments(conn, pid, body):
+    """Gives these unallocated payments {entries: [{source, id}]} to a target account."""
+    pid = int(pid)
+    if not fetch(conn, "SELECT 1 FROM srm.payee WHERE payee_id = %s", (pid,)):
+        raise LookupError("no target account %s" % pid)
+    by, assigned = _by(body), 0
+    for source in ("bank", "card"):
+        ids = [int(e["id"]) for e in body.get("entries") or [] if e.get("source") == source and str(e.get("id", "")).isdigit()]
+        if ids:
+            assigned += len(fetch(conn, PAYMENT_NAME[source], (pid, by, ids)))
+    conn.commit()
+    return dict(setup(conn, details=True), assigned=assigned)
+
+
+def unallocated(conn, q):
+    """The payments no target account matches, grouped by their statement's own words, the most money first: each
+    group's names, entries, what it moved in both periods, a pattern to start from and target accounts like it."""
+    start, end, prior_start, prior_end = _window(q)
+    rows = fetch(conn, "SELECT source, entry_id AS id, txn_date AS date, register, name, amount FROM srm.v_unallocated_payment")
+    payees = fetch(conn, "SELECT payee_id AS id, name FROM srm.payee WHERE status <> 'closed'")
+    groups = {}
+    for r in rows:
+        g = groups.setdefault(_group_key(r["name"]), {"names": {}, "entries": [], "now": 0.0, "before": 0.0, "total": 0.0})
+        amount = float(r["amount"])
+        g["names"][r["name"]] = g["names"].get(r["name"], 0) + 1
+        g["entries"].append({"source": r["source"], "id": r["id"], "date": r["date"], "register": r["register"],
+                             "name": r["name"], "amount": amount})
+        g["total"] += amount
+        if start <= r["date"] <= end:
+            g["now"] += amount
+        elif prior_start <= r["date"] <= prior_end:
+            g["before"] += amount
+    out = []
+    for key, g in groups.items():
+        names = sorted(g["names"], key=lambda n: -g["names"][n])
+        pattern = _common_prefix(names)
+        like = [p for p in payees if pattern.lower() in p["name"].lower() or p["name"].lower() in pattern.lower()][:3]
+        out.append({"key": key, "label": names[0], "names": names[:6], "nameCount": len(names), "pattern": pattern,
+                    "count": len(g["entries"]), "now": round(g["now"], 2), "before": round(g["before"], 2),
+                    "total": round(g["total"], 2), "entries": sorted(g["entries"], key=lambda e: e["date"], reverse=True),
+                    "like": like})
+    out.sort(key=lambda g: (-(abs(g["now"]) + abs(g["before"])), -abs(g["total"]), g["key"]))
+    return {"start": start, "end": end, "priorStart": prior_start, "priorEnd": prior_end, "groups": out,
+            "count": len(rows), "now": round(sum(g["now"] for g in out), 2), "before": round(sum(g["before"] for g in out), 2)}
 
 
 # ------------------------------------------------------------------------------------------------- disconnect, reconnect
@@ -1270,17 +1321,9 @@ SOURCE_TABLES = {"bank": ("bank_account", "bank_account_id", "checking account")
 # Each source's links to the others: (kind, query of card_txn_id, bank_txn_id, expense_entry_id for the source's id).
 SOURCE_LINKS = {
     "bank": [("payment", """SELECT c.txn_id AS card, c.bank_txn_id AS bank, NULL::bigint AS entry FROM srm.card_txn c
-                             JOIN srm.bank_txn b ON b.txn_id = c.bank_txn_id WHERE b.bank_account_id = %s"""),
-             ("ledger_bank", """SELECT NULL::bigint AS card, e.bank_txn_id AS bank, e.entry_id AS entry FROM srm.expense_entry e
-                                JOIN srm.bank_txn b ON b.txn_id = e.bank_txn_id WHERE b.bank_account_id = %s""")],
+                             JOIN srm.bank_txn b ON b.txn_id = c.bank_txn_id WHERE b.bank_account_id = %s""")],
     "card": [("payment", """SELECT c.txn_id AS card, c.bank_txn_id AS bank, NULL::bigint AS entry FROM srm.card_txn c
-                             WHERE c.card_account_id = %s AND c.bank_txn_id IS NOT NULL"""),
-             ("ledger_card", """SELECT e.card_txn_id AS card, NULL::bigint AS bank, e.entry_id AS entry FROM srm.expense_entry e
-                                JOIN srm.card_txn c ON c.txn_id = e.card_txn_id WHERE c.card_account_id = %s""")],
-    "ledger": [("ledger_card", """SELECT e.card_txn_id AS card, NULL::bigint AS bank, e.entry_id AS entry FROM srm.expense_entry e
-                                  WHERE e.ledger_id = %s AND e.card_txn_id IS NOT NULL"""),
-               ("ledger_bank", """SELECT NULL::bigint AS card, e.bank_txn_id AS bank, e.entry_id AS entry FROM srm.expense_entry e
-                                  WHERE e.ledger_id = %s AND e.bank_txn_id IS NOT NULL""")],
+                             WHERE c.card_account_id = %s AND c.bank_txn_id IS NOT NULL""")],
 }
 LINK_WORDS = {"payment": "card payments linked to the checks that paid them",
               "ledger_card": "cash-ledger entries linked to card charges",
@@ -1848,61 +1891,26 @@ def change_expense_account(conn, body):
 
 # ------------------------------------------------------------------------------------------------------------ admin
 
-def overlaps(conn):
-    """Cash-ledger entries that look like a card charge or check they aren't linked to: the same amount within a
-    week, the charge or check linked to no entry yet. Until linked, both count as spending. Up to three candidates
-    each, nearest date first."""
-    rows = fetch(conn, """
-        SELECT e.entry_id AS "entryId", e.version, l.code AS ledger, e.entry_date AS date, e.vendor, e.description,
-               e.amount, c.source, c.txn_id AS "txnId", c.register, c.txn_date AS "txnDate", c.payee,
-               abs(c.txn_date - e.entry_date) AS days
-          FROM srm.expense_entry e
-          JOIN srm.expense_ledger l USING (ledger_id)
-          JOIN LATERAL (
-              SELECT * FROM (
-                  SELECT 'card'::text AS source, t.txn_id, a.code AS register, t.txn_date,
-                         coalesce(p.name, t.payee_name) AS payee
-                    FROM srm.card_txn t
-                    JOIN srm.card_account a USING (card_account_id)
-                    LEFT JOIN srm.payee p ON p.payee_id = t.payee_id
-                   WHERE t.status <> 'void' AND t.kind <> 'payment' AND t.amount = e.amount
-                     AND abs(t.txn_date - e.entry_date) <= 7
-                     AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.card_txn_id = t.txn_id)
-                     AND NOT srm.source_disconnected('card', a.code)
-                  UNION ALL
-                  SELECT 'bank', b.txn_id, a.code, b.txn_date, coalesce(p.name, b.payee_name)
-                    FROM srm.bank_txn b
-                    JOIN srm.bank_account a USING (bank_account_id)
-                    LEFT JOIN srm.payee p ON p.payee_id = b.payee_id
-                   WHERE b.status <> 'void' AND -b.amount = e.amount AND abs(b.txn_date - e.entry_date) <= 7
-                     AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.bank_txn_id = b.txn_id)
-                     AND NOT srm.source_disconnected('bank', a.code)
-              ) m ORDER BY abs(m.txn_date - e.entry_date), m.txn_id LIMIT 3) c ON true
-         WHERE e.status = 'actual' AND e.kind IN ('expense', 'refund') AND e.card_txn_id IS NULL AND e.bank_txn_id IS NULL
-           AND NOT srm.source_disconnected('ledger', l.code)
-         ORDER BY e.entry_date, e.entry_id, days, c.txn_id""")
-    out = {}
-    for r in rows:
-        o = out.setdefault(r["entryId"], dict({k: r[k] for k in ("entryId", "version", "ledger", "date", "vendor",
-                                                                  "description", "amount")}, matches=[]))
-        o["matches"].append({k: r[k] for k in ("source", "txnId", "register", "txnDate", "payee", "days")})
-    return {"overlaps": list(out.values())}
-
-
 def route(conn, method, parts, body, q):
     """The spending endpoints' answer, or None when the path isn't one of them."""
     if parts == ["spending", "setup"] and method == "GET":
         return setup(conn, details=True)
     if parts == ["spending", "analysis"] and method == "GET":
         return analysis(conn, q)
-    if parts == ["spending", "overlaps"] and method == "GET":
-        return overlaps(conn)
     if parts == ["spending", "expense-account"] and method == "POST":
         return change_expense_account(conn, body)
     if parts == ["spending", "sources"] and method == "GET":
         return sources(conn, q)
     if len(parts) == 4 and parts[1] == "sources" and method == "PUT":
         return set_source(conn, parts[2], parts[3], body, q)
+    if parts == ["spending", "unallocated"] and method == "GET":
+        return unallocated(conn, q)
+    if parts == ["spending", "targets"] and method == "POST":
+        return add_target(conn, body)
+    if len(parts) == 3 and parts[1] == "targets" and method == "PUT":
+        return allocate_target(conn, parts[2], body)
+    if len(parts) == 4 and parts[1] == "targets" and parts[3] == "assign" and method == "POST":
+        return assign_payments(conn, parts[2], body)
     if parts == ["spending", "transfers"] and method == "GET":
         return transfers(conn, q)
     if len(parts) == 3 and parts[1] == "transfers" and method == "PUT":
@@ -1945,13 +1953,6 @@ def route(conn, method, parts, body, q):
     if len(parts) == 5 and parts[1:3] == ["tax", "assign"] and method == "PUT":
         assign_tax(conn, parts[3], parts[4], body)
         return tax(conn, {"year": body.get("year") or q.get("year")})
-    if parts == ["spending", "rules"] and method == "PUT":
-        return save_rule(conn, body)
-    if len(parts) == 4 and parts[1] == "rules" and parts[3] == "link":
-        if method == "PUT":
-            return save_rule_link(conn, parts[2], body)
-        if method == "DELETE":
-            return delete_rule_link(conn, parts[2])
     if len(parts) == 3 and parts[1] == "members":
         if method == "PUT":
             return save_member(conn, parts[2], body)

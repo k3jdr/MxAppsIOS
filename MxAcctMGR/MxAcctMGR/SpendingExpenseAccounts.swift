@@ -41,31 +41,17 @@ struct ExpenseAccountEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var description = ""
-    @State private var category = ""
-    @State private var driver = ""
     @State private var error: String?
     @State private var saving = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(account == nil ? "New Expense Account" : "Edit Expense Account").heading(.heading)
-            Text("An expense account is the bookkeeping category the card and checking registers, target accounts and cash-ledger lines file entries under. Spending Analysis puts its entries in a spending category with its rule.")
+            Text("An expense account is the bookkeeping category the card and checking registers, target accounts and cash-ledger lines file entries under, for Banking's yearly totals. Spending Analysis allocates spending on target accounts instead (Allocation).")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
                 TextField("Name", text: $name, prompt: Text("Home Office, Studio"))
                 TextField("Description", text: $description, prompt: Text("What files here"))
-                if account == nil {
-                    Section("Its rule in Spending Analysis") {
-                        Picker("Category", selection: $category) {
-                            Text("None").tag("")
-                            ForEach(setup.categories) { c in Text(c.name).tag(c.code) }
-                        }
-                        Picker("Driver", selection: $driver) {
-                            Text("None").tag("")
-                            ForEach(setup.drivers) { d in Text(d.title).help(d.help ?? "").tag(d.code) }
-                        }
-                    }
-                }
             }
             if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             HStack {
@@ -86,11 +72,7 @@ struct ExpenseAccountEditor: View {
         saving = true
         defer { saving = false }
         do {
-            let book = try await BankClient.saveExpenseAccount(account?.id ?? 0, ["name": name, "kind": "expense", "description": description])
-            if account == nil, let id = book.id, !(category.isEmpty && driver.isEmpty) {
-                _ = try await SpendingClient.saveRule(["expenseAccountId": id, "category": category, "driver": driver,
-                                                      "memberId": NSNull(), "notes": NSNull()])
-            }
+            _ = try await BankClient.saveExpenseAccount(account?.id ?? 0, ["name": name, "kind": "expense", "description": description])
             saved(try await SpendingClient.setup())
             dismiss()
         } catch { self.error = describe(error) }
