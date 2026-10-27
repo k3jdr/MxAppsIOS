@@ -691,8 +691,11 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
     rows, its newest data and its last change.
   - **Last Loads:** the latest `pnc-bank`, `card-downloads`, `amazon-orders` and `fred-yields` runs.
-* **Admin.** Guidance and tools for the two relationships the analysis rests on (MxAcctMGR only, not the family
-  page):
+* **Admin.** The expense accounts, and guidance and tools for the two relationships the analysis rests on (MxAcctMGR
+  only, not the family page):
+  - **Expense Accounts**: every expense account with its description, its rule (category · driver · family member;
+    orange when it has none) and this year's spending and entries, with **Edit…** (name, description), **Rule…** and
+    **Remove…** on each and **New Expense Account…**, the same sheets as the Rules tab's;
   - **Driver & Category**: a category is what the money bought (its CPI decides the inflation part), a driver why the
     spending changed (it decides the effect); they are independent, and each comes from the first of the entry's tag,
     its target account's rule, a statement text rule and its expense account's rule. A table says what each driver
@@ -863,6 +866,6 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
 | `SpendingExpenseAccounts.swift` | Spending Analysis ▸ Rules: New Expense Account… and Edit Expense Account… (with a new one's spending rule), and Remove Expense Account… with what files under it and where it moves |
-| `SpendingAdminView.swift` | Spending Analysis ▸ Admin: the Driver & Category guide with the Category × Driver table and its cells' origins, and the Target Accounts & Expense Ledgers guide with the Counted Twice finder and its links |
+| `SpendingAdminView.swift` | Spending Analysis ▸ Admin: the Expense Accounts list with Edit…, Rule… and Remove…, the Driver & Category guide with the Category × Driver table and its cells' origins, and the Target Accounts & Expense Ledgers guide with the Counted Twice finder and its links |
 | `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, rules, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Rules, Family & Lifecycle, Sources and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

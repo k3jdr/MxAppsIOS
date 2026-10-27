@@ -2,8 +2,11 @@
 //  SpendingAdminView.swift
 //  MxAcctMGR
 //
-//  Spending Analysis ▸ Admin: guidance and tools for the two relationships the analysis rests on.
+//  Spending Analysis ▸ Admin: the expense accounts, and guidance and tools for the two relationships the analysis
+//  rests on.
 //
+//  * Expense accounts: every one with its description, its rule and this year's spending, to add, edit, re-rule or
+//    remove (SpendingExpenseAccounts.swift's sheets, as on Rules).
 //  * Driver and category: two dimensions on every dollar, set by the same rules. The guide says what each means, where
 //    they come from and what each driver counts as; the Category × Driver table shows this year's spending in both, a
 //    click on a cell shows what put its entries there, with Rule… to change it.
@@ -29,8 +32,76 @@ struct SpendingAdminTab: View {
     var linked: () -> Void
 
     var body: some View {
+        ExpenseAccountsAdmin(setup: setup, data: data, entries: entries, ruleSaved: ruleSaved)
         DriverCategoryGuide(setup: setup, data: data, entries: entries, openTab: openTab, ruleSaved: ruleSaved)
         LedgerTargetGuide(entries: entries, openTab: openTab, go: go, linked: linked)
+    }
+}
+
+// MARK: - Expense accounts
+
+/// The expense accounts with Edit…, Rule… and Remove… on each, and New Expense Account….
+private struct ExpenseAccountsAdmin: View {
+    var setup: SpendingSetup
+    var data: SpendingAnalysisData
+    var entries: [SpendingEntry]
+    var ruleSaved: (SpendingSetup) -> Void
+    /// New (.some(nil)) or Edit (.some(account)).
+    @State private var editing: SpendingSetup.Named??
+    @State private var removing: SpendingSetup.Named?
+    @State private var ruleFor: RuleTarget?
+
+    var body: some View {
+        var now: [Int: (amount: Double, count: Int)] = [:]
+        for e in entries where e.date >= data.start && e.date <= data.end {
+            guard let id = e.expenseAccountId else { continue }
+            now[id, default: (0, 0)].amount += e.amount
+            now[id, default: (0, 0)].count += 1
+        }
+        return Box(title: "Expense Accounts", symbol: "folder", help: "The bookkeeping categories the card and checking registers, target accounts and expense-ledger lines file entries under. Each has a rule that puts its entries in a spending category (Rule…). Edit… renames one or changes its description; Remove… moves what files under it to another first.") {
+            HStack {
+                Button("New Expense Account…") { editing = .some(nil) }
+                Spacer()
+                Text("\(setup.expenseAccounts.count) expense accounts").foregroundStyle(.secondary)
+            }
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
+                GridRow {
+                    Text("Expense account"); Text("Its rule"); Text("This year").gridColumnAlignment(.trailing)
+                    Text("Entries").gridColumnAlignment(.trailing); Text("")
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(setup.expenseAccounts) { a in
+                    let spent = now[a.id]
+                    GridRow {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(a.name)
+                            if let d = a.description, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                        }
+                        Text(ruleText(a)).foregroundStyle(setup.rule(expenseAccount: a.id)?.category == nil ? .orange : .secondary).lineLimit(1)
+                        Text(money(spent?.amount ?? 0)).monospacedDigit()
+                        Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Button("Edit…") { editing = .some(a) }
+                            Button("Rule…") { ruleFor = RuleTarget(expenseAccountId: a.id, name: a.name) }
+                            Button("Remove…") { removing = a }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+            .font(.callout)
+        }
+        .sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+            ExpenseAccountEditor(setup: setup, account: editing ?? nil) { ruleSaved($0) }
+        }
+        .sheet(item: $removing) { a in RemoveExpenseAccountSheet(setup: setup, account: a) { ruleSaved($0) } }
+        .sheet(item: $ruleFor) { t in SpendingRuleSheet(setup: setup, target: t, entries: entries) { ruleSaved($0) } }
+    }
+
+    private func ruleText(_ a: SpendingSetup.Named) -> String {
+        guard let r = setup.rule(expenseAccount: a.id) else { return "No rule: its entries are Not assigned" }
+        return [setup.category(r.category)?.name ?? "No category", r.driver.map { SpendingDriver.title($0) }, setup.member(r.memberId)?.name]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 }
 
