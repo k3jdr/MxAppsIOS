@@ -2,7 +2,7 @@
 //  SecureAccounts.swift
 //  MxAcctMGR
 //
-//  Banking ▸ Secure Accounts: the products and services you hold an account with
+//  Banking ▸ Secure Accounts, modeled on Target Accounts: the products and services you hold an account with
 //  (srm.secure_account, V035) — each product's name and description; its service's address, API and status; your user
 //  name; and its subscription, the last payment and the renewal (auto-renew, renew by hand, or decline). The product
 //  key, the service key and the password are kept in this Mac's Keychain (SecureSecrets), never in the security master.
@@ -17,12 +17,6 @@
 import AppKit
 import Security
 import SwiftUI
-
-/// What saving a secure account answered: its id (a new one's too), or why it couldn't.
-struct SecureSaved {
-    var id: Int?
-    var error: String?
-}
 
 struct SecureAccount: Decodable, Identifiable, Hashable {
     var id: Int
@@ -301,14 +295,14 @@ struct SecureAccountsView: View {
     }
 
     /// Saves a new account (id 0), its details or its name; answers its id, or why it couldn't.
-    private func save(_ id: Int, _ body: [String: Any]) async -> SecureSaved {
+    private func save(_ id: Int, _ body: [String: Any]) async -> PayeeSaved {
         do {
             let answer = try await SecureClient.save(id, body)
             accounts = answer.secureAccounts
-            return SecureSaved(id: answer.id ?? id)
+            return PayeeSaved(id: answer.id ?? id)
         } catch {
             await load()
-            return SecureSaved(error: describe(error))
+            return PayeeSaved(error: describe(error))
         }
     }
 }
@@ -336,7 +330,7 @@ struct SecureAccountSheet: View {
     let account: SecureAccount?
     /// A new account's starting values (an mxacctmgr://secure-accounts/new link).
     var draft: SecureDraft? = nil
-    var save: ([String: Any]) async -> SecureSaved
+    var save: ([String: Any]) async -> PayeeSaved
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""

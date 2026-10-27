@@ -1,8 +1,8 @@
 """Household spending attribution for the accounts service (V037): MxAcctMGR's Reporting ▸ Spending Analysis.
 
     GET    /spending/setup                         the family, the spending categories (with their CPI series), the
-                                                   rules, the lifecycle triggers, and the expense accounts rules can
-                                                   be set on
+                                                   rules, the lifecycle triggers, and the expense and target accounts
+                                                   rules can be set on
     PUT    /spending/members/<id>                  a family member, created (id 0) or changed {version, name, relation,
                                                    birthYear, birthMonth, notes, active, by}
     DELETE /spending/members/<id>                  take one off (their rules and tags keep no member)
@@ -23,11 +23,11 @@
     DELETE /spending/drivers/<code>?moveTo=&by=    take one off: its rules and tags move to moveTo first (none: they
                                                    lose their driver)
     PUT    /spending/driver-order                  {codes: [...]}: every driver, in the order shown
-    PUT    /spending/rules                         an expense account's or statement text's rule {expenseAccountId |
-                                                   pattern, id (to change a statement text), category, driver,
-                                                   memberId, notes, by}; nothing set removes it
+    PUT    /spending/rules                         an expense account's, target account's or statement text's rule
+                                                   {expenseAccountId | payeeId | pattern, id (to change a statement
+                                                   text), category, driver, memberId, notes, by}; nothing set removes it
     PUT    /spending/rules/<id>/link               a statement text rule's link (V043) {address, text, hoverText,
-                                                   hoverRtf, title, by}
+                                                   hoverRtf, title, by}, as a target account's (PUT /payees/<id>/link)
     DELETE /spending/rules/<id>/link               take it off
     PUT    /spending/triggers/<id>                 a lifecycle trigger, created (id 0) or changed {name, category, kind,
                                                    ageFrom, ageTo, everyYears, annualCost, notes, active, by}
@@ -87,8 +87,10 @@
     PUT    /spending/change/trigger/<id>           the family page's change to a lifecycle trigger {author, category,
                                                    kind}, and a 'change' note
     POST   /spending/expense-account               file card and check entries under another expense account {entries:
-                                                   [{source, id}], expenseAccountId, by}; answers with the setup and
-                                                   how many changed
+                                                   [{source, id}], expenseAccountId, fileFuture, targetName, by}: with
+                                                   fileFuture, their target account (or a new one named targetName,
+                                                   with their statement names) is filed under it too, so future
+                                                   downloads land there; answers with the setup and how many changed
     GET    /spending/overlaps                      Admin: cash-ledger entries not linked to a card charge or check that
                                                    match one (same amount within a week, the charge or check linked to
                                                    no entry): counted twice while the ledger is included
@@ -96,7 +98,8 @@
                                                    counts toward the year (with its tax year and quarter), and the
                                                    year's summary — expenses paid and deductible, estimated payments
                                                    by jurisdiction and quarter, real estate taxes, refunds, savings
-    PUT    /spending/tax/items/<id>                a tax item, created (id 0) or changed {ledgerLineId | namePattern, label, section, taxCategory, jurisdiction,
+    PUT    /spending/tax/items/<id>                a tax item, created (id 0) or changed {payeeId | ledgerLineId |
+                                                   namePattern, label, section, taxCategory, jurisdiction,
                                                    deductibleShare, quarterly, notes, active, by}
     DELETE /spending/tax/items/<id>                take one off
     PUT    /spending/tax/assign/<source>/<entryId> move a payment to {taxYear, quarter, note}; no taxYear undoes it
@@ -163,8 +166,9 @@ def _drivers(conn):
 # ------------------------------------------------------------------------------------------------------------ setup
 
 def setup(conn, details=False):
-    """The family, categories, drivers, rules, triggers and the expense accounts rules can be set on. With details
-    (MxAcctMGR's, not the family page's login): each statement text rule's link (V043)."""
+    """The family, categories, rules, triggers and what rules can be set on. With details (MxAcctMGR's, not the
+    family page's login): each target account's bank, last four digits, logon page, nickname, notes and link
+    (srm.payee_link, V032), and each statement text rule's link (V043)."""
     members = fetch(conn, """
         SELECT member_id AS id, name, relation, birth_year AS "birthYear", birth_month AS "birthMonth", notes, active,
                version FROM srm.household_member ORDER BY relation DESC, birth_year, name""")
@@ -181,12 +185,13 @@ def setup(conn, details=False):
         link_join = " LEFT JOIN srm.spending_rule_link rl USING (rule_id)"
     rules = fetch(conn, """
         SELECT r.rule_id AS id, r.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount",
-               r.pattern, r.category_code AS category, r.driver,
+               r.payee_id AS "payeeId", p.name AS payee, r.pattern, r.category_code AS category, r.driver,
                r.member_id AS "memberId", r.notes, r.updated_by AS "updatedBy", r.updated_at AS "updatedAt"%s
           FROM srm.spending_rule r
-          LEFT JOIN srm.expense_account e USING (expense_account_id)%s
-         ORDER BY r.pattern IS NOT NULL, coalesce(e.sort_order, 0), lower(coalesce(e.name, r.pattern))"""
-                 % (link_columns, link_join))
+          LEFT JOIN srm.expense_account e USING (expense_account_id)
+          LEFT JOIN srm.payee p USING (payee_id)%s
+         ORDER BY r.payee_id IS NOT NULL, r.pattern IS NOT NULL, coalesce(e.sort_order, 0),
+                  lower(coalesce(e.name, p.name, r.pattern))""" % (link_columns, link_join))
     if details:
         rules = [nest_link(r, "link") for r in rules]
     triggers = fetch(conn, """
@@ -196,10 +201,22 @@ def setup(conn, details=False):
     accounts = fetch(conn, """
         SELECT expense_account_id AS id, name, description FROM srm.expense_account WHERE kind = 'expense'
          ORDER BY sort_order, name""")
+    if details:
+        payees = [nest_link(p, "link") for p in fetch(conn, """
+            SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.institution,
+                   p.account_last4 AS last4, p.logon_url AS "logonUrl", p.nickname, p.notes,
+                   pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip",
+                   pl.link_title AS "linkTitle"
+              FROM srm.payee p LEFT JOIN srm.payee_link pl USING (payee_id)
+             WHERE p.status <> 'closed' ORDER BY lower(p.name)""")]
+    else:
+        payees = fetch(conn, """
+            SELECT payee_id AS id, name, expense_account_id AS "expenseAccountId" FROM srm.payee
+             WHERE status <> 'closed' ORDER BY lower(name)""")
     series = fetch(conn, """
         SELECT series_code AS code, name FROM srm.market_series WHERE family = 'INFLATION' ORDER BY sort_order""")
     return {"members": members, "categories": categories, "rules": rules, "triggers": triggers,
-            "expenseAccounts": accounts, "cpiSeries": series, "drivers": _drivers(conn)}
+            "expenseAccounts": accounts, "payees": payees, "cpiSeries": series, "drivers": _drivers(conn)}
 
 
 def save_member(conn, mid, body):
@@ -460,13 +477,13 @@ def set_order(conn, table, body):
 
 
 def save_rule(conn, body):
-    account = _opt_int(body, "expenseAccountId")
+    account, payee = _opt_int(body, "expenseAccountId"), _opt_int(body, "payeeId")
     pattern = " ".join(str(body.get("pattern") or "").split())[:200] or None
-    if [account, pattern].count(None) != 1:
-        raise ValueError("a rule is for an expenseAccountId or a pattern")
+    if [account, payee, pattern].count(None) != 2:
+        raise ValueError("a rule is for an expenseAccountId, a payeeId or a pattern")
     if pattern is not None:
         return _save_text_rule(conn, body, pattern)
-    key, value = "expense_account_id", account
+    key, value = ("expense_account_id", account) if account is not None else ("payee_id", payee)
     category, driver, member = _category(conn, body), _driver(conn, body), _opt_int(body, "memberId")
     notes = _text(body, "notes", 1000)
     if not (category or driver or member or notes):
@@ -514,7 +531,8 @@ def _save_text_rule(conn, body, pattern):
 
 
 def save_rule_link(conn, rid, body):
-    """A statement text rule's link (srm.spending_rule_link, V043), made or changed; answers with the setup."""
+    """A statement text rule's link (srm.spending_rule_link, V043), made or changed, as a target account's is
+    (bank.save_payee_link); answers with the setup."""
     address = (body.get("address") or "").strip()
     if not address:
         raise ValueError("the link needs an address")
@@ -613,7 +631,7 @@ def save_tag(conn, source, entry_id, body):
 # ------------------------------------------------------------------------------------------------------------ analysis
 
 ENTRY_SQL = """
-    SELECT source, entry_id AS "entryId", txn_date AS date, register, payee, description,
+    SELECT source, entry_id AS "entryId", txn_date AS date, register, payee_id AS "payeeId", payee, description,
            expense_account_id AS "expenseAccountId", expense_account AS "expenseAccount", amount,
            category_code AS category, category_from AS "categoryFrom", driver, driver_from AS "driverFrom",
            member_id AS "memberId", event, notes, tagged, rule_pattern AS "rulePattern"
@@ -786,7 +804,9 @@ TABLES = [
      "SELECT count(*) AS rows, max(entry_date) AS newest, max(updated_at) AS changed FROM srm.expense_entry WHERE status = 'actual' AND kind IN ('expense', 'refund')"),
     ("srm.expense_account", "table", "The expense accounts entries are filed in: the expense-account rules hang on them",
      "SELECT count(*) AS rows, NULL::date AS newest, NULL::timestamptz AS changed FROM srm.expense_account WHERE kind = 'expense'"),
-    ("srm.spending_rule", "table", "Category, driver and member of an expense account's or statement text's spending",
+    ("srm.payee", "table", "The target accounts: an entry's expense account when it has none of its own, and the target-account rules",
+     "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.payee"),
+    ("srm.spending_rule", "table", "Category, driver and member of an expense account's, target account's or statement text's spending",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.spending_rule"),
     ("srm.spending_tag", "table", "One entry's own category, driver, member or event, overriding the rules",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.spending_tag"),
@@ -1339,38 +1359,43 @@ def tax(conn, q):
     today = dt.date.today()
     year = int(q.get("year") or (today.year - 1 if today.month <= 4 else today.year))
     items = fetch(conn, """
-        SELECT i.item_id AS id, i.ledger_line_id AS "ledgerLineId",
+        SELECT i.item_id AS id, i.payee_id AS "payeeId", p.name AS payee, i.ledger_line_id AS "ledgerLineId",
                ln.name AS "ledgerLine", l.code AS ledger, i.name_pattern AS "namePattern", i.label, i.section,
                i.tax_category AS "taxCategory", i.jurisdiction, i.deductible_share AS "deductibleShare", i.quarterly,
                i.notes, i.sort_order AS "sortOrder", i.active
           FROM srm.tax_item i
+          LEFT JOIN srm.payee p ON p.payee_id = i.payee_id
           LEFT JOIN srm.expense_line ln ON ln.line_id = i.ledger_line_id
           LEFT JOIN srm.expense_ledger l ON l.ledger_id = ln.ledger_id
          ORDER BY i.sort_order, i.label""")
     live = [i for i in items if i["active"]]
+    payees = [i["payeeId"] for i in live if i["payeeId"]]
     lines = [i["ledgerLineId"] for i in live if i["ledgerLineId"]]
     likes = [_like(i["namePattern"]) for i in live if i["namePattern"]]
     # Three years of candidates: a payment can count toward the year before (January, refunds) or be moved by hand.
     lo, hi = dt.date(year - 1, 1, 1), dt.date(year + 1, 12, 31)
     rows = []
-    if likes:
+    if payees or likes:
         rows += fetch(conn, """
-            SELECT 'bank' AS source, b.txn_id AS "entryId", b.txn_date AS date, b.payee_name AS payee,
-                   b.memo AS description, -b.amount AS amount, a.code AS register, NULL::bigint AS "lineId"
+            SELECT 'bank' AS source, b.txn_id AS "entryId", b.txn_date AS date, coalesce(p.name, b.payee_name) AS payee,
+                   b.payee_id AS "payeeId", b.memo AS description, -b.amount AS amount, a.code AS register,
+                   NULL::bigint AS "lineId"
               FROM srm.bank_txn b JOIN srm.bank_account a USING (bank_account_id)
+              LEFT JOIN srm.payee p ON p.payee_id = b.payee_id
              WHERE b.status <> 'void' AND b.txn_date BETWEEN %s AND %s
-               AND coalesce(b.payee_name, '') ILIKE ANY(%s)""", (lo, hi, likes))
+               AND (b.payee_id = ANY(%s) OR coalesce(p.name, b.payee_name, '') ILIKE ANY(%s))""", (lo, hi, payees, likes))
         rows += fetch(conn, """
-            SELECT 'card' AS source, c.txn_id AS "entryId", c.txn_date AS date, c.payee_name AS payee,
-                   c.memo AS description, c.amount, a.code AS register, NULL::bigint AS "lineId"
+            SELECT 'card' AS source, c.txn_id AS "entryId", c.txn_date AS date, coalesce(p.name, c.payee_name) AS payee,
+                   c.payee_id AS "payeeId", c.memo AS description, c.amount, a.code AS register, NULL::bigint AS "lineId"
               FROM srm.card_txn c JOIN srm.card_account a USING (card_account_id)
+              LEFT JOIN srm.payee p ON p.payee_id = c.payee_id
              WHERE c.status <> 'void' AND c.kind <> 'payment' AND c.txn_date BETWEEN %s AND %s
-               AND coalesce(c.payee_name, '') ILIKE ANY(%s)""", (lo, hi, likes))
+               AND (c.payee_id = ANY(%s) OR coalesce(p.name, c.payee_name, '') ILIKE ANY(%s))""", (lo, hi, payees, likes))
     ledger = []
     if lines:
         ledger = fetch(conn, """
             SELECT 'ledger' AS source, e.entry_id AS "entryId", e.entry_date AS date, coalesce(e.vendor, e.description) AS payee,
-                   e.description, e.amount, l.code AS register, e.line_id AS "lineId",
+                   NULL::integer AS "payeeId", e.description, e.amount, l.code AS register, e.line_id AS "lineId",
                    e.card_txn_id AS "cardTxnId", e.bank_txn_id AS "bankTxnId"
               FROM srm.expense_entry e JOIN srm.expense_ledger l USING (ledger_id)
              WHERE e.status = 'actual' AND e.kind IN ('expense', 'refund') AND e.line_id = ANY(%s)
@@ -1379,11 +1404,14 @@ def tax(conn, q):
     claimed = {("card", e["cardTxnId"]) for e in ledger if e.get("cardTxnId")} | {("bank", e["bankTxnId"]) for e in ledger if e.get("bankTxnId")}
     moved = {(r["source"], r["entry_id"]): r for r in fetch(conn, "SELECT source, entry_id, tax_year, quarter, note FROM srm.tax_assignment")}
     by_line = {i["ledgerLineId"]: i for i in live if i["ledgerLineId"]}
-    # The longest name a payment's contains wins ("Vz Fios" over "Fios"), as statement text rules do.
-    patterns = sorted((i for i in live if i["namePattern"]), key=lambda i: -len(i["namePattern"]))
+    by_payee = {}
+    for i in live:
+        if i["payeeId"]:
+            by_payee.setdefault(i["payeeId"], i)
+    patterns = [i for i in live if i["namePattern"]]
     entries = []
     for e in ledger + [r for r in rows if (r["source"], r["entryId"]) not in claimed]:
-        item = by_line.get(e["lineId"]) if e["source"] == "ledger" else next(
+        item = by_line.get(e["lineId"]) if e["source"] == "ledger" else by_payee.get(e["payeeId"]) or next(
             (i for i in patterns if i["namePattern"].lower() in (e["payee"] or "").lower()), None)
         if not item:
             continue
@@ -1450,10 +1478,10 @@ def tax(conn, q):
 
 def save_tax_item(conn, iid, body):
     iid = int(iid)
-    line = _opt_int(body, "ledgerLineId")
-    pattern = _text(body, "namePattern", 120)
-    if sum(x is not None for x in (line, pattern)) != 1:
-        raise ValueError("a tax item is for one ledgerLineId or namePattern")
+    payee, line = _opt_int(body, "payeeId"), _opt_int(body, "ledgerLineId")
+    pattern = _text(body, "namePattern", 80)
+    if sum(x is not None for x in (payee, line, pattern)) != 1:
+        raise ValueError("a tax item is for one payeeId, ledgerLineId or namePattern")
     label = _text(body, "label", 120)
     if not label:
         raise ValueError("label is required")
@@ -1466,14 +1494,14 @@ def save_tax_item(conn, iid, body):
     share = float(body.get("deductibleShare") if body.get("deductibleShare") not in (None, "") else 1)
     if not 0 <= share <= 1:
         raise ValueError("deductibleShare is a fraction from 0 to 1 (0.15 for 15%)")
-    values = (line, pattern, label, section, _text(body, "taxCategory", 60) or "Other", jurisdiction, share,
+    values = (payee, line, pattern, label, section, _text(body, "taxCategory", 60) or "Other", jurisdiction, share,
               bool(body.get("quarterly", False)), _text(body, "notes", 1000), bool(body.get("active", True)), _by(body))
     if iid == 0:
-        fetch(conn, """INSERT INTO srm.tax_item (ledger_line_id, name_pattern, label, section, tax_category,
+        fetch(conn, """INSERT INTO srm.tax_item (payee_id, ledger_line_id, name_pattern, label, section, tax_category,
                               jurisdiction, deductible_share, quarterly, notes, active, updated_by, sort_order)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                                (SELECT coalesce(max(sort_order), 0) + 1 FROM srm.tax_item))""", values)
-    elif not fetch(conn, """UPDATE srm.tax_item SET ledger_line_id = %s, name_pattern = %s, label = %s,
+    elif not fetch(conn, """UPDATE srm.tax_item SET payee_id = %s, ledger_line_id = %s, name_pattern = %s, label = %s,
                                    section = %s, tax_category = %s, jurisdiction = %s, deductible_share = %s,
                                    quarterly = %s, notes = %s, active = %s, updated_by = %s, updated_at = now()
                              WHERE item_id = %s RETURNING item_id""", values + (iid,)):
@@ -1645,12 +1673,16 @@ def undo_change(conn, fid, body):
 
 # ------------------------------------------------------------------------------------------------------------ entries
 
-ENTRY_TABLES = {"card": "srm.card_txn", "bank": "srm.bank_txn"}
+ENTRY_TABLES = {"card": ("srm.card_txn", "srm.card_line", "card_line_id", "card"),
+             "bank": ("srm.bank_txn", "srm.bank_line", "bank_line_id", "checking")}
 
 
 def change_expense_account(conn, body):
-    """Files card and check entries under another expense account (Entries ▸ Change Expense Account…). Cash-ledger
-    entries take their budget line's expense account and can't change here."""
+    """Files card and check entries under another expense account (Entries ▸ Change Expense Account…). With
+    fileFuture, what comes next lands there too: the entries' target accounts are filed under it, and entries with no
+    target account get one (found by targetName, or made) whose bank names are their statement names, as the card and
+    checking downloads match them. Cash-ledger entries take their budget line's expense account and can't change
+    here."""
     account = _opt_int(body, "expenseAccountId")
     if not account or not fetch(conn, "SELECT 1 FROM srm.expense_account WHERE expense_account_id = %s AND kind = 'expense'",
                                 (account,)):
@@ -1666,17 +1698,52 @@ def change_expense_account(conn, body):
             raise ValueError("a cash-ledger entry takes its budget line's expense account: change the line instead")
         if source not in ENTRY_TABLES:
             raise ValueError("source must be card or bank")
-        found = fetch(conn, "SELECT t.txn_id FROM %s t WHERE t.txn_id = %%s FOR UPDATE OF t" % ENTRY_TABLES[source],
-                      (int(c.get("id") or 0),))
+        table, lines, line_key, _ = ENTRY_TABLES[source]
+        found = fetch(conn, """SELECT t.txn_id, t.payee_id, t.payee_name, l.name AS statement
+                                 FROM %s t LEFT JOIN %s l USING (%s) WHERE t.txn_id = %%s FOR UPDATE OF t"""
+                      % (table, lines, line_key), (int(c.get("id") or 0),))
         if not found:
             raise LookupError("no %s entry %s" % (source, c.get("id")))
         rows.append(dict(found[0], source=source))
+    name = " ".join(str(body.get("targetName") or "").split())[:120]
+    if body.get("fileFuture") and not name and any(not r["payee_id"] for r in rows):
+        raise ValueError("targetName is required for entries with no target account")
     for r in rows:
         fetch(conn, """UPDATE %s SET expense_account_id = %%s, version = version + 1, updated_by = %%s, updated_at = now()
-                        WHERE txn_id = %%s""" % ENTRY_TABLES[r["source"]], (account, by, r["txn_id"]))
+                        WHERE txn_id = %%s""" % ENTRY_TABLES[r["source"]][0], (account, by, r["txn_id"]))
+    target = None
+    if body.get("fileFuture"):
+        # Their target accounts: filed under it from now on.
+        payees = sorted({r["payee_id"] for r in rows if r["payee_id"]})
+        if payees:
+            fetch(conn, """UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s,
+                                  updated_at = now() WHERE payee_id = ANY(%s)""", (account, by, payees))
+        loose = [r for r in rows if not r["payee_id"]]
+        if loose:
+            names = sorted({(r["statement"] or r["payee_name"] or "").strip() for r in loose} - {""})
+            sources = sorted({ENTRY_TABLES[r["source"]][3] for r in loose})
+            found = fetch(conn, "SELECT payee_id FROM srm.payee WHERE lower(name) = lower(%s)", (name,))
+            if found:
+                target = found[0]["payee_id"]
+                fetch(conn, """UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s,
+                                      updated_at = now() WHERE payee_id = %s""", (account, by, target))
+            else:
+                target = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, updated_by, funding_sources)
+                                        VALUES (%s, %s, %s, %s) RETURNING payee_id""", (name, account, by, sources))[0]["payee_id"]
+            # The card companies' and the bank's names for it, so their downloads post to it, and the registers
+            # that offer it.
+            fetch(conn, """UPDATE srm.payee SET
+                                  bank_names = ARRAY(SELECT DISTINCT x FROM unnest(coalesce(bank_names, '{}') || %s::text[]) x
+                                                      WHERE lower(x) <> lower(name)),
+                                  funding_sources = ARRAY(SELECT DISTINCT x FROM unnest(coalesce(funding_sources, '{}') || %s::text[]) x)
+                            WHERE payee_id = %s""", (names, sources, target))
+            for r in loose:
+                fetch(conn, """UPDATE %s SET payee_id = %%s, payee_name = %%s WHERE txn_id = %%s""" % ENTRY_TABLES[r["source"]][0],
+                      (target, name, r["txn_id"]))
     conn.commit()
     out = setup(conn, details=True)
     out["changed"] = len(rows)
+    out["targetAccountId"] = target
     return out
 
 
@@ -1694,17 +1761,20 @@ def overlaps(conn):
           JOIN srm.expense_ledger l USING (ledger_id)
           JOIN LATERAL (
               SELECT * FROM (
-                  SELECT 'card'::text AS source, t.txn_id, a.code AS register, t.txn_date, t.payee_name AS payee
+                  SELECT 'card'::text AS source, t.txn_id, a.code AS register, t.txn_date,
+                         coalesce(p.name, t.payee_name) AS payee
                     FROM srm.card_txn t
                     JOIN srm.card_account a USING (card_account_id)
+                    LEFT JOIN srm.payee p ON p.payee_id = t.payee_id
                    WHERE t.status <> 'void' AND t.kind <> 'payment' AND t.amount = e.amount
                      AND abs(t.txn_date - e.entry_date) <= 7
                      AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.card_txn_id = t.txn_id)
                      AND NOT srm.source_disconnected('card', a.code)
                   UNION ALL
-                  SELECT 'bank', b.txn_id, a.code, b.txn_date, b.payee_name
+                  SELECT 'bank', b.txn_id, a.code, b.txn_date, coalesce(p.name, b.payee_name)
                     FROM srm.bank_txn b
                     JOIN srm.bank_account a USING (bank_account_id)
+                    LEFT JOIN srm.payee p ON p.payee_id = b.payee_id
                    WHERE b.status <> 'void' AND -b.amount = e.amount AND abs(b.txn_date - e.entry_date) <= 7
                      AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.bank_txn_id = b.txn_id)
                      AND NOT srm.source_disconnected('bank', a.code)

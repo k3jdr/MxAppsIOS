@@ -2,9 +2,7 @@
 
     GET  /cards/accounts                               cards with balance owed, available credit and the current statement
     PUT  /cards/accounts/<code>                        create or change one {name, issuer, last4, creditLimit, apr,
-                                                       closeDay, dueDay, openingDate, openingBalance, paymentName,
-                                                       closedDate}: paymentName is the name checking's payments to the
-                                                       card have (V048), how they are found and how Pay names one
+                                                       closeDay, dueDay, openingDate, openingBalance, payeeId, closedDate}
     GET  /cards/accounts/<code>/removal                what removing it would clean up: its register entries, the card
                                                        company's lines, its statements, its drop folder's downloads, and
                                                        the checking and cash-ledger entries linked to it (they stay)
@@ -12,7 +10,7 @@
                                                        code repeated as confirm); its drop folder is moved to _removed
     GET  /cards/accounts/<code>/register               its entries (running balance owed), statements and the checking
                                                        payments to it not linked to a card payment
-    POST /cards/accounts/<code>/transactions           add an entry {date, kind, payee, expenseAccountId, memo, amount, by}
+    POST /cards/accounts/<code>/transactions           add an entry {date, kind, payeeId|payee, expenseAccountId, memo, amount, by}
     PUT  /cards/transactions/<id>                      change one {version, …}: refused (409) when someone changed it since
     POST /cards/transactions/<id>/link                 link a payment to the checking entry that paid it {bankTxnId} (null unlinks)
     POST /cards/accounts/<code>/pay                    pay it from a checking account {fromAccount, date, amount, memo, by}:
@@ -24,11 +22,14 @@
                                                        each line new or already read, the totals by kind, the lines before
                                                        the card's opening date, categories with no expense account. A file
                                                        that isn't a card download known here, or is another card's, is refused
+    GET  /cards/targets                                the card registers' targets that aren't target accounts: each name as
+                                                       the card company gives it, with its entries, total, dates and kinds
+    POST /cards/targets                                make them target accounts {names: [...], by}: each a recipient of credit
+                                                       card payments, in the category its entries mostly have, its entries
+                                                       linked to it (a name a target account has already gets the card source)
 
 Amounts are signed as a statement reads them: positive adds to the balance owed (charges, fees, interest), negative
-lowers it (payments, credits). An entry is never deleted: it is voided. Each entry names who it paid as text (payee,
-the card company's name for a downloaded line); a new entry with no expense account takes the one the latest entry
-paid to the same name has.
+lowers it (payments, credits). An entry is never deleted: it is voided.
 """
 
 import calendar
@@ -39,7 +40,7 @@ import re
 import urllib.request
 
 import bank
-from bank import Conflict, fetch, _date, _num, last_expense_account
+from bank import Conflict, fetch, _date, _num, _payee
 
 CODE = re.compile(r"^[A-Za-z0-9_\-]{1,40}$")
 KINDS = ("charge", "credit", "payment", "fee", "interest", "adjustment")
@@ -138,7 +139,7 @@ def accounts(conn):
     rows = fetch(conn, """
         SELECT a.card_account_id AS id, a.code, a.name, a.issuer, a.account_last4 AS last4, a.credit_limit AS "creditLimit",
                a.apr, a.statement_close_day AS "closeDay", a.payment_due_day AS "dueDay", a.opening_date AS "openingDate",
-               a.opening_balance AS "openingBalance", a.payment_name AS "paymentName",
+               a.opening_balance AS "openingBalance", a.payee_id AS "payeeId", p.name AS payee,
                a.issuer_balance AS "issuerBalance", a.issuer_available AS "issuerAvailable",
                a.issuer_balance_as_of AS "issuerBalanceAsOf", a.closed_date AS "closedDate",
                a.opening_balance + coalesce(sum(t.amount) FILTER (WHERE t.status <> 'void'), 0) AS balance,
@@ -146,9 +147,10 @@ def accounts(conn):
                count(t.*) FILTER (WHERE t.status = 'pending') AS "pendingEntries",
                max(l.posted_date) AS "lastDownload"
           FROM srm.card_account a
+          LEFT JOIN srm.payee p ON p.payee_id = a.payee_id
           LEFT JOIN srm.card_txn t ON t.card_account_id = a.card_account_id
           LEFT JOIN srm.card_line l ON l.card_line_id = t.card_line_id
-         GROUP BY a.card_account_id ORDER BY a.closed_date NULLS FIRST, a.name""")
+         GROUP BY a.card_account_id, p.name ORDER BY a.closed_date NULLS FIRST, a.name""")
     for r in rows:
         r["available"] = round(float(r["creditLimit"]) - float(r["balance"]), 2) if r["creditLimit"] is not None else None
     return {"accounts": rows}
@@ -178,18 +180,17 @@ def save_account(conn, code, body):
     with conn.cursor() as cur:
         cur.execute("""
             INSERT INTO srm.card_account (code, name, issuer, account_last4, credit_limit, apr, statement_close_day,
-                                          payment_due_day, opening_date, opening_balance, payment_name, closed_date)
+                                          payment_due_day, opening_date, opening_balance, payee_id, closed_date)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (code) DO UPDATE SET name = excluded.name, issuer = excluded.issuer,
                    account_last4 = excluded.account_last4, credit_limit = excluded.credit_limit, apr = excluded.apr,
                    statement_close_day = excluded.statement_close_day, payment_due_day = excluded.payment_due_day,
                    opening_date = excluded.opening_date, opening_balance = excluded.opening_balance,
-                   payment_name = excluded.payment_name, closed_date = excluded.closed_date, updated_at = now()
+                   payee_id = excluded.payee_id, closed_date = excluded.closed_date, updated_at = now()
             RETURNING card_account_id""",
                     (code.upper(), name[:120], (body.get("issuer") or "Chase").strip()[:80], last4, opt("creditLimit"),
                      opt("apr"), day("closeDay"), day("dueDay"), _date(body.get("openingDate") or dt.date.today()),
-                     _num(body.get("openingBalance", 0) or 0, "openingBalance"),
-                     (body.get("paymentName") or "").strip()[:120] or None,
+                     _num(body.get("openingBalance", 0) or 0, "openingBalance"), body.get("payeeId") or None,
                      _date(body["closedDate"]) if body.get("closedDate") else None))
         cid = cur.fetchone()[0]
     fetch(conn, "SELECT srm.match_card_payments(%s)", (cid,))
@@ -200,13 +201,18 @@ def save_account(conn, code, body):
 # ------------------------------------------------------------------------------------------------------------ register
 
 TXN_SQL = """
-    SELECT t.txn_id AS id, t.txn_date AS date, t.posted_date AS "postedDate", t.kind, t.payee_name AS payee,
+    SELECT t.txn_id AS id, t.txn_date AS date, t.posted_date AS "postedDate", t.kind, t.payee_id AS "payeeId",
+           coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
+           p.notes AS "payeeNote", p.nickname AS "payeeNickname", p.next_payment_date AS "payeeNextDate",
+           p.next_payment_amount AS "payeeNextAmount", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
            t.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount", t.memo,
            t.amount, t.status, t.card_line_id AS "cardLineId", l.name AS "issuerName", l.category AS "issuerCategory",
            l.file_format AS "fileFormat", t.bank_txn_id AS "bankTxnId", ba.code AS "bankAccount", bt.txn_date AS "bankDate",
            bt.check_no AS "bankCheckNo", t.version, t.entered_by AS "enteredBy", t.created_at AS "enteredAt",
            t.updated_by AS "updatedBy", t.updated_at AS "updatedAt"
       FROM srm.card_txn t
+      LEFT JOIN srm.payee p USING (payee_id)
+      LEFT JOIN srm.payee_link pl ON pl.payee_id = t.payee_id
       LEFT JOIN srm.expense_account e ON e.expense_account_id = t.expense_account_id
       LEFT JOIN srm.card_line l ON l.card_line_id = t.card_line_id
       LEFT JOIN srm.bank_txn bt ON bt.txn_id = t.bank_txn_id
@@ -216,22 +222,23 @@ TXN_SQL = """
 def register(conn, code):
     card = _card(conn, code)
     acct = [a for a in accounts(conn)["accounts"] if a["code"].upper() == card["code"].upper()][0]
-    rows = fetch(conn, TXN_SQL + " WHERE t.card_account_id = %s ORDER BY coalesce(t.posted_date, t.txn_date), t.txn_date, t.txn_id",
-                 (card["card_account_id"],))
+    rows = [bank.nest_link(r, "payeeLink") for r in
+            fetch(conn, TXN_SQL + " WHERE t.card_account_id = %s ORDER BY coalesce(t.posted_date, t.txn_date), t.txn_date, t.txn_id",
+                  (card["card_account_id"],))]
     balance = float(card["opening_balance"])
     for r in rows:
         if r["status"] != "void":
             balance += float(r["amount"])
         r["balance"] = round(balance, 2)
     unlinked = []
-    if card["payment_name"]:
+    if card["payee_id"]:
         unlinked = fetch(conn, """
             SELECT t.txn_id AS id, a.code AS "bankAccount", t.txn_date AS date, t.kind, t.check_no AS "checkNo",
                    t.amount, t.memo, t.status
               FROM srm.bank_txn t JOIN srm.bank_account a USING (bank_account_id)
-             WHERE lower(t.payee_name) = lower(%s) AND t.status <> 'void' AND t.txn_date >= %s
+             WHERE t.payee_id = %s AND t.status <> 'void' AND t.txn_date >= %s
                AND NOT EXISTS (SELECT 1 FROM srm.card_txn c WHERE c.bank_txn_id = t.txn_id)
-             ORDER BY t.txn_date""", (card["payment_name"], card["opening_date"]))
+             ORDER BY t.txn_date""", (card["payee_id"], card["opening_date"]))
     return {"account": acct, "entries": rows, "statements": statements(conn, card, rows), "unlinkedPayments": unlinked}
 
 
@@ -251,14 +258,15 @@ def _fields(conn, body, current=None):
     status = body.get("status", cur.get("status", "pending"))
     if status not in STATUSES:
         raise ValueError("status must be one of " + ", ".join(STATUSES))
-    payee = ((body["payee"] or "").strip()[:120] or None) if "payee" in body else cur.get("payee")
-    expense = body.get("expenseAccountId", cur.get("expenseAccountId"))
-    if not expense and not current:
-        expense = last_expense_account(conn, "srm.card_txn", payee)
+    if "payeeId" in body or "payee" in body:
+        payee_id, payee_name, default_account = _payee(conn, body, source="card")
+    else:
+        payee_id, payee_name, default_account = cur.get("payeeId"), cur.get("payee"), None
+    expense = body.get("expenseAccountId", cur.get("expenseAccountId")) or default_account
     if kind == "payment":
         expense = None
     return {"txn_date": _date(body.get("date", cur.get("date")) or dt.date.today()), "kind": kind,
-            "payee_name": payee, "expense_account_id": expense,
+            "payee_id": payee_id, "payee_name": payee_name, "expense_account_id": expense,
             "memo": (body.get("memo", cur.get("memo")) or "").strip()[:200] or None, "amount": amount, "status": status}
 
 
@@ -266,9 +274,9 @@ def add_transaction(conn, code, body, commit=True):
     card = _card(conn, code)
     f = _fields(conn, body)
     rows = fetch(conn, """
-        INSERT INTO srm.card_txn (card_account_id, txn_date, kind, payee_name, expense_account_id, memo, amount,
+        INSERT INTO srm.card_txn (card_account_id, txn_date, kind, payee_id, payee_name, expense_account_id, memo, amount,
                                   status, bank_txn_id, entered_by, updated_by)
-        VALUES (%(cid)s, %(txn_date)s, %(kind)s, %(payee_name)s, %(expense_account_id)s, %(memo)s, %(amount)s,
+        VALUES (%(cid)s, %(txn_date)s, %(kind)s, %(payee_id)s, %(payee_name)s, %(expense_account_id)s, %(memo)s, %(amount)s,
                 %(status)s, %(bank)s, %(by)s, %(by)s) RETURNING txn_id""",
                  dict(f, cid=card["card_account_id"], bank=body.get("bankTxnId"), by=str(body.get("by") or "MxAcctMGR")[:80]))
     if not commit:
@@ -295,8 +303,9 @@ def update_transaction(conn, txn_id, body):
     unmatch = f["status"] in ("pending", "void") and cur["cardLineId"] is not None
     by = str(body.get("by") or "MxAcctMGR")[:80]
     with conn.cursor() as c:
-        c.execute("""UPDATE srm.card_txn SET txn_date = %(txn_date)s, kind = %(kind)s, payee_name = %(payee_name)s,
-                            expense_account_id = %(expense_account_id)s, memo = %(memo)s, amount = %(amount)s, status = %(status)s,
+        c.execute("""UPDATE srm.card_txn SET txn_date = %(txn_date)s, kind = %(kind)s, payee_id = %(payee_id)s,
+                            payee_name = %(payee_name)s, expense_account_id = %(expense_account_id)s, memo = %(memo)s,
+                            amount = %(amount)s, status = %(status)s,
                             card_line_id = CASE WHEN %(unmatch)s THEN NULL ELSE card_line_id END,
                             posted_date = CASE WHEN %(unmatch)s THEN NULL ELSE posted_date END,
                             bank_txn_id = CASE WHEN %(void)s THEN NULL ELSE bank_txn_id END,
@@ -304,13 +313,19 @@ def update_transaction(conn, txn_id, body):
                       WHERE txn_id = %(id)s RETURNING card_account_id""",
                   dict(f, id=txn_id, unmatch=unmatch, void=f["status"] == "void", by=by))
         cid = c.fetchone()[0]
+    # The payee picked for a card company's line: its name there maps to that payee from now on.
+    if f["payee_id"] and cur["issuerName"] and f["payee_id"] != cur["payeeId"]:
+        fetch(conn, """UPDATE srm.payee SET bank_names = array_append(bank_names, %s)
+                        WHERE payee_id = %s AND lower(name) <> lower(%s)
+                          AND NOT (lower(%s) = ANY (SELECT lower(x) FROM unnest(bank_names) x))""",
+              (cur["issuerName"], f["payee_id"], cur["issuerName"], cur["issuerName"]))
     code = fetch(conn, "SELECT code FROM srm.card_account WHERE card_account_id = %s", (cid,))[0]["code"]
     conn.commit()
     return register(conn, code)
 
 
 def link_payment(conn, txn_id, body):
-    rows = fetch(conn, """SELECT t.card_account_id, t.kind, t.amount, a.code FROM srm.card_txn t
+    rows = fetch(conn, """SELECT t.card_account_id, t.kind, t.amount, a.code, a.payee_id FROM srm.card_txn t
                            JOIN srm.card_account a USING (card_account_id) WHERE t.txn_id = %s FOR UPDATE OF t""", (txn_id,))
     if not rows:
         raise LookupError("no card register entry %s" % txn_id)
@@ -331,11 +346,11 @@ def link_payment(conn, txn_id, body):
 
 
 def pay(conn, code, body):
-    """A payment from a checking account: the checking entry (a transfer, paid to the card's payment name) and the
+    """A payment from a checking account: the checking entry (to the card's external account, a transfer) and the
     card's payment, linked; the card company's line for it posts the payment when it is read."""
     card = _card(conn, code)
-    if not card["payment_name"]:
-        raise ValueError("set how checking names the card's payments first: Edit… ▸ Paid from checking as")
+    if not card["payee_id"]:
+        raise ValueError("set the card's external account (how the check register pays it) first: Edit… ▸ Paid from checking as")
     amount = abs(_num(body.get("amount"), "amount"))
     if amount == 0:
         raise ValueError("amount must not be zero")
@@ -343,9 +358,9 @@ def pay(conn, code, body):
     date = body.get("date") or dt.date.today().isoformat()
     memo = body.get("memo") or "%s payment" % card["name"]
     out = bank.add_transaction(conn, body.get("fromAccount") or "", {
-        "date": date, "kind": "transfer", "payee": card["payment_name"], "memo": memo, "amount": -amount, "by": by},
+        "date": date, "kind": "transfer", "payeeId": card["payee_id"], "memo": memo, "amount": -amount, "by": by},
         match=False)
-    add_transaction(conn, code, {"date": date, "kind": "payment", "payee": card["payment_name"], "memo": memo,
+    add_transaction(conn, code, {"date": date, "kind": "payment", "payeeId": card["payee_id"], "memo": memo,
                                  "amount": amount, "bankTxnId": out["id"], "by": by}, commit=False)
     fetch(conn, "SELECT srm.post_card_lines(%s)", (card["card_account_id"],))
     fetch(conn, "SELECT srm.match_bank_lines(bank_account_id) FROM srm.bank_txn WHERE txn_id = %s", (out["id"],))
@@ -497,8 +512,8 @@ def removal(conn, code):
                (SELECT count(*) FROM srm.card_txn WHERE card_account_id = %(a)s AND bank_txn_id IS NOT NULL) AS "checkingLinked",
                (SELECT count(*) FROM srm.expense_entry e JOIN srm.card_txn t ON t.txn_id = e.card_txn_id
                  WHERE t.card_account_id = %(a)s) AS "expenseLinked",
-               %(p)s AS payee""",
-                   {"a": card["card_account_id"], "p": card["payment_name"]})[0]
+               (SELECT name FROM srm.payee WHERE payee_id = %(p)s) AS payee""",
+                   {"a": card["card_account_id"], "p": card["payee_id"]})[0]
     counts["remembered"] = fetch(conn, """
         SELECT count(g.*) AS tags, (SELECT count(*) FROM srm.amazon_match m JOIN srm.card_txn x ON x.txn_id = m.card_txn_id
                                      WHERE x.card_account_id = %(a)s AND x.card_line_id IS NOT NULL) AS "amazonMatches",
@@ -548,8 +563,60 @@ def remove_account(conn, code, q):
     return {"removed": dict(gone, movedTo=moved), **accounts(conn)}
 
 
+# ------------------------------------------------------------------------------------------------------ card targets
+
+# The card company's own lines aren't targets: payments come from checking, interest, fees and adjustments from the card.
+OWN_KINDS = ("payment", "interest", "fee", "adjustment")
+
+
+def card_targets(conn):
+    """The names card entries carry without a target account (as the card company gives them), each with its entries,
+    total, first and last date and kinds; `merchant` is false for the card company's own lines."""
+    rows = fetch(conn, """
+        SELECT t.payee_name AS name, count(*) AS entries, sum(t.amount) AS total, min(t.txn_date) AS first,
+               max(t.txn_date) AS last, array_agg(DISTINCT t.kind) AS kinds
+          FROM srm.card_txn t
+         WHERE t.payee_id IS NULL AND coalesce(btrim(t.payee_name), '') <> '' AND t.status <> 'void'
+         GROUP BY t.payee_name ORDER BY count(*) DESC, lower(t.payee_name)""")
+    for r in rows:
+        r["merchant"] = not set(r["kinds"]) <= set(OWN_KINDS)
+    return {"targets": rows}
+
+
+def add_card_targets(conn, body):
+    """Makes card targets target accounts (recipients of credit card payments) and links their entries to them."""
+    names = [n.strip() for n in body.get("names") or [] if isinstance(n, str) and n.strip()]
+    if not names:
+        raise ValueError("names lists the card targets to add")
+    by = str(body.get("by") or "MxAcctMGR")[:80]
+    added = linked = 0
+    for name in names:
+        found = fetch(conn, "SELECT payee_id FROM srm.payee WHERE lower(name) = lower(%s)", (name,))
+        if found:
+            pid = found[0]["payee_id"]
+            fetch(conn, """UPDATE srm.payee SET funding_sources = array_append(funding_sources, 'card')
+                            WHERE payee_id = %s AND NOT ('card' = ANY (funding_sources))""", (pid,))
+        else:
+            # Its category: the one its entries mostly have (the card company's category, or as entered).
+            category = fetch(conn, """SELECT expense_account_id FROM srm.card_txn
+                                     WHERE payee_id IS NULL AND lower(payee_name) = lower(%s) AND expense_account_id IS NOT NULL
+                                     GROUP BY 1 ORDER BY count(*) DESC LIMIT 1""", (name,))
+            pid = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, funding_sources, updated_by)
+                                 VALUES (%s, %s, '{card}', %s) RETURNING payee_id""",
+                        (name[:120], category[0]["expense_account_id"] if category else None, by))[0]["payee_id"]
+            added += 1
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE srm.card_txn SET payee_id = %s, version = version + 1, updated_by = %s, updated_at = now()
+                            WHERE payee_id IS NULL AND lower(payee_name) = lower(%s)""", (pid, by, name))
+            linked += cur.rowcount
+    conn.commit()
+    return {"added": added, "linked": linked, **card_targets(conn)}
+
+
 def route(conn, method, parts, body, q):
     """The card endpoints' answer, or None when the path isn't one of them."""
+    if parts == ["cards", "targets"]:
+        return card_targets(conn) if method == "GET" else add_card_targets(conn, body) if method == "POST" else None
     if parts == ["cards", "accounts"] and method == "GET":
         return accounts(conn)
     if len(parts) == 3 and parts[:2] == ["cards", "accounts"] and method == "PUT":

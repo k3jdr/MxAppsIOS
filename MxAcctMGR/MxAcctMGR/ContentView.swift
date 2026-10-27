@@ -103,6 +103,7 @@ struct ContentView: View {
         }
         .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
         .sheet(item: Binding(get: { ReportNotes.shared.editing }, set: { ReportNotes.shared.editing = $0 })) { ReportNotesSheet(report: $0) }
+        .sheet(item: Binding(get: { PayeeLinks.shared.editing }, set: { PayeeLinks.shared.editing = $0 })) { PayeeLinkSheet(target: $0) }
         .sheet(isPresented: $store.showOpenPortfolio) { OpenPortfolioSheet(store: store) }
         .sheet(isPresented: $store.showNewPortfolio) { NewPortfolioSheet(store: store) }
         .sheet(isPresented: $store.showDecisions) { DecisionsSheet(store: store) }
@@ -148,6 +149,7 @@ struct ContentView: View {
         case .checking: CheckingView(store: store)
         case .cards: CardsView(store: store)
         case .expenseLedgers: ExpenseLedgersView(store: store)
+        case .expenses: TargetAccountsView(store: store)
         case .secureAccounts: SecureAccountsView(store: store)
         case .welcome: WelcomeView(store: store)
         case .choosePath: ChoosePathView(store: store)
@@ -264,10 +266,17 @@ struct ContentView: View {
                 pb.setString(text ?? "<nil>", forType: .string)
             }
         }
-        // A linked name's hover card (-payeeLinkHoverTest TEST_ID: a LinkedWords' test id, rule:ID on Rules).
+        // Links on target accounts: open the Link dialog (-payeeLinkEdit PAYEE_ID) or show a linked target's hover
+        // card (-payeeLinkHoverTest entry:TXN_ID in a register, payee:PAYEE_ID in Target Accounts).
+        if let id = defaults.object(forKey: "payeeLinkEdit") != nil ? defaults.integer(forKey: "payeeLinkEdit") : nil {
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                PayeeLinks.shared.beginEdit((try? await BankClient.book())?.payees.first { $0.id == id }.map(PayeeLinkTarget.init))
+            }
+        }
         if let id = defaults.string(forKey: "payeeLinkHoverTest") {
             Task {
-                // Once the page has loaded and shows the linked words.
+                // Once the register (or Target Accounts) has loaded and shows the linked words.
                 for _ in 0..<20 where LinkWordsAnchorView.anchors[id]?() == nil { try? await Task.sleep(for: .seconds(1)) }
                 LinkWordsAnchorView.testHover(id)
             }

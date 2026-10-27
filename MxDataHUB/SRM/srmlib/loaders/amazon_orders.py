@@ -268,20 +268,22 @@ def is_order_charge(text):
 
 CHARGES = """
     SELECT 'card' AS source, c.txn_id, c.txn_date, c.amount, a.account_last4,
-           concat_ws(' ', c.payee_name, l.name, c.memo) AS text
+           concat_ws(' ', c.payee_name, l.name, c.memo, p.name) AS text
       FROM srm.card_txn c
       JOIN srm.card_account a USING (card_account_id)
       LEFT JOIN srm.card_line l USING (card_line_id)
+      LEFT JOIN srm.payee p ON p.payee_id = c.payee_id
      WHERE c.status <> 'void' AND c.kind IN ('charge', 'credit') AND c.amount <> 0
-       AND concat_ws(' ', c.payee_name, l.name, c.memo) ~* '(amazon|amzn)'
+       AND concat_ws(' ', c.payee_name, l.name, c.memo, p.name) ~* '(amazon|amzn)'
        AND NOT EXISTS (SELECT FROM srm.amazon_match m WHERE m.card_txn_id = c.txn_id)
     UNION ALL
     SELECT 'bank', b.txn_id, b.txn_date, -b.amount, NULL,
-           concat_ws(' ', b.payee_name, l.name, l.memo, b.memo)
+           concat_ws(' ', b.payee_name, l.name, l.memo, b.memo, p.name)
       FROM srm.bank_txn b
       LEFT JOIN srm.bank_line l USING (bank_line_id)
+      LEFT JOIN srm.payee p ON p.payee_id = b.payee_id
      WHERE b.status <> 'void' AND b.amount <> 0
-       AND concat_ws(' ', b.payee_name, l.name, l.memo, b.memo) ~* '(amazon|amzn)'
+       AND concat_ws(' ', b.payee_name, l.name, l.memo, b.memo, p.name) ~* '(amazon|amzn)'
        AND NOT EXISTS (SELECT FROM srm.amazon_match m WHERE m.bank_txn_id = b.txn_id)"""
 
 SHIPMENTS = """

@@ -4,7 +4,7 @@
 //
 //  A link on a page of the sidebar (right-click the page in the left panel): a web page, an email address or a page in
 //  MxNoteONE, with words of its own and formatted hover text — made in the same Link dialog as the links on securities
-//  and statement text rules (Shared/Links). Kept on this Mac with the app's preferences, one per page: the pointer resting on
+//  and target accounts (Shared/Links). Kept on this Mac with the app's preferences, one per page: the pointer resting on
 //  the page's row shows the link's hover card (open it, Edit Link…, remove it), and the row's link mark opens it. A click
 //  on the row still opens the page.
 //

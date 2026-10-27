@@ -111,7 +111,7 @@ DESCRIBE = {
         {"method": "GET", "path": "/expense-ledgers/{code}", "summary": "A cash ledger's book: budget lines, entries, subscriptions, assets, training, trips and alerts"},
         {"method": "POST", "path": "/expense-ledgers/{code}/entries", "summary": "Add a cash ledger entry (an item bought, a refund, a funding transfer)"},
         {"method": "POST", "path": "/expense-ledgers/{code}/entries/delete", "summary": "Delete cash ledger entries for good (version-checked, all or none)"},
-        {"method": "GET", "path": "/expense-accounts", "summary": "Expense accounts with this year's totals"},
+        {"method": "GET", "path": "/expense-accounts", "summary": "Expense accounts with their payees and this year's totals"},
         {"method": "GET", "path": "/secure-accounts", "summary": "Secure accounts: products and services held an account with, their subscription payment and renewal"},
         {"method": "GET", "path": "/spending/setup", "summary": "Spending Analysis: the family, spending categories with their CPI series, rules and lifecycle triggers"},
         {"method": "GET", "path": "/spending/analysis", "summary": "Every spending dollar of two periods with category, driver and member, and each category's inflation between them"},
@@ -1419,7 +1419,7 @@ class Handler(BaseHTTPRequestHandler):
                     out = secure.route(conn, method, parts, body, q)
                     if out is None:
                         return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})
-                elif parts[:1] in (["bank"], ["expense-accounts"]):
+                elif parts[:1] in (["bank"], ["expense-accounts"], ["payees"]):
                     out = bank.route(conn, method, parts, body, q)
                     if out is None:
                         return self.send_json(404, {"error": "no such endpoint: %s %s" % (method, url.path)})

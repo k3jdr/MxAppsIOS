@@ -21,7 +21,7 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
 - **Secret path.** Without the key, every path is a bare 404, so the page gives no hint that it exists. The key never
   goes to the server's log, and pages are sent with `Referrer-Policy: no-referrer`.
 - **Limited login.** The server signs in as `spending_web` (V039, V041). That login can read what the page shows, add
-  notes, write entries' tags, and change a lifecycle trigger's category and kind, and nothing else. Its
+  notes, write entries' tags, and change a lifecycle trigger's category and kind, and nothing else. It sees target accounts by name only: their logons and addresses are not readable. Its
   password exists only in the PC's config file, readable by the PC account, SYSTEM and Administrators.
 - **The link doesn't change, key included.** Publishing (`publish-to-pc.sh`), releases, restarts, reboots and
   re-running the installer all keep it. Nothing expires or rotates it. The publish script never copies the PC's
@@ -35,7 +35,7 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
 The tabs are Overview (the attribution), Deep Dive, Forward Curve, Year-End Tax (with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
 the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution and forward curve
 (`SpendingModel.swift`), and the Deep Dive charts a category's lifecycle triggers ahead. Rules shows the expense
-account and statement text rules read-only, with both years' spending and *Suggest a change* on each;
+account, target account and statement text rules read-only, with both years' spending and *Suggest a change* on each;
 MxAcctMGR's Admin tab stays MxAcctMGR's only. The entries tables' *Bought* column shows what an Amazon charge bought
 (V046; every item, its cost and the order numbers on hover), as a link to the order on amazon.com as in MxAcctMGR (it
 opens in a new tab; whoever opens it signs in to Amazon there), and the search finds items; the Deep Dive's Largest

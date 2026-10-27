@@ -13,7 +13,7 @@ import Observation
 enum Screen: String, CaseIterable, Identifiable {
     // In the sidebar's order (Back and Next follow it). Welcome and Choose Your Path aren't in the sidebar: the Guide
     // menu opens them.
-    case checking, cards, expenseLedgers, secureAccounts
+    case checking, cards, expenseLedgers, expenses, secureAccounts
     case welcome, choosePath
     case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
@@ -32,7 +32,7 @@ enum Screen: String, CaseIterable, Identifiable {
 
     var group: Group {
         switch self {
-        case .checking, .cards, .expenseLedgers, .secureAccounts: .accounts
+        case .checking, .cards, .expenseLedgers, .expenses, .secureAccounts: .accounts
         case .welcome, .choosePath: .start
         case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
@@ -46,6 +46,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .checking: "Checking Accounts"
         case .cards: "Credit Card Accounts"
         case .expenseLedgers: "Cash Ledger"
+        case .expenses: "Target Accounts"
         case .secureAccounts: "Secure Accounts"
         case .welcome: "Welcome"
         case .choosePath: "Choose Your Path"
@@ -85,6 +86,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .checking: "checkmark.rectangle.stack"
         case .cards: "creditcard"
         case .expenseLedgers: "briefcase"
+        case .expenses: "arrow.left.arrow.right.square"
         case .secureAccounts: "lock.shield"
         case .welcome: "hand.wave"
         case .choosePath: "signpost.right.and.left"
