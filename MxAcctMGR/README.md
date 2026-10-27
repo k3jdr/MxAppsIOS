@@ -601,14 +601,19 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   sign in there yourself, the first time and whenever Amazon asks — MxAcctMGR never sees, types or keeps the password,
   and leaves sign-in, two-step and robot checks to you (the lookup waits up to ten minutes, the page yours meanwhile;
   while it reads, the page is the lookup's). It reads Your Payments ▸ Transactions, which pairs each card charge with
-  its orders (the same amount and sign within 4 days, the closest first, the card's name breaking ties); for charges
-  not there, Your Orders for their year (an order whose total is the charge, placed up to 30 days before it); then each
-  order's page for its items, unless the security master has them. One page every 3 seconds, at most 10 Transactions
-  pages, 12 Your Orders pages a year (back to a month before the charges) and 25 orders a run. The window lists the
+  its orders (the same amount and sign within 4 days, the closest first, the card's name breaking ties) — older
+  charges further down, by its Next page button or, on the newer list, its Show more button or the bottom of the page
+  (when nothing more comes, *Steps* lists the page's controls); for charges not there, Your Orders for their year
+  (`timeFilter=year-…`: otherwise Amazon shows only the past 3 months; an order whose total is the charge, placed up
+  to 30 days before it) — the **Digital Orders** tab for **Prime Video** rentals, purchases and channels, Kindle books
+  and other digital charges (D01-… orders, placed within 5 days); then each order's page for its items (a video's
+  title; a channel's renewal by its item title), unless the security master has them. One page every 3 seconds, at
+  most 40 Transactions pages, 30 Your Orders pages a year (back to a month before the charges; the year before too for
+  a January charge) and 25 orders a run. The window lists the
   charges and the orders found (*Steps* shows each page read). **One order at a time:** each charge's row takes an
   order number typed or pasted (several, comma-separated, or an order page's link) — *Attach* reads only that order's
   page (none when the security master has it) and attaches it in place of what the charge had — and *This Order*
-  attaches the order the window shows (*Your Orders* opens the list to find it). *Attach an Amazon Order…* in the
+  attaches the order the window shows (*Your Orders* and *Digital Orders* open the lists to find it). *Attach an Amazon Order…* in the
   Entries menu opens the window that way, without the full lookup. Amazon's card offers on order pages aren't items. The results attach as the export's do (`POST /spending/amazon/attach`); an export read later
   replaces what an order's page gave and narrows the charge to its shipment. *Sign Out of Amazon* clears amazon.com's
   cookies from the window. Amazon's Conditions of Use don't allow robots: it runs only when you ask, at your own risk,

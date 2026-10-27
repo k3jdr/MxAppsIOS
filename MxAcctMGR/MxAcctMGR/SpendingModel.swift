@@ -168,6 +168,16 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     }
     var amazonOrderIds: [String] { Array(Set((amazonItems ?? []).map(\.orderId))).sorted() }
 
+    /// A Prime Video charge (a rental, a purchase, a channel), a Kindle book or another Amazon digital charge: its order
+    /// (D01-…) is on Amazon's Transactions list and Digital Orders, never in the order export.
+    var isAmazonDigitalCharge: Bool {
+        guard source != "ledger" else { return false }
+        let text = [payee, description].compactMap { $0 }.joined(separator: " ").lowercased()
+        return ["prime video", "primevideo", "amazon prime", "kindle", "amazon digital", "amzn digital"].contains { text.contains($0) }
+    }
+    /// What the Amazon Order Lookup looks up: an order charge or a digital one.
+    var isAmazonLookupCharge: Bool { isAmazonOrderCharge || isAmazonDigitalCharge }
+
     /// A card charge or checking debit (or credit) from Amazon for an order: not a membership, video, e-book, audiobook or
     /// AWS bill (as the amazon-orders loader tells them).
     var isAmazonOrderCharge: Bool {

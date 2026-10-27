@@ -626,7 +626,7 @@ private struct SpendingEntriesTab: View {
                 }
                 Button(picked.count > 1 ? "Change Expense Account of \(picked.count) Entries…" : "Change Expense Account…") { refiling = picked }
                     .disabled(!picked.contains { $0.source != "ledger" })
-                if picked.contains(where: \.isAmazonOrderCharge) {
+                if picked.contains(where: \.isAmazonLookupCharge) {
                     Button(picked.count == 1 ? "Look Up Amazon Order…" : "Look Up Amazon Orders…") { lookUp(picked) }
                         .help("Find what these Amazon charges bought on amazon.com, in a window where you sign in yourself")
                     Button(picked.count == 1 ? "Attach an Amazon Order…" : "Attach Amazon Orders One by One…") { lookUp(picked, scan: false) }

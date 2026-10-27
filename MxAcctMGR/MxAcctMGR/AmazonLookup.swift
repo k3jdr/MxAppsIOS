@@ -11,10 +11,13 @@
 //  of Amazon clears them). When Amazon shows a sign-in, a two-step check or a robot check, the lookup waits for you and
 //  never answers it. It reads:
 //    1. Your Payments ▸ Transactions, which lists each card charge with the orders it paid — matched to the selected
-//       charges by amount, sign and date (within 4 days), the card's name breaking ties;
-//    2. for charges not found there, Your Orders for their year (each order's total and date), as a fallback;
-//    3. each order's page, for its items (name, ASIN, quantity, price), unless the security master has them already.
-//  Pages are opened one at a time, 3 seconds apart, at most 10 Transactions pages, 12 Your Orders pages a year and 25
+//       charges by amount, sign and date (within 4 days), the card's name breaking ties. Older charges are further down:
+//       its Next page button, or (the newer list) its Show more button or the bottom of the page loads them;
+//    2. for charges not found there, Your Orders for their year (each order's total and date), as a fallback — the
+//       Digital Orders tab for Prime Video (rentals, purchases, channels), Kindle and other digital charges;
+//    3. each order's page, for its items (name, ASIN, quantity, price; a video's title), unless the security master has
+//       them already.
+//  Pages are opened one at a time, 3 seconds apart, at most 40 Transactions pages, 30 Your Orders pages a year and 25
 //  orders a run. A single order can be attached to a charge too: its number typed or pasted (or its page's link), or
 //  the order the window shows (This Order) — only that order's page is read. Amazon's Conditions of Use don't allow robots: it runs only when you ask, and may stop working when
 //  Amazon changes its pages. The results attach to the charges as the export's do (POST /spending/amazon/attach): the
@@ -34,6 +37,8 @@ struct AmazonLookupCharge: Identifiable, Hashable {
     var id: String { entry.id }
     var cents: Int { Int((abs(entry.amount) * 100).rounded()) }
     var isCredit: Bool { entry.amount < 0 }
+    /// Prime Video, Kindle and other digital charges: their orders are on the Digital Orders tab.
+    var isDigital: Bool { entry.isAmazonDigitalCharge }
 }
 
 /// What the pages' scripts read (JSON).
@@ -66,7 +71,7 @@ final class AmazonLookup {
         #endif
         return 3
     }
-    static let maxTransactionPages = 10, maxOrderListPages = 12, maxOrderPages = 25
+    static let maxTransactionPages = 40, maxOrderListPages = 30, maxOrderPages = 25
 
     var charges: [AmazonLookupCharge]
     var status = ""
@@ -83,7 +88,7 @@ final class AmazonLookup {
     @ObservationIgnored private var watching: NSKeyValueObservation?
 
     init(entries: [SpendingEntry], attached: @escaping ([SpendingEntry]) -> Void) {
-        charges = entries.filter(\.isAmazonOrderCharge).sorted { $0.date > $1.date }.map { AmazonLookupCharge(entry: $0) }
+        charges = entries.filter(\.isAmazonLookupCharge).sorted { $0.date > $1.date }.map { AmazonLookupCharge(entry: $0) }
         self.attached = attached
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()     // the sign-in stays between lookups, as in Safari
@@ -114,7 +119,7 @@ final class AmazonLookup {
     /// The query, in words: how many charges, their dates and amounts.
     var query: String {
         guard let first = charges.map(\.entry.date).min(), let last = charges.map(\.entry.date).max() else {
-            return "None of the selected entries is an Amazon order charge (Prime, Prime Video, Kindle, Audible and AWS bills aren't orders)."
+            return "None of the selected entries is an Amazon order or Prime Video charge (AWS and Audible bills aren't orders)."
         }
         return "\(charges.count) Amazon \(charges.count == 1 ? "charge" : "charges"), \(shortDay(first))\(first == last ? "" : " – \(shortDay(last))"): "
             + charges.prefix(8).map { money2($0.entry.amount) }.joined(separator: ", ") + (charges.count > 8 ? " …" : "")
@@ -141,10 +146,12 @@ final class AmazonLookup {
 
     func stop() { task?.cancel() }
 
-    /// Opens Your Orders in the window, to find an order to attach (no lookup runs).
-    func browse() {
+    /// Opens Your Orders (or its Digital Orders tab) in the window, to find an order to attach (no lookup runs).
+    func browse(digital: Bool = false) {
         status = "Find the order below (you may need to sign in), open it and press This Order on its charge — or type or paste its number there."
-        webView.load(URLRequest(url: Self.base.appending(path: "gp/your-account/order-history")))
+        var url = URLComponents(url: Self.base.appending(path: "your-orders/orders"), resolvingAgainstBaseURL: false)!
+        if digital { url.queryItems = [URLQueryItem(name: "orderFilter", value: "digital")] }
+        webView.load(URLRequest(url: url.url!))
     }
 
     /// Attaches the orders a text names (typed or pasted numbers, or an order page's link) to one charge, in place of
@@ -169,7 +176,7 @@ final class AmazonLookup {
                     if !pages.isEmpty { try await self.wait() }
                     self.status = "Reading order \(id)…"
                     guard let page = try await self.readOrder(id) else {
-                        throw LookupError("order \(id)'s page shows no items: is it an order of yours, of things shipped (not a digital order)?")
+                        throw LookupError("order \(id)'s page shows no items: is it an order of yours?")
                     }
                     pages.append(page)
                 }
@@ -219,38 +226,69 @@ final class AmazonLookup {
             if read.lines.isEmpty && page == 1 { steps.append("No charges recognized on the Transactions page: Amazon may have changed it") }
             if charges.allSatisfy({ !$0.orders.isEmpty }) { break }
             if let oldest = dates.min(), oldest < earliest.addingTimeInterval(-7 * 86400) { break }
-            guard read.next else { steps.append("Transactions: no Next page after page \(page)"); break }
             guard fresh.count > 0 else { break }
             try await wait()
             status = "Reading Amazon's Transactions list, page \(page + 1)…"
-            let before = read.lines.first.map { "\($0.date ?? "")\($0.amount)" }
-            guard try await js(Self.nextPageScript) as? Bool == true else { break }
-            try await settle()
-            for _ in 0..<20 {      // the list may page without loading a new document
-                let now = try await json(Self.transactionsScript, as: AmazonTransactionsPage.self).lines.first.map { "\($0.date ?? "")\($0.amount)" }
-                if now != before { break }
-                try await Task.sleep(for: .milliseconds(500))
+            if read.next {
+                let before = read.lines.first.map { "\($0.date ?? "")\($0.amount)" }
+                guard try await js(Self.nextPageScript) as? Bool == true else { break }
+                try await settle()
+                for _ in 0..<20 {      // the list may page without loading a new document
+                    let now = try await json(Self.transactionsScript, as: AmazonTransactionsPage.self).lines.first.map { "\($0.date ?? "")\($0.amount)" }
+                    if now != before { break }
+                    try await Task.sleep(for: .milliseconds(500))
+                }
+            } else {
+                // The newer list has no Next page: it loads older charges below the others, from its Show more button
+                // or when the page is scrolled to the end.
+                let how = try await js(Self.moreScript) as? String ?? ""
+                var grew = false
+                for _ in 0..<20 {
+                    try await Task.sleep(for: .milliseconds(500))
+                    if try await json(Self.transactionsScript, as: AmazonTransactionsPage.self).lines.count > read.lines.count { grew = true; break }
+                }
+                guard grew else {
+                    let controls = try await js(Self.controlsScript) as? String ?? ""
+                    steps.append("Transactions: nothing more after page \(page) (\(how == "clicked" ? "pressed Show more" : "scrolled to the end"); controls on the page: \(controls.isEmpty ? "none" : controls))")
+                    break
+                }
             }
         }
-        // 2. Your Orders, for charges the Transactions list didn't show: an order whose total is the charge.
-        let years = Set(charges.filter { $0.orders.isEmpty && !$0.isCredit }.map { String($0.entry.date.prefix(4)) }).sorted(by: >)
-        for year in years {
-            for page in 0..<Self.maxOrderListPages {
-                guard charges.contains(where: { $0.orders.isEmpty && !$0.isCredit && $0.entry.date.hasPrefix(year) }) else { break }
-                try await wait()
-                status = "Reading Your Orders for \(year)\(page > 0 ? ", page \(page + 1)" : "")…"
-                var url = URLComponents(url: Self.base.appending(path: "gp/your-account/order-history"), resolvingAgainstBaseURL: false)!
-                url.queryItems = [URLQueryItem(name: "orderFilter", value: "year-\(year)"), URLQueryItem(name: "startIndex", value: "\(page * 10)")]
-                try await open(url.url!)
-                try onPage("order", "Your Orders")
-                let cards = try await json(Self.orderListScript, as: [AmazonOrderCard].self)
-                let placed = cards.compactMap { Self.day($0.placed) }
-                steps.append("Your Orders \(year), page \(page + 1): \(cards.count) orders\(placed.min().map { " back to \(shortDay(Self.iso($0)))" } ?? "")")
-                matchOrders(cards)
-                if cards.count < 10 { break }
-                // Newest first: stop past the oldest charge left (and the month before it, when it may have been ordered).
-                let left = charges.filter { $0.orders.isEmpty && !$0.isCredit && $0.entry.date.hasPrefix(year) }.compactMap { Freshness.date($0.entry.date) }
-                if let oldest = placed.min(), let need = left.min(), oldest < need.addingTimeInterval(-35 * 86400) { break }
+        // 2. Your Orders for each charge's year (and the year before, for a January charge), for charges the Transactions
+        //    list didn't show: an order whose total is the charge. Amazon shows the past 3 months unless asked for a year
+        //    (timeFilter). Digital charges look on its Digital Orders tab.
+        for digital in [false, true] {
+            let left = { (year: String) -> [Date] in
+                self.charges.filter { $0.orders.isEmpty && !$0.isCredit && $0.isDigital == digital }.compactMap { c -> Date? in
+                    let d = c.entry.date
+                    let january = d.hasPrefix(String((Int(year) ?? 0) + 1)) && d.dropFirst(5) < "02-05"
+                    return d.hasPrefix(year) || january ? Freshness.date(d) : nil
+                }
+            }
+            let years = Set(charges.filter { $0.orders.isEmpty && !$0.isCredit && $0.isDigital == digital }.flatMap { c -> [String] in
+                let y = Int(c.entry.date.prefix(4)) ?? 0
+                return c.entry.date.dropFirst(5) < "02-05" ? [String(y), String(y - 1)] : [String(y)]
+            }).sorted(by: >)
+            let tab = digital ? "Digital Orders" : "Your Orders"
+            for year in years {
+                for page in 0..<Self.maxOrderListPages {
+                    guard let need = left(year).min() else { break }
+                    try await wait()
+                    status = "Reading \(tab) for \(year)\(page > 0 ? ", page \(page + 1)" : "")…"
+                    var url = URLComponents(url: Self.base.appending(path: "your-orders/orders"), resolvingAgainstBaseURL: false)!
+                    url.queryItems = (digital ? [URLQueryItem(name: "orderFilter", value: "digital")] : [])
+                        + [URLQueryItem(name: "timeFilter", value: "year-\(year)"), URLQueryItem(name: "startIndex", value: "\(page * 10)")]
+                        + (digital ? [URLQueryItem(name: "page", value: "\(page + 1)")] : [])
+                    try await open(url.url!)
+                    try onPage("order", tab)
+                    let cards = try await json(Self.orderListScript, as: [AmazonOrderCard].self)
+                    let placed = cards.compactMap { Self.day($0.placed) }
+                    steps.append("\(tab) \(year), page \(page + 1): \(cards.count) orders\(placed.min().map { " back to \(shortDay(Self.iso($0)))" } ?? "")")
+                    matchOrders(cards, digital: digital)
+                    if cards.count < 10 { break }
+                    // Newest first: stop past the oldest charge left (and the month before it, when it may have been ordered).
+                    if let oldest = placed.min(), oldest < need.addingTimeInterval(-35 * 86400) { break }
+                }
             }
         }
         // 3. Each order's page, for what it holds, unless the security master has it.
@@ -280,12 +318,13 @@ final class AmazonLookup {
     /// An order's page read: what POST /spending/amazon/attach takes for it, or nil when it shows no items.
     private func readOrder(_ id: String) async throws -> [String: Any]? {
         // The window may show it already (This Order): no need to load it again.
-        if webView.isLoading || webView.url.flatMap(Self.order(in:)) != id || webView.url?.path.contains("order-details") != true {
+        let path = id.hasPrefix("D") ? "order" : "order-details"     // a digital order's page may be its order summary
+        if webView.isLoading || webView.url.flatMap(Self.order(in:)) != id || webView.url?.path.contains(path) != true {
             var url = URLComponents(url: Self.base.appending(path: "gp/your-account/order-details"), resolvingAgainstBaseURL: false)!
             url.queryItems = [URLQueryItem(name: "orderID", value: id)]
             try await open(url.url!)
         }
-        try onPage("order-details", "order \(id)'s page")
+        try onPage(path, "order \(id)'s page")
         let page = try await json(Self.orderPageScript, as: AmazonOrderPage.self)
         steps.append("Order \(id): \(page.items.count) item\(page.items.count == 1 ? "" : "s")\(page.total.map { ", total \(money2($0))" } ?? "")")
         guard !page.items.isEmpty else { return nil }
@@ -327,20 +366,22 @@ final class AmazonLookup {
     }
 
     /// Your Orders' orders matched to the charges left: a total equal to the charge, placed from a day before it to 30
-    /// days before it (Amazon charges when it ships).
-    private func matchOrders(_ cards: [AmazonOrderCard]) {
+    /// days before it (Amazon charges when it ships) — a digital order within 5 days (it is charged at once, and a
+    /// channel's renewals cost the same every month).
+    private func matchOrders(_ cards: [AmazonOrderCard], digital: Bool) {
+        let window = digital ? -1...5 : -1...30
         for card in cards {
             guard let total = card.total, let placed = Self.day(card.placed) else { continue }
             let cents = Int((total * 100).rounded())
-            let best = charges.indices.filter { charges[$0].orders.isEmpty && !charges[$0].isCredit && charges[$0].cents == cents }
+            let best = charges.indices.filter { charges[$0].orders.isEmpty && !charges[$0].isCredit && charges[$0].isDigital == digital && charges[$0].cents == cents }
                 .compactMap { i -> (Int, Int)? in
                     let days = Calendar.current.dateComponents([.day], from: placed, to: Freshness.date(charges[i].entry.date)!).day ?? 99
-                    return (-1...30).contains(days) ? (i, days) : nil
+                    return window.contains(days) ? (i, days) : nil
                 }
                 .min { $0.1 < $1.1 }
             if let (i, _) = best, !charges.contains(where: { $0.orders.contains(card.orderId) }) {
                 charges[i].orders = [card.orderId]
-                charges[i].foundIn = "Your Orders (total and date)"
+                charges[i].foundIn = "\(digital ? "Digital Orders" : "Your Orders") (total and date)"
             }
         }
     }
@@ -491,6 +532,29 @@ final class AmazonLookup {
     })()
     """
 
+    /// The newer Transactions list's Show more (Load more, See more) button pressed, else the page scrolled to its end:
+    /// "clicked" or "scrolled".
+    static let moreScript = #"""
+    (() => {
+      const more = [...document.querySelectorAll('button, a, input[type=submit], [role=button], .a-button-text')]
+        .find(e => /^((show|load|see|view) more( transactions)?|more transactions)$/i.test((e.value || e.innerText || e.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim())
+                   && !e.disabled && !e.closest(".a-disabled, [aria-disabled=true]"));
+      if (more) { (more.closest(".a-button")?.querySelector("input, button") || more).click(); return "clicked"; }
+      window.scrollTo(0, document.body.scrollHeight);
+      return "scrolled";
+    })()
+    """#
+
+    /// The page's controls in words, without numbers or amounts (for Steps, when the list wouldn't page): the last 12.
+    static let controlsScript = #"""
+    (() => {
+      const words = [...document.querySelectorAll('button, a, input[type=submit], [role=button], .a-button-text')]
+        .map(e => (e.value || e.innerText || e.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim())
+        .filter(t => t && t.length <= 40 && !/\d{2}|\$/.test(t));
+      return [...new Set(words)].slice(-12).join(" | ");
+    })()
+    """#
+
     /// Your Orders: each order card (the smallest part of the page holding one order number and "Order placed") with
     /// its date and total.
     static let orderListScript = #"""
@@ -500,14 +564,14 @@ final class AmazonLookup {
       const found = new Map();
       for (const e of document.body.querySelectorAll("*")) {
         const t = text(e);
-        if (!t || t.length > 4000 || !/order placed/i.test(t)) continue;
+        if (!t || t.length > 4000 || !/order placed|ordered on/i.test(t)) continue;
         const orders = [...new Set([...t.matchAll(ORDER)].map(m => m[1]))];
         if (orders.length === 1) found.set(e, { t, orderId: orders[0] });
       }
       const keys = [...found.keys()];
       return JSON.stringify(keys.filter(e => !keys.some(o => o !== e && e.contains(o))).map(e => {
         const f = found.get(e);
-        const placed = f.t.match(/order placed\s*([A-Z][a-z]+\.? \d{1,2}, \d{4})/i);
+        const placed = f.t.match(/(?:order placed|ordered on)\s*([A-Z][a-z]+\.? \d{1,2}, \d{4})/i);
         const total = f.t.match(/total\s*\$\s?([\d,]+\.\d{2})/i);
         return { orderId: f.orderId, placed: placed ? placed[1] : null, total: total ? parseFloat(total[1].replace(/,/g, "")) : null };
       }));
@@ -523,8 +587,9 @@ final class AmazonLookup {
       const placed = body.match(/(?:order placed|ordered on)\s*([A-Z][a-z]+\.? \d{1,2}, \d{4})/i);
       const total = body.match(/grand total:?\s*\$\s?([\d,]+\.\d{2})/i) || body.match(/order total:?\s*\$\s?([\d,]+\.\d{2})/i);
       const payment = body.match(/((?:visa|mastercard|american express|amex|discover)[a-z ]{0,20}?(?:ending in|\*{2,})\s*\d{4})/i);
-      const ASIN = /\/(?:dp|gp\/product)\/([A-Z0-9]{10})/;
-      const links = [...document.querySelectorAll('a[href*="/dp/"], a[href*="/gp/product/"]')];
+      const ASIN = /\/(?:dp|gp\/product|gp\/video\/detail|video\/detail)\/([A-Z0-9]{10})/;
+      const PRODUCTS = 'a[href*="/dp/"], a[href*="/gp/product/"], a[href*="/video/detail/"]';
+      const links = [...document.querySelectorAll(PRODUCTS)];
       const items = new Map();
       for (const a of links) {
         const m = (a.getAttribute("href") || "").match(ASIN);
@@ -534,7 +599,7 @@ final class AmazonLookup {
         // the smallest part holding one; its quantity, a "Qty: 2" or the badge on its picture, anywhere in it.
         let price = null, quantity = 1, area = null;
         for (let box = a.parentElement, i = 0; box && i < 8; box = box.parentElement, i++) {
-          const others = [...box.querySelectorAll('a[href*="/dp/"], a[href*="/gp/product/"]')]
+          const others = [...box.querySelectorAll(PRODUCTS)]
             .map(x => ((x.getAttribute("href") || "").match(ASIN) || [])[1]).filter(x => x && x !== m[1]);
           if (others.length) break;
           area = box;
@@ -551,6 +616,21 @@ final class AmazonLookup {
       // Offers on the page (Amazon's cards) are product links too: an item has a price when the others do.
       let list = [...items.values()].filter(i => !/business card|credit card|store card|prime visa|amazon visa|rewards visa/i.test(i.name));
       if (list.some(i => i.price !== null)) list = list.filter(i => i.price !== null);
+      // No product links (a channel's renewal, some digital orders): the item titles Amazon marks as such.
+      if (!list.length) {
+        const names = new Set();
+        for (const t of document.querySelectorAll('[data-component="itemTitle"], .yohtmlc-product-title, .yohtmlc-item a')) {
+          const name = text(t);
+          if (name.length < 3 || names.has(name)) continue;
+          names.add(name);
+          let price = null;
+          for (let box = t.parentElement, i = 0; box && i < 6 && price === null; box = box.parentElement, i++) {
+            const p = text(box).match(/\$\s?([\d,]+\.\d{2})/);
+            if (p) price = parseFloat(p[1].replace(/,/g, ""));
+          }
+          list.push({ name, asin: null, quantity: 1, price });
+        }
+      }
       return JSON.stringify({ placed: placed ? placed[1] : null, total: total ? parseFloat(total[1].replace(/,/g, "")) : null,
                               payment: payment ? payment[1] : null, items: list });
     })()
@@ -642,6 +722,8 @@ struct AmazonLookupView: View {
                         .help("Find these charges' orders on Amazon's Transactions list and Your Orders")
                     Button("Your Orders") { lookup.browse() }
                         .help("Open Your Orders below, to find an order and attach it to a charge (This Order)")
+                    Button("Digital Orders") { lookup.browse(digital: true) }
+                        .help("Open Your Orders' Digital Orders tab below: Prime Video rentals, purchases and channels, Kindle books")
                 }
                 Button("Sign Out of Amazon") { Task { await lookup.signOut() } }
                     .disabled(lookup.running)
@@ -687,7 +769,7 @@ struct AmazonLookupView: View {
                 .allowsHitTesting(!lookup.running || lookup.waitingForYou)
                 .frame(minHeight: 380)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.secondary.opacity(0.3)))
-            Text("You sign in to Amazon in the page above yourself; MxAcctMGR never sees or keeps your password, and leaves sign-in and robot checks to you. Look Up reads Your Payments ▸ Transactions, then Your Orders and each order's page, one page every \(AmazonLookup.pause.formatted()) seconds; Attach reads only the order you name. Amazon's Conditions of Use don't allow robots: this runs only when you ask, and may stop working when Amazon changes its pages.")
+            Text("You sign in to Amazon in the page above yourself; MxAcctMGR never sees or keeps your password, and leaves sign-in and robot checks to you. Look Up reads Your Payments ▸ Transactions, then Your Orders (Digital Orders for Prime Video) and each order's page, one page every \(AmazonLookup.pause.formatted()) seconds; Attach reads only the order you name. Amazon's Conditions of Use don't allow robots: this runs only when you ask, and may stop working when Amazon changes its pages.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
