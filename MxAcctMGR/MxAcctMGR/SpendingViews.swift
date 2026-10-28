@@ -1507,7 +1507,7 @@ private struct SpendingSourcesTab: View {
 
     private func amazonBox(_ a: AmazonOrders) -> some View {
         let y = String(sources.start.prefix(4))
-        return Box(title: "Amazon Orders", symbol: "shippingbox", help: "What was bought behind the Amazon charges. Amazon has no way for a program to read a personal account's orders, so they come from Amazon's own export: amazon.com ▸ Account ▸ Request Your Data ▸ Your Orders. When Amazon's e-mail arrives, download the zip and import it here (Import Export…), or drop it in the folder below and press Read Again. srm.py load amazon-orders reads its orders, shipments and items (not addresses or gift messages) and matches each Amazon charge to the shipment it paid for — Amazon charges the card when a shipment leaves, for its items and their tax — or to a whole order, and each credit to the item returned, by amount and date. The Entries tab then shows what each charge bought.") {
+        return Box(title: "Amazon Orders", symbol: "shippingbox", help: "What was bought behind the Amazon charges. Amazon has no way for a program to read a personal account's orders, so they come from Amazon's own export: amazon.com ▸ Account ▸ Request Your Data ▸ Your Orders. When Amazon's e-mail arrives, download the zip and import it here (Import Export…), or drop it in the folder below and press Read Again. srm.py load amazon-orders reads its orders, shipments and items (not addresses or gift messages) and matches each Amazon charge to the shipment it paid for — Amazon charges the card when a shipment leaves, for its items and their tax — or to a whole order, and each credit to the item returned, by amount and date. The Entries tab then shows what each charge bought. Amazon's order, shipment and refund e-mails do the same without waiting for an export: srm.py load amazon-email reads them from your Gmail, read-only (connect it once with srm.py gmail-auth), or from a Google Takeout .mbox in the drop folder — Read E-mails runs it. Where the export and the e-mails both have an order, the export's wins.") {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                 GridRow {
                     Text("Comes from").foregroundStyle(.secondary)
@@ -1528,9 +1528,10 @@ private struct SpendingSourcesTab: View {
                         if a.downloads.count > 4 { Text("and \(a.downloads.count - 4) older").foregroundStyle(.secondary) }
                     }
                 }
+                if let m = a.email { emailRow(m) }
                 GridRow {
                     Text("Lands in").foregroundStyle(.secondary)
-                    Text("srm.amazon_order (\(a.orders.formatted()) orders\(a.firstOrder.map { ", \(shortDay($0)) – \(shortDay(a.lastOrder))" } ?? "")) → srm.amazon_shipment, srm.amazon_item (\(a.items.formatted()) items) → srm.amazon_match (each charge's shipment or order) → srm.v_amazon_charge (what each entry bought)")
+                    Text("srm.amazon_order (\(a.orders.formatted()) orders\(a.firstOrder.map { ", \(shortDay($0)) – \(shortDay(a.lastOrder))" } ?? "")\(a.ordersFrom.map { ": \($0.export.formatted()) from the export, \($0.email.formatted()) from e-mails, \($0.orderPage.formatted()) from order pages" } ?? "")) → srm.amazon_shipment, srm.amazon_item (\(a.items.formatted()) items) → srm.amazon_match (each charge's shipment or order) → srm.v_amazon_charge (what each entry bought)")
                         .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
                 GridRow {
@@ -1554,7 +1555,7 @@ private struct SpendingSourcesTab: View {
                 }
                 GridRow {
                     Text("Matched").foregroundStyle(.secondary)
-                    Text("\(y): \(a.matchedNow.formatted()) of \(a.chargesNow.formatted()) Amazon charges, \(money(a.matchedSpentNow)) of \(money(a.spentNow)) · all years: \(a.matched.formatted()) of \(a.charges.formatted())")
+                    Text("\(y): \(a.matchedNow.formatted()) of \(a.chargesNow.formatted()) Amazon charges, \(money(a.matchedSpentNow)) of \(money(a.spentNow)) · all years: \(a.matched.formatted()) of \(a.charges.formatted())\(a.email.map { " (\($0.matched.formatted()) to orders from e-mails)" } ?? "")")
                         .monospacedDigit().fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -1564,6 +1565,10 @@ private struct SpendingSourcesTab: View {
                     .help("Choose the zip Amazon's Request Your Data e-mail links to (or a Retail.OrderHistory CSV): it is saved in the drop folder and read")
                 Button("Read Again") { Task { await loadAmazon(nil) } }
                     .help("Read the exports in the drop folder again and match the Amazon charges loaded since")
+                if a.email != nil {
+                    Button("Read E-mails") { Task { await loadAmazonEmail() } }
+                        .help("Read Amazon's order, shipment and refund e-mails that came since the last time (Gmail, read-only, and the .mbox files in the drop folder) and match the Amazon charges to their orders")
+                }
                 if loadingAmazon { ProgressView().controlSize(.small) }
             }
             .disabled(loadingAmazon)
@@ -1572,6 +1577,42 @@ private struct SpendingSourcesTab: View {
                     unmatchedLists(a)
                 }
                 .font(.callout)
+            }
+        }
+    }
+
+    /// Amazon's order e-mails (V055): the mailbox (or how to connect it), the .mbox files, what was read and when.
+    private func emailRow(_ m: AmazonEmail) -> some View {
+        let unread = m.connected == false && m.mboxFiles.isEmpty
+        let e = m.emails
+        return GridRow {
+            Text("E-mails").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Group {
+                    if m.connected == true {
+                        Text("Gmail\(m.mailboxes.first.map { " \($0)" } ?? ""), read-only: Amazon's order, shipment and refund e-mails\(m.since.map { " since \(shortDay($0))" } ?? ""), read by srm.py load \(m.loader)")
+                    } else if m.connected == false {
+                        Text("Gmail isn't connected: run ./srm.py gmail-auth in MxDataHUB/SRM once (srmlib/gmail.py says how), or drop a Google Takeout .mbox of Amazon's e-mails in the folder above")
+                    } else {
+                        Text("Amazon's order, shipment and refund e-mails, read by srm.py load \(m.loader)")
+                    }
+                }
+                .foregroundStyle(unread ? Color.orange : .primary).fixedSize(horizontal: false, vertical: true)
+                ForEach(m.mboxFiles.prefix(3), id: \.path) { d in
+                    HStack(spacing: 6) {
+                        Image(systemName: "envelope").foregroundStyle(.secondary)
+                        Text(d.path).font(.callout.monospaced()).textSelection(.enabled)
+                        Text("\(Freshness.when(d.modified)) · \(ByteCountFormatter.string(fromByteCount: Int64(d.bytes), countStyle: .file))").foregroundStyle(.secondary)
+                    }
+                }
+                if e.emails > 0 {
+                    Text("\(e.emails.formatted()) e-mails read\(e.first.map { ", \(shortDay($0)) – \(shortDay(e.last))" } ?? ""): \(e.orders.formatted()) orders, \(e.shipments.formatted()) shipments, \(e.refunds.formatted()) refunds, \(e.cancels.formatted()) cancellations, \(e.other.formatted()) other · \(m.orders.formatted()) orders from them\(m.firstOrder.map { ", \(shortDay($0)) – \(shortDay(m.lastOrder))" } ?? "")")
+                        .monospacedDigit().fixedSize(horizontal: false, vertical: true)
+                }
+                if let r = m.lastImport {
+                    Text("Last read \(Freshness.when(r.finishedAt)) (\(Freshness.age(r.finishedAt))), load \(r.loadId) \(r.status)\(r.message.map { ": \($0)" } ?? "")")
+                        .foregroundStyle(r.status == "succeeded" ? Color.secondary : Color.orange).fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -1629,6 +1670,12 @@ private struct SpendingSourcesTab: View {
         loadingAmazon = true
         defer { loadingAmazon = false }
         do { changed(try await SpendingClient.loadAmazon(file, window: sources)); problem = nil } catch { problem = describe(error) }
+    }
+
+    private func loadAmazonEmail() async {
+        loadingAmazon = true
+        defer { loadingAmazon = false }
+        do { changed(try await SpendingClient.loadAmazonEmail(window: sources)); problem = nil } catch { problem = describe(error) }
     }
 
     // MARK: Time window

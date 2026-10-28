@@ -148,7 +148,8 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     /// An Amazon charge or credit matched to its orders (V046): the order numbers and what was bought.
     var amazonOrders: String?
     var amazonItems: [AmazonItem]?
-    /// amazon-orders (the export, by amount and date) or amazon-lookup (Amazon's own Transactions list).
+    /// amazon-orders (the export, by amount and date), amazon-email (Amazon's order e-mails, by amount and date, V055)
+    /// or amazon-lookup (Amazon's own Transactions list).
     var amazonMatchedBy: String?
     var id: String { "\(source)-\(entryId)" }
 
@@ -164,7 +165,9 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
         let orders = Array(Set(items.map(\.orderId))).sorted()
         return (amount < 0 ? "Refunded:\n" : "Bought:\n") + lines.joined(separator: "\n")
             + "\nAmazon order\(orders.count == 1 ? "" : "s") " + orders.joined(separator: ", ")
-            + (amazonMatchedBy == "amazon-lookup" ? " — from Amazon's Transactions list" : amazonMatchedBy == "amazon-orders" ? " — matched by amount and date" : "")
+            + (amazonMatchedBy == "amazon-lookup" ? " — from Amazon's Transactions list"
+               : amazonMatchedBy == "amazon-email" ? " — from Amazon's order e-mails, matched by amount and date"
+               : amazonMatchedBy == "amazon-orders" ? " — matched by amount and date" : "")
     }
     var amazonOrderIds: [String] { Array(Set((amazonItems ?? []).map(\.orderId))).sorted() }
 
@@ -676,6 +679,40 @@ struct AmazonOrders: Decodable, Hashable {
     var lastImport: SpendingSources.Run?
     var unmatchedCharges: [Charge]
     var unmatchedShipments: [Shipment]
+    /// How many of the orders came from the export, Amazon's e-mails and order pages (the Order Lookup).
+    var ordersFrom: OrdersFrom?
+    struct OrdersFrom: Decodable, Hashable { var export: Int; var email: Int; var orderPage: Int }
+    /// Amazon's order e-mails (V055); nil before it.
+    var email: AmazonEmail?
+}
+
+/// Amazon's order, shipment and refund e-mails (V055), read by srm.py load amazon-email from Gmail (read-only) or a
+/// Google Takeout .mbox in the drop folder: the mailbox, the e-mails read, the orders they gave and the charges matched
+/// to them.
+struct AmazonEmail: Decodable, Hashable {
+    struct Emails: Decodable, Hashable {
+        var emails: Int
+        var first: String?
+        var last: String?
+        var orders: Int
+        var shipments: Int
+        var refunds: Int
+        var cancels: Int
+        var other: Int
+    }
+    var loader: String
+    /// A Gmail sign-in is kept in the Keychain (srm.py gmail-auth); nil where the loaders aren't.
+    var connected: Bool?
+    var since: String?
+    var mailboxes: [String]
+    var emails: Emails
+    var orders: Int
+    var firstOrder: String?
+    var lastOrder: String?
+    /// Amazon entries matched to orders from e-mails.
+    var matched: Int
+    var mboxFiles: [SpendingSources.Download]
+    var lastImport: SpendingSources.Run?
 }
 
 /// A note on the page from its read-only web page on the home network (Services/spending-web, V039), and the answer.
@@ -1006,14 +1043,20 @@ nonisolated enum SpendingClient {
         return try await AccountsClient.request("POST", "/spending/amazon/load?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                                 body: signed(body), as: SpendingSources.self)
     }
-    /// Which of these Amazon orders the security master keeps, with how many items.
-    static func amazonKnown(_ ids: [String]) async throws -> [String: Int] {
-        struct Known: Decodable { var orderId: String; var items: Int }
-        struct Answer: Decodable { var known: [Known] }
+    /// Reads Amazon's order e-mails (srm-loader amazon-email: Gmail, read-only, and the .mbox files in the drop folder).
+    static func loadAmazonEmail(window: SpendingSources) async throws -> SpendingSources {
+        try await AccountsClient.request("POST", "/spending/amazon/email/load?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
+                                         body: signed([:]), as: SpendingSources.self)
+    }
+    /// An Amazon order the security master keeps: how many items, and where it was read (export, email, order page).
+    struct KnownOrder: Decodable { var orderId: String; var origin: String; var items: Int }
+    /// Which of these Amazon orders the security master keeps.
+    static func amazonKnown(_ ids: [String]) async throws -> [String: KnownOrder] {
+        struct Answer: Decodable { var known: [KnownOrder] }
         guard !ids.isEmpty else { return [:] }
         let list = ids.joined(separator: ",").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let known = try await AccountsClient.request("GET", "/spending/amazon/known?ids=\(list)", as: Answer.self).known
-        return Dictionary(known.map { ($0.orderId, $0.items) }, uniquingKeysWith: { a, _ in a })
+        return Dictionary(known.map { ($0.orderId, $0) }, uniquingKeysWith: { a, _ in a })
     }
     /// The Amazon Order Lookup's results: the orders its pages gave, and each charge's orders; answers with the entries.
     static func attachAmazon(charges: [[String: Any]], orders: [[String: Any]]) async throws -> [SpendingEntry] {

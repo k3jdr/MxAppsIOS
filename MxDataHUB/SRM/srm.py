@@ -14,6 +14,9 @@
     ./srm.py load card-downloads [--file F]  Chase / Discover / Capital One card downloads (CSV / QFX) → card registers
     ./srm.py load amazon-orders [--file F]  Amazon's Request Your Data order export → orders and items behind the
                                      Amazon card charges (matched by amount and date)
+    ./srm.py load amazon-email [--since DATE] [--force] [--file F]
+                                     Amazon's order, shipment and refund e-mails in your Gmail → the same orders
+    ./srm.py gmail-auth [--client-file F]  connect Gmail, read-only, for amazon-email (sign in in the browser once)
     ./srm.py load trust-navs [--file F] collective trusts: statement NAVs + proxy-fund pricing (trusts.local.json)
     ./srm.py load portfolio-snapshots [--as-of DATE] [--portfolios CODE ...]
                                      carry portfolios' latest holdings forward (weight history)
@@ -47,7 +50,7 @@ from srmlib import common, migrate
 from srmlib.common import Config, debug, log
 from srmlib.loaders import (blackrock, derivatives, earnings_symbols, fund_families, security_fixes, fmp_symbols, massive, policy, sector_inherit, earnings_symbols_cleanup, fmp, fundamentals, gleif, market_series, mutual_funds, nasdaq100,
                              nasdaq_prices, nasdaqtrader, openfigi, portfolios, reference, samples, sec, spelling_duplicates, ssga, treasuries, trust_navs, vanguard, vanguard_holdings,
-                             vanguard_plan, pnc_bank, card_downloads, amazon_orders)
+                             vanguard_plan, pnc_bank, card_downloads, amazon_orders, amazon_email)
 
 # Dependency order: venues and the listed universe first, then constituents, then the
 # per-security enrichment that works on the benchmark / portfolio securities.
@@ -81,6 +84,7 @@ LOADERS = {
     "card-downloads": card_downloads.run,       # credit card downloads (CSV / QFX) → card lines posted to the card registers
     "pnc-bank": pnc_bank.run,                   # PNC checking downloads (QFX / CSV) → bank lines matched to the check register               # collective trusts: statement NAVs carried by a proxy fund's returns
     "amazon-orders": amazon_orders.run,         # Amazon's order export → what was bought behind the Amazon card charges (V046)
+    "amazon-email": amazon_email.run,           # Amazon's order, shipment and refund e-mails (Gmail, read-only) → the same (V055)
     "mutual-funds": mutual_funds.run,           # add mutual funds from Nasdaq.com (--symbols / --search), with prices
     "fmp-index-levels": fmp.load_index_levels,  # benchmark levels
     "fmp-corporate-actions": fmp.load_corporate_actions,
@@ -145,6 +149,8 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate")
     sub.add_parser("status")
+    auth = sub.add_parser("gmail-auth", help="connect Gmail (read-only) for amazon-email: sign in in the browser once")
+    auth.add_argument("--client-file", help="the Desktop app OAuth client's JSON from Google Cloud (once; kept in the Keychain)")
     load = sub.add_parser("load")
     load.add_argument("loader", choices=["all"] + list(LOADERS))
     # Its own dest: a subcommand's default would otherwise overwrite a -v given before the command.
@@ -173,11 +179,20 @@ def main():
     load.add_argument("--portfolios", nargs="*", help="portfolio-snapshots: only these portfolio codes")
     load.add_argument("--search", help="mutual-funds: add the funds a Nasdaq.com name search finds")
     load.add_argument("--file", help="trust-navs: the trusts file (default trusts.local.json); "
-                                                 "vanguard-plan / pnc-bank / card-downloads / amazon-orders: one download (default: the drop folders)")
+                                                 "vanguard-plan / pnc-bank / card-downloads / amazon-orders: one download (default: the drop folders); "
+                                                 "amazon-email: one .mbox or .eml instead of Gmail")
     args = parser.parse_args()
     common.set_verbosity(max(args.verbose + getattr(args, "load_verbose", 0), common.VERBOSITY))
     debug(f"srm.py {' '.join(sys.argv[1:])} (Python {sys.version.split()[0]}, verbosity {common.VERBOSITY})")
 
+    if args.command == "gmail-auth":
+        from srmlib import gmail
+        try:
+            gmail.authorize(args.client_file)    # no database: the sign-in is kept in the Keychain
+        except (gmail.NotAuthorized, OSError, ValueError, PermissionError, RuntimeError) as e:
+            log(f"gmail-auth: {e}")
+            return 1
+        return 0
     cfg = Config(args)
     conn = cfg.connect()
     try:

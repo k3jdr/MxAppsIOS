@@ -1,4 +1,9 @@
 {
   "_comment": "Copy to amazon_orders.local.json (not in git). dropFolders: where you save Amazon's Request Your Data ▸ Your Orders export — the zip as downloaded, or its Retail.OrderHistory.*.csv files unpacked (sub-folders are read too). srm.py load amazon-orders reads them and matches the orders to the Amazon card charges.",
-  "dropFolders": ["~/MyCodeGIT/MxDataSRM/src-amazon"]
+  "dropFolders": ["~/MyCodeGIT/MxDataSRM/src-amazon"],
+  "email": {
+    "_comment": "srm.py load amazon-email: Amazon's order, shipment and refund e-mails from `since` on — from Gmail (read-only; connect it once with ./srm.py gmail-auth, the sign-in kept in the Keychain) unless gmail is false, and from Google Takeout .mbox files in the drop folders.",
+    "since": "2024-10-01",
+    "gmail": true
+  }
 }

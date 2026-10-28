@@ -4,7 +4,8 @@
 //
 //  Amazon Order Lookup (Reporting ▸ Spending Analysis ▸ Entries ▸ Look Up Amazon Orders…): what the selected Amazon
 //  charges bought, read from amazon.com in a window of the app's own. Amazon has no API for a personal account's orders;
-//  the Request Your Data export (srm.py load amazon-orders) brings them in bulk, this a few charges at a time.
+//  the Request Your Data export (srm.py load amazon-orders) and Amazon's order e-mails in Gmail (srm.py load
+//  amazon-email) bring them in bulk, this a few charges at a time.
 //
 //  The window is a web view (WebKit). You sign in to Amazon there yourself, the first time and whenever Amazon asks:
 //  the app never sees, types or keeps the password (the sign-in stays in the web view's cookies, as in Safari; Sign Out
@@ -16,7 +17,7 @@
 //    2. for charges not found there, Your Orders for their year (each order's total and date), as a fallback — the
 //       Digital Orders tab for Prime Video (rentals, purchases, channels), Kindle and other digital charges;
 //    3. each order's page, for its items (name, ASIN, quantity, price; a video's title), unless the security master has
-//       them already.
+//       them already (from the export, the e-mails or an earlier lookup: Steps says which).
 //  Pages are opened one at a time, 3 seconds apart, at most 40 Transactions pages, 30 Your Orders pages a year and 25
 //  orders a run. A single order can be attached to a charge too: its number typed or pasted (or its page's link), or
 //  the order the window shows (This Order) — only that order's page is read. Amazon's Conditions of Use don't allow robots: it runs only when you ask, and may stop working when
@@ -172,7 +173,7 @@ final class AmazonLookup {
             do {
                 let known = try await SpendingClient.amazonKnown(ids)
                 var pages: [[String: Any]] = []
-                for id in ids where (known[id] ?? 0) == 0 {
+                for id in ids where (known[id]?.items ?? 0) == 0 {
                     if !pages.isEmpty { try await self.wait() }
                     self.status = "Reading order \(id)…"
                     guard let page = try await self.readOrder(id) else {
@@ -294,8 +295,13 @@ final class AmazonLookup {
         // 3. Each order's page, for what it holds, unless the security master has it.
         let ids = Array(Set(charges.flatMap(\.orders))).sorted()
         let known = try await SpendingClient.amazonKnown(ids)
+        for id in ids {
+            if let k = known[id], k.items > 0 {
+                steps.append("Order \(id): \(k.items) item\(k.items == 1 ? "" : "s") kept already, from \(Self.origin(k.origin)): its page isn't read")
+            }
+        }
         var pages: [[String: Any]] = []
-        for (n, id) in ids.filter({ (known[$0] ?? 0) == 0 }).prefix(Self.maxOrderPages).enumerated() {
+        for (n, id) in ids.filter({ (known[$0]?.items ?? 0) == 0 }).prefix(Self.maxOrderPages).enumerated() {
             try await wait()
             status = "Reading order \(id) (\(n + 1) of \(min(ids.count, Self.maxOrderPages)))…"
             if let page = try await readOrder(id) { pages.append(page) }
@@ -313,6 +319,15 @@ final class AmazonLookup {
         let missing = charges.count - found.count
         status = "Attached \(found.count) of \(charges.count) charge\(charges.count == 1 ? "" : "s") to their orders"
             + (missing > 0 ? "; \(missing) not found" : "") + ". Hover a Bought link in Entries to see what was bought."
+    }
+
+    /// Where a kept order was read, in words.
+    static func origin(_ o: String) -> String {
+        switch o {
+        case "export": return "Amazon's order export"
+        case "email": return "Amazon's order e-mails"
+        default: return "its page"
+        }
     }
 
     /// An order's page read: what POST /spending/amazon/attach takes for it, or nil when it shows no items.

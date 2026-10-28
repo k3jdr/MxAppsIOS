@@ -43,7 +43,9 @@
                                                    last import, its entries' dates and its spending in both periods —
                                                    Amazon's order export (amazon: its drop folders and downloads, the
                                                    orders it holds, its last load, how many Amazon charges it matched,
-                                                   those it didn't and the shipments no charge paid) —
+                                                   those it didn't and the shipments no charge paid; amazon.email:
+                                                   Amazon's order e-mails, V055 — the mailbox, the e-mails read, the
+                                                   orders they gave, the charges matched to them, its last load) —
                                                    and every SRM table and view the analysis reads, with its rows,
                                                    newest data and last change
     PUT    /spending/sources/<source>/<code>       include or leave out a register {included, by} (source bank, card
@@ -83,11 +85,14 @@
                                                    {filename, data (base64)}, first save that export — the zip as
                                                    downloaded or a Retail.OrderHistory CSV — in its drop folder;
                                                    answers with the sources and the load {status, message, file}
+    POST   /spending/amazon/email/load             read Amazon's order e-mails (srm-loader amazon-email: Gmail,
+                                                   read-only, and .mbox files in the drop folders); answers with the
+                                                   sources and the load {status, message}
     GET    /spending/amazon/known?ids=A,B          which of these Amazon orders are kept, with items, and where from
     POST   /spending/amazon/attach                 MxAcctMGR's Amazon Order Lookup: {charges: [{source, entryId,
                                                    orderIds}], orders: [{orderId, orderedAt, total, payment, items:
                                                    [{name, asin, quantity, price}]}], by} — keeps each order its page
-                                                   gave (an order read from the export stays as it is) and attaches
+                                                   gave (an order read from the export or the e-mails stays as it is) and attaches
                                                    the orders Amazon's Transactions list names to each charge, in
                                                    place of what it had; answers with the entries
     POST   /spending/amazon/unlink/<source>/<id>   take the orders off a charge for good (the export doesn't match it
@@ -773,8 +778,13 @@ AMAZON_TABLES = [
     ("srm.amazon_order", "table", "Amazon orders from the Request Your Data export (amazon-orders), with their shipments and items: what was bought behind the Amazon charges",
      """SELECT count(*) AS rows, max(ordered_at)::date AS newest,
                (SELECT finished_at FROM srm.load_run WHERE load_id = max(o.load_id)) AS changed FROM srm.amazon_order o"""),
-    ("srm.amazon_match", "table", "Which Amazon charge paid which shipment or order, and which credit refunded which item (amazon-orders matches them by amount and date)",
+    ("srm.amazon_match", "table", "Which Amazon charge paid which shipment or order, and which credit refunded which item (amazon-orders and amazon-email match them by amount and date)",
      "SELECT count(*) AS rows, NULL::date AS newest, max(matched_at) AS changed FROM srm.amazon_match"),
+]
+# Amazon's order e-mails (V055), in the tables list when the security master has them.
+AMAZON_EMAIL_TABLES = [
+    ("srm.amazon_email", "table", "Amazon's order, shipment and refund e-mails read from Gmail or an .mbox (amazon-email): the orders they give land in srm.amazon_order as origin email",
+     """SELECT count(*) AS rows, max(received_at)::date AS newest, max(read_at) AS changed FROM srm.amazon_email"""),
 ]
 # Amazon charges that are orders: not memberships, video, e-books, audiobooks or AWS (as amazon_orders.is_order_charge).
 AMAZON_TEXT = "concat_ws(' ', e.payee, e.description)"
@@ -840,11 +850,56 @@ def _amazon(conn, start, end, folders):
            AND NOT EXISTS (SELECT FROM srm.amazon_match m WHERE m.order_id = s.order_id AND m.how = 'order')
          GROUP BY s.shipment_id, o.order_id
          ORDER BY coalesce(s.shipped_at, o.ordered_at) DESC LIMIT 200""", (start, end))
+    origins = {r["origin"]: r["n"] for r in fetch(conn, "SELECT origin, count(*) AS n FROM srm.amazon_order GROUP BY 1")}
     return dict(o, **c,
                 loader="amazon-orders", dropFolders=folders, foldersListed=folders is not None,
                 downloads=_amazon_downloads(folders) if folders else [],
                 lastImport=_run(conn, loader="amazon_orders"),
+                ordersFrom={"export": origins.get("export", 0), "email": origins.get("email", 0),
+                            "orderPage": origins.get("order page", 0)},
+                email=_amazon_email(conn, folders),
                 unmatchedCharges=unmatched, unmatchedShipments=shipments)
+
+
+def _amazon_email(conn, folders):
+    """Amazon's order e-mails (V055): the mailbox and whether it is connected, the .mbox files in the drop folders, the
+    e-mails read by kind, the orders they gave, the Amazon entries matched to those orders, and the last load. None
+    before V055 (or when the role may not read it)."""
+    if not _readable(conn, "srm.amazon_email"):
+        return None
+    try:
+        from srmlib import gmail
+        from srmlib.loaders import amazon_email
+        connected, since = gmail.connected(), str(amazon_email.settings().get("since") or amazon_email.DEFAULT_SINCE)
+    except ImportError:
+        connected = since = None    # a machine without the loaders
+    e = fetch(conn, """
+        SELECT count(*) AS emails, min(received_at)::date AS first, max(received_at)::date AS last,
+               count(*) FILTER (WHERE kind = 'order') AS orders, count(*) FILTER (WHERE kind = 'shipment') AS shipments,
+               count(*) FILTER (WHERE kind = 'refund') AS refunds, count(*) FILTER (WHERE kind = 'cancel') AS cancels,
+               count(*) FILTER (WHERE kind = 'other') AS other,
+               array_remove(array_agg(DISTINCT CASE WHEN file_name LIKE 'gmail:%%' THEN substr(file_name, 7) END), NULL) AS mailboxes
+          FROM srm.amazon_email""")[0]
+    o = fetch(conn, """
+        SELECT count(*) AS orders, min(ordered_at)::date AS "firstOrder", max(ordered_at)::date AS "lastOrder",
+               (SELECT count(DISTINCT coalesce(m.card_txn_id, -m.bank_txn_id)) FROM srm.amazon_match m
+                  JOIN srm.amazon_order x USING (order_id) WHERE x.origin = 'email' AND m.how <> 'unlinked') AS matched
+          FROM srm.amazon_order WHERE origin = 'email'""")[0]
+    files = []
+    for folder in folders or []:
+        root = os.path.expanduser(folder)
+        for d, dirs, names in os.walk(root):
+            dirs[:] = [x for x in dirs if not x.startswith((".", "_"))]
+            for n in names:
+                p = os.path.join(d, n)
+                if n.lower().endswith((".mbox", ".eml")) and not n.startswith(".") and os.path.isfile(p):
+                    st = os.stat(p)
+                    files.append({"path": _home(p), "name": n, "bytes": st.st_size,
+                                  "modified": dt.datetime.fromtimestamp(st.st_mtime).astimezone().isoformat(timespec="seconds")})
+    return dict(loader="amazon-email", connected=connected, since=since, mailboxes=e.pop("mailboxes") or [],
+                emails=e, orders=o["orders"], firstOrder=o["firstOrder"], lastOrder=o["lastOrder"], matched=o["matched"],
+                mboxFiles=sorted(files, key=lambda f: f["modified"], reverse=True),
+                lastImport=_run(conn, loader="amazon_email"))
 
 
 def sources(conn, q):
@@ -897,10 +952,12 @@ def sources(conn, q):
                 entriesBefore=s.get("entriesBefore", 0), spentBefore=s.get("spentBefore", 0)))
     amazon = _amazon(conn, start, end, amazon_folders)
     tables = []
-    for name, kind, role, sql in TABLES + (AMAZON_TABLES if amazon is not None else []):
+    for name, kind, role, sql in (TABLES + (AMAZON_TABLES if amazon is not None else [])
+                                  + (AMAZON_EMAIL_TABLES if amazon is not None and amazon.get("email") is not None else [])):
         row = fetch(conn, sql)[0]
         tables.append(dict(name=name, kind=kind, role=role, **row))
-    loaders = [r for r in (_run(conn, loader=n) for n in ("pnc_bank", "card_downloads", "amazon_orders", "fred_yields")) if r]
+    loaders = [r for r in (_run(conn, loader=n) for n in ("pnc_bank", "card_downloads", "amazon_orders", "amazon_email",
+                                                           "fred_yields")) if r]
     return {"start": start, "end": end, "priorStart": prior_start, "priorEnd": prior_end, "sources": out,
             "tables": tables, "loaders": loaders, "amazon": amazon, "now": dt.datetime.now().astimezone()}
 
@@ -949,6 +1006,24 @@ def load_amazon(conn, body, q):
                                         "file": saved and _home(saved)})
 
 
+AMAZON_EMAIL_LOADER = os.environ.get("SRM_LOADER_URL", "http://127.0.0.1:8770") + "/load/amazon-email"
+
+
+def load_amazon_email(conn, body, q):
+    """Runs srm.py load amazon-email through srm-loader (Amazon's order e-mails: Gmail and the .mbox files); answers
+    with the sources and how the load went."""
+    req = urllib.request.Request(AMAZON_EMAIL_LOADER, data=b"", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            out = json.load(r)
+    except Exception as e:
+        raise ValueError("srm-loader didn't run amazon-email: %s" % e)
+    run = (out.get("runs") or [{}])[-1]
+    return dict(sources(conn, q), load={"status": run.get("status") or out.get("status"),
+                                        "message": run.get("message") or out.get("error") or
+                                        "\n".join((out.get("outputTail") or [])[-3:]) or None})
+
+
 AMAZON_ORDER_ID = re.compile(r"^[0-9D]\d{2}-\d{7}-\d{7}$")
 
 
@@ -978,11 +1053,14 @@ def attach_amazon(conn, body):
     orders = body.get("orders") or []
     for o in orders:
         oid = _amazon_ids([o.get("orderId")])[0]
-        known = fetch(conn, "SELECT origin FROM srm.amazon_order WHERE order_id = %s", (oid,))
-        if known and known[0]["origin"] == "export":
-            continue     # the export's rows are fuller (shipments, tax): they stay
+        known = fetch(conn, "SELECT origin, items FROM srm.amazon_order WHERE order_id = %s", (oid,))
+        if known and (known[0]["origin"] == "export" or (known[0]["origin"] == "email" and known[0]["items"])):
+            continue     # the export's and the e-mails' rows are fuller (shipments, tax): they stay
         items = [i for i in (o.get("items") or []) if str(i.get("name") or "").strip()]
         if not items:
+            continue
+        if known and known[0]["origin"] == "email":
+            _page_items(conn, oid, o, items)    # its e-mails only summed its items up: its page names them
             continue
         ordered = o.get("orderedAt")
         try:
@@ -1032,6 +1110,28 @@ def attach_amazon(conn, body):
         out.append((source, entry_id))
     conn.commit()
     return {"entries": [e for e in (_entry(conn, s_, i) for s_, i in out) if e]}
+
+
+def _page_items(conn, oid, o, items):
+    """An order from Amazon's e-mails (V055) that only summed its items up ("2 items: Sunglasses"): its page's items
+    take the summary's place on its one shipment (with several, which shipment had which isn't known: each keeps its
+    e-mail's summary and the items go on none), and its page's card is kept; its shipments and their matches stay."""
+    ships = fetch(conn, "SELECT shipment_id FROM srm.amazon_shipment WHERE order_id = %s", (oid,))
+    sid = ships[0]["shipment_id"] if len(ships) == 1 else None
+    if len(ships) <= 1:
+        fetch(conn, "DELETE FROM srm.amazon_item WHERE order_id = %s AND condition = 'summary'", (oid,))
+    for i in items:
+        qty = int(i.get("quantity") or 1)
+        price = round(float(i["price"]), 2) if i.get("price") is not None else None
+        fetch(conn, """INSERT INTO srm.amazon_item (order_id, shipment_id, product_name, asin, quantity, unit_price,
+                                                    total_owed, condition)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 'order page')""",
+              (oid, sid, str(i["name"]).strip()[:500], (str(i.get("asin") or "").strip() or None), qty, price,
+               round(price * qty, 2) if price is not None else None))
+    payment = str(o.get("payment") or "").strip()[:120] or None
+    fetch(conn, """UPDATE srm.amazon_order SET items = %s, payment = coalesce(%s, payment),
+                          payment_last4 = coalesce(%s, payment_last4), updated_at = now() WHERE order_id = %s""",
+          (len(items), payment, payment[-4:] if payment and payment[-4:].isdigit() else None, oid))
 
 
 def unlink_amazon(conn, source, entry_id, body):
@@ -1934,6 +2034,8 @@ def route(conn, method, parts, body, q):
         return (disconnect_source if parts[4] == "disconnect" else reconnect_source)(conn, parts[2], parts[3], body, q)
     if parts == ["spending", "amazon", "load"] and method == "POST":
         return load_amazon(conn, body, q)
+    if parts == ["spending", "amazon", "email", "load"] and method == "POST":
+        return load_amazon_email(conn, body, q)
     if parts == ["spending", "amazon", "known"] and method == "GET":
         return amazon_known(conn, q)
     if parts == ["spending", "amazon", "attach"] and method == "POST":

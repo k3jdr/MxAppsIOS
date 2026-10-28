@@ -652,13 +652,13 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   account get one (named in the sheet, found or made) that carries their statement names, so the next card and
   checking downloads post to it, under that expense account. Cash-ledger entries take their budget line's expense
   account and don't change.
-* **What Amazon charges bought.** An Amazon charge reads only "AMAZON MKTPL*BD9ZG3640". Once Amazon's order export is
-  read (Sources ▸ Amazon Orders), each charge matched to its order shows what was bought: the *Bought* column of the
+* **What Amazon charges bought.** An Amazon charge reads only "AMAZON MKTPL*BD9ZG3640". Once Amazon's order export or
+  its order e-mails are read (Sources ▸ Amazon Orders), each charge matched to its order shows what was bought: the *Bought* column of the
   entries tables (Entries and the Deep Dive; "Kids' Swim Goggles, 3 Pack and 1 more", every item with its cost and the
   order number on hover, and on the Payee's hover), the Tag Entry sheet, and the Deep Dive's Largest This Year. The
   search finds entries by an item's name. The context menu opens the order on amazon.com (you sign in there). A credit
   matched to a return shows the item refunded. The Bought words are a link to the order: hover shows the items and
-  whether Amazon's Transactions list or the export (by amount and date) matched it; *Edit Link…* on the card looks
+  whether Amazon's Transactions list, the export or Amazon's order e-mails (both by amount and date) matched it; *Edit Link…* on the card looks
   the charge up again, *Remove Link* (or *Take Amazon Orders Off*) takes its orders off for good — the export doesn't
   match it again.
 * **Look Up Amazon Orders…** (Entries, right-click selected Amazon charges; `AmazonLookup.swift`): finds what they
@@ -672,15 +672,17 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   (`timeFilter=year-…`: otherwise Amazon shows only the past 3 months; an order whose total is the charge, placed up
   to 30 days before it) — the **Digital Orders** tab for **Prime Video** rentals, purchases and channels, Kindle books
   and other digital charges (D01-… orders, placed within 5 days); then each order's page for its items (a video's
-  title; a channel's renewal by its item title), unless the security master has them. One page every 3 seconds, at
+  title; a channel's renewal by its item title), unless the security master has them (from the export, Amazon's
+  order e-mails or an earlier lookup — *Steps* says which, and that its page wasn't read). One page every 3 seconds, at
   most 40 Transactions pages, 30 Your Orders pages a year (back to a month before the charges; the year before too for
   a January charge) and 25 orders a run. The window lists the
   charges and the orders found (*Steps* shows each page read). **One order at a time:** each charge's row takes an
   order number typed or pasted (several, comma-separated, or an order page's link) — *Attach* reads only that order's
   page (none when the security master has it) and attaches it in place of what the charge had — and *This Order*
   attaches the order the window shows (*Your Orders* and *Digital Orders* open the lists to find it). *Attach an Amazon Order…* in the
-  Entries menu opens the window that way, without the full lookup. Amazon's card offers on order pages aren't items. The results attach as the export's do (`POST /spending/amazon/attach`); an export read later
-  replaces what an order's page gave and narrows the charge to its shipment. *Sign Out of Amazon* clears amazon.com's
+  Entries menu opens the window that way, without the full lookup. Amazon's card offers on order pages aren't items. The results attach as the export's do (`POST /spending/amazon/attach`); an export or the order's
+  e-mails read later replace what an order's page gave and narrow the charge to its shipment (an order kept from the
+  export or the e-mails isn't replaced by its page). *Sign Out of Amazon* clears amazon.com's
   cookies from the window. Amazon's Conditions of Use don't allow robots: it runs only when you ask, at your own risk,
   and may stop working when Amazon changes its pages (its scripts read the pages' words, not their layout, to last
   longer).
@@ -765,10 +767,17 @@ from one year to the next and forecasts what the children's ages bring. Everythi
     zip (or a `Retail.OrderHistory` CSV), saves it in the drop folder and runs `amazon-orders` through srm-loader;
     **Read Again** runs it again (new card charges then find their orders). *Not matched* lists the period's Amazon
     charges no order matched and the shipments no charge paid (another card, a gift card), each order opening on
-    amazon.com.
+    amazon.com. *Lands in* says how many orders came from the export, from e-mails and from order pages.
+    **E-mails** (V055): Amazon's order, shipment and refund e-mails — your Gmail, read-only, once connected with
+    `./srm.py gmail-auth` in `MxDataHUB/SRM` (you sign in to Google in your browser; the sign-in is kept in the
+    Keychain), else orange with how to connect it, and any Google Takeout `.mbox` in the drop folder — with the
+    e-mails read by kind, the orders they gave and their dates, and the last load. **Read E-mails** runs
+    `amazon-email` through srm-loader: only e-mails not read yet are fetched, and the Amazon charges are matched to
+    their orders (`matched_by` amazon-email); *Matched* adds how many went to orders from e-mails. An order the export
+    has stays the export's.
   - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
     rows, its newest data and its last change.
-  - **Last Loads:** the latest `pnc-bank`, `card-downloads`, `amazon-orders` and `fred-yields` runs.
+  - **Last Loads:** the latest `pnc-bank`, `card-downloads`, `amazon-orders`, `amazon-email` and `fred-yields` runs.
 * **Admin.** The expense accounts, the categories and drivers, and guidance (MxAcctMGR only, not the family page):
   - **Expense Accounts**: every expense account with its description and this year's entries, with **Edit…** (name,
     description) and **Remove…** on each and **New Expense Account…**: Banking's bookkeeping, not the spending

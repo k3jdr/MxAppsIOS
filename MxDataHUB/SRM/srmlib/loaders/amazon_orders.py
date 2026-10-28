@@ -25,7 +25,9 @@ AMZN.COM/BILL; not Prime memberships, Prime Video, Kindle, Audible or AWS) to wh
 
 The closest dates win; a shipment, an order or an item goes with one charge (and one credit). When the export's
 Payment Instrument Type names a card's last four digits, a charge on another card doesn't match. Matches stay from
-run to run; an order whose rows changed loses its matches and is matched again.
+run to run; an order whose rows changed loses its matches and is matched again. The orders Amazon's e-mails gave
+(amazon-email, origin 'email') are matched the same way, as matched_by 'amazon-email'; an export that has one of them
+replaces it.
 
 MxAcctMGR's Amazon Order Lookup attaches orders too, from Amazon's own Transactions list (matched_by
 'amazon-lookup', how 'transaction'), with what the order's page shows. Those stay when an export rewrites their order
@@ -226,12 +228,12 @@ def orders(rows):
 # ------------------------------------------------------------------------------------------------------------ saving
 
 def save(cur, order, file_name, load_id):
-    """Writes one order (replacing what an earlier export or its page said about it, and the loader's matches; the
-    lookup's stay, on the order as a whole)."""
+    """Writes one order (replacing what an earlier export, its e-mails or its page said about it, and the loaders'
+    matches; the lookup's stay, on the order as a whole)."""
     oid = order["id"]
     cur.execute("""UPDATE srm.amazon_match SET how = 'transaction', shipment_id = NULL
-                    WHERE order_id = %s AND matched_by <> 'amazon-orders' AND how <> 'unlinked'""", (oid,))
-    cur.execute("DELETE FROM srm.amazon_match WHERE order_id = %s AND matched_by = 'amazon-orders'", (oid,))
+                    WHERE order_id = %s AND matched_by NOT IN ('amazon-orders', 'amazon-email') AND how <> 'unlinked'""", (oid,))
+    cur.execute("DELETE FROM srm.amazon_match WHERE order_id = %s AND matched_by IN ('amazon-orders', 'amazon-email')", (oid,))
     cur.execute("DELETE FROM srm.amazon_item WHERE order_id = %s", (oid,))
     cur.execute("DELETE FROM srm.amazon_shipment WHERE order_id = %s", (oid,))
     cur.execute("""INSERT INTO srm.amazon_order (order_id, website, ordered_at, currency, order_status, payment,
@@ -382,10 +384,13 @@ def match(cur, load_id):
                 used["ship"].update(s["shipment_id"] for s in things)
                 rows = [(s["order_id"], s["shipment_id"], None) for s in things]
             for order_id, shipment_id, item_id in rows:
+                # An order from its e-mails (amazon_email, V055) is matched_by amazon-email.
                 cur.execute("""INSERT INTO srm.amazon_match (card_txn_id, bank_txn_id, order_id, shipment_id, item_id, how,
                                                              days, matched_by, load_id)
-                               VALUES (%s, %s, %s, %s, %s, %s, %s, 'amazon-orders', %s)""",
-                            (card, bank, order_id, shipment_id, item_id, how, offset, load_id))
+                               SELECT %s, %s, %s, %s, %s, %s, %s,
+                                      CASE WHEN origin = 'email' THEN 'amazon-email' ELSE 'amazon-orders' END, %s
+                                 FROM srm.amazon_order WHERE order_id = %s""",
+                            (card, bank, order_id, shipment_id, item_id, how, offset, load_id, order_id))
             made[how] += 1
 
     # 1 and 2: a shipment, or a whole order of several shipments.
