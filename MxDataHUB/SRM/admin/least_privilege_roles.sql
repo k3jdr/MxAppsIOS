@@ -67,6 +67,13 @@ END $$;
 -- Writing rows (no TRUNCATE, no CREATE on the schema), and new ids from the sequences.
 GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA srm TO srm_writer;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA srm TO srm_writer;
+-- The cards' and the bank's own lines are only added, never changed or deleted (V057).
+DO $$
+BEGIN
+    IF to_regclass('srm.card_line') IS NOT NULL THEN
+        REVOKE UPDATE, DELETE ON srm.card_line, srm.bank_line FROM srm_writer;
+    END IF;
+END $$;
 
 -- The same for whatever later migrations create, whoever owns srm's objects now (postgres, normally).
 DO $$

@@ -106,9 +106,11 @@
                                                    total, payment, items: [{name, detail, amount, date}], raw}],
                                                    charges: [{source, entryId}], by} — keeps each bill Apple's purchase
                                                    history gave and matches every Apple charge no bill is matched to yet
-                                                   (the bill of its amount from a week before it to 4 days after, else
+                                                   (the bill whose order ID its description names — Discover's — else
+                                                   the bill of its amount from a week before it to 4 days after, else
                                                    bills that add up to it); answers with how many, the Apple charges
-                                                   in those dates still without a bill, and the charges' entries
+                                                   in those dates still without a bill (with the order each names),
+                                                   and the charges' entries
     POST   /spending/apple/unlink/<source>/<id>    take the bills off a charge for good (it isn't matched again);
                                                    answers with the entry
     GET    /spending/feedback?author=&status=      notes on the page from its read-only web page (V039), newest first
@@ -1170,13 +1172,23 @@ def _page_items(conn, oid, o, items):
 # APPLE.COM/US, the Apple Store's hardware orders.
 APPLE_NAME = r"^\s*(apple\.com/bill|itunes\.com|apple services)"
 APPLE_CHARGES = """
-    SELECT 'card' AS source, c.txn_id AS entry_id, c.txn_date, c.amount
+    SELECT 'card' AS source, c.txn_id AS entry_id, c.txn_date, c.amount, coalesce(nullif(btrim(l.name), ''), c.payee_name) AS name
       FROM srm.card_txn c LEFT JOIN srm.card_line l ON l.card_line_id = c.card_line_id
      WHERE c.status <> 'void' AND c.kind <> 'payment' AND coalesce(nullif(btrim(l.name), ''), c.payee_name) ~* %(apple)s
     UNION ALL
-    SELECT 'bank', b.txn_id, b.txn_date, -b.amount
+    SELECT 'bank', b.txn_id, b.txn_date, -b.amount, coalesce(nullif(btrim(l.name), ''), b.payee_name, b.memo)
       FROM srm.bank_txn b LEFT JOIN srm.bank_line l ON l.bank_line_id = b.bank_line_id
      WHERE b.status <> 'void' AND coalesce(nullif(btrim(l.name), ''), b.payee_name, b.memo) ~* %(apple)s"""
+# Discover writes Apple's order ID into the charge's description, after the state: "APPLE.COM/BILL 866-712-7753
+# CAMVWQAB1234A0" is order MVWQAB1234. (The Visa's reads only "APPLE.COM/BILL".)
+APPLE_ORDER_IN_NAME = re.compile(r"\b[A-Z]{2}(M[A-Z0-9]{9})[A-Z0-9]{2}\s*$")
+
+
+def _apple_order(name):
+    """The Apple order ID a charge's description names, else None."""
+    m = APPLE_ORDER_IN_NAME.search(str(name or "").upper())
+    return m.group(1) if m else None
+
 # The match row for the charge c (or the 'unlinked' one that keeps it from being matched).
 APPLE_PAID_BY = "((c.source = 'card' AND m.card_txn_id = c.entry_id) OR (c.source = 'bank' AND m.bank_txn_id = c.entry_id))"
 # A charge posts up to a week after its bill, or up to 4 days before it (Apple may date a renewal's bill days after it
@@ -1223,27 +1235,43 @@ def attach_apple(conn, body):
     span = fetch(conn, "SELECT min(invoice_date) AS first, max(invoice_date) AS last, count(*) AS n FROM srm.apple_invoice")[0]
     left = []
     if span["n"]:
-        left = fetch(conn, """SELECT c.source, c.entry_id AS "entryId", c.txn_date AS date, c.amount FROM (""" + APPLE_CHARGES + """) c
+        left = fetch(conn, """SELECT c.source, c.entry_id AS "entryId", c.txn_date AS date, c.amount, c.name FROM (""" + APPLE_CHARGES + """) c
                                WHERE c.txn_date BETWEEN %(first)s AND %(last)s::date + 7
                                  AND NOT EXISTS (SELECT FROM srm.apple_match m WHERE m.how <> 'unlinked' AND """ + APPLE_PAID_BY + """)
                                ORDER BY c.txn_date DESC""", {"apple": APPLE_NAME, "first": span["first"], "last": span["last"]})
+        for c in left:      # the order it names, to look up in another family member's purchase history
+            c["orderId"] = _apple_order(c.pop("name"))
     entries = [e for e in (_entry(conn, c.get("source"), int(c.get("entryId") or 0)) for c in body.get("charges") or []) if e]
     return {"invoices": kept, "matched": matched, "kept": span["n"], "first": span["first"], "last": span["last"],
             "unmatched": left, "entries": entries}
 
 
 def _match_apple(conn):
-    """Matches each Apple charge and credit with no bill yet (oldest first) to the bill of its amount dated from a
-    week before it to 4 days after (the closest), else to 2–5 such bills that add up to it; answers how many charges."""
+    """Matches each Apple charge and credit with no bill yet (oldest first). A charge whose description names Apple's
+    order ID (Discover's) takes that bill and no other — a charge naming an order not read stays without one; any
+    other takes the bill of its amount dated from a week before it to 4 days after (the closest), else 2–5 such bills
+    that add up to it. Answers how many charges."""
     charges = fetch(conn, "SELECT * FROM (" + APPLE_CHARGES + """) c
                             WHERE NOT EXISTS (SELECT FROM srm.apple_match m WHERE """ + APPLE_PAID_BY + """)
                             ORDER BY c.txn_date, c.entry_id""", {"apple": APPLE_NAME})
     free = fetch(conn, """SELECT order_id, invoice_date, total FROM srm.apple_invoice v
-                           WHERE total IS NOT NULL
-                             AND NOT EXISTS (SELECT FROM srm.apple_match m WHERE m.order_id = v.order_id AND m.how <> 'unlinked')
+                           WHERE NOT EXISTS (SELECT FROM srm.apple_match m WHERE m.order_id = v.order_id AND m.how <> 'unlinked')
                            ORDER BY invoice_date""")
+    named = {v["order_id"]: v for v in free}
     n = 0
-    for c in charges:
+    # 1. By the order ID in the description.
+    for c in [c for c in charges if _apple_order(c["name"])]:
+        v = named.get(_apple_order(c["name"]))
+        if not v:
+            continue
+        column = "card_txn_id" if c["source"] == "card" else "bank_txn_id"
+        fetch(conn, """INSERT INTO srm.apple_match (%s, order_id, how, days, matched_by) VALUES (%%s, %%s, 'invoice', %%s, 'apple-order-id')"""
+              % column, (c["entry_id"], v["order_id"], (c["txn_date"] - v["invoice_date"]).days))
+        free.remove(v)
+        n += 1
+    # 2. By amount and date, for the charges that name no order.
+    free = [v for v in free if v["total"] is not None]
+    for c in [c for c in charges if not _apple_order(c["name"])]:
         cents = int(round(float(c["amount"]) * 100))
         near = [v for v in free if APPLE_DAYS[0] <= (c["txn_date"] - v["invoice_date"]).days <= APPLE_DAYS[1]]
         days = lambda v: abs((c["txn_date"] - v["invoice_date"]).days)

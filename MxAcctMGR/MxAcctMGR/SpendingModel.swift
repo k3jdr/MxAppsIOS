@@ -1106,7 +1106,8 @@ nonisolated enum SpendingClient {
     /// What POST /spending/apple/attach answers: how many bills were kept and charges matched, the Apple charges in
     /// the bills' dates still without one, and the charges asked about.
     struct AppleAttached: Decodable {
-        struct Left: Decodable, Hashable { var source: String; var entryId: Int; var date: String; var amount: Double }
+        /// An Apple charge without a bill, and the order its description names (Discover's), if any.
+        struct Left: Decodable, Hashable { var source: String; var entryId: Int; var date: String; var amount: Double; var orderId: String? }
         var invoices: Int
         var matched: Int
         var kept: Int

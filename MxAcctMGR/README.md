@@ -695,10 +695,13 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   Apple's own page receives from reportaproblem.apple.com about your purchases (never Apple's sign-in); the lookup
   scrolls the history back past the oldest selected charge (or presses its Load More), one step every 2 seconds, at
   most 80, and sends every bill — its order ID, date, total, payment and items with their details and amounts — to
-  `POST /spending/apple/attach`, which matches *every* Apple charge it can, not just the selected ones: the bill of its
+  `POST /spending/apple/attach`, which matches *every* Apple charge it can, not just the selected ones: a Discover
+  charge by the order ID Discover writes into its description (`…CAMVWQAB1234A0` is order MVWQAB1234), only to that
+  bill; any other by the bill of its
   amount dated from a week before it to 4 days after, the closest, else 2–5 such bills that add up to it. Bought then shows
   the items (Edit Link… reads the history again; Remove Link, or *Take Apple Purchases Off*, takes the bills off for
-  good). *Steps* says what the page gave and lists the Apple charges in the bills' dates still without one — a family
+  good). *Steps* says what the page gave and lists the Apple charges in the bills' dates still without one, with the order ID
+  each names (to look up in that family member's purchase history) — a family
   member's purchase with Family Sharing is in their history, not yours. APPLE.COM/US (the Apple Store's hardware) isn't
   looked up. *Sign Out of Apple* clears Apple's cookies from the window. It runs only when you ask, and may stop
   working when Apple changes its page.

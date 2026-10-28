@@ -157,8 +157,9 @@ final class AppleLookup {
         attached(answer.entries)
         let found = charges.filter { answered[$0.id]?.appleItems != nil }.count
         if !answer.unmatched.isEmpty {
-            steps.append("Apple charges in those dates without a bill: " + answer.unmatched.prefix(20).map { "\(shortDay($0.date)) \(money2($0.amount))" }.joined(separator: ", ")
-                         + (answer.unmatched.count > 20 ? " …" : ""))
+            steps.append("Apple charges in those dates without a bill (the order each names is in another Apple Account's purchase history, a family member's): "
+                         + answer.unmatched.prefix(30).map { "\(shortDay($0.date)) \(money2($0.amount))\($0.orderId.map { " order \($0)" } ?? "")" }.joined(separator: ", ")
+                         + (answer.unmatched.count > 30 ? " …" : ""))
         }
         status = "\(found) of \(charges.count) selected charge\(charges.count == 1 ? "" : "s") matched to their bills (\(answer.matched) newly, of every Apple charge). "
             + (answer.unmatched.isEmpty ? "Every Apple charge in those dates has its bill." : "\(answer.unmatched.count) Apple charge\(answer.unmatched.count == 1 ? "" : "s") in those dates \(answer.unmatched.count == 1 ? "has" : "have") none (a family member's purchase, or one the history didn't show): Steps lists them.")
