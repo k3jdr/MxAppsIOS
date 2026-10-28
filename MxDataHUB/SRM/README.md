@@ -56,6 +56,42 @@ Downloads are cached in `SRM_CACHE_DIR`, else `~/Library/Caches/com.k3jdr.MxData
 (`%LOCALAPPDATA%\MxDataHUB\loaders-cache` on Windows). There, MxAppsRCP's `MxDataHUB\schedule\srm-refresh.cmd` runs
 the Data Refresh on a schedule (Task Scheduler).
 
+### Database roles
+
+The loaders, services and apps need not sign in as `postgres`, a superuser who can read every database and run
+programs on the server. [admin/least_privilege_roles.sql](admin/least_privilege_roles.sql) creates `srm_reader`,
+`srm_writer` and the login `srm_app`. `srm_app` reads and writes rows in `srm`, but cannot create, alter, drop or
+truncate anything, or create roles. Tables that later migrations add get the same grants. `postgres` keeps the
+migrations, and `spending_web` keeps its own grants. Only roles granted CONNECT can open the database afterwards; the
+script prints a notice for any login role that loses access. To switch:
+
+1. **Create the roles.** On the database PC, run the script as `postgres`, then give `srm_app` a password. psql
+   prompts for it and sends it already hashed, so it never reaches a log or command history:
+   ```bat
+   "D:\Program Files\PostgreSQL\18\bin\psql.exe" -h localhost -U postgres -d srm -f admin\least_privilege_roles.sql
+   "D:\Program Files\PostgreSQL\18\bin\psql.exe" -h localhost -U postgres -d srm -c "\password srm_app"
+   ```
+   Its last query should read `t | t | f | f | f | 0`.
+2. **Switch the loaders and services** (srm.py, srm-loader, accounts, analytics) on each machine:
+   - Set `"database": {"user": "srm_app"}` in `config.local.json`. It is read on every connection, so nothing needs a
+     restart. Setting `SRM_PGUSER=srm_app` also works, but the services must then be restarted.
+   - Save the password under the new account:
+     - Windows: `cmdkey /generic:SRM-postgres:srm_app@192.168.0.223/srm /user:srm_app /pass`
+     - Mac: `security add-generic-password -U -s SRM-postgres -a srm_app@192.168.0.223/srm -w`
+   - MxAppsRCP's `srm-refresh.cmd status` then lists the `srm_app` credential.
+3. **Switch the apps.**
+   - MxDataHUB (Mac and Windows): set **DB Connection**'s user to `srm_app`, enter its password, and connect.
+   - MxAcctMGR on Windows reaches the database through the accounts service, so step 2 covers it.
+   - MxDataSQL: use whichever account the work needs.
+4. **Run migrations as `postgres`:** `./srm.py --user postgres migrate`. Store the postgres password only for the
+   run (`cmdkey /generic:SRM-postgres:postgres@192.168.0.223/srm /user:postgres /pass`, or the Keychain item), and
+   delete it afterwards (`cmdkey /delete:SRM-postgres:postgres@192.168.0.223/srm`).
+5. **Tighten `pg_hba.conf`** (optional; it needs admin rights).
+   - Above the `192.168.0.0/24` line, add `host all postgres 192.168.0.0/24 reject`. postgres can then sign in only
+     on the database PC itself, so migrations run there with `--host localhost`.
+   - Change that line's `md5` to `scram-sha-256`.
+   - Then reload: `SELECT pg_reload_conf();`.
+
 ## Schema
 
 | Area | Tables / functions |
