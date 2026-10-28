@@ -866,7 +866,7 @@ private struct DimensionPickers: View {
     }
 }
 
-private struct SpendingTagSheet: View {
+struct SpendingTagSheet: View {
     var setup: SpendingSetup
     var entries: [SpendingEntry]
     var save: ([String: Any]) async -> String?
@@ -930,6 +930,8 @@ struct TargetAllocationSheet: View {
     var target: RuleTarget
     /// Both periods' entries, to say how many are this target account's.
     var entries: [SpendingEntry]
+    /// Where those entries are from, in words.
+    var entriesIn = "in the two periods"
     var saved: (SpendingSetup) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var role = "spending"
@@ -947,7 +949,7 @@ struct TargetAllocationSheet: View {
         let mine = entries.filter { $0.payeeId == target.payeeId }
         VStack(alignment: .leading, spacing: 12) {
             Text("Allocate \(target.name)").heading(.heading)
-            Text("A payment to a target account is spending when its role is Spending; its category, driver and family member come from here unless the entry has a tag of its own. \(mine.count) of its entries are in the two periods, \(money(mine.map(\.amount).reduce(0, +))).")
+            Text("A payment to a target account is spending when its role is Spending; its category, driver and family member come from here unless the entry has a tag of its own. \(mine.count) of its entries are \(entriesIn), \(money(mine.map(\.amount).reduce(0, +))).")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
                 Picker("Role", selection: $role) {
@@ -992,7 +994,7 @@ struct TargetAllocationSheet: View {
 
 /// Change Expense Account…: files card and check entries under another expense account (the bookkeeping category the
 /// registers show) and, unless turned off, what comes next with the same target account or statement name too.
-private struct RefileSheet: View {
+struct RefileSheet: View {
     var setup: SpendingSetup
     var entries: [SpendingEntry]
     var saved: (SpendingSetup) -> Void

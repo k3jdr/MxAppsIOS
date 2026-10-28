@@ -66,6 +66,11 @@
                                                    memberId, entries: [{source, id}], by}, given those payments and
                                                    every unallocated one it matches
     POST   /spending/targets/<payeeId>/assign      give it these unallocated payments {entries: [{source, id}], by}
+    GET    /spending/targets/<payeeId>/entries?year=
+                                                   its entries as analysis gives them (every register's), newest
+                                                   first: one year's (this year's unless year=) or, with year=all, every
+                                                   one — Banking ▸ Target Accounts ▸ Show Entries… tags them and changes
+                                                   their expense account
     GET    /spending/unallocated?start=&end=&priorStart=&priorEnd=
                                                    checks and card charges no target account matches (not in the
                                                    analysis), grouped by their statement's own words, most money
@@ -1316,6 +1321,16 @@ def _patterns(body):
     return out
 
 
+def target_entries(conn, pid, q):
+    """A target account's entries as analysis gives them (with what Amazon charges bought, and from every register,
+    included or not), newest first: one year's or, with year=all, every one — for Banking ▸ Target Accounts ▸ Show
+    Entries…, whose menus tag them."""
+    raw = str(q.get("year") or dt.date.today().year)
+    year = None if raw == "all" else int(raw)
+    return {"entries": fetch(conn, _entry_sql(conn) + """ WHERE payee_id = %s AND (%s::int IS NULL OR extract(year FROM txn_date) = %s)
+                                                         ORDER BY txn_date DESC, entry_id DESC""", (int(pid), year, year))}
+
+
 def allocate_target(conn, pid, body):
     """A target account's role, category, driver, member and patterns (only the fields sent change); unallocated
     payments its patterns now match are given to it. Answers with the setup and how many were."""
@@ -2030,6 +2045,8 @@ def route(conn, method, parts, body, q):
         return allocate_target(conn, parts[2], body)
     if len(parts) == 4 and parts[1] == "targets" and parts[3] == "assign" and method == "POST":
         return assign_payments(conn, parts[2], body)
+    if len(parts) == 4 and parts[1] == "targets" and parts[3] == "entries" and method == "GET":
+        return target_entries(conn, parts[2], q)
     if parts == ["spending", "transfers"] and method == "GET":
         return transfers(conn, q)
     if len(parts) == 3 and parts[1] == "transfers" and method == "PUT":

@@ -1329,7 +1329,7 @@ struct TargetAccountsView: View {
                 // The registers' own sums.
                 TableColumn("This year") { p in
                     Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary)
-                        .help("Calculated by MxAcctMGR from this year's check, card and expense entries with this target")
+                        .help("Calculated by MxAcctMGR from this year's check, card and expense entries with this target. Double-click the row to see them")
                 }.width(min: 60, ideal: 84)
                 TableColumn("Total paid") { p in
                     let total = p.totalPaid ?? 0
@@ -1351,6 +1351,9 @@ struct TargetAccountsView: View {
                                  apply: { grid = $0 })
             .contextMenu(forSelectionType: Payee.ID.self) { ids in
                 if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) {
+                    Button("Show Entries…") { showEntries(p) }
+                        .help("The checks and card charges that add up to This year (or, choosing All years, Total paid)")
+                    Divider()
                     Button("Edit Target Account Name…") { renaming = p }
                     Button("Edit Target Details…") { details = p }
                     Divider()
@@ -1359,9 +1362,17 @@ struct TargetAccountsView: View {
                     Button("Remove Target Account…", role: .destructive) { removing = p }
                         .help("Take it off once its entries are consolidated into another target account: nothing may still file under it")
                 }
+            } primaryAction: { ids in
+                // Double-click: what makes up its This year.
+                if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) { showEntries(p) }
             }
             .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), tableRows)))
         }
+    }
+
+    /// Show Entries…: its entries in a window of their own; a change there reads the book again.
+    private func showEntries(_ p: Payee) {
+        TargetEntriesWindow.open(p, year: book?.year ?? Calendar.current.component(.year, from: .now)) { Task { await load() } }
     }
 
     private func load() async {

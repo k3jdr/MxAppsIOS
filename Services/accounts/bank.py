@@ -23,6 +23,9 @@
                                                  defaultAmount, nextPaymentDate, nextPaymentAmount, logonUrl, userName,
                                                  address1, address2, city, state, zipCode, phone, notes, bankNames,
                                                  fundingSources: checking and / or card} (V033)
+    GET  /payees/<id>/entries?year=              the entries behind its yearTotal (year=all: its totalPaid), newest
+                                                 first: register, statement name, category, Spending Analysis
+                                                 category, and what an Amazon charge bought
     PUT  /payees/<id>/note                       change only its note (the register's hover text) {note}
     PUT  /payees/<id>/link                       its link (V032): {address, text, hoverText, hoverRtf, title, by}
     DELETE /payees/<id>/link                     take the link off
@@ -427,6 +430,41 @@ def expense_accounts(conn, q=None):
     return {"year": year, "expenseAccounts": accts, "payees": [nest_link(p, "link") for p in payees]}
 
 
+def payee_entries(conn, pid, q=None):
+    """The entries behind a target account's This year (yearTotal) or, with year=all, its Total paid: SPEND's checks
+    and card charges with it as the target, newest first — each with its register, the statement's name, its
+    category (expense account), its Spending Analysis category, and what an Amazon charge bought (V046)."""
+    rows = fetch(conn, "SELECT name FROM srm.payee WHERE payee_id = %s", (int(pid),))
+    if not rows:
+        raise LookupError("no target account %s" % pid)
+    raw = str((q or {}).get("year") or dt.date.today().year)
+    year = None if raw == "all" else int(raw)
+    entries = fetch(conn, """
+        WITH t AS (
+            SELECT 'bank'::text AS source, b.txn_id AS "entryId", b.txn_date AS date, a.code AS register, b.kind,
+                   b.check_no AS "checkNo", coalesce(nullif(btrim(l.name), ''), b.payee_name) AS name, b.memo,
+                   coalesce(b.expense_account_id, p.expense_account_id) AS expense_account_id, -b.amount AS amount
+              FROM srm.bank_txn b JOIN srm.bank_account a USING (bank_account_id) LEFT JOIN srm.payee p USING (payee_id)
+              LEFT JOIN srm.bank_line l USING (bank_line_id)
+             WHERE b.payee_id = %(pid)s AND b.status <> 'void'
+            UNION ALL
+            SELECT 'card', c.txn_id, c.txn_date, a.code, c.kind, NULL, coalesce(nullif(btrim(l.name), ''), c.payee_name),
+                   c.memo, c.expense_account_id, c.amount
+              FROM srm.card_txn c JOIN srm.card_account a USING (card_account_id) LEFT JOIN srm.card_line l USING (card_line_id)
+             WHERE c.payee_id = %(pid)s AND c.status <> 'void' AND c.kind <> 'payment')
+        SELECT t.source, t."entryId", t.date, t.register, t.kind, t."checkNo", t.name, t.memo, t.amount,
+               ea.name AS category, sc.name AS spending, ac.orders, ac.items_text AS bought
+          FROM t
+          LEFT JOIN srm.expense_account ea USING (expense_account_id)
+          LEFT JOIN srm.v_spending_entry se ON se.source = t.source AND se.entry_id = t."entryId"
+          LEFT JOIN srm.spending_category sc ON sc.code = se.category_code
+          LEFT JOIN srm.v_amazon_charge ac ON ac.source = t.source AND ac.entry_id = t."entryId"
+         WHERE %(year)s::int IS NULL OR extract(year FROM t.date) = %(year)s
+         ORDER BY t.date DESC, t."entryId" DESC""", {"pid": int(pid), "year": year})
+    return {"id": int(pid), "name": rows[0]["name"], "year": year, "entries": entries,
+            "total": round(sum(float(e["amount"]) for e in entries), 2)}
+
+
 def save_expense_account(conn, eid, body):
     eid = int(eid)
     name = " ".join((body.get("name") or "").split())[:80]
@@ -693,6 +731,8 @@ def route(conn, method, parts, body, q):
         return delete_expense_account(conn, parts[1], q)
     if len(parts) == 3 and parts[0] == "expense-accounts" and parts[2] == "usage" and method == "GET":
         return expense_account_usage(conn, parts[1])
+    if len(parts) == 3 and parts[0] == "payees" and parts[2] == "entries" and method == "GET":
+        return payee_entries(conn, parts[1], q)
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "note" and method == "PUT":
         return save_payee_note(conn, parts[1], body)
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "link" and method == "PUT":
