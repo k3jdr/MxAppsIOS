@@ -30,6 +30,8 @@ python3 Services/mxservices.py install-agents   # optional: start them at login 
 
 Logs: `~/Library/Logs/MxServices/<id>.log`. Python services need `numpy` and `psycopg2` (the analytics and SRM
 loader services read the security master with SRM's own connection settings — see `MxDataHUB/SRM/README.md`).
+They sign in with the user and server `MxDataHUB/SRM/config.local.json` names: `srm_app`, not `postgres` (Database
+roles in that README). `mxservices.py` sets neither.
 
 **On Windows** (`python Services\mxservices.py start`): the services run without a console window and keep running
 when the console that started them closes. Logs go to `%LOCALAPPDATA%\MxServices\Logs`, and `stop` ends a service with
