@@ -1,0 +1,25 @@
+
+=== Build (20:44:24)
+    Signing Identity:     "Apple Development: callahan.john.3@gmail.com (4A77UM62JT)"
+** BUILD SUCCEEDED **
+
+=== Install in /Applications (20:45:33)
+Signature OK
+Installed 1.0 build 1
+
+=== Restart the accounts service (20:45:35)
+accounts        stopped
+accounts        started on http://127.0.0.1:8774 (pid 18995)
+SERVICE         LANG   PORT  STATE    WHAT IT IS FOR
+srm-loader      Python 8770  running  Refresh the security master by data category (runs MxDataHUB/SRM/srm.py loaders)
+analytics       Python 8772  running  Optimization inputs (covariance, alpha) and performance attribution from the security master
+accounts        Python 8774  running  Personal accounts (MxAcctMGR My Portfolio) in the security master: security search, tax lots, holdings
+portfolio-java  Java   8766  running  Active (benchmark-relative) portfolio construction; absolute max-Sharpe
+portfolio-cpp   C++    8767  running  Passive index tracking (minimum tracking error) and portfolio risk
+market-sample   Python 8765  running  Synthetic quotes and indicators for building and testing jobspaces
+
+Start them all: python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py start
+
+=== Open (20:45:37)
+
+=== END OK

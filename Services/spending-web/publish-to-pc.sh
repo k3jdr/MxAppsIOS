@@ -39,6 +39,7 @@ FILES=(
     Services/spending-web/static/app.css
     Services/accounts/spending.py
     Services/accounts/bank.py
+    Services/accounts/loans.py
 )
 COMMIT=$(git -C "$ROOT" rev-parse --short "$REF")
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST")

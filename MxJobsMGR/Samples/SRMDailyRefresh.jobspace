@@ -1637,9 +1637,9 @@
     }
   ],
   "run" : {
-    "agents" : "run",
+    "agents" : "skip",
     "breakpointsEnabled" : true,
-    "data" : "mock",
+    "data" : "live",
     "operations" : "interactive",
     "stepDelay" : 0.3,
     "stopOnError" : true
