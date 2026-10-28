@@ -13,10 +13,16 @@
 Logs and pid files: ~/Library/Logs/MxServices/ (on Windows %LOCALAPPDATA%\\MxServices\\Logs). Every service listens
 on 127.0.0.1 only. On Windows the services run without a console window and outlive the console that started them;
 install-agents is macOS only (MxAppsRCP's MxDataHUB\\schedule starts srm-loader for its scheduled refresh).
+
+status, and start / restart of srm-loader, analytics or accounts, end with a database line: the security master as
+those services sign in to it (MxDataHUB/SRM/config.local.json, SRM_PG*, the Keychain or Credential Manager), with its
+migration version and where the password came from, or the error. A service's "started" only means it answers
+/health, which never touches the database.
 """
 
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -30,6 +36,8 @@ LOGS = (os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), 
         else os.path.expanduser("~/Library/Logs/MxServices"))
 AGENTS = os.path.expanduser("~/Library/LaunchAgents")
 PY = sys.executable
+SRM_DIR = os.path.normpath(os.environ.get("SRM_DIR") or os.path.join(HERE, "..", "MxDataHUB", "SRM"))
+SRM_SERVICES = ("srm-loader", "analytics", "accounts")     # the services that sign in to the security master
 
 # id, folder, port, start command, build steps (when the artifact is missing), artifact, language, summary
 SERVICES = [
@@ -210,11 +218,44 @@ def stop(s):
     print("%-15s stopped" % s["id"])
 
 
+def database():
+    """Prints one line on the security master as srm-loader, analytics and accounts reach it: they connect with SRM's
+    own Config (config.local.json, SRM_PG*, the Keychain or Credential Manager), read again on every connection, and
+    this environment is the one they inherit. Never prints the password, only where it came from."""
+    if SRM_DIR not in sys.path:
+        sys.path.insert(0, SRM_DIR)
+    where, source = "(SRM at %s)" % SRM_DIR, None
+    try:
+        from srmlib.common import Config
+        config = Config()
+        where = "%s@%s:%d/%s" % (config.user, config.host, config.port, config.dbname)
+        source = config.password_and_source()[1]
+        conn = config.connect()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT max(version) FROM srm_meta.schema_version")
+            applied = cur.fetchone()[0]
+        finally:
+            conn.close()
+    except Exception as e:      # psycopg2 missing, no route to host, refused, wrong password, no such role or table
+        lines = [l for l in str(e).strip().splitlines() if l.strip()] or [type(e).__name__]
+        print("%-15s %s  FAILED: %s%s" % ("database", where, lines[0], "  (password from %s)" % source if source else ""))
+        for line in lines[1:]:
+            print("%-15s %s" % ("", line.strip()))
+        return False
+    files = os.listdir(os.path.join(SRM_DIR, "migrations"))
+    latest = max([int(m.group(1)) for m in (re.match(r"V(\d+)__", f) for f in files) if m] or [0])
+    print("%-15s %s  migrations %s of %s  (password from %s)" % ("database", where, applied, latest, source))
+    return True
+
+
 def status():
     print("%-15s %-6s %-5s %-8s %s" % ("SERVICE", "LANG", "PORT", "STATE", "WHAT IT IS FOR"))
     for s in SERVICES:
         up = get("http://127.0.0.1:%d/health" % s["port"])
         print("%-15s %-6s %-5d %-8s %s" % (s["id"], s["language"], s["port"], "running" if up else "stopped", s["summary"]))
+    print()
+    database()
     print("\nStart them all: python3 %s start" % __file__.replace(os.path.expanduser("~"), "~"))
 
 
@@ -273,6 +314,8 @@ def main():
         status()
     elif cmd == "start":
         ok = all([start(s) for s in selected(args)])
+        if any(s["id"] in SRM_SERVICES for s in selected(args)):
+            database()
         sys.exit(0 if ok else 1)
     elif cmd == "stop":
         for s in selected(args):
@@ -281,6 +324,8 @@ def main():
         for s in selected(args):
             stop(s)
             start(s)
+        if any(s["id"] in SRM_SERVICES for s in selected(args)):
+            database()
     elif cmd == "logs":
         s = service(args[0]) if args else sys.exit("logs <id>")
         try:

@@ -23,7 +23,7 @@ and **Data Refresh ▸ Automate in MxJobsMGR…** open the matching MxJobsMGR wo
 
 ```bash
 python3 Services/mxservices.py start      # builds Java / C++ the first time, starts all five
-python3 Services/mxservices.py status     # which run, on which port, what each is for
+python3 Services/mxservices.py status     # which run, on which port, what each is for, and the database
 python3 Services/mxservices.py stop
 python3 Services/mxservices.py install-agents   # optional: start them at login (launchd)
 ```
