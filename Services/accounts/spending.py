@@ -102,6 +102,15 @@
                                                    place of what it had; answers with the entries
     POST   /spending/amazon/unlink/<source>/<id>   take the orders off a charge for good (the export doesn't match it
                                                    again); answers with the entry
+    POST   /spending/apple/attach                  MxAcctMGR's Apple Purchase Lookup (V056): {invoices: [{orderId, date,
+                                                   total, payment, items: [{name, detail, amount, date}], raw}],
+                                                   charges: [{source, entryId}], by} — keeps each bill Apple's purchase
+                                                   history gave and matches every Apple charge no bill is matched to yet
+                                                   (the bill of its amount from a week before it to 4 days after, else
+                                                   bills that add up to it); answers with how many, the Apple charges
+                                                   in those dates still without a bill, and the charges' entries
+    POST   /spending/apple/unlink/<source>/<id>    take the bills off a charge for good (it isn't matched again);
+                                                   answers with the entry
     GET    /spending/feedback?author=&status=      notes on the page from its read-only web page (V039), newest first
     POST   /spending/feedback                      add one {author, kind, tab, section, category, entrySource, entryId,
                                                    suggestion, message, context}
@@ -133,6 +142,7 @@ as; the setup lists them as {code, title, help, effect, sortOrder}.
 import base64
 import datetime as dt
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -560,14 +570,18 @@ ENTRY_SQL = """
     SELECT source, entry_id AS "entryId", txn_date AS date, register, payee_id AS "payeeId", payee, description,
            expense_account_id AS "expenseAccountId", expense_account AS "expenseAccount", amount,
            category_code AS category, category_from AS "categoryFrom", driver, driver_from AS "driverFrom",
-           member_id AS "memberId", event, notes, tagged, rule_pattern AS "rulePattern"
+           member_id AS "memberId", event, notes, tagged, rule_pattern AS "rulePattern",
+           statement_name AS "statementName"
       FROM srm.v_spending_entry"""
-# The same, with what each matched Amazon charge or credit bought (V046).
-AMAZON_ENTRY_SQL = ENTRY_SQL.replace("""
-      FROM srm.v_spending_entry""", """, amazon_orders AS "amazonOrders", amazon_items AS "amazonItems",
-           amazon_matched_by AS "amazonMatchedBy"
-      FROM (SELECT e.*, a.orders AS amazon_orders, a.items AS amazon_items, a.matched_by AS amazon_matched_by
-              FROM srm.v_spending_entry e LEFT JOIN srm.v_amazon_charge a USING (source, entry_id)) e""")
+# What each matched Amazon (V046) or Apple (V056) charge or credit bought: (its fields, the view's columns, the join).
+BOUGHT_SQL = {
+    "srm.v_amazon_charge": ('amazon_orders AS "amazonOrders", amazon_items AS "amazonItems", amazon_matched_by AS "amazonMatchedBy"',
+                            "a.orders AS amazon_orders, a.items AS amazon_items, a.matched_by AS amazon_matched_by",
+                            "LEFT JOIN srm.v_amazon_charge a USING (source, entry_id)"),
+    "srm.v_apple_charge": ('apple_orders AS "appleOrders", apple_items AS "appleItems"',
+                           "ap.orders AS apple_orders, ap.items AS apple_items",
+                           "LEFT JOIN srm.v_apple_charge ap USING (source, entry_id)"),
+}
 
 
 def _readable(conn, name):
@@ -577,9 +591,15 @@ def _readable(conn, name):
 
 
 def _entry_sql(conn):
-    """The entry query: with what Amazon charges bought where the security master has the Amazon orders (V046) and
-    this role may read them (a REVOKE keeps them off the family page)."""
-    return AMAZON_ENTRY_SQL if _readable(conn, "srm.v_amazon_charge") else ENTRY_SQL
+    """The entry query: with what Amazon and Apple charges bought where the security master has their orders and bills
+    (V046, V056) and this role may read them (a REVOKE keeps them off the family page)."""
+    parts = [v for k, v in BOUGHT_SQL.items() if _readable(conn, k)]
+    if not parts:
+        return ENTRY_SQL
+    return ENTRY_SQL.replace("""
+      FROM srm.v_spending_entry""", ", " + ", ".join(p[0] for p in parts) + """
+      FROM (SELECT e.*, """ + ", ".join(p[1] for p in parts) + """
+              FROM srm.v_spending_entry e """ + " ".join(p[2] for p in parts) + ") e")
 
 
 def _year_back(d):
@@ -1143,6 +1163,123 @@ def _page_items(conn, oid, o, items):
     fetch(conn, """UPDATE srm.amazon_order SET items = %s, payment = coalesce(%s, payment),
                           payment_last4 = coalesce(%s, payment_last4), updated_at = now() WHERE order_id = %s""",
           (len(items), payment, payment[-4:] if payment and payment[-4:].isdigit() else None, oid))
+
+
+# ---------------------------------------------------------------------------------------------------------------- apple
+# Apple's charges (V056): "APPLE.COM/BILL 866-712-7753 CA" — the App Store, subscriptions, iCloud+, Apple TV; not
+# APPLE.COM/US, the Apple Store's hardware orders.
+APPLE_NAME = r"^\s*(apple\.com/bill|itunes\.com|apple services)"
+APPLE_CHARGES = """
+    SELECT 'card' AS source, c.txn_id AS entry_id, c.txn_date, c.amount
+      FROM srm.card_txn c LEFT JOIN srm.card_line l ON l.card_line_id = c.card_line_id
+     WHERE c.status <> 'void' AND c.kind <> 'payment' AND coalesce(nullif(btrim(l.name), ''), c.payee_name) ~* %(apple)s
+    UNION ALL
+    SELECT 'bank', b.txn_id, b.txn_date, -b.amount
+      FROM srm.bank_txn b LEFT JOIN srm.bank_line l ON l.bank_line_id = b.bank_line_id
+     WHERE b.status <> 'void' AND coalesce(nullif(btrim(l.name), ''), b.payee_name, b.memo) ~* %(apple)s"""
+# The match row for the charge c (or the 'unlinked' one that keeps it from being matched).
+APPLE_PAID_BY = "((c.source = 'card' AND m.card_txn_id = c.entry_id) OR (c.source = 'bank' AND m.bank_txn_id = c.entry_id))"
+# A charge posts up to a week after its bill, or up to 4 days before it (Apple may date a renewal's bill days after it
+# charged the card); Apple bills purchases made together at once.
+APPLE_DAYS = (-4, 7)
+APPLE_MOST_BILLS = 5
+
+
+def attach_apple(conn, body):
+    """The Apple Purchase Lookup's bills (Apple's purchase history): each kept (a bill read again replaces its items),
+    then every Apple charge no bill is matched to yet gets the bill of its amount dated from a week before it to 4 days after — the closest —
+    else the bills that add up to it."""
+    by = _by(body) or "MxAcctMGR"
+    kept = 0
+    for v in body.get("invoices") or []:
+        try:
+            day = dt.date.fromisoformat(str(v.get("date") or "")[:10])
+        except ValueError:
+            continue
+        items = [i for i in (v.get("items") or []) if str(i.get("name") or "").strip()]
+        total = round(float(v["total"]), 2) if v.get("total") is not None else None
+        oid = str(v.get("orderId") or "").strip()[:40]
+        if not oid:     # Apple gave no order ID: one from what it is
+            oid = "X" + hashlib.sha1(json.dumps([str(day), total, [i.get("name") for i in items]]).encode()).hexdigest()[:12].upper()
+        fetch(conn, """INSERT INTO srm.apple_invoice (order_id, invoice_date, total, payment, items, raw, read_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (order_id) DO UPDATE SET invoice_date = excluded.invoice_date, total = excluded.total,
+                              payment = coalesce(excluded.payment, srm.apple_invoice.payment), items = excluded.items,
+                              raw = excluded.raw, read_by = excluded.read_by, read_at = now()""",
+              (oid, day, total, str(v.get("payment") or "").strip()[:120] or None, len(items),
+               json.dumps(v.get("raw"), default=str) if v.get("raw") is not None else None, by))
+        fetch(conn, "DELETE FROM srm.apple_item WHERE order_id = %s", (oid,))
+        for i in items:
+            try:
+                when = dt.date.fromisoformat(str(i.get("date") or "")[:10])
+            except ValueError:
+                when = None
+            fetch(conn, "INSERT INTO srm.apple_item (order_id, name, detail, amount, item_date) VALUES (%s, %s, %s, %s, %s)",
+                  (oid, str(i["name"]).strip()[:300], str(i.get("detail") or "").strip()[:300] or None,
+                   round(float(i["amount"]), 2) if i.get("amount") is not None else None, when))
+        kept += 1
+    matched = _match_apple(conn)
+    conn.commit()
+    span = fetch(conn, "SELECT min(invoice_date) AS first, max(invoice_date) AS last, count(*) AS n FROM srm.apple_invoice")[0]
+    left = []
+    if span["n"]:
+        left = fetch(conn, """SELECT c.source, c.entry_id AS "entryId", c.txn_date AS date, c.amount FROM (""" + APPLE_CHARGES + """) c
+                               WHERE c.txn_date BETWEEN %(first)s AND %(last)s::date + 7
+                                 AND NOT EXISTS (SELECT FROM srm.apple_match m WHERE m.how <> 'unlinked' AND """ + APPLE_PAID_BY + """)
+                               ORDER BY c.txn_date DESC""", {"apple": APPLE_NAME, "first": span["first"], "last": span["last"]})
+    entries = [e for e in (_entry(conn, c.get("source"), int(c.get("entryId") or 0)) for c in body.get("charges") or []) if e]
+    return {"invoices": kept, "matched": matched, "kept": span["n"], "first": span["first"], "last": span["last"],
+            "unmatched": left, "entries": entries}
+
+
+def _match_apple(conn):
+    """Matches each Apple charge and credit with no bill yet (oldest first) to the bill of its amount dated from a
+    week before it to 4 days after (the closest), else to 2–5 such bills that add up to it; answers how many charges."""
+    charges = fetch(conn, "SELECT * FROM (" + APPLE_CHARGES + """) c
+                            WHERE NOT EXISTS (SELECT FROM srm.apple_match m WHERE """ + APPLE_PAID_BY + """)
+                            ORDER BY c.txn_date, c.entry_id""", {"apple": APPLE_NAME})
+    free = fetch(conn, """SELECT order_id, invoice_date, total FROM srm.apple_invoice v
+                           WHERE total IS NOT NULL
+                             AND NOT EXISTS (SELECT FROM srm.apple_match m WHERE m.order_id = v.order_id AND m.how <> 'unlinked')
+                           ORDER BY invoice_date""")
+    n = 0
+    for c in charges:
+        cents = int(round(float(c["amount"]) * 100))
+        near = [v for v in free if APPLE_DAYS[0] <= (c["txn_date"] - v["invoice_date"]).days <= APPLE_DAYS[1]]
+        days = lambda v: abs((c["txn_date"] - v["invoice_date"]).days)
+        same = sorted((v for v in near if int(round(float(v["total"]) * 100)) == cents), key=days)
+        pick = same[:1]
+        if not pick and len(near) > 1:
+            for k in range(2, min(APPLE_MOST_BILLS, len(near)) + 1):
+                fits = [g for g in itertools.combinations(near, k) if sum(int(round(float(v["total"]) * 100)) for v in g) == cents]
+                if fits:
+                    pick = list(min(fits, key=lambda g: max(days(v) for v in g)))
+                    break
+        if not pick:
+            continue
+        column = "card_txn_id" if c["source"] == "card" else "bank_txn_id"
+        for v in pick:
+            fetch(conn, """INSERT INTO srm.apple_match (%s, order_id, how, days, matched_by) VALUES (%%s, %%s, %%s, %%s, %%s)""" % column,
+                  (c["entry_id"], v["order_id"], "invoice" if len(pick) == 1 else "invoices",
+                   (c["txn_date"] - v["invoice_date"]).days, "apple-lookup"))
+            free.remove(v)
+        n += 1
+    return n
+
+
+def unlink_apple(conn, source, entry_id, body):
+    """Takes the bills off a charge, for good: an 'unlinked' row keeps the lookup from matching it again."""
+    if source not in ("card", "bank"):
+        raise ValueError("source must be card or bank")
+    entry_id = int(entry_id)
+    column = "card_txn_id" if source == "card" else "bank_txn_id"
+    had = fetch(conn, "SELECT order_id FROM srm.apple_match WHERE %s = %%s AND how <> 'unlinked' LIMIT 1" % column, (entry_id,))
+    if had:
+        fetch(conn, "DELETE FROM srm.apple_match WHERE %s = %%s" % column, (entry_id,))
+        fetch(conn, """INSERT INTO srm.apple_match (%s, order_id, how, matched_by) VALUES (%%s, %%s, 'unlinked', %%s)"""
+              % column, (entry_id, had[0]["order_id"], _by(body) or "MxAcctMGR"))
+    conn.commit()
+    return {"entry": _entry(conn, source, entry_id)}
 
 
 def unlink_amazon(conn, source, entry_id, body):
@@ -2063,6 +2200,10 @@ def route(conn, method, parts, body, q):
         return amazon_known(conn, q)
     if parts == ["spending", "amazon", "attach"] and method == "POST":
         return attach_amazon(conn, body)
+    if parts == ["spending", "apple", "attach"] and method == "POST":
+        return attach_apple(conn, body)
+    if len(parts) == 5 and parts[1:3] == ["apple", "unlink"] and method == "POST":
+        return unlink_apple(conn, parts[3], parts[4], body)
     if len(parts) == 5 and parts[1:3] == ["amazon", "unlink"] and method == "POST":
         return unlink_amazon(conn, parts[3], parts[4], body)
     if parts == ["spending", "feedback"]:

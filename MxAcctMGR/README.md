@@ -686,6 +686,22 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   cookies from the window. Amazon's Conditions of Use don't allow robots: it runs only when you ask, at your own risk,
   and may stop working when Amazon changes its pages (its scripts read the pages' words, not their layout, to last
   longer).
+* **Look Up Apple Purchases…** (Entries or Target Accounts ▸ Show Entries…, right-click selected APPLE.COM/BILL
+  charges; `AppleLookup.swift`, V056): what they bought — the App Store, in-app purchases, subscriptions, iCloud+,
+  Apple TV — from your Apple Account's purchase history (reportaproblem.apple.com), since Apple e-mails a receipt for
+  some purchases, not every renewal. It opens its own window with Apple's page in it (WebKit); you sign in there
+  yourself — your password, and the code Apple shows on your Mac or iPhone — and MxAcctMGR never sees, types or keeps
+  them (the lookup waits up to 15 minutes). While the page shows your purchase history, a script in it keeps what
+  Apple's own page receives from reportaproblem.apple.com about your purchases (never Apple's sign-in); the lookup
+  scrolls the history back past the oldest selected charge (or presses its Load More), one step every 2 seconds, at
+  most 80, and sends every bill — its order ID, date, total, payment and items with their details and amounts — to
+  `POST /spending/apple/attach`, which matches *every* Apple charge it can, not just the selected ones: the bill of its
+  amount dated from a week before it to 4 days after, the closest, else 2–5 such bills that add up to it. Bought then shows
+  the items (Edit Link… reads the history again; Remove Link, or *Take Apple Purchases Off*, takes the bills off for
+  good). *Steps* says what the page gave and lists the Apple charges in the bills' dates still without one — a family
+  member's purchase with Family Sharing is in their history, not yours. APPLE.COM/US (the Apple Store's hardware) isn't
+  looked up. *Sign Out of Apple* clears Apple's cookies from the window. It runs only when you ask, and may stop
+  working when Apple changes its page.
 * **Allocation.** *Spending Allocation by Target Account*: every target account with spending in either year, most
   spent first (*Every target account* shows the rest; *Only without a category or driver* the ones still to do; the
   search finds names and patterns), each with both years' spending and its **role** (Spending, Transfer, Income),

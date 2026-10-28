@@ -318,6 +318,13 @@ struct TargetEntriesView: View {
         }
         Button(picked.count > 1 ? "Change Expense Account of \(picked.count) Entries…" : "Change Expense Account…") { refiling = picked }
             .disabled(!ready || !picked.contains { $0.source != "ledger" })
+        if picked.contains(where: \.isAppleCharge) {
+            Divider()
+            Button(picked.count == 1 ? "Look Up Apple Purchase…" : "Look Up Apple Purchases…") {
+                AppleLookupWindow.open(picked) { _ in Task { await refresh() } }
+            }
+            .help("Find what these Apple charges bought in your Apple Account's purchase history, in a window where you sign in yourself")
+        }
         Divider()
         Button("Allocate \(payee.name)…") { allocating = RuleTarget(payeeId: payee.id, name: payee.name) }
             .help("Its role, and the category, driver and family member its spending goes to unless an entry's own tag says otherwise")

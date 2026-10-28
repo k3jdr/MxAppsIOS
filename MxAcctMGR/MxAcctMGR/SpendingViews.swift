@@ -564,7 +564,8 @@ private struct SpendingEntriesTab: View {
             (period == "both" || (period == "current") == (e.date >= data.start && e.date <= data.end))
                 && (!onlyUnassigned || e.driver == nil)
                 && ((lockedCategory ?? category).isEmpty || (e.category ?? SpendingEngine.unassigned) == (lockedCategory ?? category))
-                && (q.isEmpty || [e.payee, e.description, e.expenseAccount, e.event, e.register, e.amazonItems?.map(\.name).joined(separator: "\n")]
+                && (q.isEmpty || [e.payee, e.description, e.expenseAccount, e.event, e.register, e.amazonItems?.map(\.name).joined(separator: "\n"),
+                                   e.appleItems?.map(\.label).joined(separator: "\n")]
                     .contains { ($0 ?? "").lowercased().contains(q) })
         }
         .sorted { $0.date > $1.date }
@@ -574,7 +575,7 @@ private struct SpendingEntriesTab: View {
         TableText(
             titles: ["Date", "From", "Payee", "Description", "Bought", "Expense account", "Amount", "Category", "Driver", "Family member", "Event"],
             cells: { e in [e.date, e.register ?? e.sourceTitle, e.payee ?? "", e.description ?? "",
-                           (e.amazonItems ?? []).map(\.label).joined(separator: "; "), e.expenseAccount ?? "",
+                           ((e.amazonItems ?? []).map(\.label) + (e.appleItems ?? []).map(\.label)).joined(separator: "; "), e.expenseAccount ?? "",
                            String(format: "%.2f", e.amount), e.category ?? "", setup.driverTitle(e.driver), e.memberId.map(String.init) ?? "", e.event ?? ""] })
     }
 
@@ -669,6 +670,13 @@ private struct SpendingEntriesTab: View {
                 }
                 if picked.contains(where: { $0.amazonItems != nil }) {
                     Button("Take Amazon Orders Off") { Task { for e in picked where e.amazonItems != nil { await unlink(e) } } }
+                }
+                if picked.contains(where: \.isAppleCharge) {
+                    Button(picked.count == 1 ? "Look Up Apple Purchase…" : "Look Up Apple Purchases…") { lookUpApple(picked) }
+                        .help("Find what these Apple charges bought in your Apple Account's purchase history, in a window where you sign in yourself")
+                }
+                if picked.contains(where: { $0.appleItems != nil }) {
+                    Button("Take Apple Purchases Off") { Task { for e in picked where e.appleItems != nil { await unlinkApple(e) } } }
                 }
                 if picked.count == 1, let e = picked.first {
                     Divider()
@@ -813,6 +821,13 @@ private struct SpendingEntriesTab: View {
                                            title: "Amazon order \(e.amazonOrderIds.joined(separator: ", "))"),
                         words: bought, testID: "bought:\(e.id)",
                         edit: { lookUp([e]) }, remove: { Task { await unlink(e) } })
+        } else if let bought = e.bought, e.appleItems != nil {
+            // An Apple charge's bills: Apple's purchase history (you sign in there); Edit Link… reads it again.
+            LinkedWords(link: SecurityLink(address: AppleLookup.home.absoluteString, text: bought,
+                                           tip: LinkRichText.data(NSAttributedString(string: e.boughtDetail ?? "")),
+                                           title: "Apple order \(e.appleOrderIds.joined(separator: ", "))"),
+                        words: bought, testID: "bought:\(e.id)",
+                        edit: { lookUpApple([e]) }, remove: { Task { await unlinkApple(e) } })
         } else {
             Text("")
         }
@@ -830,6 +845,15 @@ private struct SpendingEntriesTab: View {
 
     private func unlink(_ e: SpendingEntry) async {
         do { if let updated = try await SpendingClient.unlinkAmazon(e) { changed(updated) } } catch { NSSound.beep() }
+    }
+
+    /// The Apple Purchase Lookup for these charges, in its own window; what it matches comes back to the table.
+    private func lookUpApple(_ picked: [SpendingEntry]) {
+        AppleLookupWindow.open(picked) { found in for e in found { changed(e) } }
+    }
+
+    private func unlinkApple(_ e: SpendingEntry) async {
+        do { if let updated = try await SpendingClient.unlinkApple(e) { changed(updated) } } catch { NSSound.beep() }
     }
 }
 

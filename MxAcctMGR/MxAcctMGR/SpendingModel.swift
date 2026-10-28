@@ -151,15 +151,29 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     /// amazon-orders (the export, by amount and date), amazon-email (Amazon's order e-mails, by amount and date, V055)
     /// or amazon-lookup (Amazon's own Transactions list).
     var amazonMatchedBy: String?
+    /// An Apple charge or credit matched to its bills (V056): the order IDs and what was bought.
+    var appleOrders: String?
+    var appleItems: [AppleItem]?
+    /// The card's or bank's own name for it: "APPLE.COM/BILL 866-712-7753 CA".
+    var statementName: String?
     var id: String { "\(source)-\(entryId)" }
 
-    /// What an Amazon charge bought, in a line: "Kids' Swim Goggles, 3 Pack and 1 more".
+    /// What an Amazon or Apple charge bought, in a line: "Kids' Swim Goggles, 3 Pack and 1 more".
     var bought: String? {
+        if let items = appleItems, let first = items.first, amazonItems == nil {
+            return items.count == 1 ? first.label : "\(first.label) and \(items.count - 1) more"
+        }
         guard let items = amazonItems, let first = items.first else { return nil }
         return items.count == 1 ? first.label : "\(first.label) and \(items.count - 1) more"
     }
     /// Every item with its cost, and the orders: hover text.
     var boughtDetail: String? {
+        if let items = appleItems, !items.isEmpty, amazonItems == nil {
+            let lines = items.map { i in i.amount.map { "\(i.label) — \(money2($0))" } ?? i.label }
+            return (amount < 0 ? "Refunded:\n" : "Bought:\n") + lines.joined(separator: "\n")
+                + "\nApple order\(appleOrderIds.count == 1 ? "" : "s") " + appleOrderIds.joined(separator: ", ")
+                + " — from your Apple Account's purchase history"
+        }
         guard let items = amazonItems, !items.isEmpty else { return nil }
         let lines = items.map { i in i.amount.map { "\(i.label) — \(money2($0))" } ?? i.label }
         let orders = Array(Set(items.map(\.orderId))).sorted()
@@ -170,6 +184,15 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
                : amazonMatchedBy == "amazon-orders" ? " — matched by amount and date" : "")
     }
     var amazonOrderIds: [String] { Array(Set((amazonItems ?? []).map(\.orderId))).sorted() }
+    var appleOrderIds: [String] { Array(Set((appleItems ?? []).map(\.orderId))).sorted() }
+
+    /// An Apple charge or credit (APPLE.COM/BILL): the App Store, a subscription, iCloud+, Apple TV — what the Apple
+    /// Purchase Lookup looks up; not APPLE.COM/US, the Apple Store's hardware.
+    var isAppleCharge: Bool {
+        guard source != "ledger" else { return false }
+        let text = [statementName, payee, description].compactMap { $0 }.joined(separator: " ").lowercased()
+        return ["apple.com/bill", "itunes.com", "apple services"].contains { text.contains($0) }
+    }
 
     /// A Prime Video charge (a rental, a purchase, a channel), a Kindle book or another Amazon digital charge: its order
     /// (D01-…) is on Amazon's Transactions list and Digital Orders, never in the order export.
@@ -213,6 +236,18 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
         let t = text.lowercased()
         return !t.isEmpty && [payee, description].contains { ($0 ?? "").lowercased().contains(t) }
     }
+}
+
+/// Something an Apple bill bought (V056): an app, an in-app purchase, a subscription, a film.
+struct AppleItem: Decodable, Hashable {
+    var name: String
+    /// Monthly, the app an in-app purchase was in, the device.
+    var detail: String?
+    var amount: Double?
+    var orderId: String
+    var orderedAt: String?
+    /// "Apple Music (Individual, Monthly)"
+    var label: String { detail.map { $0.isEmpty ? name : "\(name) (\($0))" } ?? name }
 }
 
 /// Something bought in the Amazon order a card charge or checking debit paid, or a credit refunded (V046).
@@ -1067,6 +1102,27 @@ nonisolated enum SpendingClient {
     /// Takes the Amazon orders off a charge for good (the export doesn't match it again).
     static func unlinkAmazon(_ e: SpendingEntry) async throws -> SpendingEntry? {
         try await AccountsClient.request("POST", "/spending/amazon/unlink/\(e.source)/\(e.entryId)", body: signed([:]), as: TagAnswer.self).entry
+    }
+    /// What POST /spending/apple/attach answers: how many bills were kept and charges matched, the Apple charges in
+    /// the bills' dates still without one, and the charges asked about.
+    struct AppleAttached: Decodable {
+        struct Left: Decodable, Hashable { var source: String; var entryId: Int; var date: String; var amount: Double }
+        var invoices: Int
+        var matched: Int
+        var kept: Int
+        var first: String?
+        var last: String?
+        var unmatched: [Left]
+        var entries: [SpendingEntry]
+    }
+    /// The Apple Purchase Lookup's bills (V056); the service matches every Apple charge it can and answers with these charges.
+    static func attachApple(invoices: [[String: Any]], charges: [SpendingEntry]) async throws -> AppleAttached {
+        try await AccountsClient.request("POST", "/spending/apple/attach",
+                                         body: signed(["invoices": invoices, "charges": charges.map { ["source": $0.source, "entryId": $0.entryId] }]),
+                                         as: AppleAttached.self)
+    }
+    static func unlinkApple(_ e: SpendingEntry) async throws -> SpendingEntry? {
+        try await AccountsClient.request("POST", "/spending/apple/unlink/\(e.source)/\(e.entryId)", body: signed([:]), as: TagAnswer.self).entry
     }
     private struct Notes: Decodable { var feedback: [SpendingFeedback] }
     static func feedback() async throws -> [SpendingFeedback] {

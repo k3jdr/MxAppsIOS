@@ -25,7 +25,7 @@
                                                  fundingSources: checking and / or card} (V033)
     GET  /payees/<id>/entries?year=              the entries behind its yearTotal (year=all: its totalPaid), newest
                                                  first: register, statement name, category, Spending Analysis
-                                                 category, and what an Amazon charge bought
+                                                 category, and what an Amazon or Apple charge bought
     PUT  /payees/<id>/note                       change only its note (the register's hover text) {note}
     PUT  /payees/<id>/link                       its link (V032): {address, text, hoverText, hoverRtf, title, by}
     DELETE /payees/<id>/link                     take the link off
@@ -433,7 +433,7 @@ def expense_accounts(conn, q=None):
 def payee_entries(conn, pid, q=None):
     """The entries behind a target account's This year (yearTotal) or, with year=all, its Total paid: SPEND's checks
     and card charges with it as the target, newest first — each with its register, the statement's name, its
-    category (expense account), its Spending Analysis category, and what an Amazon charge bought (V046)."""
+    category (expense account), its Spending Analysis category, and what an Amazon or Apple charge bought (V046, V056)."""
     rows = fetch(conn, "SELECT name FROM srm.payee WHERE payee_id = %s", (int(pid),))
     if not rows:
         raise LookupError("no target account %s" % pid)
@@ -453,12 +453,14 @@ def payee_entries(conn, pid, q=None):
               FROM srm.card_txn c JOIN srm.card_account a USING (card_account_id) LEFT JOIN srm.card_line l USING (card_line_id)
              WHERE c.payee_id = %(pid)s AND c.status <> 'void' AND c.kind <> 'payment')
         SELECT t.source, t."entryId", t.date, t.register, t.kind, t."checkNo", t.name, t.memo, t.amount,
-               ea.name AS category, sc.name AS spending, ac.orders, ac.items_text AS bought
+               ea.name AS category, sc.name AS spending, coalesce(ac.orders, ap.orders) AS orders,
+               coalesce(ac.items_text, ap.items_text) AS bought
           FROM t
           LEFT JOIN srm.expense_account ea USING (expense_account_id)
           LEFT JOIN srm.v_spending_entry se ON se.source = t.source AND se.entry_id = t."entryId"
           LEFT JOIN srm.spending_category sc ON sc.code = se.category_code
           LEFT JOIN srm.v_amazon_charge ac ON ac.source = t.source AND ac.entry_id = t."entryId"
+          LEFT JOIN srm.v_apple_charge ap ON ap.source = t.source AND ap.entry_id = t."entryId"
          WHERE %(year)s::int IS NULL OR extract(year FROM t.date) = %(year)s
          ORDER BY t.date DESC, t."entryId" DESC""", {"pid": int(pid), "year": year})
     return {"id": int(pid), "name": rows[0]["name"], "year": year, "entries": entries,
