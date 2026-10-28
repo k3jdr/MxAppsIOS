@@ -44,6 +44,18 @@ security add-generic-password -U -s SRM-api -a fmp -w        # prompts for the k
 security add-generic-password -U -s SRM-api -a openfigi -w
 ```
 
+**On Windows** (the PC hosting the database) the Keychain's place is the **Credential Manager**: a generic credential
+named `service:account`. `cmdkey` prompts for the value:
+
+```bat
+cmdkey /generic:SRM-postgres:postgres@192.168.0.223/srm /user:postgres /pass
+cmdkey /generic:SRM-api:fmp /user:fmp /pass
+```
+
+Downloads are cached in `SRM_CACHE_DIR`, else `~/Library/Caches/com.k3jdr.MxDataHUB.loaders`
+(`%LOCALAPPDATA%\MxDataHUB\loaders-cache` on Windows). There, MxAppsRCP's `MxDataHUB\schedule\srm-refresh.cmd` runs
+the Data Refresh on a schedule (Task Scheduler).
+
 ## Schema
 
 | Area | Tables / functions |

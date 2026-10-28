@@ -612,9 +612,11 @@ def run_loader(loader, q, dry=False, run=None):
     started = time.time()
     timeout = int(q.get("timeout", 3000))
     tail = collections.deque(maxlen=25)
-    # Unbuffered, with stderr in line, so the log shows each line when it happens and in order.
+    # Unbuffered, with stderr in line, so the log shows each line when it happens and in order. UTF-8 both ways:
+    # Windows' pipes would otherwise use the ANSI code page, which can't print the loaders' arrows and dashes.
     proc = subprocess.Popen(command, cwd=Handler.srm.folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, bufsize=1, env=dict(os.environ, PYTHONUNBUFFERED="1"))
+                            text=True, encoding="utf-8", errors="replace", bufsize=1,
+                            env=dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8"))
     killer = threading.Timer(timeout, proc.kill)
     killer.start()
     try:

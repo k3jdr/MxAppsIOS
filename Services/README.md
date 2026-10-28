@@ -31,6 +31,13 @@ python3 Services/mxservices.py install-agents   # optional: start them at login 
 Logs: `~/Library/Logs/MxServices/<id>.log`. Python services need `numpy` and `psycopg2` (the analytics and SRM
 loader services read the security master with SRM's own connection settings — see `MxDataHUB/SRM/README.md`).
 
+**On Windows** (`python Services\mxservices.py start`): the services run without a console window and keep running
+when the console that started them closes. Logs go to `%LOCALAPPDATA%\MxServices\Logs`, and `stop` ends a service with
+the loads it started. Secrets come from the Credential Manager instead of the Keychain (`MxDataHUB/SRM/README.md`).
+`install-agents` is macOS only. MxAppsRCP's `MxDataHUB\schedule\srm-refresh.cmd install` schedules the data refresh
+instead, and starts srm-loader when it isn't running. The Java service needs `mvn` and a JDK on the PATH. The C++
+service needs `make` and a compiler, so it is usually left out on Windows.
+
 **"No route to host" for the database (192.168.0.223) while MxDataHUB connects fine**: macOS's Local Network privacy.
 A service gets local-network access through the app it was started from; started in a terminal app that doesn't have
 the permission, every connection to a 192.168.x.x address fails with *No route to host* (seen 2026-10-22, after a

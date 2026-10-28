@@ -10,19 +10,24 @@
     python3 Services/mxservices.py install-agents     start them at login (writes ~/Library/LaunchAgents/com.k3jdr.mxservices.*.plist)
     python3 Services/mxservices.py uninstall-agents
 
-Logs and pid files: ~/Library/Logs/MxServices/. Every service listens on 127.0.0.1 only.
+Logs and pid files: ~/Library/Logs/MxServices/ (on Windows %LOCALAPPDATA%\\MxServices\\Logs). Every service listens
+on 127.0.0.1 only. On Windows the services run without a console window and outlive the console that started them;
+install-agents is macOS only (MxAppsRCP's MxDataHUB\\schedule starts srm-loader for its scheduled refresh).
 """
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import time
 import urllib.request
 
+WINDOWS = sys.platform == "win32"
 HERE = os.path.dirname(os.path.abspath(__file__))
-LOGS = os.path.expanduser("~/Library/Logs/MxServices")
+LOGS = (os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "MxServices", "Logs") if WINDOWS
+        else os.path.expanduser("~/Library/Logs/MxServices"))
 AGENTS = os.path.expanduser("~/Library/LaunchAgents")
 PY = sys.executable
 
@@ -80,14 +85,44 @@ def log_file(s):
 def running_pid(s):
     try:
         pid = int(open(pid_file(s)).read().strip())
-        os.kill(pid, 0)
-        return pid
     except (OSError, ValueError):
         return None
+    return pid if alive(pid) else None
+
+
+def alive(pid):
+    if not WINDOWS:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    # Not os.kill(pid, 0) on Windows: signal 0 is CTRL_C_EVENT there.
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(0x1000, False, pid)        # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        code = ctypes.c_ulong()
+        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259    # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def port_pid(port):
-    out = subprocess.run(["lsof", "-nP", "-iTCP:%d" % port, "-sTCP:LISTEN", "-t"], capture_output=True, text=True).stdout
+    """The process listening on 127.0.0.1:port (lsof; netstat on Windows)."""
+    try:
+        if WINDOWS:
+            out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True).stdout
+            for line in out.splitlines():
+                parts = line.split()
+                if len(parts) == 5 and parts[3] == "LISTENING" and parts[1].endswith(":%d" % port):
+                    return int(parts[4])
+            return None
+        out = subprocess.run(["lsof", "-nP", "-iTCP:%d" % port, "-sTCP:LISTEN", "-t"], capture_output=True, text=True).stdout
+    except OSError:
+        return None
     return int(out.split()[0]) if out.strip() else None
 
 
@@ -97,7 +132,11 @@ def build(s):
         return True
     for step in s.get("build", []):
         print("  building %s: %s" % (s["id"], " ".join(step)))
-        if subprocess.run(step, cwd=folder).returncode != 0:
+        tool = shutil.which(step[0])     # finds mvn.cmd on Windows, which CreateProcess alone would not
+        if tool is None:
+            print("  build of %s needs %s, which is not on the PATH" % (s["id"], step[0]))
+            return False
+        if subprocess.run([tool] + step[1:], cwd=folder).returncode != 0:
             print("  build of %s failed" % s["id"])
             return False
     return True
@@ -110,9 +149,31 @@ def start(s):
     if not build(s):
         return False
     os.makedirs(LOGS, exist_ok=True)
+    folder = os.path.join(HERE, s["dir"])
+    command = s["start"] + ["--port", str(s["port"])]
+    if os.path.dirname(command[0]):
+        command[0] = os.path.join(folder, command[0])           # ./build/portfolio-cpp
+    else:
+        command[0] = shutil.which(command[0]) or command[0]     # java; on Windows also a .cmd or .exe
+    # UTF-8 output whatever the system's code page (Windows writes logs in its ANSI code page otherwise).
+    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     with open(log_file(s), "ab") as log:
-        proc = subprocess.Popen(s["start"] + ["--port", str(s["port"])], cwd=os.path.join(HERE, s["dir"]),
-                                stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+        options = dict(cwd=folder, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env)
+        try:
+            if WINDOWS:
+                # Its own hidden console (the loaders it starts share it, so no window opens), its own process
+                # group (Ctrl+C here doesn't stop it), and out of this console's job when that is allowed.
+                flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+                try:
+                    proc = subprocess.Popen(command, creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB,
+                                            **options)
+                except PermissionError:
+                    proc = subprocess.Popen(command, creationflags=flags, **options)
+            else:
+                proc = subprocess.Popen(command, start_new_session=True, **options)
+        except OSError as e:
+            print("%-15s did not start: %s" % (s["id"], e))
+            return False
     open(pid_file(s), "w").write(str(proc.pid))
     for _ in range(40):
         if get("http://127.0.0.1:%d/health" % s["port"]):
@@ -130,10 +191,14 @@ def stop(s):
     if not pid:
         print("%-15s not running" % s["id"])
         return
-    try:
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
-    except OSError:
-        os.kill(pid, signal.SIGTERM)
+    if WINDOWS:
+        # The service and what it started (a loader running srm.py).
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+    else:
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+        except OSError:
+            os.kill(pid, signal.SIGTERM)
     for _ in range(20):
         if not get("http://127.0.0.1:%d/health" % s["port"], timeout=0.3):
             break
@@ -218,9 +283,15 @@ def main():
             start(s)
     elif cmd == "logs":
         s = service(args[0]) if args else sys.exit("logs <id>")
-        subprocess.run(["tail", "-n", "60", log_file(s)])
+        try:
+            with open(log_file(s), encoding="utf-8", errors="replace") as f:
+                sys.stdout.writelines(f.readlines()[-60:])
+        except OSError:
+            sys.exit("no log for %s yet (%s)" % (s["id"], log_file(s)))
     elif cmd == "catalog":
         catalog()
+    elif cmd in ("install-agents", "uninstall-agents") and WINDOWS:
+        sys.exit("%s uses launchd, which is macOS only" % cmd)
     elif cmd == "install-agents":
         install_agents()
     elif cmd == "uninstall-agents":

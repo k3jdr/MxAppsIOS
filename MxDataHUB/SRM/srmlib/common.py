@@ -6,8 +6,12 @@ Secrets are never stored in the repository. They are looked up, in order, from:
      MASSIVE_S3_SECRET_KEY),
   2. the login Keychain (service "SRM-postgres", account "user@host/db";
      service "SRM-api", accounts "openfigi", "fmp", "massive", "massive-s3-access", "massive-s3-secret"),
+     on Windows the Credential Manager instead: generic credentials named "service:account" ("SRM-api:fmp"),
   3. SRM/config.local.json (untracked, see config.local.json.example),
-and for the database also libpq's own ~/.pgpass.
+and for the database also libpq's own ~/.pgpass (%APPDATA%\\postgresql\\pgpass.conf on Windows).
+
+Downloads are cached in SRM_CACHE_DIR, else ~/Library/Caches/com.k3jdr.MxDataHUB.loaders
+(%LOCALAPPDATA%\\MxDataHUB\\loaders-cache on Windows).
 
 How much the loaders print is set by srm.py -v / -vv (or SRM_VERBOSITY): 0 prints the progress lines, 1 (verbose)
 also what each step does — the connection, downloads and cache hits, rate-limit waits, retries, every reject,
@@ -31,7 +35,10 @@ import psycopg2
 import psycopg2.extras
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CACHE_DIR = os.path.expanduser("~/Library/Caches/com.k3jdr.MxDataHUB.loaders")
+CACHE_DIR = os.environ.get("SRM_CACHE_DIR") or (
+    os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "MxDataHUB", "loaders-cache")
+    if sys.platform == "win32" else os.path.expanduser("~/Library/Caches/com.k3jdr.MxDataHUB.loaders"))
+SECRET_STORE = "Credential Manager" if sys.platform == "win32" else "Keychain"
 VERBOSITY = int(os.environ.get("SRM_VERBOSITY") or 0)
 
 
@@ -49,12 +56,52 @@ def _local_config():
 
 
 def keychain(service, account):
+    """The secret saved for service / account: in the login Keychain on a Mac, in the Credential Manager on Windows
+    (a generic credential named "service:account", e.g. `cmdkey /generic:SRM-api:fmp /user:fmp /pass`)."""
+    if sys.platform == "win32":
+        return _windows_credential(f"{service}:{account}")
     try:
         out = subprocess.run(["security", "find-generic-password", "-s", service, "-a", account, "-w"],
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return out.stdout.strip() or None if out.returncode == 0 else None
+
+
+def _windows_credential(target):
+    """The password of the Credential Manager's generic credential `target` (CredReadW), or None."""
+    import ctypes
+    from ctypes import wintypes
+
+    class CREDENTIAL(ctypes.Structure):
+        _fields_ = [("Flags", wintypes.DWORD), ("Type", wintypes.DWORD), ("TargetName", wintypes.LPWSTR),
+                    ("Comment", wintypes.LPWSTR), ("LastWritten", wintypes.FILETIME),
+                    ("CredentialBlobSize", wintypes.DWORD), ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
+                    ("Persist", wintypes.DWORD), ("AttributeCount", wintypes.DWORD), ("Attributes", ctypes.c_void_p),
+                    ("TargetAlias", wintypes.LPWSTR), ("UserName", wintypes.LPWSTR)]
+
+    advapi32 = ctypes.WinDLL("advapi32")
+    advapi32.CredReadW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                   ctypes.POINTER(ctypes.POINTER(CREDENTIAL))]
+    advapi32.CredReadW.restype = wintypes.BOOL
+    advapi32.CredFree.argtypes = [ctypes.c_void_p]
+    cred = ctypes.POINTER(CREDENTIAL)()
+    if not advapi32.CredReadW(target, 1, 0, ctypes.byref(cred)):     # 1: CRED_TYPE_GENERIC
+        return None
+    try:
+        blob = ctypes.string_at(cred.contents.CredentialBlob, cred.contents.CredentialBlobSize)
+    finally:
+        advapi32.CredFree(cred)
+    # cmdkey and the Credential Manager window save the password as UTF-16; other tools may save UTF-8.
+    text = None
+    if len(blob) % 2 == 0 and not (blob.isascii() and 0 not in blob[1::2]):
+        try:
+            text = blob.decode("utf-16-le")
+        except UnicodeDecodeError:
+            pass
+    if text is None:
+        text = blob.decode("utf-8", "replace")
+    return text.strip() or None
 
 
 class Config:
@@ -78,7 +125,7 @@ class Config:
             return os.environ["PGPASSWORD"], "PGPASSWORD"
         found = keychain("SRM-postgres", f"{self.user}@{self.host}/{self.dbname}")
         if found:
-            return found, "Keychain"
+            return found, SECRET_STORE
         found = self.local.get("database", {}).get("password")
         return (found, "config.local.json") if found else (None, "~/.pgpass or none")
 
