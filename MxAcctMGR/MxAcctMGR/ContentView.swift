@@ -148,6 +148,7 @@ struct ContentView: View {
         switch store.screen {
         case .checking: CheckingView(store: store)
         case .cards: CardsView(store: store)
+        case .loans: LoanAccountsView(store: store)
         case .expenseLedgers: ExpenseLedgersView(store: store)
         case .expenses: TargetAccountsView(store: store)
         case .secureAccounts: SecureAccountsView(store: store)

@@ -128,6 +128,8 @@ import os
 import re
 import urllib.request
 
+import psycopg2
+
 from bank import fetch, nest_link, _date, _num, Conflict
 
 # The attribution formula's terms, which a driver's growth beyond inflation counts toward (srm.spending_driver.effect).
@@ -1614,8 +1616,19 @@ def tax(conn, q):
     lines_all = fetch(conn, """
         SELECT ln.line_id AS id, ln.name, l.code AS ledger FROM srm.expense_line ln JOIN srm.expense_ledger l USING (ledger_id)
          WHERE ln.active ORDER BY l.code, ln.sort_order, ln.name""")
+    # Mortgage interest (V053): each loan whose interest is deductible, from its statements and forecast, else its 1098.
+    # None where the loans can't be read: the family page's role, or a database before V053.
+    import loans
+    fetch(conn, "SAVEPOINT loans")
+    try:
+        owed = loans.tax_summary(conn, year)
+        fetch(conn, "RELEASE SAVEPOINT loans")
+    except psycopg2.Error:
+        fetch(conn, "ROLLBACK TO SAVEPOINT loans")
+        owed = []
+    summary["mortgageInterest"] = round(sum(l["interest"] for l in owed), 2)
     return {"year": year, "items": items, "entries": entries, "summary": summary, "partialRegisters": partial,
-            "ledgerLines": lines_all}
+            "ledgerLines": lines_all, "loans": owed}
 
 
 def save_tax_item(conn, iid, body):

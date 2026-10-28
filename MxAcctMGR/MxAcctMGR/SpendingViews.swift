@@ -76,7 +76,7 @@ struct SpendingAnalysisView: View {
                         SpendingAdminTab(setup: setup, data: data, entries: shownEntries(data), openTab: { tab = $0 }, go: { store.go($0) },
                                          ruleSaved: { applied($0) })
                     }
-                case "tax": SpendingTaxTab(setup: setup)
+                case "tax": SpendingTaxTab(setup: setup, openLoans: { store.go(.loans) })
                 case "feedback":
                     SpendingFeedbackTab(setup: setup, data: data, notes: notes, changed: { notes = $0 }, entryChanged: { replace($0) },
                                         openDeepDive: { openDeepDive($0) }, reload: { Task { await reload() } })
@@ -2821,6 +2821,8 @@ private struct FeedbackCard: View {
 /// taxes, refunds and the tax savings account, from the tax items (V040) — with the CSV the accountant gets.
 private struct SpendingTaxTab: View {
     var setup: SpendingSetup
+    /// Opens Banking ▸ Loan Accounts, where a loan's statements and Form 1098 are kept.
+    var openLoans: () -> Void
     @AppStorage("taxYear") private var year = Calendar.current.component(.year, from: .now) - (Calendar.current.component(.month, from: .now) <= 4 ? 1 : 0)
     @State private var report: TaxReport?
     @State private var problem: String?
@@ -2862,6 +2864,7 @@ private struct SpendingTaxTab: View {
                 simpleBox(r, section: "real_estate", title: "Real Estate Taxes", symbol: "house", help: "Property taxes paid in the year (deductible, with state and local taxes, up to the SALT limit).")
                 simpleBox(r, section: "refund", title: "Refunds Received", symbol: "arrow.down.circle", help: "Refunds deposited in the year after: a refund that arrives in \(r.year + 1) belongs to \(r.year)'s return.")
             }
+            mortgageInterest(r)
             savings(r)
             itemsBox(r)
         } else if busy {
@@ -2928,6 +2931,7 @@ private struct SpendingTaxTab: View {
         } }
         lines += ["Real estate taxes: \(money2(s.realEstate))", "Refunds received: \(money2(s.refunds))",
                   "Tax savings: \(money2(s.savingsSetAside)) set aside, \(money2(s.savingsTakenOut)) taken out"]
+        for l in r.loans ?? [] { lines.append("Mortgage interest, \(l.name ?? l.code ?? ""): \(money2(l.interest)) (\(l.source))") }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
         message = "Summary copied"
@@ -2944,6 +2948,47 @@ private struct SpendingTaxTab: View {
     }
 
     // MARK: Sections
+
+    /// Each deductible loan's interest for the year: its Form 1098 once entered, else its statements and forecast.
+    @ViewBuilder
+    private func mortgageInterest(_ r: TaxReport) -> some View {
+        let loans = r.loans ?? []
+        Box(title: "Mortgage Interest", symbol: "house.and.flag", help: "Interest paid in the year on each loan whose interest is deductible (Banking ▸ Loan Accounts): its Form 1098 once entered there, else the statements' year-to-date interest plus the forecast for the payments still to come. A payment made December 31 for January counts in the year it was paid, as the lender's 1098 counts it.") {
+            if loans.isEmpty {
+                HStack {
+                    Text("No loan whose interest is deductible: add the mortgage on Banking ▸ Loan Accounts and import its statements.").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open Loan Accounts") { openLoans() }
+                }
+            } else {
+                Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
+                    GridRow {
+                        Text("Loan").gridColumnAlignment(.leading); Text("Statements"); Text("Forecast"); Text("Form 1098"); Text("Counts")
+                        Text("From").gridColumnAlignment(.leading)
+                    }
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(loans) { l in
+                        GridRow {
+                            Text(l.name ?? l.code ?? "").gridColumnAlignment(.leading)
+                            Text(money2(l.statementsInterest)).monospacedDigit()
+                            Text(l.forecastInterest > 0 ? money2(l.forecastInterest) : "—").monospacedDigit().foregroundStyle(.secondary)
+                            Text(l.form1098.map { money2($0.interestPaid) } ?? "—").monospacedDigit()
+                            Text(money2(l.interest)).monospacedDigit().fontWeight(.semibold)
+                            Text(l.source + (l.missingStatements ? " · a statement is missing (its year-to-date covers it)" : ""))
+                                .foregroundStyle(l.form1098 == nil ? .orange : .secondary).lineLimit(1).fillsGridColumn()
+                        }
+                    }
+                }
+                .font(.callout)
+                HStack {
+                    Text(loans.contains { $0.form1098 == nil } ? "An estimate until the lender's Form 1098 is entered on Loan Accounts (in January)." : "From the lenders' Forms 1098.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open Loan Accounts") { openLoans() }.controlSize(.small)
+                }
+            }
+        }
+    }
 
     private func expenses(_ r: TaxReport) -> some View {
         let items = r.items.filter { $0.section == "expense" && $0.active }

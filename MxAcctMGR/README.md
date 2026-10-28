@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (Spending Analysis — why the family's spending changed and the children's forward curve; SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Loan Accounts — mortgages and vehicle loans, their lenders' billing statements read from the PDFs, a forecast of every payment to payoff and each year's interest for Year-End Tax; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (Spending Analysis — why the family's spending changed and the children's forward curve; SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -438,6 +438,46 @@ what will be kept. When a card with the same last four digits — under any code
 File…, or the daily refresh), they re-attach to the new entries and the memory goes; until then Sources shows how many
 lines wait. Charges entered by hand that no download has are not kept.
 
+### Loan accounts (Banking ▸ Loan Accounts)
+
+Mortgages and vehicle loans (V053, `LoanViews.swift`, the accounts service's `loans.py`). **New…** offers
+**Mortgage** (a home loan, secured by the house) or **Vehicle Loan** (an auto, boat, RV or motorcycle loan): its name,
+a code, the lender, the last four digits of the loan number (a statement for another number is refused), the property
+or vehicle, the terms (amount borrowed, rate, term, first payment, maturity, principal and interest, escrow, the extra
+principal the forecast assumes), the target accounts the check register pays it with (two when the servicer changed:
+Mortgage, then Wells Fargo), its statements folder, and whether its interest is deductible (a mortgage's is, at first).
+The terms can wait: the first statement fills in the rate, payment, maturity, lender and last four digits left empty.
+
+**Import Statements…** reads the lender's billing statements: pick PDFs, several or a folder (the panel opens in the
+loan's folder). PDFKit gives each one's text and the service reads the figures — the statement and due dates, the
+amount due and the payment due's principal, interest and escrow, the unpaid principal balance, the rate and maturity,
+the year-to-date principal and interest, and what the lender applied since the statement before (each payment's
+split, extra principal payments, escrow disbursements, fees; kept once however many statements show them). Each PDF is
+kept in the statements folder (`~/MyCodeGIT/MxDataSRM/loans/<code>` unless another is chosen; a file already there
+isn't copied again), and a file read before is skipped. *Not Read* lists the files it didn't read and why. Wells Fargo
+Home Mortgage's layout is read, with the usual alternatives for other lenders' labels.
+
+The page shows:
+- tiles: the principal balance on the latest statement, the rate and payment, the next payment due, when the forecast
+  pays it off (green when before the maturity), this year's interest and the interest left to payoff;
+- **Forecast**: every payment from the latest statement to payoff — each month's interest is the balance times the
+  rate over 12, to the cent, and the rest of the payment is principal — with the balance as a chart, each year's
+  payments, principal, extra, interest and year-end balance, and the next 12 payments (*Every payment* lists them
+  all). A payment is expected as many days from its due date as the loan's have been (the median), so a January
+  payment made December 31 counts in the year before, as the lender's Form 1098 counts it. *Extra principal each
+  month* tries another amount: the payoff, the payments saved and the interest saved show at once; *Keep for This
+  Loan* makes it the loan's;
+- **Interest by Year**: each year's interest from the statements — the last statement's year-to-date interest plus
+  what later statements show was paid that year, so a statement not imported still counts (the year says so) — plus
+  the forecast for the payments still to come, and **Enter 1098…** for the lender's Form 1098 (box 1 interest, box 6
+  points, box 5 mortgage insurance, box 10 property tax from escrow), which then counts instead of the estimate;
+- **Statements** (✕ takes one off, its PDF kept), **What the Lender Applied**, and **Paid from Checking**: the checks
+  to the loan's target accounts, each matched to the lender's activity (the same total within five days), or newer
+  than the latest statement, or orange when no statement shows it.
+
+**Remove…** removes the loan with its statements and Forms 1098; the PDFs stay in its folder and the checks in the
+register. Spending Analysis ▸ Year-End Tax lists each loan whose interest is deductible under *Mortgage Interest*.
+
 ### Removing cash ledger entries (Banking ▸ Cash Ledger ▸ Register)
 
 Right-click an entry for **Void** (it stays on record, struck through and out of the balance; **Restore** brings it
@@ -764,6 +804,8 @@ from one year to the next and forecasts what the children's ages bring. Everythi
     settles last year's return;
   - real estate taxes; refunds, each counted toward the year before the one it arrives in; and the tax savings
     account, set aside against taken out;
+  - **Mortgage Interest**: each loan whose interest is deductible (Banking ▸ Loan Accounts, V053) with the year's
+    interest from its statements and forecast, the Form 1098's once entered, and which counts;
   - a warning when a register the items draw on starts after January 1 (PNC Checking starts 12/26/2025, so 2025 is
     incomplete).
 
@@ -905,6 +947,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
+| `LoanViews.swift` | Banking ▸ Loan Accounts: mortgages and vehicle loans (New… ▸ Mortgage or Vehicle Loan), Import Statements… (PDFKit reads each PDF's text for the service), the tiles, the forecast with its chart and what-if extra principal, Interest by Year with the Form 1098 sheet, the statements, the lender's activity and the checks that paid it |
 | `TargetAccounts.swift` | Target accounts: their funding sources, the password and user keys in this Mac's Keychain (`TargetSecrets`), the editor (New Target Account, a row's Edit Target Details) and Edit Target Account Name |
 | `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |

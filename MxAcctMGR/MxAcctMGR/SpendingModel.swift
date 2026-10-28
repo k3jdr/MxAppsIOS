@@ -776,6 +776,8 @@ struct TaxReport: Decodable {
         var refunds: Double
         var savingsSetAside: Double
         var savingsTakenOut: Double
+        /// The deductible loans' interest for the year (V053).
+        var mortgageInterest: Double?
     }
     struct Register: Decodable, Hashable { var source: String; var register: String; var name: String; var first: String? }
     struct Line: Decodable, Hashable, Identifiable { var id: Int; var name: String; var ledger: String }
@@ -786,6 +788,8 @@ struct TaxReport: Decodable {
     var summary: Summary
     var partialRegisters: [Register]
     var ledgerLines: [Line]
+    /// Each loan whose interest is deductible, with the year's interest (Banking ▸ Loan Accounts, V053).
+    var loans: [LoanYear]?
 
     static let sections = [("expense", "Tax-applicable expense"), ("payment", "Tax payment"), ("real_estate", "Real estate tax"),
                            ("refund", "Refund received"), ("savings", "Tax savings account")]
@@ -824,6 +828,13 @@ struct TaxReport: Decodable {
                  "Tax payments,\(n(summary.paymentsTotal))", "Real estate taxes,\(n(summary.realEstate))",
                  "Refunds received,\(n(summary.refunds))", "Tax savings set aside,\(n(summary.savingsSetAside))",
                  "Tax savings taken out,\(n(summary.savingsTakenOut))"]
+        if let loans, !loans.isEmpty {
+            rows += ["", "Mortgage interest", "Loan,Lender,Interest,From,Points (1098 box 6),Mortgage insurance (box 5),Property tax (box 10)"]
+            for l in loans {
+                rows.append([f(l.name), f(l.lender), n(l.interest), f(l.source), n(l.form1098?.pointsPaid ?? 0),
+                             n(l.form1098?.mortgageInsurance ?? 0), n(l.form1098?.propertyTax ?? 0)].joined(separator: ","))
+            }
+        }
         return rows.joined(separator: "\n") + "\n"
     }
 }
