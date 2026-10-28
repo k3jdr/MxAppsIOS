@@ -1213,6 +1213,8 @@ struct TargetAccountsView: View {
     /// Edit Target Details or Edit Target Account Name (a row's context menu) is open for this account.
     @State private var details: Payee?
     @State private var renaming: Payee?
+    /// Remove Target Account… (a row's context menu) is open for this account.
+    @State private var removing: Payee?
     @State private var newAccount = false
     @State private var showInactive = false
     /// How many of the table's rows show at once.
@@ -1235,7 +1237,8 @@ struct TargetAccountsView: View {
         #if DEBUG
         // Self-tests, once the list is loaded: open New Target Account (-targetAccountNew YES), Add from Card Registers
         // (-targetAccountsFromCards YES), or a row's Edit Target
-        // Details (-targetDetailsEdit PAYEE_ID) or Edit Target Account Name (-targetNameEdit PAYEE_ID).
+        // Details (-targetDetailsEdit PAYEE_ID), Edit Target Account Name (-targetNameEdit PAYEE_ID) or Remove Target
+        // Account (-targetRemove PAYEE_ID).
         .task(id: book == nil) {
             guard let book else { return }
             let defaults = UserDefaults.standard
@@ -1246,6 +1249,9 @@ struct TargetAccountsView: View {
             }
             if defaults.object(forKey: "targetNameEdit") != nil {
                 renaming = book.payees.first { $0.id == defaults.integer(forKey: "targetNameEdit") }
+            }
+            if defaults.object(forKey: "targetRemove") != nil {
+                removing = book.payees.first { $0.id == defaults.integer(forKey: "targetRemove") }
             }
         }
         #endif
@@ -1262,6 +1268,9 @@ struct TargetAccountsView: View {
             TargetNameSheet(payee: p, names: book?.payees.map(\.name) ?? []) { name in
                 await saveDetails(p.id, ["version": p.version, "name": name]).error
             }
+        }
+        .sheet(item: $removing) { p in
+            RemoveTargetAccountSheet(payee: p) { book = $0; if selected == p.id { selected = nil } }
         }
         .sheet(isPresented: $newAccount) {
             ExpenseAccountSheet { body in
@@ -1291,7 +1300,7 @@ struct TargetAccountsView: View {
         let columns = Self.columns(names)
         let listed = b.payees.filter { $0.active || showInactive }
         let shown = LocalGrid.rows(listed, grid, columns)
-        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments, every payment in all years (Total paid) and the last one. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Target Account Name… (names are unique), Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — and its link. This year and Last paid are calculated from the registers.") {
+        return Box(title: "Target accounts", symbol: "arrow.left.arrow.right.square", help: "Where the money goes to or comes from: its category, the registers that pay it (Funding: checking, credit card), this year's payments, every payment in all years (Total paid) and the last one. Each column header's button sorts and filters it, as in Excel. Right-click a row (anywhere on it) for Edit Target Account Name… (names are unique), Edit Target Details… — nickname, status, identifier, next payment, logon, notes, address, funding sources — its link, and Remove Target Account… (once nothing files under it: its entries consolidated into another). This year and Last paid are calculated from the registers.") {
             HStack {
                 Button("New Target Account…") { adding = true }
                 Button("Add from Card Registers…") { addingFromCards = true }
@@ -1346,6 +1355,9 @@ struct TargetAccountsView: View {
                     Button("Edit Target Details…") { details = p }
                     Divider()
                     payeeLinkMenu(PayeeLinkTarget(p))
+                    Divider()
+                    Button("Remove Target Account…", role: .destructive) { removing = p }
+                        .help("Take it off once its entries are consolidated into another target account: nothing may still file under it")
                 }
             }
             .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), tableRows)))

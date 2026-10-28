@@ -7,7 +7,8 @@
 //  the next payment due; where to log on and the user name; the address and phone; the note the registers show on
 //  hover; and its funding sources, the registers whose target lists offer it: recipients of checking account payments,
 //  of credit card payments, or both. The password and user keys are kept in this Mac's Keychain (TargetSecrets), never
-//  in the security master, so they are known only on the Mac they were entered on.
+//  in the security master, so they are known only on the Mac they were entered on. Remove Target Account… (a row's
+//  context menu) takes one off once nothing files under it — its entries consolidated into another target account.
 //
 
 import AppKit
@@ -484,5 +485,101 @@ struct AddCardTargetsSheet: View {
         } catch {
             problem = describe(error)
         }
+    }
+}
+
+// MARK: - Remove Target Account
+
+/// What still files under a target account (GET /payees/<id>/usage), before it is removed.
+struct PayeeUsage: Decodable {
+    var id: Int
+    var name: String
+    /// checking entries, card entries, cash-ledger entries, card accounts paid as it, cash ledgers funded through it,
+    /// tax items → how many.
+    var uses: [String: Int]
+    var inUse: Int
+    var spendingRule: Bool
+    var link: Bool
+}
+
+extension BankClient {
+    static func payeeUsage(_ id: Int) async throws -> PayeeUsage {
+        try await AccountsClient.request("GET", "/payees/\(id)/usage", as: PayeeUsage.self)
+    }
+    /// Removes a target account nothing files under (the accounts service refuses one still in use).
+    static func deletePayee(_ id: Int) async throws -> ExpenseBook {
+        try await AccountsClient.request("DELETE", "/payees/\(id)", as: ExpenseBook.self)
+    }
+}
+
+/// Remove Target Account… (a row's context menu): once its entries are consolidated into another target account,
+/// nothing files under it and it can go. While anything still does — a checking, card or cash-ledger entry, a card
+/// account paid as it, a cash ledger funded through it, a tax item — the sheet says what, and Remove stays off: those
+/// would lose their target. Its link and spending rule go with it, and its password and user keys leave this Mac's
+/// Keychain.
+struct RemoveTargetAccountSheet: View {
+    let payee: Payee
+    var removed: (ExpenseBook) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var usage: PayeeUsage?
+    @State private var error: String?
+    @State private var working = false
+
+    private static let order = ["checking entries", "card entries", "cash-ledger entries", "card accounts paid as it",
+                                "cash ledgers funded through it", "tax items"]
+    private static let one = ["checking entries": "checking entry", "card entries": "card entry", "cash-ledger entries": "cash-ledger entry",
+                              "card accounts paid as it": "card account paid as it", "cash ledgers funded through it": "cash ledger funded through it",
+                              "tax items": "tax item"]
+
+    /// What still files under it, as a list ("3 card entries, 1 tax item").
+    private static func filed(_ u: PayeeUsage) -> String {
+        order.compactMap { w in u.uses[w].flatMap { $0 > 0 ? "\($0) \($0 == 1 ? one[w] ?? w : w)" : nil } }.joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Remove \u{201C}\(payee.name)\u{201D}?").heading(.heading)
+            if let u = usage {
+                if u.inUse == 0 {
+                    let goes = [u.link ? "its link" : nil, u.spendingRule ? "its spending rule" : nil].compactMap { $0 }
+                    Text("Nothing files under it, so it can go for good: it leaves the registers' target lists and Target Accounts"
+                         + (goes.isEmpty ? "" : ", and \(goes.joined(separator: " and ")) with it")
+                         + ". Its password and user keys leave this Mac's Keychain.")
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Label("Still filed under it: \(Self.filed(u)). Consolidate them into another target account first — change each entry's target in its register — then remove this one.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange).font(.callout).fixedSize(horizontal: false, vertical: true)
+                }
+            } else if error == nil {
+                ProgressView().controlSize(.small)
+            }
+            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout).fixedSize(horizontal: false, vertical: true) }
+            HStack {
+                Spacer()
+                if working { ProgressView().controlSize(.small) }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Remove", role: .destructive) { Task { await remove() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(working || usage == nil || (usage?.inUse ?? 0) > 0)
+            }
+        }
+        .padding(18)
+        .frame(width: 460)
+        .task {
+            do { usage = try await BankClient.payeeUsage(payee.id) } catch { self.error = describe(error) }
+        }
+    }
+
+    private func remove() async {
+        working = true
+        defer { working = false }
+        do {
+            let book = try await BankClient.deletePayee(payee.id)
+            // The security master no longer knows it: its secrets on this Mac go too.
+            TargetSecrets.set(nil, .password, payee.id, account: payee.name)
+            TargetSecrets.set(nil, .keys, payee.id, account: payee.name)
+            removed(book)
+            dismiss()
+        } catch { self.error = describe(error) }
     }
 }

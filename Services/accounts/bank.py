@@ -26,6 +26,10 @@
     PUT  /payees/<id>/note                       change only its note (the register's hover text) {note}
     PUT  /payees/<id>/link                       its link (V032): {address, text, hoverText, hoverRtf, title, by}
     DELETE /payees/<id>/link                     take the link off
+    GET  /payees/<id>/usage                      what still files under it: checking, card and cash-ledger entries, the
+                                                 cards paid as it, the cash ledgers funded through it, its tax items
+    DELETE /payees/<id>                          remove a target account nothing files under (400 while anything does:
+                                                 consolidate its entries first); its link and spending rule go with it
 
 A target account (an external account: srm.payee, V028 / V033) is offered as a target by the registers its funding
 sources name — the Checking Accounts register's (checking) and the card registers' (card); one first named in a
@@ -622,6 +626,45 @@ def delete_payee_link(conn, pid):
     return {"id": int(pid), "link": None}
 
 
+# What still files under a target account, so it can't be removed: (what, one of them, count query).
+PAYEE_USES = (
+    ("checking entries", "checking entry", "SELECT count(*) FROM srm.bank_txn WHERE payee_id = %s"),
+    ("card entries", "card entry", "SELECT count(*) FROM srm.card_txn WHERE payee_id = %s"),
+    ("cash-ledger entries", "cash-ledger entry", "SELECT count(*) FROM srm.expense_entry WHERE payee_id = %s"),
+    ("card accounts paid as it", "card account paid as it", "SELECT count(*) FROM srm.card_account WHERE payee_id = %s"),
+    ("cash ledgers funded through it", "cash ledger funded through it",
+     "SELECT count(*) FROM srm.expense_ledger WHERE %s = ANY (funding_payees)"),
+    ("tax items", "tax item", "SELECT count(*) FROM srm.tax_item WHERE payee_id = %s"),
+)
+
+
+def payee_usage(conn, pid):
+    """What still files under a target account (counts by kind), and whether it has a spending rule or a link."""
+    rows = fetch(conn, "SELECT name FROM srm.payee WHERE payee_id = %s", (int(pid),))
+    if not rows:
+        raise LookupError("no target account %s" % pid)
+    uses = {what: fetch(conn, count, (int(pid),))[0]["count"] for what, _, count in PAYEE_USES}
+    rule = fetch(conn, "SELECT 1 FROM srm.spending_rule WHERE payee_id = %s", (int(pid),))
+    link = fetch(conn, "SELECT 1 FROM srm.payee_link WHERE payee_id = %s", (int(pid),))
+    return {"id": int(pid), "name": rows[0]["name"], "uses": uses, "inUse": sum(uses.values()),
+            "spendingRule": bool(rule), "link": bool(link)}
+
+
+def delete_payee(conn, pid):
+    """Removes a target account nothing files under any more (its entries consolidated into another). Refused while
+    a checking, card or cash-ledger entry, a card account, a cash ledger's funding or a tax item still names it:
+    those would lose their target silently (ON DELETE SET NULL). Its link and spending rule go with it (CASCADE);
+    MxAcctMGR takes its password and user keys out of the Keychain."""
+    usage = payee_usage(conn, pid)
+    if usage["inUse"]:
+        one = {what: single for what, single, _ in PAYEE_USES}
+        raise ValueError("%s is still in use (%s): consolidate them into another target account first" % (
+            usage["name"], ", ".join("%d %s" % (n, one[w] if n == 1 else w) for w, n in usage["uses"].items() if n)))
+    fetch(conn, "DELETE FROM srm.payee WHERE payee_id = %s", (int(pid),))
+    conn.commit()
+    return expense_accounts(conn)
+
+
 def route(conn, method, parts, body, q):
     """The bank endpoints' answer, or None when the path isn't one of them."""
     if parts == ["bank", "accounts"] and method == "GET":
@@ -656,6 +699,10 @@ def route(conn, method, parts, body, q):
         return save_payee_link(conn, parts[1], body)
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "link" and method == "DELETE":
         return delete_payee_link(conn, parts[1])
+    if len(parts) == 3 and parts[0] == "payees" and parts[2] == "usage" and method == "GET":
+        return payee_usage(conn, parts[1])
+    if len(parts) == 2 and parts[0] == "payees" and method == "DELETE":
+        return delete_payee(conn, parts[1])
     if len(parts) == 2 and parts[0] == "payees" and method == "PUT":
         return save_payee(conn, parts[1], body)
     return None
