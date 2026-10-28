@@ -658,7 +658,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   order number on hover, and on the Payee's hover), the Tag Entry sheet, and the Deep Dive's Largest This Year. The
   search finds entries by an item's name. The context menu opens the order on amazon.com (you sign in there). A credit
   matched to a return shows the item refunded. The Bought words are a link to the order: hover shows the items and
-  whether Amazon's Transactions list, the export or Amazon's order e-mails (both by amount and date) matched it; *Edit Link…* on the card looks
+  whether Amazon's Transactions list, or the export, Amazon's order e-mails or an order page the lookup read (by amount and date) matched it; *Edit Link…* on the card looks
   the charge up again, *Remove Link* (or *Take Amazon Orders Off*) takes its orders off for good — the export doesn't
   match it again.
 * **Look Up Amazon Orders…** (Entries, right-click selected Amazon charges; `AmazonLookup.swift`): finds what they

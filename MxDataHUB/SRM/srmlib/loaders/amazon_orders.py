@@ -19,7 +19,9 @@ AMZN.COM/BILL; not Prime memberships, Prime Video, Kindle, Audible or AWS) to wh
   1. a shipment: Amazon charges the card when a shipment leaves, for its items' subtotal and tax (Shipment Item
      Subtotal + Shipment Item Subtotal Tax, or its items' Total Owed): the same amount, the charge dated 3 days before
      the ship date to 7 days after (an order not shipped yet: up to 30 days after the order);
-  2. a whole order of several shipments charged at once: its items' Total Owed, up to 30 days after the order;
+  2. a whole order charged at once: its several shipments' items' Total Owed (or charges), or the order's own total
+     when it differs from its shipments' (an order e-mail's Grand Total, after a gift card or points), up to 30 days
+     after the order;
   3. 2 to 4 shipments of one order charged together, adding up to the charge;
   4. a credit (a return): one item's Total Owed, or a shipment's charge, from the ship date to 120 days after.
 
@@ -32,7 +34,9 @@ replaces it.
 MxAcctMGR's Amazon Order Lookup attaches orders too, from Amazon's own Transactions list (matched_by
 'amazon-lookup', how 'transaction'), with what the order's page shows. Those stay when an export rewrites their order
 (it replaces what the page gave), and each is narrowed to the order's shipment of the same amount when there is one.
-A charge whose order was taken off it ('unlinked') isn't matched again.
+A charge whose order was taken off it ('unlinked') isn't matched again. An order the lookup read from its page that no
+charge has (origin 'order page': its page's total, no shipments) is given one unshipped shipment of that total, its
+items in it, so it is matched as the others (matched_by 'amazon-orders').
 """
 
 import collections
@@ -290,6 +294,7 @@ CHARGES = """
 
 SHIPMENTS = """
     SELECT s.shipment_id, s.order_id, s.shipped_at, s.charge_amount, s.total_owed, o.ordered_at, o.payment_last4,
+           o.total_owed AS order_owed,
            (coalesce(o.currency, 'USD') <> 'USD' OR coalesce(o.order_status, '') ~* 'cancel'
             OR coalesce(s.shipment_status, '') ~* 'cancel') AS cancelled,
            EXISTS (SELECT FROM srm.amazon_match m WHERE m.shipment_id = s.shipment_id AND m.how IN ('shipment', 'shipments'))
@@ -320,8 +325,27 @@ def _within(days, window):
     return window[0] <= days <= window[1]
 
 
+def page_shipments(cur):
+    """Each order the Order Lookup read from its page that no charge has and has no shipment: one unshipped shipment of
+    its page's total, with its items. Returns how many."""
+    cur.execute("""
+        WITH made AS (
+            INSERT INTO srm.amazon_shipment (order_id, seq, total_owed, charge_amount)
+            SELECT o.order_id, 1, o.total_owed, o.total_owed FROM srm.amazon_order o
+             WHERE o.origin = 'order page' AND o.total_owed > 0
+               AND NOT EXISTS (SELECT FROM srm.amazon_shipment s WHERE s.order_id = o.order_id)
+               AND NOT EXISTS (SELECT FROM srm.amazon_match m WHERE m.order_id = o.order_id AND m.how <> 'unlinked')
+            RETURNING order_id, shipment_id)
+        UPDATE srm.amazon_item i SET shipment_id = made.shipment_id FROM made
+         WHERE i.order_id = made.order_id AND i.shipment_id IS NULL""")
+    cur.execute("""SELECT count(*) FROM srm.amazon_shipment s JOIN srm.amazon_order o USING (order_id)
+                    WHERE o.origin = 'order page'""")
+    return cur.fetchone()[0]
+
+
 def match(cur, load_id):
     """Matches the Amazon charges, debits and credits not matched yet; returns {how: count} of the new matches."""
+    page_shipments(cur)
     cur.execute(CHARGES)
     cols = [d[0] for d in cur.description]
     charges = [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -404,9 +428,17 @@ def match(cur, load_id):
             by_order[s["order_id"]].append(s)
     whole = collections.defaultdict(list)
     for oid, group in by_order.items():
-        if len(group) > 1 and not any(s["paid"] for s in group):
-            for amount in {sum(_cents(s["total_owed"]) for s in group), sum(_cents(s["charge_amount"]) for s in group)}:
-                whole[amount].append(group)
+        if any(s["paid"] for s in group):
+            continue
+        amounts = set()
+        if len(group) > 1:
+            amounts |= {sum(_cents(s["total_owed"]) for s in group), sum(_cents(s["charge_amount"]) for s in group)}
+        # The order's own total when its shipments' differ: an order e-mail's Grand Total after a gift card or points.
+        owed = group[0]["order_owed"]
+        if owed is not None and owed > 0 and _cents(owed) not in {_cents(s["charge_amount"]) for s in group}:
+            amounts.add(_cents(owed))
+        for amount in amounts:
+            whole[amount].append(group)
     pairs = []
     for c in charges:
         if c["cents"] <= 0:

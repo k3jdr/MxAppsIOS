@@ -1080,12 +1080,18 @@ def attach_amazon(conn, body):
                               total_owed = excluded.total_owed, content_hash = excluded.content_hash, updated_at = now()""",
               (oid, ordered, payment, last4, len(items), total, digest))
         fetch(conn, "DELETE FROM srm.amazon_item WHERE order_id = %s", (oid,))
+        # Its one shipment (given to it for matching by amount and date) takes the page's total and items.
+        ships = fetch(conn, "UPDATE srm.amazon_shipment SET total_owed = coalesce(%s, total_owed), "
+                            "charge_amount = coalesce(%s, charge_amount) WHERE order_id = %s RETURNING shipment_id",
+                      (total, total, oid))
+        sid = ships[0]["shipment_id"] if len(ships) == 1 else None
         for i in items:
             qty = int(i.get("quantity") or 1)
             price = round(float(i["price"]), 2) if i.get("price") is not None else None
-            fetch(conn, """INSERT INTO srm.amazon_item (order_id, product_name, asin, quantity, unit_price, total_owed)
-                           VALUES (%s, %s, %s, %s, %s, %s)""",
-                  (oid, str(i["name"]).strip()[:500], (str(i.get("asin") or "").strip() or None), qty, price,
+            fetch(conn, """INSERT INTO srm.amazon_item (order_id, shipment_id, product_name, asin, quantity, unit_price,
+                                                        total_owed)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                  (oid, sid, str(i["name"]).strip()[:500], (str(i.get("asin") or "").strip() or None), qty, price,
                    round(price * qty, 2) if price is not None else None))
     out = []
     for c in body.get("charges") or []:
