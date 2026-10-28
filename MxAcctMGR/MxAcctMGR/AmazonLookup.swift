@@ -16,8 +16,9 @@
 //       its Next page button, or (the newer list) its Show more button or the bottom of the page loads them;
 //    2. for charges not found there, Your Orders for their year (each order's total and date), as a fallback — the
 //       Digital Orders tab for Prime Video (rentals, purchases, channels), Kindle and other digital charges;
-//    3. each order's page, for its items (name, ASIN, quantity, price; a video's title), unless the security master has
-//       them already (from the export, the e-mails or an earlier lookup: Steps says which).
+//    3. each order's page, for its items (name, ASIN, quantity, price; a video's title) and not the suggestions Amazon
+//       shows with them, unless the security master has them already (from the export, the e-mails or an earlier
+//       lookup: Steps says which).
 //  Pages are opened one at a time, 3 seconds apart, at most 40 Transactions pages, 30 Your Orders pages a year and 25
 //  orders a run. A single order can be attached to a charge too: its number typed or pasted (or its page's link), or
 //  the order the window shows (This Order) — only that order's page is read. Amazon's Conditions of Use don't allow robots: it runs only when you ask, and may stop working when
@@ -52,6 +53,8 @@ private struct AmazonOrderPage: Decodable {
     var total: Double?
     var payment: String?
     var items: [Item]
+    /// Products on the page that aren't the order's (Amazon's suggestions), left out.
+    var suggestions: Int?
 }
 
 @MainActor
@@ -341,7 +344,9 @@ final class AmazonLookup {
         }
         try onPage(path, "order \(id)'s page")
         let page = try await json(Self.orderPageScript, as: AmazonOrderPage.self)
-        steps.append("Order \(id): \(page.items.count) item\(page.items.count == 1 ? "" : "s")\(page.total.map { ", total \(money2($0))" } ?? "")")
+        let left = page.suggestions ?? 0
+        steps.append("Order \(id): \(page.items.count) item\(page.items.count == 1 ? "" : "s")\(page.total.map { ", total \(money2($0))" } ?? "")"
+            + (left > 0 ? " (\(left) of Amazon's suggestions left out)" : ""))
         guard !page.items.isEmpty else { return nil }
         let items: [[String: Any]] = page.items.map { i in
             var item: [String: Any] = ["name": i.name, "quantity": i.quantity ?? 1]
@@ -594,17 +599,30 @@ final class AmazonLookup {
     """#
 
     /// An order's page: when it was placed, its total, how it was paid, and its items — each product link's name, its
-    /// ASIN, and the price and quantity in the part of the page around it that names no other product.
+    /// ASIN, and the price and quantity in the part of the page around it that names no other product. Amazon's
+    /// suggestions below the order (Inspired by your browsing history, Customers also bought, Sponsored: its carousels)
+    /// are product links too: links in them don't count, and where the page marks the order's shipments only the links
+    /// there do. When the items in page order come to its Item(s) Subtotal before the last of them, the rest are
+    /// suggestions too. `suggestions`: how many products were left out.
     static let orderPageScript = #"""
     (() => {
       const text = e => (e.innerText || "").replace(/\s+/g, " ").trim();
       const body = text(document.body);
       const placed = body.match(/(?:order placed|ordered on)\s*([A-Z][a-z]+\.? \d{1,2}, \d{4})/i);
       const total = body.match(/grand total:?\s*\$\s?([\d,]+\.\d{2})/i) || body.match(/order total:?\s*\$\s?([\d,]+\.\d{2})/i);
+      const subtotal = body.match(/subtotal:?\s*\$\s?([\d,]+\.\d{2})/i);
       const payment = body.match(/((?:visa|mastercard|american express|amex|discover)[a-z ]{0,20}?(?:ending in|\*{2,})\s*\d{4})/i);
       const ASIN = /\/(?:dp|gp\/product|gp\/video\/detail|video\/detail)\/([A-Z0-9]{10})/;
       const PRODUCTS = 'a[href*="/dp/"], a[href*="/gp/product/"], a[href*="/video/detail/"]';
-      const links = [...document.querySelectorAll(PRODUCTS)];
+      const SUGGESTIONS = '.a-carousel-container, .a-carousel, [data-a-carousel-options], [class*="carousel" i], [id*="carousel" i], '
+        + '#rhf, [id^="rhf"], [class*="p13n"], [data-p13n-asin-metadata], [cel_widget_id*="sims" i], [cel_widget_id*="sp_" i], '
+        + '[class*="sponsored" i], [id*="recommend" i], [data-component*="recommend" i]';
+      const SHIPMENTS = '[data-component="shipments"], [data-component="purchasedItems"], [data-component="itemTitle"], .shipment, .yohtmlc-item';
+      const asinOf = a => ((a.getAttribute("href") || "").match(ASIN) || [])[1];
+      const every = [...document.querySelectorAll(PRODUCTS)];
+      let links = every.filter(a => !a.closest(SUGGESTIONS));
+      const shipped = links.filter(a => a.closest(SHIPMENTS));
+      if (shipped.length) links = shipped;
       const items = new Map();
       for (const a of links) {
         const m = (a.getAttribute("href") || "").match(ASIN);
@@ -631,6 +649,15 @@ final class AmazonLookup {
       // Offers on the page (Amazon's cards) are product links too: an item has a price when the others do.
       let list = [...items.values()].filter(i => !/business card|credit card|store card|prime visa|amazon visa|rewards visa/i.test(i.name));
       if (list.some(i => i.price !== null)) list = list.filter(i => i.price !== null);
+      // Suggestions the page doesn't mark come after the order's items: the items before them add up to its subtotal.
+      if (subtotal && list.length > 1 && list.every(i => i.price !== null)) {
+        const want = parseFloat(subtotal[1].replace(/,/g, ""));
+        let sum = 0;
+        for (let k = 0; k < list.length - 1; k++) {
+          sum += list[k].price * list[k].quantity;
+          if (Math.abs(sum - want) < 0.015) { list = list.slice(0, k + 1); break; }
+        }
+      }
       // No product links (a channel's renewal, some digital orders): the item titles Amazon marks as such.
       if (!list.length) {
         const names = new Set();
@@ -646,8 +673,10 @@ final class AmazonLookup {
           list.push({ name, asin: null, quantity: 1, price });
         }
       }
+      const kept = new Set(list.map(i => i.asin));
+      const suggestions = new Set(every.map(asinOf).filter(x => x && !kept.has(x))).size;
       return JSON.stringify({ placed: placed ? placed[1] : null, total: total ? parseFloat(total[1].replace(/,/g, "")) : null,
-                              payment: payment ? payment[1] : null, items: list });
+                              payment: payment ? payment[1] : null, items: list, suggestions });
     })()
     """#
 }
