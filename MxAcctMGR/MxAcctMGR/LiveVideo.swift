@@ -10,8 +10,9 @@
 //    • CNBC (U.S.), cnbc.com Live TV — the network as it airs. CNBC streams it to CNBC+ subscribers and to viewers
 //      who sign in with a TV provider; without a sign-in the page may show a short free preview. The sign-in stays in
 //      the window's cookies, as in Safari. Fill Sign-In fills CNBC's sign-in form with the user name and password of
-//      your CNBC secure account (Banking ▸ Secure Accounts: its service address on cnbc.com, or CNBC in its name),
-//      the password read from this Mac's Keychain only then; you press the page's Sign In. With no such account the
+//      your CNBC secure account (Banking ▸ Secure Accounts: its service address on cnbc.com, or CNBC in its name):
+//      the user name at once, the password only after Touch ID (or your Mac's password where Touch ID isn't
+//      available) confirms it's you, and read from this Mac's Keychain only then; you press the page's Sign In. With no such account the
 //      button is Add to Secure Accounts…, which opens New Secure Account filled in for CNBC. A TV provider's sign-in
 //      (its own window) you type yourself.
 //    • CNBC Television on YouTube — free, live only during the events CNBC streams there (Fed decisions, hearings,
@@ -25,6 +26,7 @@
 //
 
 import AppKit
+import LocalAuthentication
 import SwiftUI
 import WebKit
 
@@ -156,28 +158,55 @@ final class LiveVideo {
         return found.first(where: \.active) ?? found.first
     }
 
-    /// Fills the sign-in form showing in the page with the secure account's user name and password (read from this
-    /// Mac's Keychain now, and kept nowhere else); you press the page's Sign In. Nothing is sent until you do.
+    /// Fills the sign-in form showing in the page from the secure account: its user name at once; its password only
+    /// when the page shows a password field and Touch ID confirms it's you — read from this Mac's Keychain then, and
+    /// kept nowhere else. You press the page's Sign In: nothing is sent until you do.
     func fillSignIn() async {
         guard let webView, let a = signInAccount else { return }
         let userName = a.ownerUserName ?? ""
-        let password = SecureSecrets.get(.password, a.id) ?? ""
-        if userName.isEmpty && password.isEmpty {
+        let hasPassword = SecureSecrets.has(.password, a.id)
+        if userName.isEmpty && !hasPassword {
             signInNote = "\(a.name) in Secure Accounts has no user name or password yet: add them in its Edit Service Details."
             return
         }
         do {
-            let filled = try await webView.callAsyncJavaScript(Self.fillScript, arguments: ["userName": userName, "password": password],
-                                                               in: nil, contentWorld: .defaultClient) as? String ?? ""
-            signInNote = switch filled {
-            case "both": "Filled your user name and password from \(a.name): press Sign In in the page."
-            case "user": "Filled your user name from \(a.name): continue in the page, then Fill Sign-In again for the password."
-            case "password": "Filled your password from \(a.name): press Sign In in the page."
-            default: "No sign-in form is showing: choose Sign In in CNBC's page first, then Fill Sign-In."
+            // The user name, and which fields the page shows.
+            let found = try await fill(webView, userName: userName, password: "")
+            guard found.contains("password"), hasPassword else {
+                signInNote = found == "none" ? "No sign-in form is showing: choose Sign In in CNBC's page first, then Fill Sign-In."
+                    : found.contains("password") ? "\(a.name) in Secure Accounts has no password: add it in its Edit Service Details."
+                    : userName.isEmpty ? "\(a.name) in Secure Accounts has no user name: add it in its Edit Service Details."
+                    : "Filled your user name from \(a.name): continue in the page, then Fill Sign-In again for the password."
+                return
             }
+            // The password, once Touch ID confirms it's you.
+            let you = LAContext()
+            you.localizedCancelTitle = "Don't Fill"
+            do {
+                _ = try await you.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "fill in your CNBC password from Secure Accounts")
+            } catch let e as LAError where [.userCancel, .appCancel, .systemCancel].contains(e.code) {
+                signInNote = "Touch ID was cancelled: the password wasn't filled."
+                return
+            } catch {
+                signInNote = "The password wasn't filled: Touch ID didn't confirm it's you (\(describe(error)))."
+                return
+            }
+            guard let password = SecureSecrets.get(.password, a.id), !password.isEmpty else {
+                signInNote = "This Mac's Keychain didn't give the password of \(a.name)."
+                return
+            }
+            _ = try await fill(webView, userName: "", password: password)
+            signInNote = "Filled your \(found.contains("user") && !userName.isEmpty ? "user name and " : "")password from \(a.name): press Sign In in the page."
         } catch {
             signInNote = "Couldn't fill the sign-in: \(describe(error))"
         }
+    }
+
+    /// Fills what's given (an empty value is left alone); answers the fields the page shows: "user", "password", both
+    /// ("user password") or "none".
+    private func fill(_ webView: WKWebView, userName: String, password: String) async throws -> String {
+        try await webView.callAsyncJavaScript(Self.fillScript, arguments: ["userName": userName, "password": password],
+                                              in: nil, contentWorld: .defaultClient) as? String ?? ""
     }
 
     /// Opens Secure Accounts on New Secure Account filled in for the stream's site (or its account, if there is one).
@@ -190,7 +219,7 @@ final class LiveVideo {
     }
 
     /// Fills the page's visible sign-in fields — the user name (an e-mail or user field) and the password — as typing
-    /// would, so the page's own scripts see them; never submits. Answers which it filled: both, user, password or none.
+    /// would, so the page's own scripts see them; never submits. Answers which fields it found, as fill(_:userName:password:).
     private static let fillScript = #"""
     const shown = el => !el.disabled && !el.readOnly && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
     const fields = [...document.querySelectorAll("input")].filter(shown);
@@ -203,10 +232,9 @@ final class LiveVideo {
         el.dispatchEvent(new Event("input", { bubbles: true }));
         el.dispatchEvent(new Event("change", { bubbles: true }));
     };
-    const did = [];
-    if (userField && userName) { set(userField, userName); did.push("user"); }
-    if (passwordField && password) { set(passwordField, password); did.push("password"); }
-    return did.length === 2 ? "both" : did[0] || "none";
+    if (userField && userName) set(userField, userName);
+    if (passwordField && password) set(passwordField, password);
+    return userField && passwordField ? "user password" : userField ? "user" : passwordField ? "password" : "none";
     """#
 
     // MARK: The page and the window
@@ -358,7 +386,7 @@ struct LiveVideoView: View {
                     if let a = video.signInAccount {
                         Button { Task { await video.fillSignIn() } } label: { Label("Fill Sign-In", systemImage: "key.fill") }
                             .disabled(video.webView == nil)
-                            .help("Fill CNBC's sign-in form with the user name and password of \(a.name) in Secure Accounts (the password from this Mac's Keychain); then press Sign In in the page")
+                            .help("Fill CNBC's sign-in form with the user name and password of \(a.name) in Secure Accounts — the password after Touch ID, from this Mac's Keychain; then press Sign In in the page")
                     } else {
                         Button { video.addSignInAccount() } label: { Label("Add to Secure Accounts…", systemImage: "key") }
                             .help("Keep your CNBC user name and password in Banking ▸ Secure Accounts (the password in this Mac's Keychain), for Fill Sign-In")

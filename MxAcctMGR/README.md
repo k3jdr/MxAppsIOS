@@ -253,7 +253,8 @@ markets within seconds, others shape positioning over weeks or months.
 
   CNBC doesn't stream its U.S. channel free anywhere, on YouTube or elsewhere (checked 10/29/26), so the first stream
   is the real channel and needs your subscription. **Fill Sign-In** (the key) fills CNBC's sign-in form with the user
-  name and password of your CNBC secure account (*Secure accounts*, below); you press Sign In. With no CNBC secure
+  name and password of your CNBC secure account (*Secure accounts*, below) — the password only after **Touch ID**
+  confirms it's you; you press Sign In. With no CNBC secure
   account the button is **Add to Secure Accounts…**, which opens New Secure Account filled in for CNBC. ↻ loads the
   stream again (after signing in, or a stalled stream). `LiveVideo.shared` is the window's controller, for features
   that drive it from elsewhere in the app: `open(_:)`, `play(_:)`, `keepOnTop`, `fillSignIn()`, `close()`, and what it
@@ -624,10 +625,13 @@ there is one). Its *Move Keys to Secure Accounts* moved the keys it used to keep
 the subscriptions' names, making the missing ones through the accounts service (ADR-0018 in `MxJobsMGR/c4/adr`).
 
 **CNBC sign-in.** CNBC Live's *Fill Sign-In* uses the secure account whose service address is on cnbc.com, or with
-CNBC in its name (an active one first): its user name, and its password read from the Keychain only when you press
-the button. It fills the sign-in form showing in CNBC's page — as typing would, in a script world of the app's own —
-and never submits it: you press Sign In. Nothing is kept anywhere else. Its *Add to Secure Accounts…* opens New Secure
-Account named CNBC with `https://www.cnbc.com` as its service address (or the CNBC account, if one is named so).
+CNBC in its name (an active one first). It fills the sign-in form showing in CNBC's page — as typing would, in a
+script world of the app's own — and never submits it: you press Sign In. The user name goes in at once. The password
+only when the page shows a password field: macOS asks for **Touch ID** first ("MxAcctMGR is trying to fill in your
+CNBC password from Secure Accounts"; *Use Password…* takes your Mac's login password instead, and is the only way when
+no Touch ID sensor is at hand), and only then is it read from the Keychain. *Don't Fill* leaves it out. Nothing is
+kept anywhere else. Its *Add to Secure Accounts…* opens New Secure Account named CNBC with `https://www.cnbc.com` as
+its service address (or the CNBC account, if one is named so).
 
 **Import Passwords and Keys…** reads a credentials worksheet from the workbook **open in Microsoft Excel** (Apple
 Events: macOS asks once whether MxAcctMGR may control Excel; an encrypted workbook can't be read from its file, and no
@@ -999,7 +1003,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | The built-in optimizers, the attribution result, and the Layer 3 service client |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live button) |
-| `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame it keeps, Fill Sign-In from Secure Accounts — and the window with its web view; pages' new windows (a TV provider's sign-in) open in the app |
+| `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame it keeps, Fill Sign-In from Secure Accounts (the password after Touch ID) — and the window with its web view; pages' new windows (a TV provider's sign-in) open in the app |
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
