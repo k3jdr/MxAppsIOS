@@ -141,6 +141,8 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+        // At launch, the Layer 3 services that aren't running (ServicesCheck.swift).
+        .modifier(StoppedServicesAlert(store: store))
     }
 
     @ViewBuilder
@@ -213,7 +215,8 @@ struct ContentView: View {
     /// Launch arguments for testing and demos: `-screen myImprove -sample employer-stock`, and for a report
     /// walkthrough `-screen reportWalkthrough -report cpi -reportStep 5` (0–6; 5 simulates the long run) with `-reaction sell-all`;
     /// for the earnings screens `-earningsDate 2026-10-20` (Earnings by Day, and the month or week the calendar shows)
-    /// with `-earningsSymbol PG` (the company selected), and `-earningsMode Week`.
+    /// with `-earningsSymbol PG` (the company selected), and `-earningsMode Week`. `-checkServices NO` skips the launch
+    /// check of the Layer 3 services.
     private func start() {
         NavigationKeys.install(store)
         // Links on tickers and names live in the security master, through the accounts service; links kept on this
@@ -296,6 +299,13 @@ struct ContentView: View {
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
         // Every account — the samples and My Portfolio — comes from the security master.
         Task { await store.loadAccounts() }
+        // The Layer 3 services that aren't running, in an alert (ServicesCheck.swift).
+        if defaults.object(forKey: "checkServices") == nil || defaults.bool(forKey: "checkServices") {
+            Task {
+                let stopped = await ServicesCheck.stopped()
+                if !stopped.isEmpty { store.stoppedServices = stopped }
+            }
+        }
         if defaults.bool(forKey: "addSecurities") { store.go(.myPortfolio); store.addingSecurities = true }
         if store.screen == .reportWalkthrough, defaults.object(forKey: "reportStep") != nil {
             let r = store.currentReport

@@ -302,6 +302,8 @@ final class PortStore {
     var addSecuritiesLink: LinkTarget?
     var message: String?
     var errorMessage: String?
+    /// The Layer 3 services MxAcctMGR uses that weren't running at launch, for its alert (ServicesCheck.swift).
+    var stoppedServices: [ServiceInfo]?
 
     init() {
         // Every account comes from the security master (loadAccounts): until it answers, the samples are empty
