@@ -72,7 +72,7 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Spending Analysis · SRM Table · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
-| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report, and Compute Hyperscalers Tracking ⌥⌘U in Tier 6 below Semiconductor Sales · Simulate the Long Run ⌘↩ |
+| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · CNBC Live (its own window) · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report, and Compute Hyperscalers Tracking ⌥⌘U in Tier 6 below Semiconductor Sales · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
 
 ### Back and Forward
@@ -236,7 +236,28 @@ markets within seconds, others shape positioning over weeks or months.
   **real** earnings releases (the six largest from Earnings by Day, marked "you hold"); an analyst-ratings panel that
   says no source is loaded yet — with what the selected account would be worth if it opened with the futures (each
   holding's real market and rate betas). Each panel says what it measures and how a long-term investor
-  might use it. Its earnings panel links to today's real list (Earnings by Day).
+  might use it. Its earnings panel links to today's real list (Earnings by Day). **Watch CNBC Live**, above the
+  tiles, opens CNBC Live.
+* **CNBC Live** (Morning Briefing ▸ Watch CNBC Live, Reports ▸ CNBC Live; `LiveVideo.swift`) — CNBC's live video in
+  a window of MxAcctMGR's own (WebKit), never handed to Safari: move it, resize it, or **Keep on Top** to read the
+  briefing under it. There is one window: opening it again brings it forward. It opens where you left it, launch after
+  launch, and closing it stops the video. The menu at its top left picks the stream, remembered for next time:
+  * **CNBC (U.S.) — cnbc.com Live TV** (the first) — the network as it airs, from cnbc.com/live-tv. CNBC streams it to
+    **CNBC+** subscribers and to viewers who sign in with a **TV provider**; without a sign-in the page shows CNBC+'s
+    offer and no video. Choose SIGN IN in the page (or *Fill Sign-In*, below); the sign-in stays in the window's
+    cookies, as in Safari. A TV provider's sign-in opens in a window of its own, also in the app.
+  * **CNBC Television on YouTube — live events** — free, live only while CNBC streams an event there (Fed decisions,
+    hearings, special coverage); the channel's page otherwise.
+  * **CNBC on YouTube — 24/7 documentaries** — free and always live, but CNBC's documentaries, not the business-news
+    channel.
+
+  CNBC doesn't stream its U.S. channel free anywhere, on YouTube or elsewhere (checked 10/29/26), so the first stream
+  is the real channel and needs your subscription. **Fill Sign-In** (the key) fills CNBC's sign-in form with the user
+  name and password of your CNBC secure account (*Secure accounts*, below); you press Sign In. With no CNBC secure
+  account the button is **Add to Secure Accounts…**, which opens New Secure Account filled in for CNBC. ↻ loads the
+  stream again (after signing in, or a stalled stream). `LiveVideo.shared` is the window's controller, for features
+  that drive it from elsewhere in the app: `open(_:)`, `play(_:)`, `keepOnTop`, `fillSignIn()`, `close()`, and what it
+  shows (`stream`, `isOpen`, `pageTitle`, `signInAccount`).
 * **Earnings Calendar** — real earnings reports by **month** or **week** (◀ ▶ and Today step through them), weeks Sunday to Saturday as on a
   U.S. calendar. A month
   cell shows the number of U.S.-listed companies reporting, for past days a bar and count of how many beat (green),
@@ -601,6 +622,12 @@ account's Edit Service Details) or `mxacctmgr://secure-accounts/new?name=…&api
 Secure Account filled in with the subscription's name, base URL and documentation, or the account of that name if
 there is one). Its *Move Keys to Secure Accounts* moved the keys it used to keep itself into the secure accounts of
 the subscriptions' names, making the missing ones through the accounts service (ADR-0018 in `MxJobsMGR/c4/adr`).
+
+**CNBC sign-in.** CNBC Live's *Fill Sign-In* uses the secure account whose service address is on cnbc.com, or with
+CNBC in its name (an active one first): its user name, and its password read from the Keychain only when you press
+the button. It fills the sign-in form showing in CNBC's page — as typing would, in a script world of the app's own —
+and never submits it: you press Sign In. Nothing is kept anywhere else. Its *Add to Secure Accounts…* opens New Secure
+Account named CNBC with `https://www.cnbc.com` as its service address (or the CNBC account, if one is named so).
 
 **Import Passwords and Keys…** reads a credentials worksheet from the workbook **open in Microsoft Excel** (Apple
 Events: macOS asks once whether MxAcctMGR may control Excel; an encrypted workbook can't be read from its file, and no
@@ -971,7 +998,8 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `AddSecuritiesSheet.swift` | Add Securities: search the security master |
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | The built-in optimizers, the attribution result, and the Layer 3 service client |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
-| `ReportsHubViews.swift` | Report Library and Morning Briefing |
+| `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live button) |
+| `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame it keeps, Fill Sign-In from Secure Accounts — and the window with its web view; pages' new windows (a TV provider's sign-in) open in the app |
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |

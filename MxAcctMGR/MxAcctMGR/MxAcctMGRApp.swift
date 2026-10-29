@@ -124,6 +124,7 @@ struct MxAcctMGRApp: App {
                     .keyboardShortcut("r", modifiers: [.command, .option])
                 Button("Morning Briefing") { store.go(.morningBriefing) }
                     .keyboardShortcut("m", modifiers: [.command, .option])
+                Button("CNBC Live") { LiveVideo.shared.open() }     // its own window (LiveVideo.swift)
                 Button("Earnings Calendar") { store.go(.earningsCalendar) }
                     .keyboardShortcut("e", modifiers: [.command, .option])
                 Button("Earnings Today") { store.openEarningsDay(EarningsDates.today()) }

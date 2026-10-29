@@ -236,6 +236,14 @@ struct MorningBriefingView: View {
             "Professionals use it to manage risk around events in the next hours and days. For a long-term account, it is context — what you'll read about today — not a to-do list.",
             "The market panels are an illustrative morning in the shape of a real one; your account and today's earnings list are real (security master, Nasdaq.com and FMP). Point at a panel for what it measures and how a long-term investor might use it.",
         ]) {
+            // CNBC's live video in a window of its own, beside or over the briefing (LiveVideo.swift).
+            HStack(spacing: 10) {
+                Button { LiveVideo.shared.open() } label: { Label("Watch CNBC Live", systemImage: "play.tv") }
+                    .buttonStyle(.borderedProminent)
+                    .help("Open CNBC's live video in a window of its own: move it, resize it, keep it on top while you read")
+                Text("In its own window — move it, resize it or keep it on top; it opens where you left it, and closing it stops the video.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 10) {
                 MetricTile(title: "Your account before the open", value: money(preMarket), caption: "if it moved with S&P futures (\(signedPct(Briefing.futuresMove, 1)))",
                            tint: Color.signed(preMarket), help: "An estimate from the futures move and each holding's market and rate betas (analytics service, from real prices): what \(p.name) would be worth at the open if prices followed the futures. It often changes by the close.")
