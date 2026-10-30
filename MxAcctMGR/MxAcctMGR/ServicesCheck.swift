@@ -5,7 +5,8 @@
 //  At launch: whether the Layer 3 services MxAcctMGR uses are running. Those that aren't are named in an alert, with
 //  what each one does here and the command that starts them (Guide ▸ Layer 3 Services has every service's status).
 //  The services can still be starting when the app opens at login, so the ones that don't answer are asked again a
-//  few seconds later before the alert shows. The launch argument -checkServices NO leaves it out (tests and demos).
+//  few seconds later before the alert shows. After that the app keeps checking: while any of them doesn't answer, the
+//  sidebar's Layer 3 Services row and the toolbar's Layer 3 services engine are red. The launch argument -checkServices NO leaves it all out (tests and demos).
 //
 
 import AppKit
@@ -22,6 +23,10 @@ enum ServicesCheck {
     ]
     /// How long to wait before asking the silent ones again.
     static let retry = 4.0
+    /// How often to check again after launch.
+    static let watchEvery = 30.0
+    /// The red of what's down, dark enough for white text.
+    static let red = Color(red: 0.82, green: 0.1, blue: 0.1)
 
     /// The services MxAcctMGR uses that aren't running, after a second try.
     static func stopped() async -> [ServiceInfo] {
@@ -31,6 +36,17 @@ enum ServicesCheck {
             running = await ServiceCatalog.probeAll()
         }
         return used.compactMap { running[$0.id] == true ? nil : ServiceCatalog.service($0.id) }
+    }
+
+    /// At launch and from then on: keeps the store's services that are down current; only the first check alerts.
+    static func watch(_ store: PortStore) async {
+        let stopped = await Self.stopped()
+        store.servicesDown = stopped.map(\.id)
+        if !stopped.isEmpty { store.stoppedServices = stopped }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(watchEvery))
+            store.servicesDown = await Self.stopped().map(\.id)
+        }
     }
 
     static func title(_ stopped: [ServiceInfo]) -> String {
@@ -48,6 +64,45 @@ enum ServicesCheck {
     static func copyStartCommand() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(ServiceCatalog.startCommand, forType: .string)
+    }
+}
+
+/// The toolbar's engine picker while it reads Layer 3 services and any of them is down, so it shows even when the
+/// sidebar's row is scrolled out of sight.
+struct ServicesDownPicker: ViewModifier {
+    var down: [String]
+
+    func body(content: Content) -> some View {
+        if down.isEmpty {
+            content
+        } else {
+            content
+                .foregroundStyle(.white)
+                .background(ServicesCheck.red, in: Capsule())
+                .help("Not running: " + down.joined(separator: ", "))
+        }
+    }
+}
+
+/// The sidebar's Layer 3 Services row while any service MxAcctMGR uses is down: red, with their names on hover.
+struct ServicesDownRow: ViewModifier {
+    var down: [String]
+
+    func body(content: Content) -> some View {
+        if down.isEmpty {
+            content
+        } else {
+            let names = "Not running: " + down.joined(separator: ", ")
+            content
+                .foregroundStyle(.white)
+                .listItemTint(.white)
+                .background {
+                    RoundedRectangle(cornerRadius: 6).fill(ServicesCheck.red)
+                        .padding(.horizontal, -8).padding(.vertical, -4)
+                }
+                .help(names)
+                .accessibilityValue(names)
+        }
     }
 }
 

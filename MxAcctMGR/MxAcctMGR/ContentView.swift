@@ -28,6 +28,7 @@ struct ContentView: View {
                   systemImage: screen == .reportWalkthrough ? store.currentReport.symbol : screen.systemImage)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                .modifier(ServicesDownRow(down: screen == .services ? store.servicesDown : []))
                 // Right-click for the page's link and its hover text (PageLinks.swift).
                 .pageLink(screen, title: sidebarTitle(screen))
                 .quickHelpArea(PortHelp.about(screen))
@@ -209,6 +210,7 @@ struct ContentView: View {
         .pickerStyle(.menu)
         .fixedSize()
         .help("Run the optimizers built-in or through the Layer 3 services (portfolio-java, portfolio-cpp)")
+        .modifier(ServicesDownPicker(down: store.engine == .services ? store.servicesDown : []))
         .quickHelpArea(PortHelp.engine)
     }
 
@@ -299,12 +301,9 @@ struct ContentView: View {
         if let id = defaults.string(forKey: "sample"), store.portfolios.contains(where: { $0.id == id }) { store.selectedID = id }
         // Every account — the samples and My Portfolio — comes from the security master.
         Task { await store.loadAccounts() }
-        // The Layer 3 services that aren't running, in an alert (ServicesCheck.swift).
+        // The Layer 3 services that aren't running: an alert at launch, the sidebar's row red for as long (ServicesCheck.swift).
         if defaults.object(forKey: "checkServices") == nil || defaults.bool(forKey: "checkServices") {
-            Task {
-                let stopped = await ServicesCheck.stopped()
-                if !stopped.isEmpty { store.stoppedServices = stopped }
-            }
+            Task { await ServicesCheck.watch(store) }
         }
         if defaults.bool(forKey: "addSecurities") { store.go(.myPortfolio); store.addingSecurities = true }
         if store.screen == .reportWalkthrough, defaults.object(forKey: "reportStep") != nil {

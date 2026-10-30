@@ -304,6 +304,8 @@ final class PortStore {
     var errorMessage: String?
     /// The Layer 3 services MxAcctMGR uses that weren't running at launch, for its alert (ServicesCheck.swift).
     var stoppedServices: [ServiceInfo]?
+    /// The ones not answering now, kept current after launch: the sidebar's Layer 3 Services row is red while there are any.
+    var servicesDown: [String] = []
 
     init() {
         // Every account comes from the security master (loadAccounts): until it answers, the samples are empty

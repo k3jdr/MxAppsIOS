@@ -989,8 +989,9 @@ srm-loader (market-sample is only for MxJobsMGR's jobspaces) — and if any does
 alert: each one that isn't running, with what MxAcctMGR uses it for, and the command that starts them. *Copy Start
 Command* puts `python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py start` on the clipboard; *Layer 3 Services…*
 opens that screen. A service that doesn't answer is asked again 4 seconds later before the alert shows, since the
-services may still be starting when the app opens at login. The launch argument `-checkServices NO` skips the check
-(`ServicesCheck.swift`).
+services may still be starting when the app opens at login. After that it checks every 30 seconds: while any of the
+five doesn't answer, **Layer 3 Services** in the sidebar is red, with the ones that are down on hover, as is the
+toolbar's engine picker while it reads Layer 3 services, and both go back to normal once they answer again. The launch argument `-checkServices NO` skips all of this (`ServicesCheck.swift`).
 
 ## Build and run
 
@@ -1027,7 +1028,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `SRMData.swift` | Security-master securities and benchmarks registry (with the analytics service's risk numbers), the accounts-service client, analytics inputs |
 | `AddSecuritiesSheet.swift` | Add Securities: search the security master |
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | The built-in optimizers, the attribution result, and the Layer 3 service client |
-| `ServicesCheck.swift` | At launch, the Layer 3 services MxAcctMGR uses that aren't running, for the alert that names them |
+| `ServicesCheck.swift` | The Layer 3 services MxAcctMGR uses that aren't running: the alert at launch that names them, and the sidebar row and toolbar picker that stay red while any is down |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live button) |
 | `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame and divider it keeps, Fill Sign-In from Secure Accounts (the password after Touch ID) — and the window with its web view, beside the news; pages' new windows (a TV provider's sign-in) open in the app |
