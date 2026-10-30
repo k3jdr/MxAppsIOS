@@ -257,8 +257,18 @@ markets within seconds, others shape positioning over weeks or months.
   confirms it's you; you press Sign In. With no CNBC secure
   account the button is **Add to Secure Accounts…**, which opens New Secure Account filled in for CNBC. ↻ loads the
   stream again (after signing in, or a stalled stream). `LiveVideo.shared` is the window's controller, for features
-  that drive it from elsewhere in the app: `open(_:)`, `play(_:)`, `keepOnTop`, `fillSignIn()`, `close()`, and what it
-  shows (`stream`, `isOpen`, `pageTitle`, `signInAccount`).
+  that drive it from elsewhere in the app: `open(_:)`, `play(_:)`, `keepOnTop`, `showNews(_:)`, `fillSignIn()`,
+  `close()`, and what it shows (`stream`, `isOpen`, `showsNews`, `pageTitle`, `signInAccount`).
+
+  **Market News**, right of the video past a divider (`MassiveNews.swift`), is Massive's news feed
+  (`GET api.massive.com/v2/reference/news`, in every Stocks plan and updated hourly), the 50 newest articles, asked as
+  the panel shows and every five minutes while it does. Each article has its headline, publisher and time, and its
+  tickers colored by Massive's sentiment for each (green positive, red negative, with the reasoning on hover); its
+  summary shows on hover. Click a headline to read the article in your browser, or a ticker for only its news (or
+  type a symbol in the field at the panel's top and press Return; empty it for all the news). Drag the divider to
+  size the two sides, all the way right to hide the news; the button at the header's right end hides or shows it.
+  Resizing the window resizes the video, and the divider's place and whether the news shows are kept between
+  launches. The API key comes from Secure Accounts (*Massive news*, below).
 * **Earnings Calendar** — real earnings reports by **month** or **week** (◀ ▶ and Today step through them), weeks Sunday to Saturday as on a
   U.S. calendar. A month
   cell shows the number of U.S.-listed companies reporting, for past days a bar and count of how many beat (green),
@@ -632,6 +642,13 @@ CNBC password from Secure Accounts"; *Use Password…* takes your Mac's login pa
 no Touch ID sensor is at hand), and only then is it read from the Keychain. *Don't Fill* leaves it out. Nothing is
 kept anywhere else. Its *Add to Secure Accounts…* opens New Secure Account named CNBC with `https://www.cnbc.com` as
 its service address (or the CNBC account, if one is named so).
+
+**Massive news.** CNBC Live's Market News asks Massive's feed with the secure account whose service address or API is
+on massive.com (or polygon.io, its old name), or with Massive in its name, but not the S3 Flat Files keys; an active
+one first, then one named for the API. Its key is the account's service key, or its product key if it has no service
+key, read from this Mac's Keychain for each request (no Touch ID: only the app sees it, and it isn't shown) and sent
+in the `Authorization` header, never in a web address. With no such account the panel offers *Add to Secure
+Accounts…* (New Secure Account filled in for Massive); with no key, *Open in Secure Accounts…*.
 
 **Import Passwords and Keys…** reads a credentials worksheet from the workbook **open in Microsoft Excel** (Apple
 Events: macOS asks once whether MxAcctMGR may control Excel; an encrypted workbook can't be read from its file, and no
@@ -1012,7 +1029,8 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ServicesCheck.swift` | At launch, the Layer 3 services MxAcctMGR uses that aren't running, for the alert that names them |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live button) |
-| `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame it keeps, Fill Sign-In from Secure Accounts (the password after Touch ID) — and the window with its web view; pages' new windows (a TV provider's sign-in) open in the app |
+| `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame and divider it keeps, Fill Sign-In from Secure Accounts (the password after Touch ID) — and the window with its web view, beside the news; pages' new windows (a TV provider's sign-in) open in the app |
+| `MassiveNews.swift` | CNBC Live's Market News: Massive's news feed, asked with the Massive API key in Secure Accounts (`MassiveNews.shared`), and the panel that lists it |
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |

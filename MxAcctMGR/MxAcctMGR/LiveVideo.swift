@@ -20,9 +20,13 @@
 //    • CNBC on YouTube, 24/7 — free and always live, but documentaries and deep dives, not the business-news channel.
 //  CNBC doesn't stream its U.S. channel free anywhere, on YouTube or elsewhere (checked 10/29/26).
 //
+//  Right of the video, past a divider you drag to size them (all the way right hides it), is Massive's market news
+//  (MassiveNews.swift), asked with the Massive API key in Secure Accounts; the header's last button shows or hides it.
+//  The divider's place, and whether the news shows, are kept between launches with the window's.
+//
 //  LiveVideo.shared is the window's controller: the rest of the app opens it (open), changes its stream (play), keeps
-//  it on top (keepOnTop), fills the sign-in (fillSignIn) or closes it, and reads what it shows (stream, isOpen,
-//  pageTitle, signInAccount).
+//  it on top (keepOnTop), shows the news (showNews; news is its controller), fills the sign-in (fillSignIn) or closes
+//  it, and reads what it shows (stream, isOpen, showsNews, pageTitle, signInAccount).
 //
 
 import AppKit
@@ -59,9 +63,12 @@ final class LiveVideo {
                detail: "Free and always live: CNBC's documentaries and deep dives, not the business-news channel"),
     ]
 
-    /// The window's place and size, kept in the app's defaults between launches.
-    private static let frameName = "CNBC Live"
-    private static let streamKey = "liveVideoStream", onTopKey = "liveVideoKeepOnTop"
+    /// The window's place and size, and the divider's, kept in the app's defaults between launches.
+    private static let frameName = "CNBC Live", splitName = "CNBC Live News"
+    private static let streamKey = "liveVideoStream", onTopKey = "liveVideoKeepOnTop", newsKey = "liveVideoShowsNews"
+    private static let newsWidthKey = "liveVideoNewsWidth"
+    /// The news's width the first time it shows.
+    private static let newsWidth: CGFloat = 340
 
     /// The stream the window plays (and opens to next time).
     private(set) var stream: Stream
@@ -72,6 +79,10 @@ final class LiveVideo {
             window?.level = keepOnTop ? .floating : .normal
         }
     }
+    /// Massive's news shows right of the video.
+    private(set) var showsNews: Bool
+    /// The news panel's controller.
+    @ObservationIgnored let news = MassiveNews.shared
     /// The window is on screen.
     private(set) var isOpen = false
     private(set) var loading = false
@@ -87,6 +98,9 @@ final class LiveVideo {
     private(set) var signInNote: String?
 
     @ObservationIgnored private var window: NSWindow?
+    @ObservationIgnored private var newsItem: NSSplitViewItem?
+    /// The window opened with the news hidden: the width to show it at (the divider's saved place doesn't keep it).
+    @ObservationIgnored private var hiddenNewsWidth: CGFloat?
     @ObservationIgnored private let pages = Pages()
     @ObservationIgnored private var titleWatch: NSKeyValueObservation?
     @ObservationIgnored private var closing: NSObjectProtocol?
@@ -96,6 +110,7 @@ final class LiveVideo {
         let saved = UserDefaults.standard.string(forKey: Self.streamKey)
         stream = Self.streams.first { $0.id == saved } ?? Self.cnbcUS
         keepOnTop = UserDefaults.standard.bool(forKey: Self.onTopKey)
+        showsNews = UserDefaults.standard.object(forKey: Self.newsKey) as? Bool ?? true
         pages.video = self
     }
 
@@ -111,7 +126,30 @@ final class LiveVideo {
         NSApp.activate()
         w.makeKeyAndOrderFront(nil)
         isOpen = true
+        news.setActive(showsNews)
         Task { await findSignInAccount() }
+    }
+
+    /// Shows or hides Massive's news right of the video.
+    func showNews(_ on: Bool) {
+        guard let newsItem else { newsShown(on); return }
+        if on, let width = hiddenNewsWidth, let split = window?.contentViewController as? NSSplitViewController {
+            hiddenNewsWidth = nil
+            newsItem.isCollapsed = false
+            split.splitView.layoutSubtreeIfNeeded()
+            split.splitView.setPosition(split.splitView.bounds.width - width - split.splitView.dividerThickness, ofDividerAt: 0)
+        } else {
+            newsItem.animator().isCollapsed = !on
+        }
+    }
+
+    /// The news showed or went (the button, or the divider dragged all the way right).
+    private func newsShown(_ on: Bool) {
+        if on != showsNews {
+            showsNews = on
+            UserDefaults.standard.set(on, forKey: Self.newsKey)
+        }
+        news.setActive(isOpen && on)
     }
 
     /// Changes the stream; the window, if open, plays it at once.
@@ -214,6 +252,11 @@ final class LiveVideo {
         guard let site = stream.signInSite, let store = PortAppDelegate.store else { return }
         store.secureRequest = .newSecureAccount(name: site == "cnbc.com" ? "CNBC" : site, api: nil, url: "https://www.\(site)")
         store.go(.secureAccounts)
+        Self.showMainWindow()
+    }
+
+    /// Brings the app's main window forward (sent to Secure Accounts, say).
+    static func showMainWindow() {
         NSApp.activate()
         NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }?.makeKeyAndOrderFront(nil)
     }
@@ -257,26 +300,79 @@ final class LiveVideo {
     }
 
     private func makeWindow() -> NSWindow {
-        let host = NSHostingController(rootView: LiveVideoView(video: self))
-        host.sizingOptions = [.minSize]     // the window is yours to size; the bar and page only set its minimum
-        let w = NSWindow(contentViewController: host)
+        // The video and the news, either side of the divider; the window is yours to size, and each side only sets
+        // its minimum.
+        let videoHost = NSHostingController(rootView: LiveVideoView(video: self))
+        videoHost.sizingOptions = [.minSize]
+        let newsHost = NSHostingController(rootView: MassiveNewsView(news: news))
+        newsHost.sizingOptions = [.minSize]
+        let split = LiveSplit()
+        split.splitView.isVertical = true
+        split.splitView.dividerStyle = .thin
+        let videoItem = NSSplitViewItem(viewController: videoHost)
+        videoItem.holdingPriority = .defaultLow      // resizing the window resizes the video, not the news
+        let newsItem = NSSplitViewItem(viewController: newsHost)
+        newsItem.holdingPriority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.defaultLow.rawValue + 10)
+        newsItem.canCollapse = true
+        newsItem.minimumThickness = 280
+        split.addSplitViewItem(videoItem)
+        split.addSplitViewItem(newsItem)
+        let placed = UserDefaults.standard.object(forKey: "NSSplitView Subview Frames \(Self.splitName)") != nil
+        split.splitView.autosaveName = Self.splitName
+        newsItem.isCollapsed = !showsNews
+        let width = UserDefaults.standard.double(forKey: Self.newsWidthKey)
+        hiddenNewsWidth = !showsNews && width > 0 ? width : nil
+        split.resized = { [weak self, weak newsItem, weak newsHost] in
+            guard let self, let newsItem else { return }
+            if newsItem.isCollapsed == showsNews { newsShown(!newsItem.isCollapsed) }
+            if !newsItem.isCollapsed, let width = newsHost?.view.frame.width, width > 0 {
+                UserDefaults.standard.set(width, forKey: Self.newsWidthKey)
+            }
+        }
+        self.newsItem = newsItem
+
+        let w = NSWindow(contentViewController: split)
         w.title = "CNBC Live"
         w.subtitle = stream.title
         w.styleMask.insert([.resizable, .miniaturizable])
         w.isReleasedWhenClosed = false
         w.collectionBehavior.insert(.fullScreenPrimary)
-        w.setContentSize(NSSize(width: 960, height: 580))
-        if !w.setFrameUsingName(Self.frameName) { w.center() }
+        w.setContentSize(NSSize(width: 960 + (showsNews ? Self.newsWidth : 0), height: 580))
+        if !w.setFrameUsingName(Self.frameName) {
+            w.center()
+        } else if !placed && showsNews, let screen = w.screen?.visibleFrame {
+            // The window was sized for the video alone: room for the news beside it.
+            var f = w.frame
+            f.size.width = min(f.width + Self.newsWidth, screen.width)
+            f.origin.x = max(screen.minX, min(f.minX, screen.maxX - f.width))
+            w.setFrame(f, display: false)
+        }
         w.setFrameAutosaveName(Self.frameName)
+        if !placed && showsNews {
+            split.splitView.layoutSubtreeIfNeeded()
+            split.splitView.setPosition(split.splitView.bounds.width - Self.newsWidth - split.splitView.dividerThickness, ofDividerAt: 0)
+        }
         closing = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
             MainActor.assumeIsolated { LiveVideo.shared.stopped() }
         }
-        // Back from Secure Accounts (a CNBC account just added, say): look it up again.
+        // Back from Secure Accounts (a CNBC account or Massive key just added, say): look them up again.
         forward = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: w, queue: .main) { _ in
-            Task { @MainActor in await LiveVideo.shared.findSignInAccount() }
+            Task { @MainActor in
+                LiveVideo.shared.news.cameForward()
+                await LiveVideo.shared.findSignInAccount()
+            }
         }
         window = w
         return w
+    }
+
+    /// The window's two sides, telling the controller when the divider moves (dragged all the way right, the news hides).
+    private final class LiveSplit: NSSplitViewController {
+        var resized: (() -> Void)?
+        override func splitViewDidResizeSubviews(_ notification: Notification) {
+            super.splitViewDidResizeSubviews(notification)
+            resized?()
+        }
     }
 
     /// The window closed: the video stops, and its page (and any sign-in window it opened) goes.
@@ -290,6 +386,7 @@ final class LiveVideo {
         titleWatch = nil
         webView = nil
         pages.closePopups()
+        news.setActive(false)
         isOpen = false
         loading = false
         pageTitle = ""
@@ -401,6 +498,13 @@ struct LiveVideoView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(note ?? video.stream.detail)
+                Toggle(isOn: Binding(get: { video.showsNews }, set: { video.showNews($0) })) {
+                    Label("Market News", systemImage: "sidebar.right")
+                }
+                .toggleStyle(.button)
+                .labelStyle(.iconOnly)
+                .help(video.showsNews ? "Hide the market news (or drag the divider all the way right)"
+                      : "Show Massive's market news right of the video (drag the divider between them to size it)")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
