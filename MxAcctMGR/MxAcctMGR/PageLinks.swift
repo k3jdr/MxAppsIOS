@@ -69,8 +69,10 @@ func pageLinkMenu(_ screen: Screen, title: String) -> some View {
 
 extension View {
     /// A sidebar page's row with its link: the hover card when the pointer rests on it, and a link mark that opens it.
-    func pageLink(_ screen: Screen, title: String) -> some View {
+    /// `menu` goes above the link's items in its right-click menu.
+    func pageLink<Items: View>(_ screen: Screen, title: String, @ViewBuilder menu: () -> Items = { EmptyView() }) -> some View {
         let link = PageLinks.shared.link(screen)
+        let items = menu()
         return background {
             if let link, let url = link.url {
                 LinkWordsAnchor(url: url, words: link.text ?? title, tip: link.tipText, title: link.title, testID: "page:\(screen.rawValue)",
@@ -85,6 +87,9 @@ extension View {
                     .help("Open \(link.text ?? title)'s link")
             }
         }
-        .contextMenu { pageLinkMenu(screen, title: title) }
+        .contextMenu {
+            items
+            pageLinkMenu(screen, title: title)
+        }
     }
 }

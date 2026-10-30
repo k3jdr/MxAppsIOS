@@ -263,7 +263,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MxAcctMGR;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Secure Accounts reads a credentials worksheet from the workbook open in Microsoft Excel, so its passwords and keys go into this Mac's Keychain without a copy in a file.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Secure Accounts reads a credentials worksheet from the workbook open in Microsoft Excel, so its passwords and keys go into this Mac's Keychain without a copy in a file. Start Stopped Services asks Terminal to start the Layer 3 services.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Educational software — not investment advice.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -302,7 +302,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MxAcctMGR;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Secure Accounts reads a credentials worksheet from the workbook open in Microsoft Excel, so its passwords and keys go into this Mac's Keychain without a copy in a file.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Secure Accounts reads a credentials worksheet from the workbook open in Microsoft Excel, so its passwords and keys go into this Mac's Keychain without a copy in a file. Start Stopped Services asks Terminal to start the Layer 3 services.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Educational software — not investment advice.";
 				LD_RUNPATH_SEARCH_PATHS = (

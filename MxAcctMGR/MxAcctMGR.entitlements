@@ -3,13 +3,15 @@
 <plist version="1.0">
 <dict>
 	<!-- Secure Accounts ▸ Import Passwords and Keys… reads a credentials worksheet from the workbook open in Excel
-	     (Apple Events: macOS asks once). The sandbox, network and user-selected file entitlements come from the
+	     (Apple Events: macOS asks once). Layer 3 Services' Start Stopped Services asks Terminal to run mxservices.py
+	     (the sandbox would hold anything the app ran itself). The sandbox, network and user-selected file entitlements come from the
 	     build settings. -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
 	<key>com.apple.security.temporary-exception.apple-events</key>
 	<array>
 		<string>com.microsoft.Excel</string>
+		<string>com.apple.Terminal</string>
 	</array>
 </dict>
 </plist>

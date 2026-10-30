@@ -7,6 +7,8 @@
 //  The services can still be starting when the app opens at login, so the ones that don't answer are asked again a
 //  few seconds later before the alert shows. After that the app keeps checking: while any of them doesn't answer, the
 //  sidebar's Layer 3 Services row and the toolbar's Layer 3 services engine are red. The launch argument -checkServices NO leaves it all out (tests and demos).
+//  The row's right-click menu and Guide ▸ Start Stopped Services start them in Terminal: the app's sandbox would hold
+//  anything it ran itself, and a service needs the repository and the Keychain.
 //
 
 import AppKit
@@ -61,9 +63,56 @@ enum ServicesCheck {
             + "\n\nStart the services in Terminal:\n\(ServiceCatalog.startCommand)"
     }
 
+    /// Asks Terminal to start the services that are down, then checks until they answer (or a minute has gone).
+    static func startStopped(_ store: PortStore) {
+        let command = ServiceCatalog.startCommand + " " + store.servicesDown.joined(separator: " ")
+        Task {
+            let problem = await Task.detached { askTerminal(command) }.value
+            if let problem {
+                store.errorMessage = problem + "\n\nStart them in Terminal yourself:\n" + command
+                return
+            }
+            for _ in 0..<15 {
+                try? await Task.sleep(for: .seconds(2))
+                store.servicesDown = await stopped().map(\.id)
+                if store.servicesDown.isEmpty { break }
+            }
+        }
+    }
+
+    /// Runs the command in a new Terminal window, where its output shows; what went wrong, if anything. macOS asks
+    /// once whether MxAcctMGR may control Terminal.
+    private nonisolated static func askTerminal(_ command: String) -> String? {
+        var error: NSDictionary?
+        NSAppleScript(source: """
+            tell application "Terminal"
+                activate
+                do script "\(command)"
+            end tell
+            """)?.executeAndReturnError(&error)
+        guard let error else { return nil }
+        let number = error[NSAppleScript.errorNumber] as? Int ?? 0
+        return number == -1743
+            ? "MxAcctMGR isn't allowed to control Terminal: allow it in System Settings ▸ Privacy & Security ▸ Automation."
+            : "Terminal: \(error[NSAppleScript.errorMessage] as? String ?? "error \(number)")"
+    }
+
     static func copyStartCommand() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(ServiceCatalog.startCommand, forType: .string)
+    }
+}
+
+/// The menu item that starts the services that are down (the sidebar row's right-click menu, Guide).
+struct StartStoppedServicesItem: View {
+    var store: PortStore
+
+    var body: some View {
+        let down = store.servicesDown
+        Button(down.isEmpty ? "All Services Running" : "Start Stopped Services: " + down.joined(separator: ", ")) {
+            ServicesCheck.startStopped(store)
+        }
+        .disabled(down.isEmpty)
     }
 }
 
@@ -100,7 +149,7 @@ struct ServicesDownRow: ViewModifier {
                     RoundedRectangle(cornerRadius: 6).fill(ServicesCheck.red)
                         .padding(.horizontal, -8).padding(.vertical, -4)
                 }
-                .help(names)
+                .help(names + ". Right-click to start them.")
                 .accessibilityValue(names)
         }
     }

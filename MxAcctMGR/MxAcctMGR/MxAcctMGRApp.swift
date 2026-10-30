@@ -86,6 +86,7 @@ struct MxAcctMGRApp: App {
                     .keyboardShortcut("l", modifiers: [.command, .shift])
                 Button("Layer 3 Services") { store.go(.services) }
                     .keyboardShortcut("l", modifiers: [.command, .option])
+                StartStoppedServicesItem(store: store)
             }
             CommandMenu("Portfolio") {
                 Picker("Account", selection: $store.selectedID) {

@@ -30,7 +30,12 @@ struct ContentView: View {
                 .contentShape(Rectangle())
                 .modifier(ServicesDownRow(down: screen == .services ? store.servicesDown : []))
                 // Right-click for the page's link and its hover text (PageLinks.swift).
-                .pageLink(screen, title: sidebarTitle(screen))
+                .pageLink(screen, title: sidebarTitle(screen)) {
+                    if screen == .services {
+                        StartStoppedServicesItem(store: store)
+                        Divider()
+                    }
+                }
                 .quickHelpArea(PortHelp.about(screen))
                 .tag(screen)
         }

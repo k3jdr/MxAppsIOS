@@ -991,7 +991,11 @@ Command* puts `python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py start` on th
 opens that screen. A service that doesn't answer is asked again 4 seconds later before the alert shows, since the
 services may still be starting when the app opens at login. After that it checks every 30 seconds: while any of the
 five doesn't answer, **Layer 3 Services** in the sidebar is red, with the ones that are down on hover, as is the
-toolbar's engine picker while it reads Layer 3 services, and both go back to normal once they answer again. The launch argument `-checkServices NO` skips all of this (`ServicesCheck.swift`).
+toolbar's engine picker while it reads Layer 3 services, and both go back to normal once they answer again.
+**Start Stopped Services**, in the sidebar row's right-click menu and the Guide menu, names the ones that are down and
+starts them with `mxservices.py` in a new Terminal window, where the output shows: the app's sandbox would hold anything
+it ran itself, and a service needs the repository and the Keychain. macOS asks once whether MxAcctMGR may control
+Terminal (System Settings ▸ Privacy & Security ▸ Automation). The launch argument `-checkServices NO` skips all of this (`ServicesCheck.swift`).
 
 ## Build and run
 
