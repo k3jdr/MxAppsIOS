@@ -84,15 +84,10 @@ Choose what happens when an item already exists: **Ask**, **Replace**, **Replace
 **Drag and drop** works between panes, with Finder and with other apps. Within one volume a drag moves;
 hold ⌥ to copy. Drop on a folder row to put the items into that folder.
 
-**Delete… (F8 / ⌘⌫)** deletes the marked items permanently (nothing goes to the Trash), on the machine they
-are on: a file on an SMB or NFS mount is deleted by its server over `ssh` (`Remove-Item` on Windows, `rm` elsewhere),
-so nothing is copied or moved across the network. It always asks first, naming the items, their paths on that
-machine and the host. The server's command checks that each path is still what the list showed (folder or
-file, same size) and leaves it alone otherwise; a symlink or junction is removed itself, never what it points
-to. A server that can't be reached over `ssh` is named in the question, and its items are deleted through the
-mount instead.
+**Delete… (F8 / ⌘⌫)** deletes the marked items permanently (nothing goes to the Trash), here on this Mac — a file
+on an SMB or NFS share through its mount. It always asks first, naming the items and their paths.
 
-**Commands on a file's server.** Delete and ffmpeg Meta-data… find the machine from the mount: the SSH target is
+**Commands on a file's server.** ffmpeg Meta-data… (below) finds the machine from the mount: the SSH target is
 the `~/.ssh/config` alias whose `HostName` is the mount's server (else `user@server` with the mount's user),
 signed in with keys or the agent (never prompting). The share's folder comes from the server itself:
 `Get-SmbShare` on Windows (through `powershell -EncodedCommand`, so cmd or PowerShell as sshd's shell both work),

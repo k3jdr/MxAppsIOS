@@ -40,7 +40,7 @@ enum FileHelp {
         title: "MxFileMGR",
         detail: "Two panes, each with tabs; the active one has the accent line on top. Tab switches panes, Return opens, Backspace goes up, "
             + "Space shows Quick Look and typing jumps to a name. Mark items with click, ⇧-click or ⌘-click; F5 copies and F6 moves them "
-            + "to the other pane, F2 renames, F7 makes a folder, F8 (⌘⌫) deletes, on the machine the files are on. The sidebar has Favorites, cloud storage, drives and servers.",
+            + "to the other pane, F2 renames, F7 makes a folder, F8 (⌘⌫) deletes permanently, after asking. The sidebar has Favorites, cloud storage, drives and servers.",
         symbol: "rectangle.split.2x1")
 
     private static func sheetScreen(_ sheet: WorkspaceSheet) -> (String, QuickHelpItem) {

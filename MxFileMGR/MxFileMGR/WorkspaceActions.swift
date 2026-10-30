@@ -138,57 +138,16 @@ extension Workspace {
 
     // MARK: Delete
 
-    /// Deletes the marked items permanently, on the machine each one is on: a file on an SMB or NFS mount
-    /// is deleted by its server over ssh (FileHost.swift), anything else here. Always asks first, naming them.
+    /// Deletes the marked items permanently, here — a file on a network share through its mount. Always asks
+    /// first, naming them.
     func deleteItems() {
         guard let items = requireMarked() else { return }
-        Task { await delete(items) }
-    }
-
-    private func delete(_ items: [FileItem]) async {
-        var local: [FileItem] = []
-        var remote: [(RemoteHost, [(FileItem, String)])] = []
-        var unreachable: [String] = []
-        for item in items {
-            do {
-                let location = try await FileHosts.locate(item.url)
-                if let host = location.host {
-                    if let i = remote.firstIndex(where: { $0.0 == host }) { remote[i].1.append((item, location.path)) }
-                    else { remote.append((host, [(item, location.path)])) }
-                } else {
-                    local.append(item)
-                }
-            } catch {
-                // A server without ssh: the mount can still delete it, after saying why.
-                let reason = (error as? CLIToolError)?.message ?? error.localizedDescription
-                if !unreachable.contains(reason) { unreachable.append(reason) }
-                local.append(item)
-            }
-        }
-
-        func list(_ paths: [String]) -> String {
-            let shown = paths.prefix(8).map { "    " + $0 }
-            return (shown + (paths.count > 8 ? ["    … and \(paths.count - 8) more"] : [])).joined(separator: "\n")
-        }
-        var sections = remote.map { host, pairs in "On \(host.name):\n" + list(pairs.map(\.1)) }
-        if !local.isEmpty {
-            sections.append((remote.isEmpty ? "" : "On this Mac:\n") + list(local.map(\.url.path)))
-        }
-        if !unreachable.isEmpty {
-            sections.append(unreachable.joined(separator: "\n") + "\nThose items are deleted through the network mount instead.")
-        }
-        let whereText = remote.count == 1 && local.isEmpty ? " on \(remote[0].0.name)"
-            : remote.isEmpty && unreachable.isEmpty ? " on this Mac" : ""
-        guard Alerts.confirm("Delete \(describe(items))\(whereText)?",
-                             info: sections.joined(separator: "\n\n") + "\n\nThis deletes permanently: nothing goes to the Trash, and it can't be undone.",
+        let paths = items.map(\.url.path)
+        let shown = paths.prefix(8).map { "    " + $0 } + (paths.count > 8 ? ["    … and \(paths.count - 8) more"] : [])
+        guard Alerts.confirm("Delete \(describe(items))?",
+                             info: shown.joined(separator: "\n") + "\n\nThis deletes permanently: nothing goes to the Trash, and it can't be undone.",
                              ok: "Delete", destructive: true) else { return }
-        if !local.isEmpty { TransferManager.shared.delete(local.map(\.url)) }
-        for (host, pairs) in remote {
-            TransferManager.shared.deleteRemote(pairs.map { item, path in
-                RemoteDeleteTarget(path: path, name: item.name, isFolder: item.isDirectory || item.isPackage,
-                                   isSymlink: item.isSymlink, size: item.size)
-            }, on: host)
-        }
+        TransferManager.shared.delete(items.map(\.url))
     }
 
     private func describe(_ items: [FileItem]) -> String {

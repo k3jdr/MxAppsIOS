@@ -2,9 +2,10 @@
 //  FileHost.swift
 //  MxFileMGR
 //
-//  The machine a file lives on, so Delete and ffmpeg run there instead of
-//  pulling the file across the network. A file on an SMB or NFS mount belongs
-//  to the mount's server; anything else (local disks, WebDAV, …) is this Mac.
+//  The machine a file lives on, so ffmpeg (ffmpeg Meta-data…) runs there
+//  instead of pulling the file across the network. A file on an SMB or NFS
+//  mount belongs to the mount's server; anything else (local disks, WebDAV,
+//  …) is this Mac.
 //
 //  Commands reach the server over ssh, signed in the way ssh would (keys,
 //  ssh-agent, ~/.ssh/config) and never prompting (BatchMode). The SSH target
@@ -295,57 +296,5 @@ nonisolated enum FileHosts {
         }
         shares.withLock { $0[key] = path }
         return path
-    }
-}
-
-/// One item for TransferManager.deleteRemote: its path on the host and what the file list showed.
-nonisolated struct RemoteDeleteTarget: Sendable {
-    let path: String
-    let name: String
-    let isFolder: Bool
-    let isSymlink: Bool
-    let size: Int64
-
-    /// Deletes each item after checking it's still what the list showed; prints "ok<TAB>i" or "err<TAB>i<TAB>why".
-    /// A link (symlink, junction) is removed itself, never what it points to.
-    static func script(_ items: [(Int, RemoteDeleteTarget)], on host: RemoteHost) -> String {
-        let mismatch = "it isn't the item shown in the list any more, so it was left alone"
-        switch host.os {
-        case .windows:
-            var lines = ["""
-            function Remove-MxItem($i, $p, $dir, $link, $size) {
-              try {
-                $item = Get-Item -LiteralPath $p -Force -ErrorAction Stop
-                $isLink = [bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint)
-                if ($item.PSIsContainer -ne $dir -or (-not $dir -and -not $link -and -not $isLink -and $item.Length -ne $size)) {
-                  "err`t$i`t\(mismatch)"; return
-                }
-                if ($isLink -and $item.PSIsContainer) { [IO.Directory]::Delete($p, $false) }
-                else { Remove-Item -LiteralPath $p -Recurse:$dir -Force -ErrorAction Stop }
-                "ok`t$i"
-              } catch { "err`t$i`t$($_.Exception.Message)" }
-            }
-            """]
-            for (i, t) in items {
-                lines.append("Remove-MxItem \(i) \(host.quote(t.path)) $\(t.isFolder) $\(t.isSymlink) \(t.size)")
-            }
-            return lines.joined(separator: "\n")
-        case .posix:
-            var lines = ["""
-            del() {
-              i=$1 p=$2
-              if [ -L "$p" ]; then :
-              elif [ "$3" = d ]; then [ -d "$p" ] || { printf 'err\\t%s\\t%s\\n' "$i" \(host.quote(mismatch)); return; }
-              elif [ "$4" = 0 ]; then
-                [ -f "$p" ] && [ "$(wc -c < "$p" | tr -d ' ')" = "$5" ] || { printf 'err\\t%s\\t%s\\n' "$i" \(host.quote(mismatch)); return; }
-              fi
-              if out=$(rm -rf -- "$p" 2>&1); then printf 'ok\\t%s\\n' "$i"; else printf 'err\\t%s\\t%s\\n' "$i" "$out" | head -1; fi
-            }
-            """]
-            for (i, t) in items {
-                lines.append("del \(i) \(host.quote(t.path)) \(t.isFolder ? "d" : "f") \(t.isSymlink ? 1 : 0) \(t.size)")
-            }
-            return lines.joined(separator: "\n")
-        }
     }
 }
