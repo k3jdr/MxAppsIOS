@@ -1051,6 +1051,8 @@ struct TableRibbon: View {
             RibbonMenu("Fill", "arrow.down.to.line.compact") {
                 Button("Fill Down  ⌘D") { grid?.fillDown() }
                 Button("Fill Right  ⌘R") { grid?.fillRight() }
+                Button("Fill Up") { grid?.fillUp() }
+                Button("Fill Left") { grid?.fillLeft() }
             }
         }
         RibbonGroup("Merge") {

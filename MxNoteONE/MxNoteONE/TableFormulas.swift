@@ -148,6 +148,20 @@ enum Formula {
         calendar.date(from: DateComponents(year: year, month: month, day: day)).map(serial)
     }
 
+    /// The pattern a typed date or time was written in.
+    static func datePattern(of text: String) -> String? {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Writing it back must give the same text: the parsers also read "Oct 14, 2026" with M/d/yyyy.
+        return zip(datePatterns, dateParsers).first { pattern, parser in
+            parser.date(from: s).map { parser.string(from: $0) == s } ?? false
+        }?.0
+    }
+
+    /// The date some months later (or earlier), on the same day of the month or the last day of a shorter month.
+    static func addingMonths(_ months: Int, to serial: Double) -> Double {
+        calendar.date(byAdding: .month, value: months, to: date(fromSerial: serial)).map(self.serial) ?? serial
+    }
+
     /// A date as General shows it: 10/14/2026, with the time when there is one.
     static func generalDate(_ serial: Double) -> String {
         let hasTime = abs(serial - serial.rounded(.down)) > 1e-9

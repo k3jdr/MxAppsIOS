@@ -1065,6 +1065,8 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
     private var dropLine: Int?
     /// The moving corner of a ⇧-extended selection.
     private var extent: CellRef?
+    /// What Auto Fill Options would redo.
+    private var handleFill: HandleFill?
     /// The cell's text before typing began (to put back an entry that breaks its validation rule).
     private var editingOriginal: NSAttributedString?
     /// Circle Invalid Data: values that break their cell's validation rule are circled.
@@ -1542,6 +1544,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
     /// Resize on column borders, move on the outer edges, pointing hand on links, text cursor in cells.
     func cursor(at p: NSPoint) -> NSCursor {
         if let handle = fillHandleRect, handle.insetBy(dx: -3, dy: -3).contains(p) { return .crosshair }
+        if let button = autoFillButtonRect, button.contains(p) { return .arrow }
         if filterButton(at: p) != nil { return .arrow }
         if columnBorder(at: p) != nil { return .resizeLeftRight }
         if rowBorder(at: p) != nil { return .resizeUpDown }
@@ -1651,7 +1654,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         }
         grid.stroke()
         drawSelectionOutline(showSelection)
-        if showSelection || (editing == nil && !selection.isEmpty) { drawFillHandle() }
+        if !selection.isEmpty { drawFillHandle() }
         if let dropLine, rowTops.indices.contains(dropLine) {
             NSColor.controlAccentColor.setFill()
             NSRect(x: 0, y: rowTops[dropLine] - 1.5, width: columnLefts.last ?? bounds.width, height: 3).fill()
@@ -2321,6 +2324,11 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         guard let cell = editing else { return false }
         switch commandSelector {
+        case Selector(("noop:")) where NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+                && [2, 15].contains(NSApp.currentEvent?.keyCode):
+            // ⌘D and ⌘R reach here unbound while typing in a cell.
+            if NSApp.currentEvent?.keyCode == 2 { fillDown() } else { fillRight() }
+            return true
         case #selector(NSResponder.moveToEndOfParagraph(_:)) where model.validationRule(cell)?.kind == .list
                 && NSApp.currentEvent?.keyCode == 125:
             showList(cell)
@@ -2462,6 +2470,10 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         let p = convert(event.locationInWindow, from: nil)
         if let handle = fillHandleRect, handle.insetBy(dx: -3, dy: -3).contains(p) {
             dragFillHandle(event)
+            return
+        }
+        if let button = autoFillButtonRect, button.contains(p) {
+            showAutoFillOptions(button)
             return
         }
         if let cell = dropdownButton(at: p) {
@@ -4063,44 +4075,55 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
 
     /// Fill Down (⌘D): the block's top row goes into the rows below it; with one row selected, the row above comes
     /// down into it. Formulas move their relative references along.
-    func fillDown() {
-        guard let block = selectionBlock, let top = block.rows.first else { return NSSound.beep() }
-        var sources = [top], targets = Array(block.rows.dropFirst())
-        if targets.isEmpty {
-            guard let above = model.shownRow(from: top - 1, step: -1) else { return NSSound.beep() }
-            sources = [above]
-            targets = [top]
-        }
-        fill(down: true, sources: sources, targets: targets, lanes: block.columns, series: false, name: "Fill Down")
-    }
+    func fillDown() { fillFromEdge(down: true, backward: false, name: "Fill Down") }
 
     /// Fill Right (⌘R): the block's left column goes into the columns right of it (or the column left comes in).
-    func fillRight() {
-        guard let block = selectionBlock, let left = block.columns.first else { return NSSound.beep() }
-        var sources = [left], targets = Array(block.columns.dropFirst())
-        if targets.isEmpty {
-            guard let before = model.shownColumn(from: left - 1, step: -1) else { return NSSound.beep() }
-            sources = [before]
-            targets = [left]
+    func fillRight() { fillFromEdge(down: false, backward: false, name: "Fill Right") }
+
+    /// Fill Up: the block's bottom row goes into the rows above it (or the row below comes in).
+    func fillUp() { fillFromEdge(down: true, backward: true, name: "Fill Up") }
+
+    /// Fill Left: the block's right column goes into the columns left of it (or the column right comes in).
+    func fillLeft() { fillFromEdge(down: false, backward: true, name: "Fill Left") }
+
+    private func fillFromEdge(down: Bool, backward: Bool, name: String) {
+        guard let block = selectionBlock else { return NSSound.beep() }
+        let line = backward ? (down ? block.rows : block.columns).reversed() : (down ? block.rows : block.columns)
+        guard let edge = line.first else { return NSSound.beep() }
+        var sources = [edge], targets = Array(line.dropFirst())
+        let oneLine = targets.isEmpty
+        if oneLine {
+            // The neighbour on the side the fill comes from.
+            let step = backward ? 1 : -1
+            guard let neighbour = down ? model.shownRow(from: edge + step, step: step) : model.shownColumn(from: edge + step, step: step) else { return NSSound.beep() }
+            sources = [neighbour]
+            targets = [edge]
         }
-        fill(down: false, sources: sources, targets: targets, lanes: block.rows, series: false, name: "Fill Right")
+        guard fill(down: down, sources: sources, targets: targets, lanes: down ? block.columns : block.rows, series: .none, name: name) != nil else { return }
+        if oneLine, let top = block.rows.first, let bottom = block.rows.last, let left = block.columns.first, let right = block.columns.last {
+            selectRange(CellRef(row: top, column: left), CellRef(row: bottom, column: right))
+        }
     }
 
-    private func fill(down: Bool, sources: [Int], targets: [Int], lanes: [Int], series: Bool, name: String) {
+    /// Returns whether a series was continued, or nil when the block can't be filled.
+    @discardableResult
+    private func fill(down: Bool, sources: [Int], targets: [Int], lanes: [Int], series: FillSeries.Level, name: String) -> Bool? {
         let all = sources + targets
         let rows = down ? (all.min()!...all.max()!) : (lanes.min()!...lanes.max()!)
         let columns = down ? (lanes.min()!...lanes.max()!) : (all.min()!...all.max()!)
         guard model.canFill(rows: rows, columns: columns) else {
             NotebookStore.shared.showAlert("Can't fill merged cells", "Unmerge the cells in the block first.")
-            return
+            return nil
         }
-        run(name) { model.fill(down: down, sources: sources, targets: targets, lanes: lanes, series: series) }
+        var continued = false
+        run(name) { continued = model.fill(down: down, sources: sources, targets: targets, lanes: lanes, series: series) }
         selectRange(CellRef(row: rows.lowerBound, column: columns.lowerBound), CellRef(row: rows.upperBound, column: columns.upperBound))
+        return continued
     }
 
     /// The fill handle: a small square at the selection's bottom-right corner.
     private var fillHandleRect: NSRect? {
-        guard !isExport, editing == nil, let block = selectionBlock, let r = block.rows.last, let c = block.columns.last else { return nil }
+        guard !isExport, let block = selectionBlock, let r = block.rows.last, let c = block.columns.last else { return nil }
         let rect = cellRect(model.master(CellRef(row: r, column: c)))
         guard rect.width > 0 else { return nil }
         return NSRect(x: rect.maxX - 3.5, y: rect.maxY - 3.5, width: 7, height: 7)
@@ -4119,6 +4142,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             NSColor.controlAccentColor.setStroke()
             path.stroke()
         }
+        drawAutoFillButton()
         guard let handle = fillHandleRect else { return }
         NSColor.white.setFill()
         handle.insetBy(dx: -1, dy: -1).fill()
@@ -4126,20 +4150,24 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         handle.fill()
     }
 
-    /// Dragging the fill handle down or right fills (continuing number series); double-clicking it fills down as
-    /// far as the column beside has data, as in Excel.
+    /// Dragging the fill handle down, up, right or left fills (continuing series); double-clicking it fills down as
+    /// far as the column beside has data, as in Excel. A value being typed in the cell is entered first.
     private func dragFillHandle(_ event: NSEvent) {
+        endEditing()
         guard let window, let block = selectionBlock, let bottom = block.rows.last, let right = block.columns.last,
               let top = block.rows.first, let left = block.columns.first else { return }
         if event.clickCount == 2 {
-            // Down to the last row of data in the neighbouring column.
-            let neighbour = left > 0 ? left - 1 : right + 1
-            guard neighbour < model.columnCount else { return NSSound.beep() }
-            var end = bottom
-            while end + 1 < model.rowCount, !model.shownString(CellRef(row: end + 1, column: neighbour)).trimmingCharacters(in: .whitespaces).isEmpty {
-                end += 1
+            // Down to the last row of data in the column to the left, or else to the right.
+            func dataEnd(_ column: Int) -> Int {
+                var end = bottom
+                while column >= 0, column < model.columnCount, end + 1 < model.rowCount,
+                      !model.shownString(CellRef(row: end + 1, column: column)).trimmingCharacters(in: .whitespaces).isEmpty {
+                    end += 1
+                }
+                return end
             }
-            guard end > bottom else { return }
+            let end = dataEnd(left - 1) > bottom ? dataEnd(left - 1) : dataEnd(right + 1)
+            guard end > bottom else { return NSSound.beep() }
             fillHandleTargets(down: true, block: block, to: end)
             return
         }
@@ -4154,30 +4182,128 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             guard let cell = self.cell(at: p) else { return }
             let span = self.model.span(cell)
             let lastRow = span.row + span.rows - 1, lastColumn = span.column + span.columns - 1
-            if lastRow > bottom, lastRow - bottom >= lastColumn - right {
-                target = (true, lastRow)
-                self.fillPreview = self.cellRect(CellRef(row: top, column: left)).union(self.cellRect(CellRef(row: lastRow, column: right)))
-            } else if lastColumn > right {
-                target = (false, lastColumn)
-                self.fillPreview = self.cellRect(CellRef(row: top, column: left)).union(self.cellRect(CellRef(row: bottom, column: lastColumn)))
-            } else {
+            // The direction the pointer has gone furthest past the block.
+            let below = lastRow - bottom, above = top - span.row, after = lastColumn - right, before = left - span.column
+            let furthest = max(below, above, after, before)
+            func preview(_ a: CellRef, _ b: CellRef) { self.fillPreview = self.cellRect(a).union(self.cellRect(b)) }
+            if furthest <= 0 {
                 target = nil
                 self.fillPreview = nil
+            } else if below == furthest {
+                target = (true, lastRow)
+                preview(CellRef(row: top, column: left), CellRef(row: lastRow, column: right))
+            } else if above == furthest {
+                target = (true, span.row)
+                preview(CellRef(row: span.row, column: left), CellRef(row: bottom, column: right))
+            } else if after == furthest {
+                target = (false, lastColumn)
+                preview(CellRef(row: top, column: left), CellRef(row: bottom, column: lastColumn))
+            } else {
+                target = (false, span.column)
+                preview(CellRef(row: top, column: span.column), CellRef(row: bottom, column: right))
             }
         }
         fillPreview = nil
         if let target { fillHandleTargets(down: target.down, block: block, to: target.to) }
     }
 
-    /// A fill handle drag down or right to a row or column: the selected block is the source.
+    /// A fill handle drag to a row or column: the selected block is the source, running towards the drag.
     func fillHandleTargets(down: Bool, block: (rows: [Int], columns: [Int]), to end: Int) {
-        if down {
-            let targets = ((block.rows.last! + 1)...end).filter { !model.isRowHidden($0) }
-            fill(down: true, sources: block.rows, targets: targets, lanes: block.columns, series: true, name: "Fill")
-        } else {
-            let targets = ((block.columns.last! + 1)...end).filter { !model.isColumnHidden($0) }
-            fill(down: false, sources: block.columns, targets: targets, lanes: block.rows, series: true, name: "Fill")
+        let line = down ? block.rows : block.columns
+        guard let first = line.first, let last = line.last else { return }
+        let backward = end < first
+        let reach = backward ? Array((end...(first - 1)).reversed()) : Array(((last + 1)...end))
+        let targets = reach.filter { down ? !model.isRowHidden($0) : !model.isColumnHidden($0) }
+        guard !targets.isEmpty else { return }
+        let sources = backward ? Array(line.reversed()) : line
+        let lanes = down ? block.columns : block.rows
+        let before = model.snapshot
+        guard let continued = fill(down: down, sources: sources, targets: targets, lanes: lanes, series: .automatic, name: "Fill") else { return }
+        handleFill = HandleFill(down: down, sources: sources, targets: targets, lanes: lanes, before: before, after: model.data,
+                                selection: selection, option: continued ? .series : .copy)
+        needsDisplay = true
+    }
+
+    // MARK: Auto Fill Options
+
+    /// Excel's Auto Fill Options: how the last fill handle fill went across.
+    private enum AutoFillOption: CaseIterable {
+        case copy, series, formatting, withoutFormatting
+
+        var title: String {
+            switch self {
+            case .copy: "Copy Cells"
+            case .series: "Fill Series"
+            case .formatting: "Fill Formatting Only"
+            case .withoutFormatting: "Fill Without Formatting"
+            }
         }
+    }
+
+    /// The last fill handle fill, which the Auto Fill Options button redoes another way.
+    private struct HandleFill {
+        let down: Bool
+        let sources: [Int], targets: [Int], lanes: [Int]
+        let before: TableModel.Snapshot
+        var after: TableData
+        var selection: Set<CellRef>
+        var option: AutoFillOption
+    }
+
+    /// The Auto Fill Options button sits in the filled block's last cell for as long as the table is as the fill left
+    /// it and the block stays selected.
+    private var autoFillButtonRect: NSRect? {
+        guard !isExport, editing == nil, let handleFill, selection == handleFill.selection, model.data == handleFill.after,
+              let block = selectionBlock, let r = block.rows.last, let c = block.columns.last else { return nil }
+        let rect = cellRect(model.master(CellRef(row: r, column: c)))
+        return NSRect(x: rect.maxX - 29, y: rect.maxY - 18, width: 22, height: 15)
+    }
+
+    private func drawAutoFillButton() {
+        guard let rect = autoFillButtonRect else { return }
+        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
+        NSColor.white.setFill()
+        path.fill()
+        NSColor(white: 0.6, alpha: 1).setStroke()
+        path.lineWidth = 0.75
+        path.stroke()
+        NSColor(white: 0.3, alpha: 1).setFill()
+        for x in [rect.minX + 3.5, rect.minX + 8] {
+            for y in [rect.minY + 3.5, rect.minY + 8] { NSRect(x: x, y: y, width: 3.5, height: 3.5).fill() }
+        }
+        let arrow = NSBezierPath()
+        arrow.move(to: NSPoint(x: rect.maxX - 8.5, y: rect.midY - 1.5))
+        arrow.line(to: NSPoint(x: rect.maxX - 2.5, y: rect.midY - 1.5))
+        arrow.line(to: NSPoint(x: rect.maxX - 5.5, y: rect.midY + 2))
+        arrow.close()
+        arrow.fill()
+    }
+
+    private func showAutoFillOptions(_ button: NSRect) {
+        guard let handleFill else { return }
+        let menu = NSMenu()
+        for option in AutoFillOption.allCases {
+            menu.addItem(ClosureMenuItem(option.title, state: option == handleFill.option) { [weak self] in
+                self?.redoFill(as: option)
+            })
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: button.minX, y: button.maxY + 2), in: self)
+    }
+
+    /// Fills again from the table as it was before the fill (one more undo step, back to what the handle made).
+    private func redoFill(as option: AutoFillOption) {
+        guard var last = handleFill, option != last.option else { return }
+        run("Fill") {
+            model.data = last.before.data
+            model.fill(down: last.down, sources: last.sources, targets: last.targets, lanes: last.lanes,
+                       series: option == .copy || option == .formatting ? .none : option == .series ? .all : .automatic,
+                       content: option != .formatting, formatting: option != .withoutFormatting)
+        }
+        last.after = model.data
+        last.selection = selection
+        last.option = option
+        handleFill = last
+        needsDisplay = true
     }
 
     /// The Fill menu.
@@ -4191,6 +4317,8 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         right.keyEquivalent = "r"
         right.keyEquivalentModifierMask = .command
         menu.addItem(right)
+        menu.addItem(ClosureMenuItem("Fill Up") { [weak self] in self?.fillUp() })
+        menu.addItem(ClosureMenuItem("Fill Left") { [weak self] in self?.fillLeft() })
         return menu
     }
 

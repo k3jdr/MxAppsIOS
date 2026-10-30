@@ -310,8 +310,8 @@
         "timeZone" : "America/New_York"
       },
       "title" : "Weekday SRM refresh",
-      "x" : 300,
-      "y" : 90
+      "x" : 360,
+      "y" : 150
     },
     {
       "agent" : {

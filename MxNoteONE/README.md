@@ -81,12 +81,18 @@ Section and New Section Group. Right-click a page for its own menu.
   **Sort Includes First Row** sorts every row.
 - **Inserting rows and columns**: Insert Row Above / Below (and Insert Column Left / Right) add as many rows (or columns)
   as are selected — select three rows and the menu says Insert 3 Rows Above — and the new ones are selected.
-- **Fill Down / Fill Right** (⌘D / ⌘R, right-click ▸ Fill, or the Table ribbon's Fill menu): the selection's top row
-  (or left column) is copied into the rest of it; with one cell selected the cell above (or left) comes in. Formulas
-  move their relative references along as in Excel (=B2*C2 → =B3*C3; `$` parts stay), and number formats and shading
-  come too. **Fill handle**: drag the small square at the selection's bottom-right corner down or right to fill — two
-  or more evenly spaced numbers or dates continue as a series (1, 2 → 3, 4, 5; weekly dates) — or double-click it to
-  fill down as far as the column beside has data.
+- **Fill Down / Right / Up / Left** (⌘D / ⌘R, also while typing in a cell; right-click ▸ Fill, or the Table ribbon's
+  Fill menu): the selection's top row (or left column, bottom row, right column) is copied into the rest of it; with one
+  cell selected the neighbouring cell comes in. Formulas move their relative references along as in Excel (=B2*C2 →
+  =B3*C3; `$` parts stay); font, alignment, number formats and shading come too, and validation and conditional
+  formatting rules on the source cells reach the filled ones. **Fill handle**: drag the small square at the corner of
+  the selection (or of the cell you're typing in — the entry goes in first) in any direction to fill, or double-click
+  it to fill down as far as the column beside has data. As in Excel, a drag continues what it can: numbers (1, 2 → 3, 4;
+  uneven ones along their best-fit line; one number alone is copied), dates (one date by the day; 1/15, 2/15 by the
+  month), month and day names (Jan → Feb, Mon, Wed → Fri), quarters (Q4 → Q1) and text with a number in it (Item 1 →
+  Item 2, A09 → A10, 1st → 2nd). Dragged up or left they run backward (Mon → Sun). **Auto Fill Options**: the button
+  that appears after a drag redoes it as Copy Cells, Fill Series (one number then counts up), Fill Formatting Only or
+  Fill Without Formatting.
 - **Moving rows**: right-click ▸ Move Row Up / Down, the Table ribbon's Row Up / Row Down, or ⌥⇧↑ / ⌥⇧↓ (also while
   typing in a cell). Or select whole rows (right-click ▸ Select Row, or drag across them) and drag them up or down; a
   line shows where they'll go (dragged sideways first, it selects cells instead; a click types in the cell). The
