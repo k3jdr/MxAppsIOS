@@ -31,7 +31,7 @@ struct WelcomeView: View {
                     Label("The sidebar is the guide: My Portfolio has six steps; ⌥⌘↓ and ⌥⌘↑ move to the next and previous screen, and ⌘[ and ⌘] go back and forward, as in a browser.", systemImage: "sidebar.left")
                     Label("Quick Help, under the sidebar, explains whatever is under the pointer — a number, a column, a button. ⌥⌘/ shows or hides it; its ⧉ button floats it in its own window.", systemImage: "questionmark.bubble")
                     Label("Investments, in the sidebar, walks your own account (My Portfolio) through six steps — active or passive, your choice.", systemImage: "person.crop.circle")
-                    Label("Pick a sample account in the toolbar for the report walkthroughs and the Morning Briefing: each teaches an edge case. Library ▸ Sample Portfolios describes them all; copy one into My Portfolio to work through it.", systemImage: "briefcase")
+                    Label("Pick a sample account in the toolbar for the report walkthroughs: each teaches an edge case. Library ▸ Sample Portfolios describes them all; copy one into My Portfolio to work through it.", systemImage: "briefcase")
                     Label("Engine in the toolbar: the built-in optimizers, or the shared Layer 3 services (portfolio-java, portfolio-cpp, analytics) that MxDataHUB and MxJobsMGR use.", systemImage: "cpu")
                 }
                 .font(.callout)
@@ -111,7 +111,7 @@ struct ChoosePathView: View {
             }
             .padding(14)
             .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-            .quickHelpArea("Investments", "The six steps on your own account: My Holdings, My Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
+            .quickHelpArea("Investments", "The Morning Briefing and the six steps on your own account: My Holdings, My Benchmark, Risk Today, Optimize or Build the Tracker, Trades & Taxes or Rebalance Bands, Attribution.", symbol: "person.crop.circle")
         }
     }
 }

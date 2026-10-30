@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Loan Accounts — mortgages and vehicle loans, their lenders' billing statements read from the PDFs, a forecast of every payment to payoff and each year's interest for Year-End Tax; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (Spending Analysis — why the family's spending changed and the children's forward curve; SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Loan Accounts — mortgages and vehicle loans, their lenders' billing statements read from the PDFs, a forecast of every payment to payoff and each year's interest for Year-End Tax; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Accounts — where the registers' money goes to or comes from, each with its details, its funding sources and a link of its own; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (the Morning Briefing and 6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (Spending Analysis — why the family's spending changed and the children's forward curve; SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -99,10 +99,50 @@ the foot of each step.
 
 ### Investments path
 
-The clear path for your own account, in six steps (the sidebar's **Investments** section, called My Portfolio before 2026-10-25). Every
-Investments step works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each step shows
+The clear path for your own account: the Morning Briefing, then six steps (the sidebar's **Investments** section, called My Portfolio before 2026-10-25). All of
+Investments works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each page shows
 the account and sets **My approach** — *Active* or *Passive index* — its account type, and **Start From a Sample**
 (copy any sample's holdings, lots and benchmark) or reset to the account as saved in the security master.
+
+* **Morning Briefing** — ten panels: an illustrative morning's overnight markets, Treasury yield changes (with the
+  2Y–10Y and 3M–10Y spreads), the economic calendar (consensus, prior, impact; each release opens its walkthrough),
+  an economic surprise index, Fed funds futures probabilities, weekly fund flows, credit spreads and the VIX; today's
+  **real** earnings releases (the six largest from Earnings by Day, marked "you hold"); an analyst-ratings panel that
+  says no source is loaded yet — with what My Portfolio would be worth if it opened with the futures (each
+  holding's real market and rate betas). Each panel says what it measures and how a long-term investor
+  might use it. Its earnings panel links to today's real list (Earnings by Day). **Watch CNBC Live**, above the
+  tiles, opens CNBC Live.
+* **CNBC Live** (Morning Briefing ▸ Watch CNBC Live, Reports ▸ CNBC Live; `LiveVideo.swift`) — CNBC's live video in
+  a window of MxAcctMGR's own (WebKit), never handed to Safari: move it, resize it, or **Keep on Top** to read the
+  briefing under it. There is one window: opening it again brings it forward. It opens where you left it, launch after
+  launch, and closing it stops the video. The menu at its top left picks the stream, remembered for next time:
+  * **CNBC (U.S.) — cnbc.com Live TV** (the first) — the network as it airs, from cnbc.com/live-tv. CNBC streams it to
+    **CNBC+** subscribers and to viewers who sign in with a **TV provider**; without a sign-in the page shows CNBC+'s
+    offer and no video. Choose SIGN IN in the page (or *Fill Sign-In*, below); the sign-in stays in the window's
+    cookies, as in Safari. A TV provider's sign-in opens in a window of its own, also in the app.
+  * **CNBC Television on YouTube — live events** — free, live only while CNBC streams an event there (Fed decisions,
+    hearings, special coverage); the channel's page otherwise.
+  * **CNBC on YouTube — 24/7 documentaries** — free and always live, but CNBC's documentaries, not the business-news
+    channel.
+
+  CNBC doesn't stream its U.S. channel free anywhere, on YouTube or elsewhere (checked 10/29/26), so the first stream
+  is the real channel and needs your subscription. **Fill Sign-In** (the key) fills CNBC's sign-in form with the user
+  name and password of your CNBC secure account (*Secure accounts*, below) — the password only after **Touch ID**
+  confirms it's you; you press Sign In. With no CNBC secure
+  account the button is **Add to Secure Accounts…**, which opens New Secure Account filled in for CNBC. ↻ loads the
+  stream again (after signing in, or a stalled stream). `LiveVideo.shared` is the window's controller, for features
+  that drive it from elsewhere in the app: `open(_:)`, `play(_:)`, `keepOnTop`, `showNews(_:)`, `fillSignIn()`,
+  `close()`, and what it shows (`stream`, `isOpen`, `showsNews`, `pageTitle`, `signInAccount`).
+
+  **Market News**, right of the video past a divider (`MassiveNews.swift`), is Massive's news feed
+  (`GET api.massive.com/v2/reference/news`, in every Stocks plan and updated hourly), the 50 newest articles, asked as
+  the panel shows and every five minutes while it does. Each article has its headline, publisher and time, and its
+  tickers colored by Massive's sentiment for each (green positive, red negative, with the reasoning on hover); its
+  summary shows on hover. Click a headline to read the article in your browser, or a ticker for only its news (or
+  type a symbol in the field at the panel's top and press Return; empty it for all the news). Drag the divider to
+  size the two sides, all the way right to hide the news; the button at the header's right end hides or shows it.
+  Resizing the window resizes the video, and the divider's place and whether the news shows are kept between
+  launches. The API key comes from Secure Accounts (*Massive news*, below).
 
 **Add Securities…** (⇧⌘N, above the holdings table) searches the security master (see *My Portfolio in the security
 master* below). Each holding row has a trash button to remove it.
@@ -230,45 +270,6 @@ markets within seconds, others shape positioning over weeks or months.
     links and when you last changed them, then the report's publisher and schedule, the drivers it moves and its
     impact, its official source (a click opens it), and **Edit Notes…** and **Open Walkthrough**.
   * A speech-bubble mark follows the name of a report with notes. Notes are kept on this Mac (`reportNotes`).
-* **Morning Briefing** — ten panels: an illustrative morning's overnight markets, Treasury yield changes (with the
-  2Y–10Y and 3M–10Y spreads), the economic calendar (consensus, prior, impact; each release opens its walkthrough),
-  an economic surprise index, Fed funds futures probabilities, weekly fund flows, credit spreads and the VIX; today's
-  **real** earnings releases (the six largest from Earnings by Day, marked "you hold"); an analyst-ratings panel that
-  says no source is loaded yet — with what the selected account would be worth if it opened with the futures (each
-  holding's real market and rate betas). Each panel says what it measures and how a long-term investor
-  might use it. Its earnings panel links to today's real list (Earnings by Day). **Watch CNBC Live**, above the
-  tiles, opens CNBC Live.
-* **CNBC Live** (Morning Briefing ▸ Watch CNBC Live, Reports ▸ CNBC Live; `LiveVideo.swift`) — CNBC's live video in
-  a window of MxAcctMGR's own (WebKit), never handed to Safari: move it, resize it, or **Keep on Top** to read the
-  briefing under it. There is one window: opening it again brings it forward. It opens where you left it, launch after
-  launch, and closing it stops the video. The menu at its top left picks the stream, remembered for next time:
-  * **CNBC (U.S.) — cnbc.com Live TV** (the first) — the network as it airs, from cnbc.com/live-tv. CNBC streams it to
-    **CNBC+** subscribers and to viewers who sign in with a **TV provider**; without a sign-in the page shows CNBC+'s
-    offer and no video. Choose SIGN IN in the page (or *Fill Sign-In*, below); the sign-in stays in the window's
-    cookies, as in Safari. A TV provider's sign-in opens in a window of its own, also in the app.
-  * **CNBC Television on YouTube — live events** — free, live only while CNBC streams an event there (Fed decisions,
-    hearings, special coverage); the channel's page otherwise.
-  * **CNBC on YouTube — 24/7 documentaries** — free and always live, but CNBC's documentaries, not the business-news
-    channel.
-
-  CNBC doesn't stream its U.S. channel free anywhere, on YouTube or elsewhere (checked 10/29/26), so the first stream
-  is the real channel and needs your subscription. **Fill Sign-In** (the key) fills CNBC's sign-in form with the user
-  name and password of your CNBC secure account (*Secure accounts*, below) — the password only after **Touch ID**
-  confirms it's you; you press Sign In. With no CNBC secure
-  account the button is **Add to Secure Accounts…**, which opens New Secure Account filled in for CNBC. ↻ loads the
-  stream again (after signing in, or a stalled stream). `LiveVideo.shared` is the window's controller, for features
-  that drive it from elsewhere in the app: `open(_:)`, `play(_:)`, `keepOnTop`, `showNews(_:)`, `fillSignIn()`,
-  `close()`, and what it shows (`stream`, `isOpen`, `showsNews`, `pageTitle`, `signInAccount`).
-
-  **Market News**, right of the video past a divider (`MassiveNews.swift`), is Massive's news feed
-  (`GET api.massive.com/v2/reference/news`, in every Stocks plan and updated hourly), the 50 newest articles, asked as
-  the panel shows and every five minutes while it does. Each article has its headline, publisher and time, and its
-  tickers colored by Massive's sentiment for each (green positive, red negative, with the reasoning on hover); its
-  summary shows on hover. Click a headline to read the article in your browser, or a ticker for only its news (or
-  type a symbol in the field at the panel's top and press Return; empty it for all the news). Drag the divider to
-  size the two sides, all the way right to hide the news; the button at the header's right end hides or shows it.
-  Resizing the window resizes the video, and the divider's place and whether the news shows are kept between
-  launches. The API key comes from Secure Accounts (*Massive news*, below).
 * **Earnings Calendar** — real earnings reports by **month** or **week** (◀ ▶ and Today step through them), weeks Sunday to Saturday as on a
   U.S. calendar. A month
   cell shows the number of U.S.-listed companies reporting, for past days a bar and count of how many beat (green),
@@ -943,7 +944,7 @@ Each sample is an edge case, and an account in the security master: `srm.py load
 run through the srm-loader service so it shows in Data Refresh ▸ Activity) writes them with real securities, tax lots
 costed at the real close on each purchase date, cash and a benchmark, managed by "MxAcctMGR samples". The app reads
 them through the accounts service like My Portfolio and keeps only each one's lesson (`Samples.swift`). *Use* makes
-it the account of the report walkthroughs and the Morning Briefing; *Copy to My Portfolio* (or My Portfolio's *Start
+it the account of the report walkthroughs; *Copy to My Portfolio* (or My Portfolio's *Start
 From a Sample*) copies its holdings, lots and benchmark into My Portfolio to work through the six steps.
 
 | Sample (code) | Account | Benchmark | Edge case |

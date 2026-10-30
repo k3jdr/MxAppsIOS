@@ -15,8 +15,8 @@ enum Screen: String, CaseIterable, Identifiable {
     // menu opens them.
     case checking, cards, loans, expenseLedgers, expenses, secureAccounts
     case welcome, choosePath
-    case myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
-    case reportLibrary, morningBriefing, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
+    case morningBriefing, myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
+    case reportLibrary, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
     case whyOptimize, whyAttribution, activeVsPassive, samples
     case spending, securities, services
 
@@ -34,8 +34,8 @@ enum Screen: String, CaseIterable, Identifiable {
         switch self {
         case .checking, .cards, .loans, .expenseLedgers, .expenses, .secureAccounts: .accounts
         case .welcome, .choosePath: .start
-        case .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
-        case .reportLibrary, .morningBriefing, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
+        case .morningBriefing, .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
+        case .reportLibrary, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
              .whyOptimize, .whyAttribution, .activeVsPassive, .samples: .reports
         case .spending, .securities, .services: .library
         }
@@ -77,7 +77,7 @@ enum Screen: String, CaseIterable, Identifiable {
     /// The title with its group where the title alone is ambiguous (window title, Quick Help).
     var fullTitle: String {
         switch group {
-        case .mine: "Investments · \(step!). \(title)"
+        case .mine: step.map { "Investments · \($0). \(title)" } ?? "Investments · \(title)"
         default: title
         }
     }
@@ -172,7 +172,7 @@ final class PortStore {
             // A lesson-only page that Settings ▸ Guidance hides opens My Portfolio instead.
             if !PortSettings.shared.shows(screen) { screen = .myPortfolio; return }
             UserDefaults.standard.set(screen.rawValue, forKey: "screen")
-            // The Investments path always works on the user's own account (My Portfolio).
+            // Investments always works on the user's own account (My Portfolio).
             if screen.group == .mine, selectedID != "mine" { selectedID = "mine" }
         }
     }

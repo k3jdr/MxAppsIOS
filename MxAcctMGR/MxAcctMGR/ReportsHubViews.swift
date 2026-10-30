@@ -3,7 +3,7 @@
 //  MxAcctMGR
 //
 //  Knowledge Library ▸ Report Library — the hierarchy of reports portfolio managers watch, by tier, with what each
-//  measures, why PMs care, which price drivers it moves, and the five with the greatest impact — and Knowledge Library ▸
+//  measures, why PMs care, which price drivers it moves, and the five with the greatest impact — and Investments ▸
 //  Morning Briefing, the ten things many institutional PMs review before the open, on an illustrative morning.
 //
 

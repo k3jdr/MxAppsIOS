@@ -124,7 +124,7 @@ extension PortStore {
         whenSettled("open \(c)") { [self] in
             await openSRMAccount(c)
             selectedID = "mine"
-            if !Screen.myPath.contains(screen) { go(.myPortfolio) }
+            if screen.group != .mine { go(.myPortfolio) }
         }
     }
 

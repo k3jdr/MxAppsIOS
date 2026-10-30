@@ -196,7 +196,7 @@ struct ContentView: View {
         .pickerStyle(.menu)
         .fixedSize()
         .disabled(store.screen.group == .mine)
-        .help(store.screen.group == .mine ? "The Investments steps always use My Portfolio, your own account" : "The account the report walkthroughs and the Morning Briefing work on")
+        .help(store.screen.group == .mine ? "Investments always uses My Portfolio, your own account" : "The account the report walkthroughs work on")
         .quickHelpArea(PortHelp.samplePicker)
     }
 
