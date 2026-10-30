@@ -2,7 +2,7 @@
 //  SpendingModel.swift
 //  MxAcctMGR
 //
-//  Reporting ▸ Spending Analysis: household spending attribution, kept in the security master (accounts service
+//  Banking ▸ Spending Analysis: household spending attribution, kept in the security master (accounts service
 //  /spending, V037). Every dollar the registers and cash ledgers spend has two dimensions — a spending category
 //  (Food, Housing, Transportation …) and a primary driver (inflation, family growth, a new activity, a lifecycle
 //  transition, a preference change, a one-time event) — allocated on target accounts (V052) and by tags on

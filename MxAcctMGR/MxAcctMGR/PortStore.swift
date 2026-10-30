@@ -13,12 +13,12 @@ import Observation
 enum Screen: String, CaseIterable, Identifiable {
     // In the sidebar's order (Back and Next follow it). Welcome and Choose Your Path aren't in the sidebar: the Guide
     // menu opens them.
-    case checking, cards, loans, expenseLedgers, expenses, secureAccounts
+    case spending, checking, cards, loans, expenseLedgers, expenses, secureAccounts
     case welcome, choosePath
     case morningBriefing, myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
     case whyOptimize, whyAttribution, activeVsPassive, samples
-    case spending, securities, services
+    case securities, services
 
     var id: String { rawValue }
 
@@ -32,12 +32,12 @@ enum Screen: String, CaseIterable, Identifiable {
 
     var group: Group {
         switch self {
-        case .checking, .cards, .loans, .expenseLedgers, .expenses, .secureAccounts: .accounts
+        case .spending, .checking, .cards, .loans, .expenseLedgers, .expenses, .secureAccounts: .accounts
         case .welcome, .choosePath: .start
         case .morningBriefing, .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .reportLibrary, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
              .whyOptimize, .whyAttribution, .activeVsPassive, .samples: .reports
-        case .spending, .securities, .services: .library
+        case .securities, .services: .library
         }
     }
 

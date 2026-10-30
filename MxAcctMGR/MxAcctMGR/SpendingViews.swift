@@ -2,7 +2,7 @@
 //  SpendingViews.swift
 //  MxAcctMGR
 //
-//  Reporting ▸ Spending Analysis (SpendingModel.swift): why the family's spending changed from one year to the next
+//  Banking ▸ Spending Analysis (SpendingModel.swift): why the family's spending changed from one year to the next
 //  — the attribution table and charts — and the forward curve of what the children's ages bring, with the entries,
 //  target accounts' allocation, family and lifecycle model they are made from, and the sources they come from with how fresh each is.
 //

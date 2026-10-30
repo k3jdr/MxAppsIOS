@@ -2,7 +2,7 @@
 //  AmazonLookup.swift
 //  MxAcctMGR
 //
-//  Amazon Order Lookup (Reporting ▸ Spending Analysis ▸ Entries ▸ Look Up Amazon Orders…): what the selected Amazon
+//  Amazon Order Lookup (Banking ▸ Spending Analysis ▸ Entries ▸ Look Up Amazon Orders…): what the selected Amazon
 //  charges bought, read from amazon.com in a window of the app's own. Amazon has no API for a personal account's orders;
 //  the Request Your Data export (srm.py load amazon-orders) and Amazon's order e-mails in Gmail (srm.py load
 //  amazon-email) bring them in bulk, this a few charges at a time.
