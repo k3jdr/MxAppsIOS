@@ -20,6 +20,8 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          days; the plan reaches back 12 months, so an earlier `from` is cut there
                                          (planStart and notOnPlan in the answer)
     GET  /earnings/history?symbol=&limit=   one company's reports from FMP, newest first (back decades)
+    GET  /economic/calendar?from=&to=&country=   FMP's economic calendar for up to 62 days (default the next 30, U.S.):
+                                         each release's UTC time, estimate, previous, actual, unit and impact
     POST /links/query                    links on securities' tickers and names (srm.security_link, V014) for
                                          {securityIds: [...], tickers: [...]}; tickers resolve to their current U.S.
                                          listing (srm.us_security) and come back in `resolved`
@@ -54,7 +56,7 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          statements (read from the PDFs' text), the forecast to payoff and each year's
                                          interest for Year-End Tax
 
-The earnings endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
+The earnings and economic-calendar endpoints need no database: they use SRM's FMP key (FMP_API_KEY, Keychain SRM-api / fmp, or
 config.local.json), so MxAcctMGR's earnings screens get revenue figures with no API key in the sandboxed app; the
 fundamentals endpoint uses the database when it can reach it and falls back to FMP when it can't.
 
@@ -137,6 +139,7 @@ DESCRIBE = {
         {"method": "POST", "path": "/accounts/{code}/load-prices", "summary": "Load prices for unpriced holdings (via srm-loader)"},
         {"method": "GET", "path": "/earnings/calendar", "summary": "FMP earnings calendar: EPS and revenue, estimated and actual (12 months back)"},
         {"method": "GET", "path": "/earnings/history", "summary": "One company's earnings reports from FMP, newest first"},
+        {"method": "GET", "path": "/economic/calendar", "summary": "FMP economic calendar: scheduled releases with estimate, previous, actual and impact (up to 62 days)"},
         {"method": "POST", "path": "/securities/browse", "summary": "Securities search as in MxDataHUB: identifier matches ranked, type, benchmark, active, column sort and filters, a page at a time"},
         {"method": "POST", "path": "/securities/browse/values", "summary": "A column's distinct values with their counts, for its filter panel"},
         {"method": "GET", "path": "/securities/{id}/detail", "summary": "A security's facts, identifiers, listings, classification, benchmark membership, corporate actions and prices"},
@@ -1039,6 +1042,32 @@ def earnings_calendar(q):
             "planStart": plan_start.isoformat(), "notOnPlan": not_on_plan, "rows": out}
 
 
+def economic_calendar(q):
+    """FMP's scheduled releases for one country, soonest first. FMP keeps its dates in UTC and gives an event with no
+    time of day (an election, a holiday) 00:00 and no figures; a speech can really fall at 00:00 UTC, the evening before
+    in the U.S. It has cut a call of 108 days short from the early end, while 62 came back whole."""
+    today = dt.datetime.now(dt.timezone.utc).date()
+    start = parse_day(q.get("from") or today.isoformat(), "from")
+    end = parse_day(q.get("to") or (start + dt.timedelta(days=30)).isoformat(), "to")
+    if end < start or (end - start).days > 62:
+        raise ValueError("to must be on or after from, and at most 62 days later")
+    country = (q.get("country") or "US").upper()
+    rows = fmp("economic-calendar", 900, **{"from": start.isoformat(), "to": end.isoformat()})
+    seen, out = set(), []
+    for r in sorted(rows if isinstance(rows, list) else [], key=lambda r: r.get("date") or ""):
+        day, _, clock = (r.get("date") or "").partition(" ")
+        k = (r.get("date"), r.get("event"))
+        if r.get("country") != country or k in seen or not clock or not start.isoformat() <= day <= end.isoformat():
+            continue
+        seen.add(k)
+        out.append({"at": "%sT%sZ" % (day, clock), "date": day, "event": r.get("event"),
+                    "allDay": clock == "00:00:00" and r.get("estimate") is None and r.get("previous") is None
+                              and "Speech" not in (r.get("event") or ""),
+                    "estimate": r.get("estimate"), "previous": r.get("previous"), "actual": r.get("actual"),
+                    "unit": r.get("unit"), "impact": r.get("impact")})
+    return {"source": "FMP economic-calendar", "from": start.isoformat(), "to": end.isoformat(), "country": country, "rows": out}
+
+
 def earnings_history(q):
     symbol = (q.get("symbol") or "").strip().upper()
     if not SYMBOL.match(symbol):
@@ -1344,11 +1373,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"status": "ok", "service": "accounts", "version": VERSION})
             if url.path == "/describe":
                 return self.send_json(200, dict(DESCRIBE, version=VERSION, port=Handler.port))
-            if parts[:1] in (["earnings"], ["fundamentals"]) and method == "GET":    # FMP only: no database connection
+            if parts[:1] in (["earnings"], ["economic"], ["fundamentals"]) and method == "GET":    # FMP only: no database connection
                 if parts == ["earnings", "calendar"]:
                     out = earnings_calendar(q)
                 elif parts == ["earnings", "history"]:
                     out = earnings_history(q)
+                elif parts == ["economic", "calendar"]:
+                    out = economic_calendar(q)
                 elif parts == ["fundamentals", "quarters"]:
                     out = fundamentals_quarters(q)
                 else:

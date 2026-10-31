@@ -538,6 +538,15 @@ nonisolated enum FMPEarningsClient {
         try await get("/earnings/calendar?from=\(from)&to=\(to)", as: CalendarPage.self)
     }
 
+    struct EconomicPage: Decodable, Sendable {
+        var rows: [EconomicRelease]
+    }
+
+    /// FMP's scheduled U.S. economic releases from `from` to `to` (at most 62 days), soonest first (EconomicCalendar.swift).
+    static func economicCalendar(from: String, to: String) async throws -> EconomicPage {
+        try await get("/economic/calendar?from=\(from)&to=\(to)", as: EconomicPage.self)
+    }
+
     /// A company's reports, newest first.
     static func history(_ symbol: String, limit: Int = 40) async throws -> History {
         let s = symbol.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? symbol

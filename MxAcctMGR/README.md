@@ -8,7 +8,7 @@ news cost over the long run.
 > **Educational only.** Every security, price, benchmark and account — My Portfolio and the samples — is real data
 > from the security master (MxDataHUB's `srm` schema), with risk estimated from real daily prices by the analytics
 > service; the earnings screens show real companies' reports as Nasdaq.com and FMP publish them. The report
-> walkthroughs and the Morning Briefing's market panels are scenarios — made-up numbers in the shape of real releases,
+> walkthroughs and the Morning Briefing's market panels (all but its economic calendar and earnings) are scenarios — made-up numbers in the shape of real releases,
 > labelled as such — and a walkthrough about one company uses the account's own stock with invented numbers. Nothing in
 > MxAcctMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
 > status bar says so on every screen.
@@ -105,13 +105,21 @@ the account and sets **My approach** — *Active* or *Passive index* — its acc
 (copy any sample's holdings, lots and benchmark) or reset to the account as saved in the security master.
 
 * **Morning Briefing** — ten panels: an illustrative morning's overnight markets, Treasury yield changes (with the
-  2Y–10Y and 3M–10Y spreads), the economic calendar (consensus, prior, impact; each release opens its walkthrough),
-  an economic surprise index, Fed funds futures probabilities, weekly fund flows, credit spreads and the VIX; today's
-  **real** earnings releases (the six largest from Earnings by Day, marked "you hold"); an analyst-ratings panel that
+  2Y–10Y and 3M–10Y spreads), an economic surprise index, Fed funds futures probabilities, weekly fund flows, credit
+  spreads and the VIX; the **real** economic calendar (below); today's **real** earnings releases (the six largest
+  from Earnings by Day, marked "you hold"); an analyst-ratings panel that
   says no source is loaded yet — with what My Portfolio would be worth if it opened with the futures (each
   holding's real market and rate betas). Each panel says what it measures and how a long-term investor
   might use it. Its earnings panel links to today's real list (Earnings by Day). **Watch CNBC Live**, above the
   tiles, opens CNBC Live.
+* **Economic calendar** (Morning Briefing's panel 3 and its Next big event tile; `EconomicCalendar.swift`) — the next
+  ten high-impact U.S. releases from today on, each with its day, time (U.S. Eastern), estimate and prior reading, and
+  the actual once it's out; a release with a walkthrough opens it. FMP's own `impact` rating picks them, and a release
+  FMP lists as several lines (four for CPI, four for the jobs report) gets one row. Source: FMP `stable/economic-calendar`
+  through the **accounts** service (`GET /economic/calendar`, port 8774), which holds SRM's FMP key. There is no loader
+  to schedule and nothing in the security master: the page asks when it opens and every 15 minutes while it shows, and
+  the service keeps FMP's answer for 15 minutes. Until 10/31/26 this panel was a hard-coded illustrative list, so it
+  never moved.
 * **CNBC Live** (Morning Briefing ▸ Watch CNBC Live, Reports ▸ CNBC Live; `LiveVideo.swift`) — CNBC's live video in
   a window of MxAcctMGR's own (WebKit), never handed to Safari: move it, resize it, or **Keep on Top** to read the
   briefing under it. There is one window: opening it again brings it forward. It opens where you left it, launch after
@@ -1035,6 +1043,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ServicesCheck.swift` | The Layer 3 services MxAcctMGR uses that aren't running: the alert at launch that names them, and the sidebar row and toolbar picker that stay red while any is down |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
 | `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live button) |
+| `EconomicCalendar.swift` | The Morning Briefing's economic calendar: FMP's scheduled releases through the accounts service, one row per release, kept current while the page shows |
 | `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame and divider it keeps, Fill Sign-In from Secure Accounts (the password after Touch ID) — and the window with its web view, beside the news; pages' new windows (a TV provider's sign-in) open in the app |
 | `MassiveNews.swift` | CNBC Live's Market News: Massive's news feed, asked with the Massive API key in Secure Accounts (`MassiveNews.shared`), and the panel that lists it |
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |

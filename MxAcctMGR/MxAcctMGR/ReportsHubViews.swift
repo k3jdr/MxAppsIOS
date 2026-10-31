@@ -4,7 +4,8 @@
 //
 //  Knowledge Library ▸ Report Library — the hierarchy of reports portfolio managers watch, by tier, with what each
 //  measures, why PMs care, which price drivers it moves, and the five with the greatest impact — and Investments ▸
-//  Morning Briefing, the ten things many institutional PMs review before the open, on an illustrative morning.
+//  Morning Briefing, the ten things many institutional PMs review before the open: an illustrative morning, with today's
+//  real earnings list and the real economic calendar (EconomicCalendar.swift).
 //
 
 import Charts
@@ -181,7 +182,7 @@ struct ImpactDots: View {
 
 // MARK: - Morning Briefing
 
-/// An illustrative morning's data for the ten items.
+/// An illustrative morning's data for the panels that have no real source yet.
 nonisolated enum Briefing {
     static let date = "Wednesday 2026-10-21 (illustrative)"
 
@@ -192,27 +193,6 @@ nonisolated enum Briefing {
     static let futuresMove = -0.005, futuresRate = 0.0001
 
     static let yields: [(String, Double, Double)] = [("3-month", 4.20, 0.00), ("2-year", 4.08, -0.02), ("5-year", 4.18, 0.00), ("10-year", 4.51, 0.01), ("30-year", 4.92, 0.02)]
-
-    struct Event: Identifiable {
-        var id: String { day + time + name }
-        var day: String
-        var time: String
-        var name: String
-        var consensus: String
-        var prior: String
-        var report: String?
-        var impact: Int
-    }
-    static let calendar: [Event] = [
-        Event(day: "Today", time: "8:30", name: "CPI (core, m/m)", consensus: "+0.3%", prior: "+0.3%", report: "cpi", impact: 3),
-        Event(day: "Today", time: "10:30", name: "EIA crude inventories", consensus: "−1.2m bbl", prior: "+0.4m", report: "energy", impact: 1),
-        Event(day: "Today", time: "1:00", name: "10-year note auction ($42bn)", consensus: "4.58% WI", prior: "0.6bp tail", report: "auctions", impact: 2),
-        Event(day: "Thu", time: "8:30", name: "PPI final demand (m/m)", consensus: "+0.2%", prior: "+0.3%", report: "ppi", impact: 2),
-        Event(day: "Thu", time: "8:30", name: "Retail sales (m/m)", consensus: "+0.3%", prior: "+0.5%", report: "retail-sales", impact: 2),
-        Event(day: "Fri", time: "8:30", name: "Housing starts", consensus: "1.34m", prior: "1.36m", report: "housing", impact: 1),
-        Event(day: "Fri", time: "3:30", name: "CFTC Commitments of Traders", consensus: "—", prior: "—", report: "cot", impact: 1),
-        Event(day: "Next Wed", time: "2:00", name: "FOMC decision and projections", consensus: "Hold", prior: "Hold", report: "fomc", impact: 3),
-    ]
 
     static let surprise: [Double] = [8, 6, 9, 4, 2, 3, -1, -4, -3, -6, -8, -7, -10, -9, -12, -11, -14, -13, -12, -15]
     static let vix: [Double] = [15.2, 14.8, 15.5, 16.1, 15.9, 16.8, 17.4, 16.9, 18.2, 19.5, 18.8, 17.6, 18.4, 19.9, 21.0, 20.2, 19.4, 18.6, 18.6, 21.4]
@@ -231,10 +211,12 @@ struct MorningBriefingView: View {
         let _ = store.riskStamp
         let p = store.portfolio
         let preMarket = MarketReport.accountMove(p, market: Briefing.futuresMove, rate: Briefing.futuresRate)
+        let calendar = EconomicCalendar.shared
+        let today = EconomicEvents.today()
         StepPage(store: store, subtitle: "\(Briefing.date): the ten things many institutional PMs review before the open.", lessonTitle: "How to read a morning briefing", lesson: [
             "A briefing answers three questions: what happened overnight, what is scheduled today, and how investors are positioned and feeling.",
             "Professionals use it to manage risk around events in the next hours and days. For a long-term account, it is context — what you'll read about today — not a to-do list.",
-            "The market panels are an illustrative morning in the shape of a real one; your account and today's earnings list are real (security master, Nasdaq.com and FMP). Point at a panel for what it measures and how a long-term investor might use it.",
+            "The market panels are an illustrative morning in the shape of a real one; your account, the economic calendar and today's earnings list are real (security master, FMP and Nasdaq.com). Point at a panel for what it measures and how a long-term investor might use it.",
         ]) {
             // CNBC's live video in a window of its own, beside or over the briefing (LiveVideo.swift).
             HStack(spacing: 10) {
@@ -247,7 +229,9 @@ struct MorningBriefingView: View {
             HStack(spacing: 10) {
                 MetricTile(title: "Your account before the open", value: money(preMarket), caption: "if it moved with S&P futures (\(signedPct(Briefing.futuresMove, 1)))",
                            tint: Color.signed(preMarket), help: "An estimate from the futures move and each holding's market and rate betas (analytics service, from real prices): what \(p.name) would be worth at the open if prices followed the futures. It often changes by the close.")
-                MetricTile(title: "Next big event", value: "CPI 8:30", caption: "consensus core +0.3% m/m", tint: .orange, help: "The highest-impact release on today's calendar.")
+                MetricTile(title: "Next big event", value: calendar.next?.shortName ?? "—",
+                           caption: calendar.next.map { [$0.dayTitle(today: today) + ", " + $0.timeTitle + " ET", $0.figures].filter { !$0.isEmpty }.joined(separator: " · ") } ?? "",
+                           tint: .orange, help: "The next high-impact U.S. release on the economic calendar, from FMP.")
                 MetricTile(title: "VIX", value: String(format: "%.1f", Briefing.vix.last!), caption: "+2.8 today, long-run average ≈ 19", tint: .orange, help: "The market's expected 30-day volatility of the S&P 500, from option prices; it rises when investors pay up for protection.")
                 MetricTile(title: "Fed: odds of a cut next meeting", value: "62%", caption: "from fed funds futures", help: "Probabilities implied by fed funds futures prices.")
             }
@@ -268,18 +252,24 @@ struct MorningBriefingView: View {
                 }
                 panel(3, "Economic calendar", "calendar", "Scheduled releases with the economists' consensus and the prior reading. The surprise versus consensus is what moves prices.",
                       "Knowing what's scheduled explains the day's moves before they happen. Open any report's walkthrough from here.") {
-                    ForEach(Briefing.calendar) { e in
+                    let events = calendar.events.prefix(10)
+                    if events.isEmpty {
+                        Text(calendar.problem ?? (calendar.updated == nil ? "Reading the economic calendar…" : "No high-impact U.S. releases in the next \(EconomicCalendar.days) days."))
+                            .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    ForEach(Array(events)) { e in
                         HStack(spacing: 8) {
-                            Text(e.day).font(.caption).foregroundStyle(.secondary).frame(width: 58, alignment: .leading)
-                            Text(e.time).font(.caption.monospacedDigit()).frame(width: 38, alignment: .leading)
+                            Text(e.dayTitle(today: today)).font(.caption).foregroundStyle(.secondary).frame(width: 66, alignment: .leading)
+                            Text(e.timeTitle).font(.caption.monospacedDigit()).frame(width: 34, alignment: .leading)
                             if let id = e.report {
-                                Button(e.name) { store.openReport(id) }.buttonStyle(.link).font(.callout).help("Open the walkthrough")
-                            } else { Text(e.name).font(.callout) }
+                                Button(e.name) { store.openReport(id) }.buttonStyle(.link).font(.callout).lineLimit(1).help("Open the walkthrough")
+                            } else { Text(e.name).font(.callout).lineLimit(1) }
                             Spacer()
-                            Text(e.consensus).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            ImpactDots(level: e.impact)
+                            Text(e.figures).font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
+                    Text(events.isEmpty || calendar.problem == nil ? "FMP's high-impact U.S. releases; times are U.S. Eastern." : "From the last reading: \(calendar.problem ?? "")")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 panel(4, "Economic surprise index", "chart.line.downtrend.xyaxis", "Whether recent data has come in above (positive) or below (negative) forecasts, like the Bloomberg and Citi surprise indexes.",
                       "A falling index means forecasters have been too optimistic. It tends to mean-revert as forecasts adjust.") {
@@ -358,6 +348,7 @@ struct MorningBriefingView: View {
         }
         .task { if store.earnings.days[EarningsDates.today()] == nil { _ = await store.earnings.load([EarningsDates.today()]) } }
         .task(id: store.portfolio.holdings.map(\.ticker)) { await store.ensureHoldingRisk() }
+        .task { await EconomicCalendar.shared.keepCurrent() }
     }
 
 
