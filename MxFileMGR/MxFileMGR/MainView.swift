@@ -139,15 +139,23 @@ private struct FunctionKeyBar: View {
 /// Running and recently finished file operations.
 private struct TransferPanel: View {
     private var manager = TransferManager.shared
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         if !manager.jobs.isEmpty {
             VStack(spacing: 0) {
                 Divider()
-                ForEach(manager.jobs) { job in
-                    JobRow(job: job)
-                    Divider()
+                // Many jobs scroll here rather than squeezing the panes.
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(manager.jobs) { job in
+                            JobRow(job: job)
+                            Divider()
+                        }
+                    }
+                    .onGeometryChange(for: CGFloat.self, of: \.size.height) { contentHeight = $0 }
                 }
+                .frame(height: min(contentHeight, 240))
             }
             .background(.bar)
             .quickHelpArea(FileHelp.transfers)
@@ -158,13 +166,18 @@ private struct TransferPanel: View {
 private struct JobRow: View {
     let job: TransferJob
     @State private var showErrors = false
+    @State private var showOutput = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(job.title).fontWeight(.medium)
+                Text(job.title).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
                 Text(job.detail).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Spacer()
+                if !job.output.isEmpty {
+                    Button("Output") { showOutput.toggle() }
+                        .buttonStyle(.link)
+                }
                 switch job.state {
                 case .running:
                     Button("Stop", systemImage: "stop.circle") { job.cancel() }
@@ -195,6 +208,16 @@ private struct JobRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 90)
+            }
+            if showOutput {
+                ScrollView {
+                    Text(job.output.joined(separator: "\n"))
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 120)
+                .defaultScrollAnchor(.bottom)
             }
         }
         .font(.callout)

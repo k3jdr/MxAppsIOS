@@ -409,6 +409,7 @@ struct FileListView: NSViewRepresentable {
             menu.addItem(ActionMenuItem("New File…") { workspace.newFile() })
             menu.addItem(ActionMenuItem("Paste") { workspace.pasteFromPasteboard(move: false) })
             menu.addItem(.separator())
+            menu.addItem(ActionMenuItem("yt-dlp Download…") { workspace.downloadWithYTDLP() })
             menu.addItem(ActionMenuItem("Open Terminal Here") { workspace.openTerminal() })
             menu.addItem(ActionMenuItem("Add to Favorites") { workspace.addToFavorites() })
             return menu

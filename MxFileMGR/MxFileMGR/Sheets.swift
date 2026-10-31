@@ -24,6 +24,7 @@ struct WorkspaceSheetView: View {
         case .webDAV(let account): WebDAVSheet(workspace: workspace, account: account)
         case .sftp(let account): SFTPSheet(workspace: workspace, account: account)
         case .mediaMetadata(let url): MediaMetadataSheet(workspace: workspace, url: url)
+        case .ytDLP(let folder): YTDLPSheet(folder: folder)
         }
     }
 }

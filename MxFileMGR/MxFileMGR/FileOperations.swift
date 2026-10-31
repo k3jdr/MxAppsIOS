@@ -47,6 +47,10 @@ final class TransferJob: Identifiable {
     var fraction: Double?
     var state: State = .running
     var errors: [String] = []
+    /// What a command-line tool printed, for jobs that keep it (yt-dlp).
+    var output: [String] = []
+    /// Stays listed until dismissed even without errors.
+    var keepListed = false
     @ObservationIgnored let flag = CancelFlag()
 
     init(title: String) { self.title = title }
@@ -108,6 +112,21 @@ nonisolated final class ProgressReporter: @unchecked Sendable {
         Task { @MainActor in job.errors.append(message) }
     }
 
+    /// What a tool is doing now. Never skipped by the throttle: the next step can be long and print nothing.
+    func status(_ text: String) {
+        lock.withLock { name = text }
+        post(force: true)
+    }
+
+    /// One line of a tool's output; the job keeps the latest 500.
+    func log(_ line: String) {
+        let job = job
+        Task { @MainActor in
+            job.output.append(line)
+            if job.output.count > 500 { job.output.removeFirst(job.output.count - 500) }
+        }
+    }
+
     private func post(force: Bool) {
         let update: (fraction: Double?, detail: String)? = lock.withLock {
             let now = Date()
@@ -156,7 +175,7 @@ final class TransferManager {
         job.fraction = 1
         NotificationCenter.default.post(name: .mxFilesChanged, object: nil)
         // Clean jobs leave the panel on their own; ones with errors stay until dismissed.
-        if job.errors.isEmpty {
+        if job.errors.isEmpty, !job.keepListed {
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(2))
                 self?.dismiss(job)

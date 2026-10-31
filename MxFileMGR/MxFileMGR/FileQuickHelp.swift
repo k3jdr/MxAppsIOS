@@ -70,6 +70,12 @@ enum FileHelp {
             return ("ffmpeg Meta-data", QuickHelpItem(
                 title: "ffmpeg Meta-data — \(url.lastPathComponent)",
                 detail: mediaMetadataDetail, symbol: "film"))
+        case .ytDLP(let folder):
+            return ("yt-dlp Download", QuickHelpItem(
+                title: "yt-dlp Download",
+                detail: "Type a URL or a whole yt-dlp command; it runs in \(folder.path), without a shell, so URLs need no quoting. Each line is its own download. "
+                    + "They run in the background, with progress and Stop in the transfer panel, so you can keep working and start more.",
+                symbol: "arrow.down.circle"))
         case .sftp(let account):
             return (account == nil ? "Add SFTP Account" : "Edit SFTP Account", sftpSheet)
         case .webDAV(let account):
@@ -265,7 +271,7 @@ enum FileHelp {
 
     static let transfers = QuickHelpItem(
         title: "Transfers",
-        detail: "Copies, moves, deletes, archives and cloud transfers running in the background, with their progress. Stop ends one; jobs with problems stay listed until dismissed.",
+        detail: "Copies, moves, deletes, archives, cloud transfers and yt-dlp downloads running in the background, with their progress. Stop ends one; jobs with problems stay listed until dismissed. Output shows what a download's command printed.",
         symbol: "arrow.up.arrow.down.circle")
 
     static let functionKeys = QuickHelpItem(

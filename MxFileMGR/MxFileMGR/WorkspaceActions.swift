@@ -400,6 +400,11 @@ extension Workspace {
         sheet = .mediaMetadata(item.url)
     }
 
+    /// yt-dlp Download…, saving to the marked folder or the active pane's folder.
+    func downloadWithYTDLP() {
+        sheet = .ytDLP(marked.count == 1 && marked[0].isDirectory ? marked[0].url : activeTab.url)
+    }
+
     func addSFTPAccount() {
         sheet = .sftp(nil)
     }
