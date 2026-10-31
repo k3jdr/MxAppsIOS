@@ -117,6 +117,7 @@ without a connection.
 | **Purpose** | Show the Layer 3 services and the MxJobsMGR workflows built on them; open a workflow for the selected portfolio. |
 | **Layout** | Segmented **Workflows** / **Layer 3 Services**. *Workflows*: the five samples with the services each needs and whether they run; **Open in MxJobsMGR**. *Layer 3 Services*: each service's state, language and why, use cases, endpoints, start command, project folder (*Show Project in Finder*), and *Choosing a language*. |
 | **Data** | `ServiceCatalog` (built in) and `GET /health` per service. |
+| **At launch** | When any service doesn't answer `GET /health`, even after a second try, an alert names them: **Start Services** runs `mxservices.py start` with those ids in a new Terminal window; **Not Now** leaves them stopped. |
 | **Hand-off** | Open in MxJobsMGR → `mxjobsmgr://sample/<id>?portfolio=&benchmark=` (portfolio selected in Portfolios, else DEMO_GROWTH). |
 
 ## Launch arguments (testing)

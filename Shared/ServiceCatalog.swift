@@ -181,6 +181,25 @@ nonisolated enum ServiceCatalog {
             return out
         }
     }
+
+    /// Runs a command in a new Terminal window, where its output shows (the sandbox would hold anything the app ran
+    /// itself); what went wrong, if anything. macOS asks once whether the app may control Terminal, which needs the
+    /// app's Apple Events entitlement and usage description.
+    static func askTerminal(_ command: String) -> String? {
+        var error: NSDictionary?
+        NSAppleScript(source: """
+            tell application "Terminal"
+                activate
+                do script "\(command)"
+            end tell
+            """)?.executeAndReturnError(&error)
+        guard let error else { return nil }
+        let number = error[NSAppleScript.errorNumber] as? Int ?? 0
+        let app = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "This app"
+        return number == -1743
+            ? "\(app) isn't allowed to control Terminal: allow it in System Settings ▸ Privacy & Security ▸ Automation."
+            : "Terminal: \(error[NSAppleScript.errorMessage] as? String ?? "error \(number)")"
+    }
 }
 
 /// The sample jobspaces of MxJobsMGR, as both apps describe them.

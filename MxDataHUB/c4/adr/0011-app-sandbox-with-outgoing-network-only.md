@@ -14,7 +14,8 @@ Enable the **App Sandbox** with **outgoing network connections** only (`ENABLE_A
 
 ## Consequences
 
-- Least privilege: the app cannot read files or start processes.
+- Least privilege: the app cannot read files or start processes. The one exception is Apple Events to Terminal
+  (`MxDataHUB.entitlements`): at launch, when Layer 3 services are stopped and you confirm, Terminal starts them.
 - Anything that needs files, processes or other credentials runs as a Layer 3 service outside the sandbox
   ([ADR-0005](0005-data-refresh-through-local-loader-service.md)).
 - Import/export of files (e.g. holdings) would need a user-selected file entitlement; today holdings are pasted.

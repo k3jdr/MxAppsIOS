@@ -33,8 +33,10 @@ struct ServicesWorkflowsView: View {
             Divider()
             if tab == "Services" {
                 ServicesView(openSample: open, openSampleTitle: "Open in MxJobsMGR")
+                    .id(store.servicesStarts)
             } else {
                 SampleGalleryView(open: open, openTitle: "Open in MxJobsMGR", note: note)
+                    .id(store.servicesStarts)
             }
         }
         .alert("MxDataHUB", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {

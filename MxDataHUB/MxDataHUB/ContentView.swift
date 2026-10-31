@@ -58,6 +58,8 @@ struct ContentView: View {
         .onChange(of: store.place, initial: true) { store.recordPlace() }
         .onOpenURL { url in open(AppLink(url: url)) }
         .errorDialog("MxDataHUB", message: $store.errorMessage)
+        // At launch, the Layer 3 services that aren't running, and whether to start them (ServicesCheck.swift).
+        .modifier(StoppedServicesAlert(store: store))
         // Links on tickers and names (Shared/Links), as in MxNoteONE: ⌘K, a row's context menu, Edit Link… on a hover card.
         .sheet(item: Binding(get: { SecurityLinks.shared.editing }, set: { SecurityLinks.shared.editing = $0 })) { SecurityLinkSheet(initial: $0) }
     }
@@ -134,6 +136,7 @@ struct ContentView: View {
     /// Saved password, then launch arguments for testing and demos:
     /// `-autoConnect YES -section Portfolios -query AAPL` (connection fields: `-host`, `-port`,
     /// `-user`, `-database`, `-sslMode`). Debug builds also take the password from PGPASSWORD.
+    /// `-checkServices NO` skips the launch check of the Layer 3 services.
     private func start() async {
         NavigationKeys.install(store)
         store.loadSavedPassword()
@@ -143,6 +146,9 @@ struct ContentView: View {
         }
         #endif
         let defaults = UserDefaults.standard
+        if defaults.object(forKey: "checkServices") == nil || defaults.bool(forKey: "checkServices") {
+            Task { await ServicesCheck.atLaunch(store) }
+        }
         if let query = defaults.string(forKey: "query") { store.query = query }
         if defaults.bool(forKey: "autoConnect"), !store.password.isEmpty {
             await store.connect()

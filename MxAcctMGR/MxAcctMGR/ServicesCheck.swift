@@ -67,7 +67,7 @@ enum ServicesCheck {
     static func startStopped(_ store: PortStore) {
         let command = ServiceCatalog.startCommand + " " + store.servicesDown.joined(separator: " ")
         Task {
-            let problem = await Task.detached { askTerminal(command) }.value
+            let problem = await Task.detached { ServiceCatalog.askTerminal(command) }.value
             if let problem {
                 store.errorMessage = problem + "\n\nStart them in Terminal yourself:\n" + command
                 return
@@ -78,23 +78,6 @@ enum ServicesCheck {
                 if store.servicesDown.isEmpty { break }
             }
         }
-    }
-
-    /// Runs the command in a new Terminal window, where its output shows; what went wrong, if anything. macOS asks
-    /// once whether MxAcctMGR may control Terminal.
-    private nonisolated static func askTerminal(_ command: String) -> String? {
-        var error: NSDictionary?
-        NSAppleScript(source: """
-            tell application "Terminal"
-                activate
-                do script "\(command)"
-            end tell
-            """)?.executeAndReturnError(&error)
-        guard let error else { return nil }
-        let number = error[NSAppleScript.errorNumber] as? Int ?? 0
-        return number == -1743
-            ? "MxAcctMGR isn't allowed to control Terminal: allow it in System Settings ▸ Privacy & Security ▸ Automation."
-            : "Terminal: \(error[NSAppleScript.errorMessage] as? String ?? "error \(number)")"
     }
 
     static func copyStartCommand() {

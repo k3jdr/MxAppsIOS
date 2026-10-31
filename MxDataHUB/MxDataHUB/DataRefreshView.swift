@@ -236,7 +236,7 @@ struct DataRefreshView: View {
                 }
             }
         }
-        .task { await refresh.load() }
+        .task(id: store.servicesStarts) { await refresh.load() }
         .task { await refresh.followActivity() }
         .errorDialog("Data Refresh", message: $refresh.error)
     }

@@ -275,6 +275,10 @@ final class SRMStore {
     var available: Bool?
     var errorMessage: String?
     var busy = false
+    /// The Layer 3 services that weren't running at launch, for its alert (ServicesCheck.swift).
+    var stoppedServices: [ServiceInfo]?
+    /// Goes up when Start Services has finished, so the screens that show the services look again.
+    var servicesStarts = 0
 
     // Back and Forward through the places visited, as in a browser (Navigation.swift).
     private(set) var canGoBack = false
