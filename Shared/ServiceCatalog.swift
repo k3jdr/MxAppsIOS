@@ -182,6 +182,30 @@ nonisolated enum ServiceCatalog {
         }
     }
 
+    /// The services that sign in to the security master (SRM_SERVICES in mxservices.py).
+    static let databaseServices = ["srm-loader", "analytics", "accounts"]
+
+    /// Why a running service can't reach the security master, by service id: GET /health never touches the database, so
+    /// a service can answer it and still be unable to work. One that isn't running, or too old to have GET /database, isn't listed.
+    static func databaseProblems() async -> [String: String] {
+        await withTaskGroup(of: (String, String?).self) { group in
+            for service in all where databaseServices.contains(service.id) {
+                group.addTask { (service.id, await databaseProblem(service)) }
+            }
+            var out: [String: String] = [:]
+            for await (id, problem) in group { out[id] = problem }
+            return out
+        }
+    }
+
+    private static func databaseProblem(_ service: ServiceInfo) async -> String? {
+        struct Failure: Decodable { var error: String }
+        guard let url = URL(string: service.baseURL + "/database"),
+              let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 15)),
+              (response as? HTTPURLResponse)?.statusCode == 503 else { return nil }
+        return (try? JSONDecoder().decode(Failure.self, from: data))?.error ?? String(decoding: data, as: UTF8.self)
+    }
+
     /// Runs a command in a new Terminal window, where its output shows (the sandbox would hold anything the app ran
     /// itself); what went wrong, if anything. macOS asks once whether the app may control Terminal, which needs the
     /// app's Apple Events entitlement and usage description.

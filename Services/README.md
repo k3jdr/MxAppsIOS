@@ -60,7 +60,8 @@ the permission, every connection to a 192.168.x.x address fails with *No route t
 | [contracts](contracts/) | JSON | — | The versioned request / outcome contracts between the services and the agents | — |
 
 Every service answers `GET /health` and `GET /describe` (its purpose, language rationale, use cases, endpoints and
-the samples built on it — what the apps display).
+the samples built on it — what the apps display). `/health` never touches the database, so srm-loader, analytics and
+accounts also answer `GET /database`: 200 when that service can reach the security master, else 503 with why.
 
 ## Choosing a language for a Layer 3 tool
 

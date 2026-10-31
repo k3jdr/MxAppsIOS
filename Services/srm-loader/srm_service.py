@@ -9,6 +9,7 @@ Wraps MxDataHUB/SRM/srm.py so an MxJobsMGR jobspace can run the daily SRM refres
 Endpoints (JSON):
 
     GET  /health                      service status and SRM folder
+    GET  /database                    whether this service can reach the security master (503 with why when it can't)
     GET  /loaders                     loader names in dependency order (srm.py LOADERS)
     POST /load/<loader>?max=&force=1&since=&months=&history=1&benchmarks=SP500,DJIA&symbols=AAPL,MSFT&funds=1
                                       &asOf=&portfolios= (portfolio-snapshots)
@@ -519,6 +520,9 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/health" and method == "GET":
                 return self.send_json(200, {"status": "ok", "service": "mxjobs-srm", "version": VERSION,
                                             "srmDir": Handler.srm.folder, "busy": LOAD_LOCK.locked()})
+            if url.path == "/database" and method == "GET":
+                Handler.srm.connect().close()
+                return self.send_json(200, {"database": "ok"})
             if url.path == "/loaders" and method == "GET":
                 return self.send_json(200, {"loaders": Handler.srm.loaders})
             if url.path == "/status" and method == "GET":

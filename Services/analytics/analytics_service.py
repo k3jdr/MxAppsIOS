@@ -4,6 +4,7 @@
 Reads the security master (MxDataHUB/SRM, PostgreSQL schema srm) and serves:
 
     GET  /health, /describe            status; what this service is for (shown in MxJobsMGR and MxDataHUB)
+    GET  /database                     whether this service can reach the security master (503 with why when it can't)
     GET  /portfolios, /benchmarks      what can be analysed
     POST /inputs                       optimization inputs for a portfolio and/or benchmark: universe, sectors,
                                        benchmark and current weights, shrunk covariance, expected returns or
@@ -858,6 +859,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"status": "ok", "service": "analytics", "version": VERSION})
             if url.path == "/describe":
                 return self.send_json(200, dict(DESCRIBE, version=VERSION, port=Handler.port))
+            if url.path == "/database" and method == "GET":
+                Handler.srm.connect().close()
+                return self.send_json(200, {"database": "ok"})
             if url.path.startswith("/inputs/") and method == "GET":
                 with CACHE_LOCK:
                     payload = CACHE.get(url.path.split("/")[-1])

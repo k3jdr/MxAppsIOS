@@ -4,6 +4,7 @@
 Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V011) and serves:
 
     GET  /health, /describe              status; what this service is for (shown in MxJobsMGR and MxDataHUB)
+    GET  /database                       whether this service can reach the security master (503 with why when it can't)
     GET  /securities?q=&kind=&priced=&offset=&limit=   search securities by ticker, name, ISIN or CUSIP; kind = all |
                                          stocks | funds | bonds (fixed-income funds); priced=1 only those with prices;
                                          best first, a page at a time (limit ≤ 500) with the total that match; mutual
@@ -1373,6 +1374,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"status": "ok", "service": "accounts", "version": VERSION})
             if url.path == "/describe":
                 return self.send_json(200, dict(DESCRIBE, version=VERSION, port=Handler.port))
+            if url.path == "/database" and method == "GET":
+                Handler.srm.connect().close()
+                return self.send_json(200, {"database": "ok"})
             if parts[:1] in (["earnings"], ["economic"], ["fundamentals"]) and method == "GET":    # FMP only: no database connection
                 if parts == ["earnings", "calendar"]:
                     out = earnings_calendar(q)
