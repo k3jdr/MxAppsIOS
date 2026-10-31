@@ -43,8 +43,8 @@ This Year links them too; `REVOKE SELECT ON srm.v_amazon_charge FROM
 spending_web` takes the items off the page (the rest works without them). They read the
 same queries, through `Services/accounts/spending.py`. Viewing choices are allowed and are kept in the browser: the
 year, *Year to date*, *Only registers covering both years*, the Deep Dive category, the entry filters, and the
-entries tables' Payee width (drag the grip at its header's right edge, with a mouse or a finger; double-click it for the
-standard width; longer names end in "…" and show in full on hover). It can change two things (V041), each applied at once, with
+entries tables' Payee and Bought widths (drag the grip at a header's right edge, with a mouse or a finger; double-click it for the
+standard width; longer text ends in "…" and shows in full on hover). It can change two things (V041), each applied at once, with
 nothing to fill in: signed with the name she gave for notes, else "Family page":
 
 - **An entry's Category and Driver**, in the entries tables on Entries and in the Deep Dive. A change gives the entry a

@@ -487,7 +487,7 @@ function entriesBox(list, title, locked) {
       <label><input type="checkbox" data-set="unassignedOnly"${S.unassignedOnly ? " checked" : ""}> No driver yet</label>
       <input type="search" data-set="search" value="${esc(S.search)}" placeholder="Search payee, item bought, event">
       <span class="spacer"></span><span class="muted">${rows.length.toLocaleString()} entries, ${money(rows.reduce((a, e) => a + e.amount, 0))}</span></div>
-    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l bought">Bought</th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th class="l">Event</th><th></th></tr>
+    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l bought">Bought<span class="grip" data-resize="bought" title="Drag to make Bought wider or narrower; double-click for the standard width"></span></th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th class="l">Event</th><th></th></tr>
     ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td>
       <td class="l bought">${boughtLink(e)}</td><td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "Its target account isn't allocated")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "Its target account has no driver: counts as usage")}">${pick("driver", e)}</td>
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
@@ -782,23 +782,27 @@ document.getElementById("note-form").addEventListener("change", ev => { if (ev.t
 document.getElementById("note-form").addEventListener("submit", ev => {
   if (ev.submitter?.value === "send") { ev.preventDefault(); sendNote(); }
 });
-// The Payee column's width: dragged on its header's grip (mouse or finger), kept in this browser.
-const PAYEE_WIDTH = 220;
-const setPayeeWidth = w => document.documentElement.style.setProperty("--payee-w", Math.round(Math.min(900, Math.max(80, w))) + "px");
-setPayeeWidth(saved("payeeWidth", PAYEE_WIDTH));
+// The Payee and Bought columns' widths: dragged on their headers' grips (mouse or finger), kept in this browser.
+const COLUMN_WIDTHS = { payee: 220, bought: 240 };
+const setColumnWidth = (column, w) => document.documentElement.style.setProperty(`--${column}-w`, Math.round(Math.min(900, Math.max(80, w))) + "px");
+for (const column in COLUMN_WIDTHS) setColumnWidth(column, saved(column + "Width", COLUMN_WIDTHS[column]));
 document.addEventListener("pointerdown", ev => {
-  const grip = ev.target.closest('[data-resize="payee"]'); if (!grip) return;
+  const grip = ev.target.closest("[data-resize]"); if (!grip) return;
   ev.preventDefault();
+  const column = grip.dataset.resize;
   const startX = ev.clientX, start = grip.parentElement.getBoundingClientRect().width;
   try { grip.setPointerCapture(ev.pointerId); } catch { /* the page's own listeners below follow the pointer anyway */ }
-  const move = e => setPayeeWidth(start + e.clientX - startX);
+  const move = e => setColumnWidth(column, start + e.clientX - startX);
   const up = () => {
     document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
-    keep("payeeWidth", parseInt(getComputedStyle(document.documentElement).getPropertyValue("--payee-w")));
+    keep(column + "Width", parseInt(getComputedStyle(document.documentElement).getPropertyValue(`--${column}-w`)));
   };
   document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
 });
-document.addEventListener("dblclick", ev => { if (ev.target.closest('[data-resize="payee"]')) { setPayeeWidth(PAYEE_WIDTH); keep("payeeWidth", PAYEE_WIDTH); } });
+document.addEventListener("dblclick", ev => {
+  const column = ev.target.closest("[data-resize]")?.dataset.resize; if (!column) return;
+  setColumnWidth(column, COLUMN_WIDTHS[column]); keep(column + "Width", COLUMN_WIDTHS[column]);
+});
 
 let resizeTimer;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 200); });
