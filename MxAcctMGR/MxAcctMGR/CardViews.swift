@@ -278,6 +278,8 @@ struct CardsView: View {
     @State private var selfTested = false
     #endif
     @State private var selection = Set<CardEntry.ID>()
+    /// The entry Open … Transaction scrolled to.
+    @State private var revealed: CardEntry.ID?
     @State private var draft = CardDraft()
     /// The register's Excel-style sorting and column filters (the header buttons).
     @State private var grid = GridQueryOptions()
@@ -322,6 +324,17 @@ struct CardsView: View {
             if defaults.bool(forKey: "cardRemove") { Task { await askRemoval() } }
         }
         #endif
+        // Spending Analysis's Open … Transaction, once the register is loaded: the entry selected, in view and open.
+        .task(id: "\(register == nil) \(store.registerEntryRequest ?? 0)") {
+            guard let r = register, let id = store.registerEntryRequest else { return }
+            store.registerEntryRequest = nil
+            guard let e = r.entries.first(where: { $0.id == id }) else { message = "That entry isn't in this register any more."; return }
+            // Also a statement of the card shown before, which the Card picker would have cleared.
+            if !r.statements.contains(where: { $0.closingDate == period }) || !shown(r).contains(e) { period = "" }
+            selection = [e.id]
+            revealed = e.id
+            editing = e
+        }
         .task(id: selected) {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -512,6 +525,7 @@ struct CardsView: View {
             .columnHeaderFilters(types: LocalGrid.types(Self.columns), options: grid,
                                  loadValues: { (LocalGrid.values(period, column: $0, grid, Self.columns), false) },
                                  apply: { grid = $0 })
+            .background(RevealRow(id: revealed, row: rows.firstIndex { $0.id == revealed }))
             .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(rows.count, 6), registerRows)))
         }
     }
@@ -870,6 +884,7 @@ struct CardEditSheet: View {
             if let n = entry.issuerName {
                 Label("The card company's line \"\(n)\"\(entry.issuerCategory.map { " (\($0))" } ?? "") of \(shortDay(entry.postedDate)). A target picked here is used for that name from now on; marking it not posted or void unmatches the line.", systemImage: "creditcard")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
             if let error { Text(error).foregroundStyle(.red).font(.callout).fixedSize(horizontal: false, vertical: true) }
             HStack {

@@ -243,6 +243,8 @@ struct CheckingView: View {
     @State private var accountSheet: BankAccount??
     @State private var matching: BankLine?
     @State private var selection = Set<RegisterEntry.ID>()
+    /// The entry Open … Transaction scrolled to.
+    @State private var revealed: RegisterEntry.ID?
     @State private var draft = EntryDraft.newEntry()
     @State private var noteFor: RegisterEntry?
     /// The register's Excel-style sorting and column filters (the header buttons).
@@ -281,6 +283,16 @@ struct CheckingView: View {
             }
         }
         .task { await reload() }
+        // Spending Analysis's Open … Transaction, once the register is loaded: the entry selected, in view and open.
+        .task(id: "\(register == nil) \(store.registerEntryRequest ?? 0)") {
+            guard let r = register, let id = store.registerEntryRequest else { return }
+            store.registerEntryRequest = nil
+            guard let e = r.entries.first(where: { $0.id == id }) else { message = "That entry isn't in this register any more."; return }
+            if e.date < focusDay { focusOn = false }
+            selection = [e.id]
+            revealed = e.id
+            editing = e
+        }
         // The register is shared: pick up what others entered while it is open.
         .task(id: selected) {
             while !Task.isCancelled {
@@ -434,6 +446,7 @@ struct CheckingView: View {
             // An entry not cleared yet is shaded light yellow, as a pencilled line on the paper register, until the
             // bank clears it; cleared, reconciled and void entries keep the table's banded rows.
             .background(RowShading(marked: shown.map { $0.status == "open" }))
+            .background(RevealRow(id: revealed, row: shown.firstIndex { $0.id == revealed }))
             .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), registerRows)))
         }
     }
@@ -716,19 +729,7 @@ struct RowShading: NSViewRepresentable {
 
         /// The table whose scroll view covers the middle of this view, watched as it scrolls.
         private func attach() {
-            guard let probe, let root = probe.window?.contentView else { return }
-            let target = probe.convert(probe.bounds, to: nil)
-            let middle = CGPoint(x: target.midX, y: target.midY)
-            var best: (table: NSTableView, area: CGFloat)?
-            var stack = [root]
-            while let view = stack.popLast() {
-                if let t = view as? NSTableView, let scroll = t.enclosingScrollView {
-                    let frame = scroll.convert(scroll.bounds, to: nil)
-                    if frame.contains(middle), frame.width * frame.height < best?.area ?? .infinity { best = (t, frame.width * frame.height) }
-                }
-                stack.append(contentsOf: view.subviews)
-            }
-            table = best?.table
+            table = probe?.tableCovering
             NotificationCenter.default.removeObserver(self)
             if let clip = table?.enclosingScrollView?.contentView {
                 clip.postsBoundsChangedNotifications = true
@@ -738,6 +739,42 @@ struct RowShading: NSViewRepresentable {
 
         @objc private func scrolled() { apply() }
     }
+}
+
+extension NSView {
+    /// The table whose scroll view covers the middle of this view, for a view sitting behind a Table.
+    var tableCovering: NSTableView? {
+        guard let root = window?.contentView else { return nil }
+        let target = convert(bounds, to: nil)
+        let middle = CGPoint(x: target.midX, y: target.midY)
+        var best: (table: NSTableView, area: CGFloat)?
+        var stack = [root]
+        while let view = stack.popLast() {
+            if let t = view as? NSTableView, let scroll = t.enclosingScrollView {
+                let frame = scroll.convert(scroll.bounds, to: nil)
+                if frame.contains(middle), frame.width * frame.height < best?.area ?? .infinity { best = (t, frame.width * frame.height) }
+            }
+            stack.append(contentsOf: view.subviews)
+        }
+        return best?.table
+    }
+}
+
+/// Behind a Table: scrolls `row` into view once for each new `id`, with the table laid out, and leaves it alone after.
+struct RevealRow: NSViewRepresentable {
+    var id: Int?
+    var row: Int?
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard let id, let row, id != context.coordinator.done else { return }
+        context.coordinator.done = id
+        DispatchQueue.main.async { view.tableCovering?.scrollRowToVisible(row) }
+    }
+
+    final class Coordinator { var done: Int? }
 }
 
 /// Above a register: its Date column's order, oldest or newest first — the register's own order or the Date

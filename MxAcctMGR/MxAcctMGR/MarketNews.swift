@@ -1,25 +1,29 @@
 //
-//  MassiveNews.swift
+//  MarketNews.swift
 //  MxAcctMGR
 //
-//  The market news right of CNBC Live's video (past the divider): Massive's news feed (massive.com, formerly
-//  Polygon.io — GET api.massive.com/v2/reference/news, in every Stocks plan and updated hourly), newest first. Each
-//  article shows its headline, publisher and time and its tickers, colored by Massive's sentiment for each (green
-//  positive, red negative); its summary shows on hover. Clicking a headline opens the article in your browser, and
-//  clicking a ticker narrows the feed to it (the field at the panel's top: empty for all the news).
+//  The market news right of CNBC Live's video (past the divider), newest first, from the source chosen in the menu at
+//  the panel's top and kept between launches: Massive's news feed, the default, or one of the others (NewsFeeds.swift).
+//  Each article shows its headline, publisher and time; its summary shows on hover, and clicking a headline opens the
+//  article in your browser.
+//
+//  Massive's feed (massive.com, formerly Polygon.io — GET api.massive.com/v2/reference/news, in every Stocks plan and
+//  updated hourly) also gives each article's tickers, colored by Massive's sentiment for each (green positive, red
+//  negative). Clicking a ticker narrows the feed to it (the field at the panel's top: empty for all the news); Yahoo
+//  Finance takes the field too.
 //
 //  The API key is your Massive secure account's (Banking ▸ Secure Accounts: its service address on massive.com, or
 //  Massive in its name — not the S3 Flat Files keys): its service key, or its product key where it was kept there. It
 //  is read from this Mac's Keychain for each request and sent in the Authorization header, never in a web address.
 //
-//  MassiveNews.shared is the panel's controller: CNBC Live runs it while the panel shows (setActive), and the rest of
-//  the app can narrow it to a ticker (show) or ask again (refresh).
+//  MarketNews.shared is the panel's controller: CNBC Live runs it while the panel shows (setActive), and the rest of
+//  the app can change its source (choose), narrow it to a ticker (show) or ask again (refresh).
 //
 
 import AppKit
 import SwiftUI
 
-/// One article of Massive's news feed.
+/// One article of the news, as Massive's feed sends it and the other sources are read into.
 nonisolated struct NewsArticle: Decodable, Identifiable, Hashable {
     struct Publisher: Decodable, Hashable {
         var name: String?
@@ -44,7 +48,11 @@ nonisolated struct NewsArticle: Decodable, Identifiable, Hashable {
     var publisher: Publisher?
     var insights: [Insight]?
 
-    var url: URL? { URL(string: articleUrl) }
+    /// Where the article is: only a web address, whatever a source sends.
+    var url: URL? {
+        guard let url = URL(string: articleUrl), url.scheme == "https" || url.scheme == "http" else { return nil }
+        return url
+    }
     var published: Date? {
         (try? Date(publishedUtc, strategy: .iso8601))
             ?? (try? Date(publishedUtc, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)))
@@ -54,10 +62,6 @@ nonisolated struct NewsArticle: Decodable, Identifiable, Hashable {
 
 nonisolated enum MassiveClient {
     static let newsURL = URL(string: "https://api.massive.com/v2/reference/news")!
-
-    struct Failure: LocalizedError {
-        var errorDescription: String?
-    }
 
     private struct Page: Decodable {
         var results: [Lossy]?
@@ -96,24 +100,26 @@ nonisolated enum MassiveClient {
         case 429: "Too many requests for your Massive plan (\(said)): it's asked again in five minutes."
         default: "Massive answered HTTP \(code): \(said)"
         }
-        throw Failure(errorDescription: why)
+        throw NewsFailure(errorDescription: why)
     }
 }
 
 @MainActor
 @Observable
-final class MassiveNews {
-    static let shared = MassiveNews()
+final class MarketNews {
+    static let shared = MarketNews()
 
-    /// How often the feed is asked again while the panel shows (Massive updates it hourly; a free key may ask five
-    /// times a minute).
+    /// How often the source is asked again while the panel shows (Massive updates its feed hourly; a free key may ask
+    /// five times a minute).
     static let every: TimeInterval = 300
     static let limit = 50
-    private static let tickerKey = "massiveNewsTicker"
+    private static let tickerKey = "massiveNewsTicker", sourceKey = "marketNewsSource"
 
-    /// The feed, newest first.
+    /// Where the news comes from.
+    private(set) var source: NewsSource
+    /// The news, newest first.
     private(set) var articles: [NewsArticle] = []
-    /// Only this ticker's news ("" for all of it).
+    /// Only this ticker's news ("" for all of it), for a source that can narrow it.
     private(set) var ticker: String
     /// The secure account whose key asks for the feed, looked up each time it's asked.
     private(set) var account: SecureAccount?
@@ -132,10 +138,11 @@ final class MassiveNews {
 
     private init() {
         ticker = UserDefaults.standard.string(forKey: Self.tickerKey) ?? ""
+        source = UserDefaults.standard.string(forKey: Self.sourceKey).flatMap(NewsSource.init(rawValue:)) ?? .massive
     }
 
-    /// The panel shows (true) or went (false). While it shows, the feed is asked now if it's older than five minutes,
-    /// then every five minutes.
+    /// The panel shows (true) or went (false). While it shows, the source is asked now if its news is older than five
+    /// minutes, then every five minutes.
     func setActive(_ on: Bool) {
         guard on != (refreshing != nil) else { return }
         refreshing?.cancel()
@@ -153,6 +160,19 @@ final class MassiveNews {
         }
     }
 
+    /// The news from this source, asked at once, the list empty until it answers.
+    func choose(_ source: NewsSource) {
+        guard source != self.source else { return }
+        self.source = source
+        UserDefaults.standard.set(source.rawValue, forKey: Self.sourceKey)
+        asked += 1      // an answer still coming from the last source isn't shown
+        articles = []
+        problem = nil
+        updated = nil
+        noKey = false
+        Task { await refresh() }
+    }
+
     /// Only this ticker's news (empty or nil for all of it), asked at once.
     func show(ticker: String?) {
         let t = (ticker ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -164,31 +184,22 @@ final class MassiveNews {
         Task { await refresh() }
     }
 
-    /// Asks the feed now, with the key of the Massive secure account.
+    /// Asks the source now (Massive with the key of its secure account).
     func refresh() async {
         asked += 1
         let request = asked
         loading = true
         defer { if request == asked { loading = false } }
+        let source = source, ticker = ticker
         do {
-            account = Self.account(in: try await SecureClient.list().secureAccounts)
-            accountsLoaded = true
-        } catch let error where account == nil {
-            problem = "Secure Accounts didn't answer, and the Massive key is kept there: \(describe(error))"
-            return
-        } catch {}      // the account found before still has its key
-        guard let account, let key = Self.key(of: account) else {
-            noKey = account != nil
-            problem = nil
-            articles = []
-            updated = nil
-            return
-        }
-        noKey = false
-        let ticker = ticker
-        do {
-            let found = try await MassiveClient.news(key: key, ticker: ticker, limit: Self.limit)
-            guard request == asked else { return }      // a newer request (another ticker) is on its way
+            let found: [NewsArticle]
+            if source == .massive {
+                guard let key = await massiveKey(for: request) else { return }
+                found = try await MassiveClient.news(key: key, ticker: ticker, limit: Self.limit)
+            } else {
+                found = try await NewsFeeds.articles(from: source, ticker: ticker, limit: Self.limit)
+            }
+            guard request == asked else { return }      // a newer request (another source or ticker) is on its way
             articles = found
             updated = Date()
             problem = nil
@@ -198,9 +209,34 @@ final class MassiveNews {
         }
     }
 
+    /// The key of the Massive secure account, looked up again; nil, with what's wrong set, when there's none.
+    private func massiveKey(for request: Int) async -> String? {
+        do {
+            let all = try await SecureClient.list().secureAccounts
+            guard request == asked else { return nil }
+            account = Self.account(in: all)
+            accountsLoaded = true
+        } catch {
+            guard request == asked else { return nil }
+            if account == nil {     // otherwise the account found before still has its key
+                problem = "Secure Accounts didn't answer, and the Massive key is kept there: \(describe(error))"
+                return nil
+            }
+        }
+        guard let account, let key = Self.key(of: account) else {
+            noKey = account != nil
+            problem = nil
+            articles = []
+            updated = nil
+            return nil
+        }
+        noKey = false
+        return key
+    }
+
     /// The window came forward (back from Secure Accounts, say): asked again if it had no account or key.
     func cameForward() {
-        if refreshing != nil, accountsLoaded && account == nil || noKey { Task { await refresh() } }
+        if refreshing != nil, source == .massive, accountsLoaded && account == nil || noKey { Task { await refresh() } }
     }
 
     /// Opens the Massive account in Secure Accounts (Edit Service Details), or New Secure Account filled in for
@@ -240,25 +276,38 @@ final class MassiveNews {
 
 // MARK: - The panel
 
-struct MassiveNewsView: View {
-    @Bindable var news: MassiveNews
+struct MarketNewsView: View {
+    @Bindable var news: MarketNews
     @State private var tickerText = ""
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Label("Market News", systemImage: "newspaper")
-                    .font(.headline)
-                    .lineLimit(1)
+                Menu {
+                    Picker("News Source", selection: Binding(get: { news.source }, set: { news.choose($0) })) {
+                        ForEach(NewsSource.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                } label: {
+                    Label(news.source.title, systemImage: "newspaper")
+                }
+                .menuStyle(.borderlessButton)
+                .font(.headline)
+                .lineLimit(1)
+                .fixedSize()
+                .help("Where the news comes from: \(news.source.detail)")
                 Spacer(minLength: 4)
-                TextField("All tickers", text: $tickerText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 92)
-                    .onSubmit { news.show(ticker: tickerText) }
-                    .help("Only one ticker's news: type its symbol (AAPL) and press Return; empty it for all the news")
+                if news.source.takesTicker {
+                    TextField("All tickers", text: $tickerText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 92)
+                        .onSubmit { news.show(ticker: tickerText) }
+                        .help("Only one ticker's news: type its symbol (AAPL) and press Return; empty it for all the news")
+                }
                 if news.loading { ProgressView().controlSize(.small) }
                 Button { Task { await news.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                    .help("Ask Massive for the latest news now (it's asked every five minutes while the news shows)")
+                    .help("Ask \(news.source.name) for the latest news now (it's asked every five minutes while the news shows)")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -274,11 +323,11 @@ struct MassiveNewsView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if news.accountsLoaded && news.account == nil {
+        if news.source == .massive && news.accountsLoaded && news.account == nil {
             notice("No Massive account in Secure Accounts",
                    detail: "Keep your Massive API key (massive.com ▸ Dashboard ▸ Keys) in Banking ▸ Secure Accounts as a secure account's service key: it stays in this Mac's Keychain.",
                    button: "Add to Secure Accounts…")
-        } else if news.noKey, let a = news.account {
+        } else if news.source == .massive, news.noKey, let a = news.account {
             notice("\(a.name) has no key",
                    detail: "Add your Massive API key as its service key in Secure Accounts ▸ Edit Service Details.",
                    button: "Open in Secure Accounts…")
@@ -289,7 +338,7 @@ struct MassiveNewsView: View {
                 } else if news.loading || news.updated == nil {
                     ProgressView()
                 } else {
-                    Text(news.ticker.isEmpty ? "No news from Massive." : "No news for \(news.ticker).").foregroundStyle(.secondary)
+                    Text(filter.isEmpty ? "No news from \(news.source.name)." : "No news for \(filter).").foregroundStyle(.secondary)
                 }
             }
             .font(.callout)
@@ -332,7 +381,7 @@ struct MassiveNewsView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
-            if let a = news.account {
+            if news.source == .massive, let a = news.account {
                 Button { news.openAccount() } label: { Image(systemName: "key") }
                     .buttonStyle(.borderless)
                     .help("The key is \(a.name)'s, in Banking ▸ Secure Accounts: open it there")
@@ -342,10 +391,13 @@ struct MassiveNewsView: View {
         .padding(.vertical, 4)
     }
 
+    /// The ticker the news is narrowed to ("" for none, or a source that can't narrow it).
+    private var filter: String { news.source.takesTicker ? news.ticker : "" }
+
     private var summary: String {
-        guard let updated = news.updated else { return "From Massive (massive.com)" }
+        guard let updated = news.updated else { return "From \(news.source.name) (\(news.source.site))" }
         let count = news.articles.count
-        return "\(count) \(count == 1 ? "article" : "articles")\(news.ticker.isEmpty ? "" : " on \(news.ticker)") from Massive · \(updated.formatted(date: .omitted, time: .shortened))"
+        return "\(count) \(count == 1 ? "article" : "articles")\(filter.isEmpty ? "" : " on \(filter)") from \(news.source.name) · \(updated.formatted(date: .omitted, time: .shortened))"
     }
 }
 
@@ -355,7 +407,7 @@ private struct NewsRow: View {
     let article: NewsArticle
     /// The minute it was drawn, for its time.
     let now: Date
-    let news: MassiveNews
+    let news: MarketNews
 
     private static let ago: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -397,7 +449,7 @@ private struct NewsRow: View {
                 Divider()
                 ForEach(tickers.prefix(8), id: \.self) { t in Button("Only \(t)'s News") { news.show(ticker: t) } }
             }
-            if !news.ticker.isEmpty { Button("All the News") { news.show(ticker: nil) } }
+            if news.source.takesTicker && !news.ticker.isEmpty { Button("All the News") { news.show(ticker: nil) } }
         }
     }
 

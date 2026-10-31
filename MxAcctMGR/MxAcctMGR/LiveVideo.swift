@@ -20,8 +20,8 @@
 //    • CNBC on YouTube, 24/7 — free and always live, but documentaries and deep dives, not the business-news channel.
 //  CNBC doesn't stream its U.S. channel free anywhere, on YouTube or elsewhere (checked 10/29/26).
 //
-//  Right of the video, past a divider you drag to size them (all the way right hides it), is Massive's market news
-//  (MassiveNews.swift), asked with the Massive API key in Secure Accounts; the header's last button shows or hides it.
+//  Right of the video, past a divider you drag to size them (all the way right hides it), is the market news
+//  (MarketNews.swift), from the source chosen in its own header; the header's last button shows or hides it.
 //  The divider's place, and whether the news shows, are kept between launches with the window's.
 //
 //  LiveVideo.shared is the window's controller: the rest of the app opens it (open), changes its stream (play), keeps
@@ -79,10 +79,10 @@ final class LiveVideo {
             window?.level = keepOnTop ? .floating : .normal
         }
     }
-    /// Massive's news shows right of the video.
+    /// The market news shows right of the video.
     private(set) var showsNews: Bool
     /// The news panel's controller.
-    @ObservationIgnored let news = MassiveNews.shared
+    @ObservationIgnored let news = MarketNews.shared
     /// The window is on screen.
     private(set) var isOpen = false
     private(set) var loading = false
@@ -130,7 +130,7 @@ final class LiveVideo {
         Task { await findSignInAccount() }
     }
 
-    /// Shows or hides Massive's news right of the video.
+    /// Shows or hides the market news right of the video.
     func showNews(_ on: Bool) {
         guard let newsItem else { newsShown(on); return }
         if on, let width = hiddenNewsWidth, let split = window?.contentViewController as? NSSplitViewController {
@@ -304,7 +304,7 @@ final class LiveVideo {
         // its minimum.
         let videoHost = NSHostingController(rootView: LiveVideoView(video: self))
         videoHost.sizingOptions = [.minSize]
-        let newsHost = NSHostingController(rootView: MassiveNewsView(news: news))
+        let newsHost = NSHostingController(rootView: MarketNewsView(news: news))
         newsHost.sizingOptions = [.minSize]
         let split = LiveSplit()
         split.splitView.isVertical = true
@@ -504,7 +504,7 @@ struct LiveVideoView: View {
                 .toggleStyle(.button)
                 .labelStyle(.iconOnly)
                 .help(video.showsNews ? "Hide the market news (or drag the divider all the way right)"
-                      : "Show Massive's market news right of the video (drag the divider between them to size it)")
+                      : "Show the market news right of the video (drag the divider between them to size it)")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

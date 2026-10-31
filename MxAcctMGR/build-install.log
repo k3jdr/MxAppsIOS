@@ -1,16 +1,15 @@
 
-=== Build (14:04:29)
-2026-10-30 14:04:30.817 xcodebuild[65295:642206]  iOSSimulator: [SimServiceContext sharedServiceContextForDeveloperDir:error:] returned nil (Error Domain=DVTCoreSimulatorAdditionsErrorDomain Code=3 "CoreSimulator is out of date. Current version (1174.9.2) is older than build version (1174.21.0)." UserInfo={NSLocalizedDescription=CoreSimulator is out of date. Current version (1174.9.2) is older than build version (1174.21.0).}). Simulator device support disabled.
-    Signing Identity:     "Apple Development: callahan.john.3@gmail.com (4A77UM62JT)"
+=== Build (00:35:42)
+2026-10-31 00:35:43.249 xcodebuild[30150:264147]  iOSSimulator: [SimServiceContext sharedServiceContextForDeveloperDir:error:] returned nil (Error Domain=DVTCoreSimulatorAdditionsErrorDomain Code=3 "CoreSimulator is out of date. Current version (1174.9.2) is older than build version (1174.21.0)." UserInfo={NSLocalizedDescription=CoreSimulator is out of date. Current version (1174.9.2) is older than build version (1174.21.0).}). Simulator device support disabled.
 ** BUILD SUCCEEDED **
 
-=== Install in /Applications (14:05:35)
+=== Install in /Applications (00:35:43)
 Signature OK
 Installed 1.0 build 1
 
-=== Restart the accounts service (14:05:36)
+=== Restart the accounts service (00:35:43)
 accounts        stopped
-accounts        started on http://127.0.0.1:8774 (pid 65505)
+accounts        started on http://127.0.0.1:8774 (pid 30186)
 database        srm_app@192.168.0.223:5432/srm  migrations 57 of 57  (password from Keychain)
 SERVICE         LANG   PORT  STATE    WHAT IT IS FOR
 srm-loader      Python 8770  running  Refresh the security master by data category (runs MxDataHUB/SRM/srm.py loaders)
@@ -24,6 +23,6 @@ database        srm_app@192.168.0.223:5432/srm  migrations 57 of 57  (password f
 
 Start them all: python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py start
 
-=== Open (14:05:38)
+=== Open (00:35:46)
 
 === END OK

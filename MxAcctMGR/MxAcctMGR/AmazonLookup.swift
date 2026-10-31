@@ -21,7 +21,8 @@
 //       lookup: Steps says which).
 //  Pages are opened one at a time, 3 seconds apart, at most 40 Transactions pages, 30 Your Orders pages a year and 25
 //  orders a run. A single order can be attached to a charge too: its number typed or pasted (or its page's link), or
-//  the order the window shows (This Order) — only that order's page is read. Amazon's Conditions of Use don't allow robots: it runs only when you ask, and may stop working when
+//  the order the window shows (This Order) — only that order's page is read; one placed after the charge, or already
+//  on another charge, asks first (Attach Anyway). Amazon's Conditions of Use don't allow robots: it runs only when you ask, and may stop working when
 //  Amazon changes its pages. The results attach to the charges as the export's do (POST /spending/amazon/attach): the
 //  Entries tab's Bought links, with what was bought on hover.
 //
@@ -86,6 +87,9 @@ final class AmazonLookup {
     var steps: [String] = []
     /// The order the window shows now (an order's page), for This Order.
     var shownOrder: String?
+    /// An Attach whose orders don't look like the charge's, waiting for your answer.
+    struct PendingAttach { var charge: AmazonLookupCharge; var ids: [String]; var pages: [[String: Any]]; var warnings: [String] }
+    var pendingAttach: PendingAttach?
     @ObservationIgnored let webView: WKWebView
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private let attached: ([SpendingEntry]) -> Void
@@ -159,7 +163,8 @@ final class AmazonLookup {
     }
 
     /// Attaches the orders a text names (typed or pasted numbers, or an order page's link) to one charge, in place of
-    /// what it had; reads each order's page unless the security master has it.
+    /// what it had; reads each order's page unless the security master has it. An order that doesn't look like the
+    /// charge's waits for your answer (pendingAttach).
     func attach(_ text: String, to chargeID: String) {
         guard !running, let i = charges.firstIndex(where: { $0.id == chargeID }) else { return }
         let ids = Self.orderNumbers(in: text)
@@ -168,31 +173,40 @@ final class AmazonLookup {
             status = "That isn't an Amazon order number: it looks like 113-1234567-1234567."
             return
         }
+        let charge = charges[i]
+        attaching { [self] in
+            let known = try await SpendingClient.amazonKnown(ids)
+            var pages: [[String: Any]] = []
+            for id in ids where (known[id]?.items ?? 0) == 0 {
+                if !pages.isEmpty { try await wait() }
+                status = "Reading order \(id)…"
+                guard let page = try await readOrder(id) else {
+                    throw LookupError("order \(id)'s page shows no items: is it an order of yours?")
+                }
+                pages.append(page)
+            }
+            let warnings = Self.attachWarnings(charge.entry, ids: ids, known: known, pages: pages)
+            if warnings.isEmpty {
+                try await save(ids, on: charge, pages: pages)
+            } else {
+                status = "Nothing attached yet: \(warnings[0])"
+                pendingAttach = PendingAttach(charge: charge, ids: ids, pages: pages, warnings: warnings)
+            }
+        }
+    }
+
+    /// Attach Anyway: the orders you were warned of go on the charge.
+    func confirmAttach(_ pending: PendingAttach) {
+        attaching { [self] in try await save(pending.ids, on: pending.charge, pages: pending.pages) }
+    }
+
+    private func attaching(_ work: @escaping @MainActor () async throws -> Void) {
+        guard !running else { return }
         running = true
         problem = nil
-        let charge = charges[i]
         task = Task { [weak self] in
             guard let self else { return }
-            do {
-                let known = try await SpendingClient.amazonKnown(ids)
-                var pages: [[String: Any]] = []
-                for id in ids where (known[id]?.items ?? 0) == 0 {
-                    if !pages.isEmpty { try await self.wait() }
-                    self.status = "Reading order \(id)…"
-                    guard let page = try await self.readOrder(id) else {
-                        throw LookupError("order \(id)'s page shows no items: is it an order of yours?")
-                    }
-                    pages.append(page)
-                }
-                let entries = try await SpendingClient.attachAmazon(
-                    charges: [["source": charge.entry.source, "entryId": charge.entry.entryId, "orderIds": ids]], orders: pages)
-                if let j = self.charges.firstIndex(where: { $0.id == chargeID }) {
-                    self.charges[j].orders = ids
-                    self.charges[j].foundIn = "yours"
-                }
-                self.attached(entries)
-                self.status = "Attached order\(ids.count == 1 ? "" : "s") \(ids.joined(separator: ", ")) to the \(money2(charge.entry.amount)) charge of \(shortDay(charge.entry.date))."
-            } catch is CancellationError {
+            do { try await work() } catch is CancellationError {
                 self.status = "Stopped."
             } catch {
                 self.problem = describe(error)
@@ -201,6 +215,38 @@ final class AmazonLookup {
             self.running = false
             self.waitingForYou = false
         }
+    }
+
+    private func save(_ ids: [String], on charge: AmazonLookupCharge, pages: [[String: Any]]) async throws {
+        let entries = try await SpendingClient.attachAmazon(
+            charges: [["source": charge.entry.source, "entryId": charge.entry.entryId, "orderIds": ids]], orders: pages)
+        if let j = charges.firstIndex(where: { $0.id == charge.id }) {
+            charges[j].orders = ids
+            charges[j].foundIn = "yours"
+        }
+        attached(entries)
+        status = "Attached order\(ids.count == 1 ? "" : "s") \(ids.joined(separator: ", ")) to the \(money2(charge.entry.amount)) charge of \(shortDay(charge.entry.date))."
+    }
+
+    /// Why these orders may not be this charge's: one placed more than a day after it (the matchers' limit: Amazon
+    /// charges when an order ships), or already on another charge or credit of the same sign (only an order shipped in
+    /// parts is; a refund's credit on its order is expected). A digital order's date isn't tried: a channel's page may
+    /// give none, and it is then kept as the day it was read.
+    static func attachWarnings(_ entry: SpendingEntry, ids: [String], known: [String: SpendingClient.KnownOrder], pages: [[String: Any]]) -> [String] {
+        var warnings: [String] = []
+        for id in ids {
+            let page = pages.first { $0["orderId"] as? String == id }
+            let placed = page?["orderedAt"] as? String ?? known[id]?.orderedAt
+            if !id.hasPrefix("D"), let placed, let from = Freshness.date(placed), let to = Freshness.date(entry.date),
+               let days = Calendar.current.dateComponents([.day], from: from, to: to).day, days < -1 {
+                warnings.append("Order \(id) was placed \(shortDay(placed)), after this \(shortDay(entry.date)) charge: Amazon charges an order when it ships.")
+            }
+            for other in known[id]?.charges ?? [] where !(other.source == entry.source && other.entryId == entry.entryId)
+                && (other.amount < 0) == (entry.amount < 0) {
+                warnings.append("Order \(id) is already on the \(money2(other.amount)) \(other.amount < 0 ? "credit" : "charge") of \(shortDay(other.date)): only an order shipped in parts belongs on two charges.")
+            }
+        }
+        return warnings
     }
 
     /// Clears amazon.com's cookies and data from the app's web view: the next lookup asks you to sign in.
@@ -818,5 +864,12 @@ struct AmazonLookupView: View {
         }
         .padding(14)
         .frame(minWidth: 820, minHeight: 680)
+        .alert("Attach anyway?", isPresented: Binding(get: { lookup.pendingAttach != nil }, set: { if !$0 { lookup.pendingAttach = nil } }),
+               presenting: lookup.pendingAttach) { pending in
+            Button("Attach Anyway") { lookup.confirmAttach(pending) }
+            Button("Cancel", role: .cancel) { lookup.status = "Not attached." }
+        } message: { pending in
+            Text(pending.warnings.joined(separator: "\n\n"))
+        }
     }
 }

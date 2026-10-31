@@ -142,15 +142,31 @@ the account and sets **My approach** — *Active* or *Passive index* — its acc
   that drive it from elsewhere in the app: `open(_:)`, `play(_:)`, `keepOnTop`, `showNews(_:)`, `fillSignIn()`,
   `close()`, and what it shows (`stream`, `isOpen`, `showsNews`, `pageTitle`, `signInAccount`).
 
-  **Market News**, right of the video past a divider (`MassiveNews.swift`), is Massive's news feed
-  (`GET api.massive.com/v2/reference/news`, in every Stocks plan and updated hourly), the 50 newest articles, asked as
-  the panel shows and every five minutes while it does. Each article has its headline, publisher and time, and its
-  tickers colored by Massive's sentiment for each (green positive, red negative, with the reasoning on hover); its
-  summary shows on hover. Click a headline to read the article in your browser, or a ticker for only its news (or
-  type a symbol in the field at the panel's top and press Return; empty it for all the news). Drag the divider to
-  size the two sides, all the way right to hide the news; the button at the header's right end hides or shows it.
-  Resizing the window resizes the video, and the divider's place and whether the news shows are kept between
-  launches. The API key comes from Secure Accounts (*Massive news*, below).
+  **Market News**, right of the video past a divider (`MarketNews.swift`), lists the newest articles (up to 50) from
+  the source chosen in the menu at the panel's top, asked as the panel shows and every five minutes while it does.
+  Choosing another source reloads the panel, and the choice is kept between launches. If a source fails, the panel
+  says why; the video isn't touched. Each article has its headline, publisher and time, with its summary on hover
+  where the source gives one; click a headline to read the article in your browser. The sources (`NewsFeeds.swift`;
+  each checked 10/30/26):
+  * **Massive API** (the default) — Massive's news feed (`GET api.massive.com/v2/reference/news`, in every Stocks plan
+    and updated hourly). Its tickers are colored by Massive's sentiment for each (green positive, red negative, with
+    the reasoning on hover). Click a ticker for only its news, or type a symbol in the field at the panel's top and
+    press Return; empty it for all the news. The API key comes from Secure Accounts (*Massive news*, below).
+  * **CNBC Press Releases** — CNBC's announcements and interview transcripts, read from the data in its
+    `cnbc.com/press-releases` page, because the RSS feed for that section answers with no items. If CNBC reworks the
+    page, the panel says the list couldn't be read.
+  * **Yahoo Finance** — Yahoo's headline RSS for the S&P 500, Dow and Nasdaq, or for the ticker in the field. Its
+    links often lead to other publishers, named by their sites.
+  * **Google News — Business** — Google News's RSS for its Business section. Google Finance has no feed or public
+    endpoint, so this stands in for it, under its own name.
+  * **Wall Street Journal** — Dow Jones's Markets RSS: headlines and a line of summary. The articles open at wsj.com,
+    where reading them takes a subscription.
+
+  What a source sends is treated as untrusted: it's cut down to plain text, and only web addresses open.
+
+  Drag the divider to size the two sides, all the way right to hide the news; the button at the header's right end
+  hides or shows it. Resizing the window resizes the video, and the divider's place and whether the news shows are
+  kept between launches.
 
 **Add Securities…** (⇧⌘N, above the holdings table) searches the security master (see *My Portfolio in the security
 master* below). Each holding row has a trash button to remove it.
@@ -696,7 +712,9 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   (Inflation, Family Growth, New Activity, Lifecycle Transition, Preference Change, Lifestyle & Hobbies — V045,
   One-Time Event, Taxes — V044), and optionally a family member, from its **target account's allocation** (set on
   *Allocation*). A **tag** on a single entry overrides it — a mixed merchant's one purchase, or an event ("Philmont
-  2026") — set on *Entries* (double-click, or select several and right-click). Each *Entries* column header has an Excel-style sort and filter
+  2026") — set on *Entries* (double-click, or select several and right-click). **Open DISCOVER Transaction** (right-click
+  one entry, on *Entries* or a Deep Dive's table; named for the entry's *From*) goes to that card's or checking account's
+  register with the entry selected and its details open, the card company's or bank's own line among them; Back returns. Each *Entries* column header has an Excel-style sort and filter
   button (the banking registers' `LocalGridFilters`: a checklist of its values or a condition; Amount by value, Date
   by day), on top of the period, category and search above the table; *Clear Sort & Filters* puts the table back to
   newest first. With entries selected, a bar above the table shows how many and how much, with **Category** and
@@ -736,7 +754,9 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   charges and the orders found (*Steps* shows each page read). **One order at a time:** each charge's row takes an
   order number typed or pasted (several, comma-separated, or an order page's link) — *Attach* reads only that order's
   page (none when the security master has it) and attaches it in place of what the charge had — and *This Order*
-  attaches the order the window shows (*Your Orders* and *Digital Orders* open the lists to find it). *Attach an Amazon Order…* in the
+  attaches the order the window shows (*Your Orders* and *Digital Orders* open the lists to find it). An order placed
+  more than a day after the charge, or already on another charge (credits apart: a refund's is expected), asks first:
+  *Attach Anyway* or *Cancel* (an order shipped in parts does belong on two charges). *Attach an Amazon Order…* in the
   Entries menu opens the window that way, without the full lookup. Amazon's card offers on order pages aren't items. The results attach as the export's do (`POST /spending/amazon/attach`); an export or the order's
   e-mails read later replace what an order's page gave and narrow the charge to its shipment (an order kept from the
   export or the e-mails isn't replaced by its page). *Sign Out of Amazon* clears amazon.com's
@@ -1045,7 +1065,8 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live button) |
 | `EconomicCalendar.swift` | The Morning Briefing's economic calendar: FMP's scheduled releases through the accounts service, one row per release, kept current while the page shows |
 | `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame and divider it keeps, Fill Sign-In from Secure Accounts (the password after Touch ID) — and the window with its web view, beside the news; pages' new windows (a TV provider's sign-in) open in the app |
-| `MassiveNews.swift` | CNBC Live's Market News: Massive's news feed, asked with the Massive API key in Secure Accounts (`MassiveNews.shared`), and the panel that lists it |
+| `MarketNews.swift` | CNBC Live's Market News: the panel and its controller (`MarketNews.shared`), with its source menu, and Massive's news feed, asked with the Massive API key in Secure Accounts |
+| `NewsFeeds.swift` | Market News's sources (`NewsSource`), and how those other than Massive are read: RSS, CNBC's Press Releases page, and the cleaning of what they send |
 | `ReportNotes.swift` | Your notes on reports: kept on this Mac; the report's name in the matrix, its context menu and hover card; the Notes dialog |
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |

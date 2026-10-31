@@ -1083,8 +1083,16 @@ nonisolated enum SpendingClient {
         try await AccountsClient.request("POST", "/spending/amazon/email/load?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          body: signed([:]), as: SpendingSources.self)
     }
-    /// An Amazon order the security master keeps: how many items, and where it was read (export, email, order page).
-    struct KnownOrder: Decodable { var orderId: String; var origin: String; var items: Int }
+    /// An Amazon order the security master keeps: how many items, where it was read (export, email, order page), when it
+    /// was placed and the entries it is on.
+    struct KnownOrder: Decodable {
+        struct Charge: Decodable { var source: String; var entryId: Int; var date: String; var amount: Double }
+        var orderId: String
+        var origin: String
+        var items: Int
+        var orderedAt: String?
+        var charges: [Charge]?
+    }
     /// Which of these Amazon orders the security master keeps.
     static func amazonKnown(_ ids: [String]) async throws -> [String: KnownOrder] {
         struct Answer: Decodable { var known: [KnownOrder] }

@@ -64,10 +64,10 @@ struct SpendingAnalysisView: View {
                 case "deepdive":
                     if let data {
                         SpendingDeepDiveTab(setup: setup, data: data, entries: shownEntries(data), code: $deepDive,
-                                            changed: { replace($0) }, ruleSaved: { applied($0) }, back: { tab = "attribution" })
+                                            changed: { replace($0) }, ruleSaved: { applied($0) }, openSource: { store.openRegister(of: $0) }, back: { tab = "attribution" })
                     }
                 case "entries":
-                    if let data { SpendingEntriesTab(setup: setup, data: data, entries: shownEntries(data), changed: { replace($0) }, ruleSaved: { applied($0) }) }
+                    if let data { SpendingEntriesTab(setup: setup, data: data, entries: shownEntries(data), changed: { replace($0) }, ruleSaved: { applied($0) }, openSource: { store.openRegister(of: $0) }) }
                 case "rules":
                     if let data { TargetAllocationTab(setup: setup, data: data, entries: shownEntries(data)) { applied($0) } }
                 case "family": SpendingFamilyTab(setup: setup, data: data) { applied($0) }
@@ -535,6 +535,8 @@ private struct SpendingEntriesTab: View {
     var entries: [SpendingEntry]
     var changed: (SpendingEntry) -> Void
     var ruleSaved: (SpendingSetup) -> Void
+    /// Open … Transaction: the entry in its card's or checking account's register.
+    var openSource: (SpendingEntry) -> Void
     /// The one category shown (Deep Dive), without the category picker.
     var lockedCategory: String? = nil
     var title = "Spending Entries"
@@ -654,6 +656,11 @@ private struct SpendingEntriesTab: View {
                                  apply: { grid = $0 })
             .contextMenu(forSelectionType: SpendingEntry.ID.self) { ids in
                 let picked = rows.filter { ids.contains($0.id) }
+                if picked.count == 1, let e = picked.first, let register = e.register, e.source != "ledger" {
+                    Button("Open \(register) Transaction") { openSource(e) }
+                        .help("Go to this entry in its register, with its details and the card company's or bank's own line for it")
+                    Divider()
+                }
                 Button(picked.count > 1 ? "Tag \(picked.count) Entries…" : "Tag Entry…") { tagging = picked }.disabled(picked.isEmpty)
                 categoryMenu(picked, label: picked.count > 1 ? "Set Category of \(picked.count) Entries" : "Set Category")
                 driverMenu(picked, label: picked.count > 1 ? "Set Driver of \(picked.count) Entries" : "Set Driver")
@@ -2455,6 +2462,7 @@ private struct SpendingDeepDiveTab: View {
     @Binding var code: String
     var changed: (SpendingEntry) -> Void
     var ruleSaved: (SpendingSetup) -> Void
+    var openSource: (SpendingEntry) -> Void
     var back: () -> Void
     @AppStorage("spendingCurveInflate") private var inflate = true
     @State private var ruleFor: RuleTarget?
@@ -2499,7 +2507,7 @@ private struct SpendingDeepDiveTab: View {
                                    description: Text("Nothing in \(priorYear) or \(year) is in \(name). Target accounts' allocation (Allocation) and tags (Entries) put spending in a category."))
         }
         lifecycleBox
-        SpendingEntriesTab(setup: setup, data: data, entries: entries, changed: changed, ruleSaved: ruleSaved,
+        SpendingEntriesTab(setup: setup, data: data, entries: entries, changed: changed, ruleSaved: ruleSaved, openSource: openSource,
                            lockedCategory: code, title: "\(name) Entries")
             .id(code)
     }

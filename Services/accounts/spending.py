@@ -93,7 +93,8 @@
     POST   /spending/amazon/email/load             read Amazon's order e-mails (srm-loader amazon-email: Gmail,
                                                    read-only, and .mbox files in the drop folders); answers with the
                                                    sources and the load {status, message}
-    GET    /spending/amazon/known?ids=A,B          which of these Amazon orders are kept, with items, and where from
+    GET    /spending/amazon/known?ids=A,B          which of these Amazon orders are kept, with items, where from, when
+                                                   placed and the entries each is on
     POST   /spending/amazon/attach                 MxAcctMGR's Amazon Order Lookup: {charges: [{source, entryId,
                                                    orderIds}], orders: [{orderId, orderedAt, total, payment, items:
                                                    [{name, asin, quantity, price}]}], by} — keeps each order its page
@@ -1063,9 +1064,22 @@ def _amazon_ids(values):
 
 
 def amazon_known(conn, q):
-    """Which of these orders are kept (so the lookup reads only the others' pages)."""
+    """Which of these orders are kept (so the lookup reads only the others' pages), when each was placed and the
+    entries it is on (so Attach can warn of an order that doesn't fit)."""
     ids = _amazon_ids((q.get("ids") or "").split(","))
-    rows = fetch(conn, """SELECT order_id AS "orderId", origin, items FROM srm.amazon_order WHERE order_id = ANY(%s)""", (ids,))
+    rows = fetch(conn, """
+        SELECT o.order_id AS "orderId", o.origin, o.items, o.ordered_at::date AS "orderedAt",
+               coalesce((SELECT jsonb_agg(jsonb_build_object('source', x.source, 'entryId', x.entry_id, 'date', x.txn_date,
+                                                             'amount', x.amount) ORDER BY x.txn_date)
+                           FROM (SELECT 'card' AS source, c.txn_id AS entry_id, c.txn_date, c.amount
+                                   FROM srm.amazon_match m JOIN srm.card_txn c ON c.txn_id = m.card_txn_id
+                                  WHERE m.order_id = o.order_id AND m.how <> 'unlinked' AND c.status <> 'void'
+                                 UNION
+                                 SELECT 'bank', b.txn_id, b.txn_date, -b.amount
+                                   FROM srm.amazon_match m JOIN srm.bank_txn b ON b.txn_id = m.bank_txn_id
+                                  WHERE m.order_id = o.order_id AND m.how <> 'unlinked' AND b.status <> 'void') x),
+                        '[]'::jsonb) AS charges
+          FROM srm.amazon_order o WHERE o.order_id = ANY(%s)""", (ids,))
     return {"known": rows}
 
 

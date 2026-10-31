@@ -167,6 +167,9 @@ final class PortStore {
     /// An mxacctmgr://secure-accounts link (MxJobsMGR's API Subscriptions) for Secure Accounts to act on once its list
     /// is loaded: open an account's details, or New Secure Account filled in.
     var secureRequest: AppLink?
+    /// Spending Analysis's Open … Transaction: the entry Credit Card Accounts or Checking Accounts brings up once its
+    /// register is loaded.
+    var registerEntryRequest: Int?
     var screen: Screen = .myPortfolio {
         didSet {
             // A lesson-only page that Settings ▸ Guidance hides opens My Portfolio instead.
@@ -658,6 +661,14 @@ final class PortStore {
     var inputs: OptimizationInputs { srmInputs ?? .empty }
 
     func go(_ s: Screen) { screen = s }
+
+    /// Opens the card's or checking account's register a spending entry came from, on that entry: the page picks the
+    /// account from the same saved choice as its picker, and brings the entry up once the register is loaded.
+    func openRegister(of e: SpendingEntry) {
+        UserDefaults.standard.set(e.register, forKey: e.source == "card" ? "cardAccount" : "checkingAccount")
+        registerEntryRequest = e.entryId
+        go(e.source == "card" ? .cards : .checking)
+    }
 
     // MARK: Runs
 
