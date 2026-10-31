@@ -1,0 +1,10 @@
+.DS_Store
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+## Built by scripts/bootstrap.sh
+Vendor/
+
+## Test output
+build/

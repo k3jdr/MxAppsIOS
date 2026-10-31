@@ -1,0 +1,335 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXFileReference section */
+		8D4C6A0130A1B2C3004D5E70 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		8D4C6A1230A1B2C3004D5E70 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		8D4C6A0230A1B2C3004D5E70 /* MxOpenCVD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MxOpenCVD.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		8D4C6A0330A1B2C3004D5E70 /* MxOpenCVD */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MxOpenCVD;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8D4C6A0430A1B2C3004D5E70 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		8D4C6A0830A1B2C3004D5E70 = {
+			isa = PBXGroup;
+			children = (
+				8D4C6A0130A1B2C3004D5E70 /* README.md */,
+				8D4C6A1230A1B2C3004D5E70 /* Info.plist */,
+				8D4C6A0330A1B2C3004D5E70 /* MxOpenCVD */,
+				8D4C6A0930A1B2C3004D5E70 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8D4C6A0930A1B2C3004D5E70 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8D4C6A0230A1B2C3004D5E70 /* MxOpenCVD.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8D4C6A0A30A1B2C3004D5E70 /* MxOpenCVD */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8D4C6A0D30A1B2C3004D5E70 /* Build configuration list for PBXNativeTarget "MxOpenCVD" */;
+			buildPhases = (
+				8D4C6A0530A1B2C3004D5E70 /* Sources */,
+				8D4C6A0430A1B2C3004D5E70 /* Frameworks */,
+				8D4C6A0630A1B2C3004D5E70 /* Resources */,
+				8D4C6A0730A1B2C3004D5E70 /* Embed ONNX Runtime and Models */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8D4C6A0330A1B2C3004D5E70 /* MxOpenCVD */,
+			);
+			name = MxOpenCVD;
+			productName = MxOpenCVD;
+			productReference = 8D4C6A0230A1B2C3004D5E70 /* MxOpenCVD.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8D4C6A0B30A1B2C3004D5E70 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+			};
+			buildConfigurationList = 8D4C6A0C30A1B2C3004D5E70 /* Build configuration list for PBXProject "MxOpenCVD" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8D4C6A0830A1B2C3004D5E70;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8D4C6A0930A1B2C3004D5E70 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8D4C6A0A30A1B2C3004D5E70 /* MxOpenCVD */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8D4C6A0630A1B2C3004D5E70 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		8D4C6A0730A1B2C3004D5E70 /* Embed ONNX Runtime and Models */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed ONNX Runtime and Models";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nif [ ! -d \"$SRCROOT/Vendor/onnxruntime/lib\" ]; then\n    echo \"error: Vendor libraries are missing. Run scripts/bootstrap.sh first.\"\n    exit 1\nfi\nFRAMEWORKS=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$FRAMEWORKS\"\n# The dylib's install name is libonnxruntime.1.dylib, so that's the name it needs in the bundle.\n# Sign a new file and move it into place: overwriting in place kills any running copy of the app with a code-signature fault.\ncp -f \"$SRCROOT\"/Vendor/onnxruntime/lib/libonnxruntime.*.*.*.dylib \"$FRAMEWORKS/libonnxruntime.new\"\nchmod u+w \"$FRAMEWORKS/libonnxruntime.new\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --options runtime --timestamp=none \"$FRAMEWORKS/libonnxruntime.new\"\nmv -f \"$FRAMEWORKS/libonnxruntime.new\" \"$FRAMEWORKS/libonnxruntime.1.dylib\"\nMODELS=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Models\"\nmkdir -p \"$MODELS\"\ncp -f \"$SRCROOT\"/Models/*.onnx \"$SRCROOT\"/Models/*.txt \"$MODELS/\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8D4C6A0530A1B2C3004D5E70 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		8D4C6A0E30A1B2C3004D5E70 /* Debug configuration for PBXProject "MxOpenCVD" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				DEVELOPMENT_TEAM = QC4VX47BJ8;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.6;
+				SDKROOT = macosx;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 1;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		8D4C6A0F30A1B2C3004D5E70 /* Release configuration for PBXProject "MxOpenCVD" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				DEVELOPMENT_TEAM = QC4VX47BJ8;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.6;
+				SDKROOT = macosx;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		8D4C6A1030A1B2C3004D5E70 /* Debug configuration for PBXNativeTarget "MxOpenCVD" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QC4VX47BJ8;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MxOpenCVD;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSCameraUsageDescription = "MxOpenCVD inspects parts with the iPhone, USB and MacBook cameras.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(SRCROOT)/Vendor/opencv/lib",
+					"$(SRCROOT)/Vendor/opencv/lib/opencv4/3rdparty",
+					"$(SRCROOT)/Vendor/onnxruntime/lib",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-lopencv_objdetect",
+					"-lopencv_calib3d",
+					"-lopencv_features2d",
+					"-lopencv_flann",
+					"-lopencv_imgcodecs",
+					"-lopencv_imgproc",
+					"-lopencv_core",
+					"-llibjpeg-turbo",
+					"-llibpng",
+					"-lzlib",
+					"-ltegra_hal",
+					"-lonnxruntime",
+					"-framework",
+					Accelerate,
+					"-framework",
+					Vision,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxOpenCVD;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "MxOpenCVD/MxOpenCVD-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				SYSTEM_HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Vendor/opencv/include/opencv4",
+					"$(SRCROOT)/Vendor/onnxruntime/include",
+				);
+			};
+			name = Debug;
+		};
+		8D4C6A1130A1B2C3004D5E70 /* Release configuration for PBXNativeTarget "MxOpenCVD" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QC4VX47BJ8;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MxOpenCVD;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSCameraUsageDescription = "MxOpenCVD inspects parts with the iPhone, USB and MacBook cameras.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(SRCROOT)/Vendor/opencv/lib",
+					"$(SRCROOT)/Vendor/opencv/lib/opencv4/3rdparty",
+					"$(SRCROOT)/Vendor/onnxruntime/lib",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-lopencv_objdetect",
+					"-lopencv_calib3d",
+					"-lopencv_features2d",
+					"-lopencv_flann",
+					"-lopencv_imgcodecs",
+					"-lopencv_imgproc",
+					"-lopencv_core",
+					"-llibjpeg-turbo",
+					"-llibpng",
+					"-lzlib",
+					"-ltegra_hal",
+					"-lonnxruntime",
+					"-framework",
+					Accelerate,
+					"-framework",
+					Vision,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.k3jdr.MxOpenCVD;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "MxOpenCVD/MxOpenCVD-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				SYSTEM_HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Vendor/opencv/include/opencv4",
+					"$(SRCROOT)/Vendor/onnxruntime/include",
+				);
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8D4C6A0C30A1B2C3004D5E70 /* Build configuration list for PBXProject "MxOpenCVD" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8D4C6A0E30A1B2C3004D5E70 /* Debug configuration for PBXProject "MxOpenCVD" */,
+				8D4C6A0F30A1B2C3004D5E70 /* Release configuration for PBXProject "MxOpenCVD" */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8D4C6A0D30A1B2C3004D5E70 /* Build configuration list for PBXNativeTarget "MxOpenCVD" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8D4C6A1030A1B2C3004D5E70 /* Debug configuration for PBXNativeTarget "MxOpenCVD" */,
+				8D4C6A1130A1B2C3004D5E70 /* Release configuration for PBXNativeTarget "MxOpenCVD" */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8D4C6A0B30A1B2C3004D5E70 /* Project object */;
+}
