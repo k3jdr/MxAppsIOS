@@ -143,6 +143,12 @@ function entries() {
   return S.data.entries.filter(e => !out.has(e.source + (e.register ?? "")));
 }
 
+// The lists show every register, so that one left out of the comparison can still be found: this says which.
+function leftOutNote() {
+  const partial = S.full ? partialRegisters() : [];
+  return partial.length ? `<p class="hint">${esc(partial.map(c => `${c.register ?? c.source} starts ${day(c.first)}`).join("; "))}: listed here, but left out of the comparison's totals, as it doesn't cover the earlier year.</p>` : "";
+}
+
 function attribute(list) {
   const rates = Object.fromEntries(S.data.inflation.map(i => [i.category, i]));
   const prior = {}, current = {};
@@ -447,7 +453,7 @@ function diveTab() {
   h += `<div class="row">${box("Largest This Year", `<div class="scroll"><table>${top.map(e => `<tr><td class="l muted">${day(e.date)}</td><td class="l" title="${esc(e.payee ?? e.description ?? "")}">${boughtLink(e, e.payee ?? e.description ?? "—")}</td><td>${money2(e.amount)}</td><td class="l muted">${esc(e.event ?? driverTitle(e.driver))}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>`, { section: `Deep Dive ${name}: largest` })}
     ${box("By Family Member", Object.keys(byMember).every(k => k === "0") ? `<p class="muted">None of it names a family member yet.</p>` : `<table><tr><th class="l">Member</th><th>${py}</th><th>${y}</th><th>Change</th></tr>${Object.keys(byMember).map(k => { const s = sums(byMember[k]); return `<tr><td class="l">${esc(memberName(+k) ?? "No one named")}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td>${money(s.change)}</td></tr>`; }).join("")}</table>`, { section: `Deep Dive ${name}: members` })}</div>`;
   h += lifecycleBox(code);
-  h += entriesBox(mine, `${name} Entries`, true);
+  h += entriesBox(S.data.entries.filter(e => (e.category ?? UNASSIGNED) === code), `${name} Entries`, true);
   return h;
 }
 
@@ -479,7 +485,7 @@ function entriesBox(list, title, locked) {
   const q = S.search.toLowerCase();
   const rows = list.filter(e => (S.period === "both" || (S.period === "current") === inNow(e))
     && (!S.unassignedOnly || !e.driver) && (locked || !S.cat || (e.category ?? UNASSIGNED) === S.cat)
-    && (!q || [e.payee, e.description, e.event, e.register, (e.amazonItems ?? []).map(i => i.name).join("\n")].some(v => (v ?? "").toLowerCase().includes(q))))
+    && (!q || [e.payee, e.description, e.expenseAccount, e.event, e.register, (e.amazonItems ?? []).map(i => i.name).join("\n")].some(v => (v ?? "").toLowerCase().includes(q))))
     .sort((a, b) => a.date < b.date ? 1 : -1);
   const body = `<div class="bar">
       <select data-set="period"><option value="current"${S.period === "current" ? " selected" : ""}>This year</option><option value="prior"${S.period === "prior" ? " selected" : ""}>Earlier year</option><option value="both"${S.period === "both" ? " selected" : ""}>Both</option></select>
@@ -487,12 +493,13 @@ function entriesBox(list, title, locked) {
       <label><input type="checkbox" data-set="unassignedOnly"${S.unassignedOnly ? " checked" : ""}> No driver yet</label>
       <input type="search" data-set="search" value="${esc(S.search)}" placeholder="Search payee, item bought, event">
       <span class="spacer"></span><span class="muted">${rows.length.toLocaleString()} entries, ${money(rows.reduce((a, e) => a + e.amount, 0))}</span></div>
-    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l bought">Bought<span class="grip" data-resize="bought" title="Drag to make Bought wider or narrower; double-click for the standard width"></span></th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th class="l">Event</th><th></th></tr>
+    ${leftOutNote()}
+    <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l bought">Bought<span class="grip" data-resize="bought" title="Drag to make Bought wider or narrower; double-click for the standard width"></span></th><th class="l">Expense account</th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th class="l">Event</th><th></th></tr>
     ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td>
-      <td class="l bought">${boughtLink(e)}</td><td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "Its target account isn't allocated")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "Its target account has no driver: counts as usage")}">${pick("driver", e)}</td>
+      <td class="l bought">${boughtLink(e)}</td><td class="l muted">${esc(e.expenseAccount ?? "")}</td><td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "Its target account isn't allocated")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "Its target account has no driver: counts as usage")}">${pick("driver", e)}</td>
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
     ${rows.length > S.shown ? `<p><button data-action="more">Show ${Math.min(200, rows.length - S.shown)} more</button></p>` : ""}`;
-  return box(title, body, { section: title, help: "Every spending dollar: its category and driver and where they came from, and for an Amazon charge what was bought — a link to the order on amazon.com. ⚑ tells John something about one entry." });
+  return box(title, body, { section: title, help: "Every spending dollar: its expense account, its category and driver and where they came from, and for an Amazon charge what was bought — a link to the order on amazon.com. ⚑ tells John something about one entry." });
 }
 
 function curveTab() {
@@ -516,17 +523,17 @@ function curveTab() {
 // The target accounts' allocation, read-only (MxAcctMGR's Allocation tab changes it): each with both years' spending
 // and a note to John.
 function allocationTab() {
-  const spent = {};
-  for (const e of entries()) { const s = spent[e.payeeId] ?? (spent[e.payeeId] = { before: 0, now: 0 }); if (inNow(e)) s.now += e.amount; else if (inBefore(e)) s.before += e.amount; }
+  const spent = {}, accountName = id => S.setup.expenseAccounts.find(a => a.id === id)?.name;
+  for (const e of S.data.entries) { const s = spent[e.payeeId] ?? (spent[e.payeeId] = { before: 0, now: 0 }); if (inNow(e)) s.now += e.amount; else if (inBefore(e)) s.before += e.amount; }
   const py = S.data.priorStart.slice(0, 4), y = S.data.start.slice(0, 4);
   const shown = S.setup.payees.filter(p => (p.role ?? "spending") === "spending" && (spent[p.id] || p.category || p.driver))
     .sort((a, b) => (spent[b.id]?.now ?? 0) - (spent[a.id]?.now ?? 0) || (spent[b.id]?.before ?? 0) - (spent[a.id]?.before ?? 0));
   const left = S.setup.payees.filter(p => p.role === "transfer" || p.role === "income");
-  const row = p => `<tr><td class="l">${esc(p.name)}${(p.patterns ?? []).length ? `<br><span class="muted">statement names containing ${esc(p.patterns.join(", "))}</span>` : ""}</td><td>${money(spent[p.id]?.before ?? 0)}</td><td>${money(spent[p.id]?.now ?? 0)}</td><td class="l">${esc(p.category ? catName(p.category) : "Not assigned")}</td><td class="l">${esc(p.driver ? driverTitle(p.driver) : "—")}</td><td class="l muted">${esc(memberName(p.memberId) ?? "")}</td>
+  const row = p => `<tr><td class="l">${esc(p.name)}${(p.patterns ?? []).length ? `<br><span class="muted">statement names containing ${esc(p.patterns.join(", "))}</span>` : ""}</td><td>${money(spent[p.id]?.before ?? 0)}</td><td>${money(spent[p.id]?.now ?? 0)}</td><td class="l muted">${esc(accountName(p.expenseAccountId) ?? "")}</td><td class="l">${esc(p.category ? catName(p.category) : "Not assigned")}</td><td class="l">${esc(p.driver ? driverTitle(p.driver) : "—")}</td><td class="l muted">${esc(memberName(p.memberId) ?? "")}</td>
     <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Target account: ${esc(p.name)}" data-category="${esc(p.category ?? "")}">Suggest a change</button></td></tr>`;
   return `<p class="hint">Every payment from the checking accounts and credit cards goes to a target account: the provider, merchant or vendor paid. Each dollar's category and driver come from the entry's own tag if it has one, else its target account's allocation. Transfers between our own accounts, income and the cash ledgers aren't spending. John changes the allocation in MxAcctMGR; Suggest a change tells him.</p>`
-    + box("Target Accounts", shown.length ? `<div class="scroll"><table><tr><th class="l">Target account</th><th>${py}</th><th>${y}</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th></th></tr>${shown.map(row).join("")}</table></div>` : `<p class="muted">No target account is allocated yet.</p>`,
-      { help: "The category, driver and family member of each target account's spending, the largest first" + (left.length ? `; ${left.length} more are transfers or income and left out` : "") });
+    + box("Target Accounts", shown.length ? `<div class="scroll"><table><tr><th class="l">Target account</th><th>${py}</th><th>${y}</th><th class="l">Expense account</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th></th></tr>${shown.map(row).join("")}</table></div>` : `<p class="muted">No target account is allocated yet.</p>`,
+      { help: "The expense account, category, driver and family member of each target account's spending, the largest first" + (left.length ? `; ${left.length} more are transfers or income and left out` : "") });
 }
 
 function familyTab() {
@@ -653,7 +660,7 @@ function downloadTaxCsv() {
 function render() {
   const app = document.getElementById("app");
   if (!S.setup || !S.data) { app.innerHTML = S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : `<div class="loading">Reading the registers…</div>`; return; }
-  const body = { deepdive: diveTab, curve: curveTab, tax: taxTab, entries: () => entriesBox(entries(), "Spending Entries", false), rules: allocationTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
+  const body = { deepdive: diveTab, curve: curveTab, tax: taxTab, entries: () => entriesBox(S.data.entries, "Spending Entries", false), rules: allocationTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
   let inner;
   try { inner = body(); } catch (e) { inner = `<p class="notice warn">This part of the page failed: ${esc(e.message)}</p>`; console.error(e); }
   app.innerHTML = controls() + strip() + (S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : "") + tabsBar() + inner;
