@@ -149,6 +149,13 @@ function leftOutNote() {
   return partial.length ? `<p class="hint">${esc(partial.map(c => `${c.register ?? c.source} starts ${day(c.first)}`).join("; "))}: listed here, but left out of the comparison's totals, as it doesn't cover the earlier year.</p>` : "";
 }
 
+// What each register left out of the comparison spent this year: All spending still counts it.
+function leftOutSpending() {
+  if (!S.full) return [];
+  return partialRegisters().map(c => ({ name: c.register ?? c.source, amount: S.data.entries.filter(e => e.source + (e.register ?? "") === c.source + (c.register ?? "") && inNow(e)).reduce((a, e) => a + e.amount, 0) }))
+    .filter(r => Math.abs(r.amount) >= 0.005);
+}
+
 function attribute(list) {
   const rates = Object.fromEntries(S.data.inflation.map(i => [i.category, i]));
   const prior = {}, current = {};
@@ -382,25 +389,28 @@ const tabsBar = () => `<nav class="tabs">${TABS.map(([id, t]) => `<button class=
 
 function attributionTab() {
   const rows = attribute(entries()), t = total(rows), partial = partialRegisters();
+  const leftOut = leftOutSpending(), all = leftOut.reduce((a, r) => a + r.amount, t.current), compared = leftOut.length ? "registers compared" : "";
   let h = "";
-  if (partial.length) h += `<p class="notice${S.full ? "" : " warn"}">${esc(partial.map(c => `${c.register ?? c.source} starts ${day(c.first)}`).join("; "))}${S.full ? ": left out, as it doesn't cover the earlier year." : ": its earlier-year spending is missing, so its whole spending counts as growth."}</p>`;
-  h += `<div class="tiles">${tile("Earlier year", money(t.prior))}${tile("This year", money(t.current))}${tile("Change", money(t.change), t.growth === null ? "" : signedPct(t.growth), "This year less the earlier year", t.change > 0 ? "var(--up)" : "var(--down)")}
+  if (partial.length) h += `<p class="notice${S.full ? "" : " warn"}">${esc(partial.map(c => `${c.register ?? c.source} starts ${day(c.first)}`).join("; "))}${S.full ? ": left out of the comparison, as it doesn't cover the earlier year, and counted in All spending." : ": its earlier-year spending is missing, so its whole spending counts as growth."}</p>`;
+  h += `<div class="tiles">${leftOut.length ? tile("All spending", money(all), "every register", "Spending this year from every register, also those left out of the comparison. The other figures compare only the registers covering both years.") : ""}${tile("Earlier year", money(t.prior), compared)}${tile("This year", money(t.current), compared)}${tile("Change", money(t.change), t.growth === null ? "" : signedPct(t.growth), "This year less the earlier year", t.change > 0 ? "var(--up)" : "var(--down)")}
     ${["inflation", "lifecycle", "behavior"].concat(Math.abs(t.effect("taxes")) >= 0.5 ? ["taxes"] : []).map(id => { const e = EFFECTS.find(x => x.id === id); return tile(e.name, money(t.effect(id)), t.share(id) === null ? "" : `${pct(t.share(id))} of the change`, e.help); }).join("")}</div>`;
   if (!rows.length) return h + `<p class="muted">No spending in these periods.</p>`;
   const tr = r => `<tr${r.code === "TOTAL" ? ' class="total"' : ""}>
-      <td class="l">${r.code === "TOTAL" ? esc(r.name) : `<button class="link" data-dive="${esc(r.code)}" title="Deep dive into ${esc(r.name)}">${esc(r.name)}</button>`}</td>
+      <td class="l">${r.code === "TOTAL" ? esc(leftOut.length ? "Registers compared" : r.name) : `<button class="link" data-dive="${esc(r.code)}" title="Deep dive into ${esc(r.name)}">${esc(r.name)}</button>`}</td>
       <td>${money(r.prior)}</td><td>${money(r.current)}</td><td class="${cls(r.change)}">${money(r.change)}</td>
       <td>${r.growth === null ? (r.prior === 0 && r.current > 0 ? "new" : "—") : signedPct(r.growth, 0)}</td>
       ${EFFECTS.map(e => `<td title="${money(r.effect(e.id))}">${r.share(e.id) === null ? "—" : pct(r.share(e.id))}</td>`).join("")}
       <td class="muted">${signedPct(r.rate, 1)}${r.code !== "TOTAL" && r.basis !== "CPI" ? "*" : ""}</td><td class="l muted">${esc(r.reading)}</td></tr>`;
+  // A row below the comparison: this year's spending only, with no earlier year to compare it with.
+  const thisYear = (name, amount, isTotal) => `<tr${isTotal ? ' class="total"' : ""}><td class="l">${esc(name)}</td><td class="muted">—</td><td>${money(amount)}</td><td colspan="${EFFECTS.length + 4}"></td></tr>`;
   h += box("Key Metrics by Category", `<div class="scroll"><table><tr><th class="l">Category</th><th>Earlier</th><th>This year</th><th>Change</th><th>Growth</th>
       ${EFFECTS.map(e => `<th title="${esc(e.help)}" style="color:${e.color}">${e.name}</th>`).join("")}<th>CPI</th><th class="l">Reading</th></tr>
-      ${rows.map(tr).join("")}${tr(t)}</table></div>
+      ${rows.map(tr).join("")}${tr(t)}${leftOut.map(r => thisYear(`${r.name}, not compared`, r.amount)).join("")}${leftOut.length ? thisYear("All spending", all, true) : ""}</table></div>
       <p class="hint">Contributions are shares of the change. Click a category for its deep dive. CPI is the category's price change between the years (FRED; * assumed where there are no values yet).</p>`,
     { help: "Each category's growth and how much of its change each effect explains" });
   h += `<div class="row">${box("From Last Year to This Year", waterfall(t))}${box("What Changed Each Category", effectBars(rows) + legend(EFFECTS.map(e => [e.name, e.color])), { help: "Click a category for its deep dive" })}</div>`;
   // Both dimensions of this year's dollars.
-  const now = entries().filter(inNow), order = S.setup.categories.map(c => c.code).concat([UNASSIGNED]);
+  const now = S.data.entries.filter(inNow), order = S.setup.categories.map(c => c.code).concat([UNASSIGNED]);
   const drv = Object.keys(DRIVERS).concat([""]);
   const cols = order.map(code => {
     const mine = now.filter(e => (e.category ?? UNASSIGNED) === code); if (!mine.length) return null;
