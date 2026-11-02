@@ -281,7 +281,7 @@ def save_loan(conn, code, body):
         found = {r["payee_id"] for r in fetch(conn, "SELECT payee_id FROM srm.payee WHERE payee_id = ANY(%s)", (payees,))}
         missing = [p for p in payees if p not in found]
         if missing:
-            raise ValueError("no target account %s" % missing[0])
+            raise ValueError("no merchant %s" % missing[0])
     status = body.get("status") or "open"
     if status not in STATUSES:
         raise ValueError("status must be open or paid_off")
@@ -600,7 +600,7 @@ def tax_summary(conn, year):
 # ------------------------------------------------------------------------------------------------- the loan
 
 def _checks(conn, loan, activity):
-    """The checks to the loan's target accounts (three years), each with the statement activity it matches: the same
+    """The checks to the loan's merchants (three years), each with the statement activity it matches: the same
     total within five days."""
     if not loan["paymentPayees"]:
         return []

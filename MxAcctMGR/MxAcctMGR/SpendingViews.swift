@@ -4,7 +4,7 @@
 //
 //  Banking ▸ Spending Analysis (SpendingModel.swift): why the family's spending changed from one year to the next
 //  — the attribution table and charts — and the forward curve of what the children's ages bring, with the entries,
-//  target accounts' allocation, family and lifecycle model they are made from, and the sources they come from with how fresh each is.
+//  merchants' allocation, family and lifecycle model they are made from, and the sources they come from with how fresh each is.
 //
 
 import Charts
@@ -35,7 +35,7 @@ struct SpendingAnalysisView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: "Household spending attribution: like portfolio attribution, for the family's spending — why it changed from last year (prices, more of the same, the children's ages, habits, one-time events) and what the children's ages bring in the next ten years.", lesson: [
-            "Spending is the payments from the checking accounts and credit cards to target accounts — the providers, merchants and vendors paid — whose role is Spending; transfers, income and cash ledgers aren't. Each dollar has two dimensions: a spending category (Food, Housing, Transportation …) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event), allocated on its target account (Allocation); tag a single entry (Philmont as a one-time event) on Entries.",
+            "Spending is the payments from the checking accounts and credit cards to merchants — the providers, merchants and vendors paid — whose role is Spending; transfers, income and cash ledgers aren't. Each dollar has two dimensions: a spending category (Food, Housing, Transportation …) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event), allocated on its merchant (Allocation); tag a single entry (Philmont as a one-time event) on Entries.",
             "Each category's change splits as in performance attribution: change = inflation + usage + lifecycle + behavior + one-time + taxes. Inflation is last year's spending times the category's CPI change (FRED, in the security master); each driver's effect is what its spending grew beyond inflation. Inflation and lifecycle are the unavoidable part; behavior is habit.",
             "The forward curve stacks each child's lifecycle costs — club sports at 10, a phone at 12, a laptop at 13, tutors at 14, driving at 16, college visits and applications at 16–17, college at 18 — so the waves show three to five years ahead.",
         ], scrollsHorizontally: true, widest: .infinity) {
@@ -96,7 +96,7 @@ struct SpendingAnalysisView: View {
             if tab == "admin" { tab = "attribution" }
             await reload()
         }
-        // A target account's link saved on Banking: the setup brings it.
+        // A merchant's link saved on Banking: the setup brings it.
         .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .quickHelpArea(PortHelp.about(.spending))
     }
@@ -373,7 +373,7 @@ struct SpendingAnalysisView: View {
                     Button(r.name) { openDeepDive(r.code) }
                         .buttonStyle(.link)
                         .foregroundStyle(r.code == SpendingEngine.unassigned ? .secondary : .primary)
-                        .help("Deep dive into \(r.name): its entries, the target accounts and tags that put them here, and what changed")
+                        .help("Deep dive into \(r.name): its entries, the merchants and tags that put them here, and what changed")
                         .textSelection(.disabled)
                         .contextMenu {
                             transactionsItem(r.name, entries, data)
@@ -427,7 +427,7 @@ struct SpendingAnalysisView: View {
         let order = setup.categories.map(\.name) + ["Not assigned"]
         let drivers = setup.drivers.map(\.title) + ["Not assigned"]
         let palette: [Color] = [.orange, .blue, .cyan, .purple, .pink, .indigo, .teal, .brown, .mint, .yellow, .green, .red]
-        return Box(title: "This Year by Category and Driver", symbol: "square.stack.3d.up", help: "Both dimensions of every dollar this year: the category it was spent on and its primary driver. Allocate them on target accounts (Allocation) and with tags on single entries (Entries). Right-click (or double-click) a category's bar or its name under the chart for a deep dive into it.") {
+        return Box(title: "This Year by Category and Driver", symbol: "square.stack.3d.up", help: "Both dimensions of every dollar this year: the category it was spent on and its primary driver. Allocate them on merchants (Allocation) and with tags on single entries (Entries). Right-click (or double-click) a category's bar or its name under the chart for a deep dive into it.") {
             Chart(slices) { s in
                 BarMark(x: .value("Category", s.category), y: .value("Dollars", s.amount))
                     .foregroundStyle(by: .value("Driver", s.driver))
@@ -675,7 +675,7 @@ private struct SpendingEntriesTab: View {
         let rows = justAttached.isEmpty || grid.filters["Bought"] == nil ? filtered
             : LocalGrid.rows(base, grid, gridColumns, except: "Bought").filter { passing.contains($0.id) || justAttached.contains($0.id) }
         let picked = rows.filter { selected.contains($0.id) }
-        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and card charges and credits to target accounts whose role is Spending. Each shows its category and driver and where they came from (the entry's own tag, else its target account's allocation). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Each column header's button sorts and filters it, as in Excel. Select several entries (⇧ / ⌘ click, ⌘A) and use Category or Driver above the table, or right-click, to change just that for all of them; each keeps the rest of its own tag. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — or to allocate their target account (Allocate…).") {
+        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and card charges and credits to merchants whose role is Spending. Each shows its category and driver and where they came from (the entry's own tag, else its merchant's allocation). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Each column header's button sorts and filters it, as in Excel. Select several entries (⇧ / ⌘ click, ⌘A) and use Category or Driver above the table, or right-click, to change just that for all of them; each keeps the rest of its own tag. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — or to allocate their merchant (Allocate…).") {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) { entryFilters; Spacer(); entryCount(rows) }
                 VStack(alignment: .leading, spacing: 6) {
@@ -702,11 +702,11 @@ private struct SpendingEntriesTab: View {
                 TableColumn("Amount") { e in Text(money2(e.amount)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(min: 70, ideal: 90).customizationID("amount")
                 TableColumn("Category") { e in
                     Text(setup.category(e.category)?.name ?? "Not assigned").foregroundStyle(e.category == nil ? .secondary : .primary)
-                        .help(e.categoryFrom.map { "From the \($0)" } ?? "Its target account has no category, and no tag gives one")
+                        .help(e.categoryFrom.map { "From the \($0)" } ?? "Its merchant has no category, and no tag gives one")
                 }.width(min: 80, ideal: 110).customizationID("category")
                 TableColumn("Driver") { e in
                     Text(setup.driverTitle(e.driver)).foregroundStyle(e.driver == nil ? .secondary : .primary)
-                        .help(e.driverFrom.map { "From the \($0)" } ?? "No driver from its target account or a tag: counts as usage")
+                        .help(e.driverFrom.map { "From the \($0)" } ?? "No driver from its merchant or a tag: counts as usage")
                 }.width(min: 80, ideal: 130).customizationID("driver")
                 TableColumn("Family member") { e in Text(setup.member(e.memberId)?.name ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110).customizationID("member")
                 TableColumn("Event") { e in
@@ -767,7 +767,7 @@ private struct SpendingEntriesTab: View {
                 }
                 if picked.count == 1, let e = picked.first {
                     Divider()
-                    if let id = e.payeeId { Button("Allocate \(e.payee ?? "Target Account")…") { ruleFor = RuleTarget(payeeId: id, name: e.payee ?? "") } }
+                    if let id = e.payeeId { Button("Allocate \(e.payee ?? "Merchant")…") { ruleFor = RuleTarget(payeeId: id, name: e.payee ?? "") } }
                     if !e.amazonOrderIds.isEmpty {
                         Divider()
                         ForEach(e.amazonOrderIds, id: \.self) { o in
@@ -824,8 +824,8 @@ private struct SpendingEntriesTab: View {
                 Button(c.name) { Task { await setField(picked, "category", c.code) } }
             }
             Divider()
-            Button("Follow the Target Account") { Task { await setField(picked, "category", "") } }
-                .help("Take the entries' own category off: their target account's allocation sets it again")
+            Button("Follow the Merchant") { Task { await setField(picked, "category", "") } }
+                .help("Take the entries' own category off: their merchant's allocation sets it again")
         }
         .disabled(picked.isEmpty || bulkSaving)
     }
@@ -836,13 +836,13 @@ private struct SpendingEntriesTab: View {
                 Button(d.title) { Task { await setField(picked, "driver", d.code) } }.help(d.help ?? "")
             }
             Divider()
-            Button("Follow the Target Account") { Task { await setField(picked, "driver", "") } }
-                .help("Take the entries' own driver off: their target account's allocation sets it again")
+            Button("Follow the Merchant") { Task { await setField(picked, "driver", "") } }
+                .help("Take the entries' own driver off: their merchant's allocation sets it again")
         }
         .disabled(picked.isEmpty || bulkSaving)
     }
 
-    /// Sets one dimension (category or driver; "" follows the target account again) on each entry, leaving the rest of its own tag
+    /// Sets one dimension (category or driver; "" follows the merchant again) on each entry, leaving the rest of its own tag
     /// as it is (the service's merge). Entries already tagged that way are skipped.
     private func setField(_ picked: [SpendingEntry], _ field: String, _ value: String) async {
         let todo = picked.filter { e in
@@ -949,7 +949,7 @@ private struct SpendingEntriesTab: View {
     }
 }
 
-/// The target account an Allocate… sheet is open for.
+/// The merchant an Allocate… sheet is open for.
 struct RuleTarget: Identifiable {
     var payeeId: Int
     var name: String
@@ -964,7 +964,7 @@ private struct DimensionPickers: View {
     @Binding var category: String
     @Binding var driver: String
     @Binding var member: Int
-    var blank = "The target account's"
+    var blank = "The merchant's"
 
     var body: some View {
         Picker("Category", selection: $category) {
@@ -1009,7 +1009,7 @@ struct SpendingTagSheet: View {
                 TextField("Notes", text: $notes)
             }
             if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
-            else { Text("What is set here overrides the target account's allocation for these entries; what is left as the target account's follows it. Nothing set takes the tag off.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            else { Text("What is set here overrides the merchant's allocation for these entries; what is left as the merchant's follows it. Nothing set takes the tag off.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Spacer()
                 if saving { ProgressView().controlSize(.small) }
@@ -1039,12 +1039,12 @@ struct SpendingTagSheet: View {
     }
 }
 
-/// Allocate…: a target account's spending role and the category, driver and family member its spending goes to (V052),
+/// Allocate…: a merchant's spending role and the category, driver and family member its spending goes to (V052),
 /// and the statement names it matches — "GIANT" covers "GIANT 6505" and "GIANT WEST CHESTER #6505".
 struct TargetAllocationSheet: View {
     var setup: SpendingSetup
     var target: RuleTarget
-    /// Both periods' entries, to say how many are this target account's.
+    /// Both periods' entries, to say how many are this merchant's.
     var entries: [SpendingEntry]
     /// Where those entries are from, in words.
     var entriesIn = "in the two periods"
@@ -1065,7 +1065,7 @@ struct TargetAllocationSheet: View {
         let mine = entries.filter { $0.payeeId == target.payeeId }
         VStack(alignment: .leading, spacing: 12) {
             Text("Allocate \(target.name)").heading(.heading)
-            Text("A payment to a target account is spending when its role is Spending; its category, driver and family member come from here unless the entry has a tag of its own. \(mine.count) of its entries are \(entriesIn), \(money(mine.map(\.amount).reduce(0, +))).")
+            Text("A payment to a merchant is spending when its role is Spending; its category, driver and family member come from here unless the entry has a tag of its own. \(mine.count) of its entries are \(entriesIn), \(money(mine.map(\.amount).reduce(0, +))).")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Form {
                 Picker("Role", selection: $role) {
@@ -1076,7 +1076,7 @@ struct TargetAllocationSheet: View {
                 Section("Statement names containing (one a line)") {
                     TextEditor(text: $patterns).font(.body.monospaced()).frame(height: 70)
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(.quaternary))
-                    Text("A card's or bank's line whose name contains one of these is this target account's, ignoring case; the longest match wins. Unallocated payments they match are given to it when you save.")
+                    Text("A card's or bank's line whose name contains one of these is this merchant's, ignoring case; the longest match wins. Unallocated payments they match are given to it when you save.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -1109,17 +1109,17 @@ struct TargetAllocationSheet: View {
 }
 
 
-/// registers show) and, unless turned off, what comes next with the same target account or statement name too.
+/// registers show) and, unless turned off, what comes next with the same merchant or statement name too.
 
 // MARK: - Allocation
 
-/// Allocation (V052): spending is allocated on target accounts. Each target account with spending in either period —
+/// Allocation (V052): spending is allocated on merchants. Each merchant with spending in either period —
 /// its role (spending, transfer, income) and the category, driver and family member its spending goes to, changed as
 /// its pickers are; Allocate… (✎) also edits the statement names it matches.
 private struct TargetAllocationTab: View {
     var setup: SpendingSetup
     var data: SpendingAnalysisData
-    /// Both periods' spending entries, of every register: a target account paid only from one left out of the comparison still needs allocating.
+    /// Both periods' spending entries, of every register: a merchant paid only from one left out of the comparison still needs allocating.
     var entries: [SpendingEntry]
     var saved: (SpendingSetup) -> Void
     @State private var search = ""
@@ -1165,23 +1165,23 @@ private struct TargetAllocationTab: View {
         }
         let open = list.filter { ($0.role ?? "spending") == "spending" && $0.category == nil }.count
         if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
-        Box(title: "Spending Allocation by Target Account", symbol: "arrow.left.arrow.right.square", help: "Every payment from a checking account or a credit card goes to a target account — the provider, merchant or vendor paid — and only payments to target accounts whose role is Spending are spending. Each target account's category, driver and family member allocate its spending (an entry's own tag, set on Entries, overrides them for a mixed merchant's purchase or a one-time event). Changes save as you pick, and the attribution follows. ✎ opens Allocate…, which also sets the statement names the target account matches (GIANT covers GIANT 6505 and GIANT WEST CHESTER #6505). Payments no target account matches aren't in the analysis: Sources ▸ Unallocated Payments lists them to allocate. Transfers and income are on Sources ▸ Transfers & Income.") {
+        Box(title: "Spending Allocation by Merchant", symbol: "arrow.left.arrow.right.square", help: "Every payment from a checking account or a credit card goes to a merchant — the provider, merchant or vendor paid — and only payments to merchants whose role is Spending are spending. Each merchant's category, driver and family member allocate its spending (an entry's own tag, set on Entries, overrides them for a mixed merchant's purchase or a one-time event). Changes save as you pick, and the attribution follows. ✎ opens Allocate…, which also sets the statement names the merchant matches (GIANT covers GIANT 6505 and GIANT WEST CHESTER #6505). Payments no merchant matches aren't in the analysis: Sources ▸ Unallocated Payments lists them to allocate. Transfers and income are on Sources ▸ Transfers & Income.") {
             HStack {
-                TextField("Search target accounts and their patterns", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
+                TextField("Search merchants and their patterns", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
                 Toggle("Only without a category or driver", isOn: $onlyOpen).toggleStyle(.checkbox)
-                Toggle("Every target account", isOn: $showAll).toggleStyle(.checkbox)
+                Toggle("Every merchant", isOn: $showAll).toggleStyle(.checkbox)
                     .help("Also those with no spending in either period, transfers and income")
                 Spacer()
                 if saving != nil { ProgressView().controlSize(.small) }
-                Text("\(list.count) target accounts\(open > 0 ? " · \(open) with no category" : "")").foregroundStyle(open > 0 ? .orange : .secondary)
+                Text("\(list.count) merchants\(open > 0 ? " · \(open) with no category" : "")").foregroundStyle(open > 0 ? .orange : .secondary)
             }
             MissingPaymentsLine(text: search, data: data) { finding = FindRequest(text: search) }
             if list.isEmpty {
-                Text(q.isEmpty ? "No target account has spending in either period." : "No target account matches.").foregroundStyle(.secondary)
+                Text(q.isEmpty ? "No merchant has spending in either period." : "No merchant matches.").foregroundStyle(.secondary)
             } else {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                     GridRow {
-                        Text("Target account").fillsGridColumn(); Text(priorYear).gridColumnAlignment(.trailing); Text(year).gridColumnAlignment(.trailing)
+                        Text("Merchant").fillsGridColumn(); Text(priorYear).gridColumnAlignment(.trailing); Text(year).gridColumnAlignment(.trailing)
                         Text("Role"); Text("Category"); Text("Driver"); Text("Family member"); Text("")
                     }
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -1336,7 +1336,7 @@ private struct SpendingFamilyTab: View {
                             presenting: removingMember) { m in
             Button("Remove", role: .destructive) { Task { await run { try await SpendingClient.deleteMember(m.id) } } }
         } message: { _ in
-            Text("Target accounts and tags allocated to them keep their category and driver but no longer name a family member, and the forward curve leaves them out. To keep them but leave them out, edit them and turn Active off.")
+            Text("Merchants and tags allocated to them keep their category and driver but no longer name a family member, and the forward curve leaves them out. To keep them but leave them out, edit them and turn Active off.")
         }
         .confirmationDialog("Remove the trigger \(removingTrigger?.name ?? "")?", isPresented: Binding(get: { removingTrigger != nil }, set: { if !$0 { removingTrigger = nil } }),
                             presenting: removingTrigger) { t in
@@ -1511,7 +1511,7 @@ private struct SpendingSourcesTab: View {
     var setup: SpendingSetup
     var yearToDate: Bool
     var fullCoverage: Bool
-    /// A target account was made or allocated (Unallocated Payments): the setup and the analysis are read again.
+    /// A merchant was made or allocated (Unallocated Payments): the setup and the analysis are read again.
     var allocated: (SpendingSetup) -> Void
     var changed: (SpendingSources) -> Void
     @State private var problem: String?
@@ -1896,7 +1896,7 @@ private struct SpendingSourcesTab: View {
         let y = String(sources.start.prefix(4)), py = String(sources.priorStart.prefix(4))
         VStack(alignment: .leading, spacing: 2) {
             if s.entriesNow + s.entriesBefore == 0 && (s.entries ?? 0) > 0 && s.spendingFirst == nil {
-                Text("None of its \((s.entries ?? 0).formatted()) entries counts as spending: none goes to a target account whose role is Spending (card payments and transfers are not spending). Set its target accounts' roles on Sources ▸ Transfers & Income for them to count.")
+                Text("None of its \((s.entries ?? 0).formatted()) entries counts as spending: none goes to a merchant whose role is Spending (card payments and transfers are not spending). Set its merchants' roles on Sources ▸ Transfers & Income for them to count.")
                     .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("\(y): \(s.entriesNow.formatted()) entries, \(money(s.spentNow)) · \(py): \(s.entriesBefore.formatted()) entries, \(money(s.spentBefore))"
@@ -1943,7 +1943,7 @@ private struct SpendingSourcesTab: View {
 
     private var tablesBox: some View {
         Box(title: "SRM Tables in the Aggregation", symbol: "tablecells", help: "Every table and view in the security master (schema srm) the analysis reads. Downloads land in the line tables and post to the registers; srm.v_spending_entry gathers the registers' spending and resolves each entry's category, driver and member from the tags and rules; the app adds them up per category and period and takes inflation from the CPI series. Newest data is the latest transaction, line or observation date; last changed is the latest edit, or the load that wrote the newest rows.") {
-            Text("Downloads → line tables → registers → target accounts → srm.v_spending_entry (spending target accounts, their allocation and tags) → the attribution, with inflation from srm.market_series_value; the family and lifecycle triggers make the forward curve.")
+            Text("Downloads → line tables → registers → merchants → srm.v_spending_entry (spending merchants, their allocation and tags) → the attribution, with inflation from srm.market_series_value; the family and lifecycle triggers make the forward curve.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 GridRow {
@@ -1993,8 +1993,8 @@ private struct SpendingSourcesTab: View {
 /// The page's tabs as a row of buttons, each as wide as its name. A segmented picker of seven tabs redrew every
 /// segment as wide as the widest name after a tab change; the row then outgrew the page and, centered, slid under
 /// the sidebar.
-/// Sources ▸ Unallocated Payments (V052): checks and card charges no target account matches — not in the analysis —
-/// grouped by their statement's own words, the most money first, each allocated from here to a new target account or
+/// Sources ▸ Unallocated Payments (V052): checks and card charges no merchant matches — not in the analysis —
+/// grouped by their statement's own words, the most money first, each allocated from here to a new merchant or
 /// an existing one, with a pattern so the next downloads follow.
 private struct UnallocatedBox: View {
     var window: SpendingSources
@@ -2008,14 +2008,14 @@ private struct UnallocatedBox: View {
     @State private var search = ""
 
     var body: some View {
-        Box(title: "Unallocated Payments", symbol: "questionmark.folder", help: "Checks and card charges no target account matches. They aren't in the analysis until they are allocated: Allocate… makes a target account for a group (its name, a pattern its statements start with, its role and the category, driver and family member its spending goes to) or adds the group to an existing one. With a pattern, the next downloads with those words go to it by themselves. Grouped by the statement's own words (a processor's prefix and store numbers left off), the most money first.") {
+        Box(title: "Unallocated Payments", symbol: "questionmark.folder", help: "Checks and card charges no merchant matches. They aren't in the analysis until they are allocated: Allocate… makes a merchant for a group (its name, a pattern its statements start with, its role and the category, driver and family member its spending goes to) or adds the group to an existing one. With a pattern, the next downloads with those words go to it by themselves. Grouped by the statement's own words (a processor's prefix and store numbers left off), the most money first.") {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(.secondary).font(.callout) }
             if let d = data {
                 if d.groups.isEmpty {
-                    Text("Every check and card charge has a target account.").foregroundStyle(.secondary)
+                    Text("Every check and card charge has a merchant.").foregroundStyle(.secondary)
                 } else {
-                    Text("\(d.count.formatted()) payments in \(d.groups.count.formatted()) groups have no target account — \(money(d.now)) this year, \(money(d.before)) the year before — and aren't in the analysis.")
+                    Text("\(d.count.formatted()) payments in \(d.groups.count.formatted()) groups have no merchant — \(money(d.now)) this year, \(money(d.before)) the year before — and aren't in the analysis.")
                         .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                     TextField("Search statement names", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
                     let matching = d.groups.filter { g in search.isEmpty || ([g.label, g.pattern] + g.names).contains { $0.localizedCaseInsensitiveContains(search) } }
@@ -2102,7 +2102,7 @@ private struct MissingPaymentsLine: View {
 }
 
 /// Find a Payment…: every check, card charge and downloaded line with these words, wherever it is. A statement name no
-/// target account matches can be allocated here, and those payments join the analysis.
+/// merchant matches can be allocated here, and those payments join the analysis.
 private struct FindPaymentSheet: View {
     @State var text: String
     var data: SpendingAnalysisData
@@ -2114,16 +2114,16 @@ private struct FindPaymentSheet: View {
     @State private var notice: String?
     @State private var busy = false
     @State private var allocating: SpendingUnallocated.Group?
-    /// The setup as the last allocation left it, for the next one's target accounts.
+    /// The setup as the last allocation left it, for the next one's merchants.
     @State private var latest: SpendingSetup?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Find a Payment").heading(.heading)
-            Text("Every check, card charge and downloaded line with these words in its statement name, target account or memo, in the analysis or not.")
+            Text("Every check, card charge and downloaded line with these words in its statement name, merchant or memo, in the analysis or not.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
-                TextField("Statement name, target account or memo", text: $text).textFieldStyle(.roundedBorder)
+                TextField("Statement name, merchant or memo", text: $text).textFieldStyle(.roundedBorder)
                 if busy { ProgressView().controlSize(.small) }
             }
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
@@ -2132,7 +2132,7 @@ private struct FindPaymentSheet: View {
                 ForEach(found.groups) { g in
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 0) {
-                            Text("\(g.count) with no target account: \(g.label)").font(.callout).lineLimit(1)
+                            Text("\(g.count) with no merchant: \(g.label)").font(.callout).lineLimit(1)
                             Text("\(g.nameCount) statement name\(g.nameCount == 1 ? "" : "s"), \(money2(g.total))" + (g.like.isEmpty ? "" : " · like \(g.like.map(\.name).joined(separator: ", "))"))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
@@ -2148,7 +2148,7 @@ private struct FindPaymentSheet: View {
                     TableColumn("Date") { r in Text(shortDay(r.date)).monospacedDigit() }.width(min: 70, ideal: 80)
                     TableColumn("From") { r in Text(r.register).foregroundStyle(.secondary) }.width(min: 60, ideal: 90)
                     TableColumn("Statement name") { r in Text(r.name).help(r.name) }.width(min: 120, ideal: 230)
-                    TableColumn("Target account") { r in Text(r.payee ?? "").foregroundStyle(.secondary).help(r.payee ?? "") }.width(min: 60, ideal: 120)
+                    TableColumn("Merchant") { r in Text(r.payee ?? "").foregroundStyle(.secondary).help(r.payee ?? "") }.width(min: 60, ideal: 120)
                     TableColumn("Amount") { r in Text(money2(r.amount)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(min: 60, ideal: 80)
                     TableColumn("Where it is") { r in
                         Text(r.why).foregroundStyle(["spending", "other_period", "void", "card_payment"].contains(r.state) ? Color.secondary : Color.orange).help(r.why)
@@ -2189,7 +2189,7 @@ private struct FindPaymentSheet: View {
     }
 }
 
-/// Allocate… for a group of unallocated payments: a new target account (its name, patterns, role and allocation) or an
+/// Allocate… for a group of unallocated payments: a new merchant (its name, patterns, role and allocation) or an
 /// existing one (with the group's pattern added, so the next downloads follow).
 private struct AllocateGroupSheet: View {
     let group: SpendingUnallocated.Group
@@ -2214,12 +2214,12 @@ private struct AllocateGroupSheet: View {
             Text("\(group.count) payment\(group.count == 1 ? "" : "s") under \(group.nameCount) statement name\(group.nameCount == 1 ? "" : "s"), \(money(group.total)) in all: \(group.names.prefix(3).joined(separator: "; "))\(group.nameCount > 3 ? "; …" : "")")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Picker("", selection: $existing) {
-                Text("New target account").tag(false); Text("Existing target account").tag(true)
+                Text("New merchant").tag(false); Text("Existing merchant").tag(true)
             }
             .pickerStyle(.segmented).labelsHidden()
             Form {
                 if existing {
-                    Picker("Target account", selection: $payeeId) {
+                    Picker("Merchant", selection: $payeeId) {
                         Text("Choose…").tag(0)
                         ForEach(group.like) { p in Text("\(p.name) (like it)").tag(p.id) }
                         if !group.like.isEmpty { Divider() }
@@ -2229,7 +2229,7 @@ private struct AllocateGroupSheet: View {
                 } else {
                     TextField("Name", text: $name, prompt: Text("Giant, Aldi, Westchester Tire"))
                     TextField("Statement names containing (one a line)", text: $patterns, axis: .vertical).lineLimit(1...4)
-                        .help("A card's or bank's line whose name contains one of these is this target account's, ignoring case")
+                        .help("A card's or bank's line whose name contains one of these is this merchant's, ignoring case")
                     Picker("Role", selection: $role) {
                         Text("Spending").tag("spending"); Text("Transfer (between your accounts)").tag("transfer"); Text("Income").tag("income")
                     }
@@ -2281,13 +2281,13 @@ private struct AllocateGroupSheet: View {
     }
 }
 
-/// Sources ▸ Transfers & Income: target accounts left out of the analysis as moving money rather than spending it
+/// Sources ▸ Transfers & Income: merchants left out of the analysis as moving money rather than spending it
 /// (filed under a transfer or income account), and the ones that look like they should be — the one checking pays a
 /// card with (its charges count on the card), a cash ledger's funding account (its items count), names of transfers,
 /// investment buys and sells, pay and deposits — each filed from here, with its checks and card entries.
 private struct TransfersBox: View {
     var window: SpendingSources
-    /// A target account was filed: the analysis is read again.
+    /// A merchant was filed: the analysis is read again.
     var filed: () async -> Void
     @State private var data: SpendingTransfers?
     @State private var problem: String?
@@ -2296,7 +2296,7 @@ private struct TransfersBox: View {
     @State private var showAll = false
 
     var body: some View {
-        Box(title: "Transfers & Income (Not Spending)", symbol: "arrow.left.arrow.right", help: "Money moved between your own accounts, or coming in, isn't spending, and counting it would count a dollar twice: a check that pays a card (its charges count on the card), a move to savings or an investment, pay and deposits. A target account whose role is Transfer or Income is left out with its checks and card entries. Suggested: the target accounts still Spending that look like they shouldn't be — certain when a card is paid with it or a cash ledger funded from it, else by their names. File as… sets its role; Put Back makes it Spending again.") {
+        Box(title: "Transfers & Income (Not Spending)", symbol: "arrow.left.arrow.right", help: "Money moved between your own accounts, or coming in, isn't spending, and counting it would count a dollar twice: a check that pays a card (its charges count on the card), a move to savings or an investment, pay and deposits. A merchant whose role is Transfer or Income is left out with its checks and card entries. Suggested: the merchants still Spending that look like they shouldn't be — certain when a card is paid with it or a cash ledger funded from it, else by their names. File as… sets its role; Put Back makes it Spending again.") {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(.secondary).font(.callout) }
             if let d = data {
@@ -2318,7 +2318,7 @@ private struct TransfersBox: View {
         let certain = d.suggested.filter { $0.certain == true }
         let shown = showAll ? d.suggested : Array(d.suggested.prefix(12))
         HStack {
-            Text(d.suggested.isEmpty ? "No target account in the analysis looks like moving money." : "In the analysis, but they look like moving money: \(d.suggested.count)")
+            Text(d.suggested.isEmpty ? "No merchant in the analysis looks like moving money." : "In the analysis, but they look like moving money: \(d.suggested.count)")
                 .font(.callout.weight(.semibold))
             Spacer()
             if saving != nil { ProgressView().controlSize(.small) }
@@ -2355,7 +2355,7 @@ private struct TransfersBox: View {
 
     @ViewBuilder
     private func leftOutList(_ d: SpendingTransfers) -> some View {
-        Text(d.leftOut.isEmpty ? "No target account is left out as a transfer or income yet." : "Left out as transfers or income: \(d.leftOut.count)")
+        Text(d.leftOut.isEmpty ? "No merchant is left out as a transfer or income yet." : "Left out as transfers or income: \(d.leftOut.count)")
             .font(.callout.weight(.semibold))
         if !d.leftOut.isEmpty {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
@@ -2375,7 +2375,7 @@ private struct TransfersBox: View {
 
     private func header(category: String) -> some View {
         GridRow {
-            Text("Target account").fillsGridColumn()
+            Text("Merchant").fillsGridColumn()
             Text(priorYear).gridColumnAlignment(.trailing); Text(year).gridColumnAlignment(.trailing)
             Text("Entries").gridColumnAlignment(.trailing)
             Text(category); Text("")
@@ -2427,7 +2427,7 @@ private struct TransfersBox: View {
         }
         saving = nil
         problem = failed.isEmpty ? nil : "Not filed — " + failed.joined(separator: "; ")
-        notice = "\(list.count - failed.count) target account\(list.count - failed.count == 1 ? "" : "s") filed as \(Self.roleTitle(role).lowercased())s: left out of the analysis."
+        notice = "\(list.count - failed.count) merchant\(list.count - failed.count == 1 ? "" : "s") filed as \(Self.roleTitle(role).lowercased())s: left out of the analysis."
         await filed()
     }
 }
@@ -2589,7 +2589,7 @@ private struct CategoryChartMenu: View {
 // MARK: - Deep dive
 
 /// One category taken apart: what it spent in both periods and why it changed (effects, months, drivers), how its
-/// entries got into it (target accounts and tags), where the money went (target accounts, the largest entries,
+/// entries got into it (merchants and tags), where the money went (merchants, the largest entries,
 /// family members), what the lifecycle model brings to it, and its entries to tag.
 private struct SpendingDeepDiveTab: View {
     var setup: SpendingSetup
@@ -2644,7 +2644,7 @@ private struct SpendingDeepDiveTab: View {
             }
         } else {
             ContentUnavailableView("No \(name) spending in either period", systemImage: "magnifyingglass",
-                                   description: Text("Nothing in \(priorYear) or \(year) is in \(name). Target accounts' allocation (Allocation) and tags (Entries) put spending in a category."))
+                                   description: Text("Nothing in \(priorYear) or \(year) is in \(name). Merchants' allocation (Allocation) and tags (Entries) put spending in a category."))
         }
         lifecycleBox
         SpendingEntriesTab(setup: setup, data: data, entries: allEntries, changed: changed, ruleSaved: ruleSaved, openSource: openSource,
@@ -2737,7 +2737,7 @@ private struct SpendingDeepDiveTab: View {
                     let driver = setup.driver(d)
                     GridRow {
                         Text(driver?.title ?? (d.isEmpty ? "No driver yet" : d)).foregroundStyle(driver == nil ? .secondary : .primary)
-                            .help(driver.map { $0.help ?? "" } ?? "No driver from its target account or a tag: it counts as usage")
+                            .help(driver.map { $0.help ?? "" } ?? "No driver from its merchant or a tag: it counts as usage")
                         Text(money(s.before)); Text(money(s.now))
                         Text(money(s.change)).foregroundStyle(s.change > 0.5 ? .red : s.change < -0.5 ? .green : .secondary)
                         Text(money(s.now - s.before * (1 + rate))).foregroundStyle((driver?.effect ?? .usage).color)
@@ -2755,10 +2755,10 @@ private struct SpendingDeepDiveTab: View {
         }
     }
 
-    // MARK: How entries got here: target accounts and tags
+    // MARK: How entries got here: merchants and tags
 
     private struct Origin: Identifiable {
-        var kind: String          // target account, entry, none (a target account with no category)
+        var kind: String          // merchant, entry, none (a merchant with no category)
         var label: String
         var target: RuleTarget?
         var says: String?
@@ -2776,7 +2776,7 @@ private struct SpendingDeepDiveTab: View {
             groups[kind + label, default: Origin(kind: kind, label: label, target: kind == "entry" ? nil : target, says: says, entries: [])].entries.append(e)
         }
         let list = groups.values.sorted { abs(sums($0.entries).now) + abs(sums($0.entries).before) > abs(sums($1.entries).now) + abs(sums($1.entries).before) }
-        return Box(title: "How Entries Got Here", symbol: "point.3.connected.trianglepath.dotted", help: "What put each entry in \(name): its target account's allocation (every payment to it), or the entry's own tag. Allocate… changes a target account's; tag single entries in the table below.") {
+        return Box(title: "How Entries Got Here", symbol: "point.3.connected.trianglepath.dotted", help: "What put each entry in \(name): its merchant's allocation (every payment to it), or the entry's own tag. Allocate… changes a merchant's; tag single entries in the table below.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
                 GridRow {
                     Text("Put here by").gridColumnAlignment(.leading); Text("Allocated to").gridColumnAlignment(.leading)
@@ -2788,7 +2788,7 @@ private struct SpendingDeepDiveTab: View {
                     GridRow {
                         VStack(alignment: .leading, spacing: 0) {
                             Text(o.label)
-                            Text(o.kind == "none" ? "target account with no category" : o.kind == "entry" ? "entry tags" : "target account").font(.caption)
+                            Text(o.kind == "none" ? "merchant with no category" : o.kind == "entry" ? "entry tags" : "merchant").font(.caption)
                                 .foregroundStyle(o.kind == "none" ? .orange : .secondary)
                         }
                         Text(o.says ?? "").foregroundStyle(.secondary)
@@ -2810,10 +2810,10 @@ private struct SpendingDeepDiveTab: View {
     private func accountsBox(_ mine: [SpendingEntry]) -> some View {
         let byTarget = Dictionary(grouping: mine, by: { $0.payee ?? "—" })
         let targets = byTarget.keys.sorted { abs(sums(byTarget[$0]!).change) > abs(sums(byTarget[$1]!).change) }
-        return Box(title: "Where It Went", symbol: "building.2", help: "\(name) spending by target account — who was paid — the ones whose spending changed most between the periods first.") {
+        return Box(title: "Where It Went", symbol: "building.2", help: "\(name) spending by merchant — who was paid — the ones whose spending changed most between the periods first.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 3) {
                 GridRow {
-                    Text("Target account").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change"); Text("Entries")
+                    Text("Merchant").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change"); Text("Entries")
                 }
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 ForEach(targets.prefix(15), id: \.self) { t in
@@ -2859,9 +2859,9 @@ private struct SpendingDeepDiveTab: View {
 
     private func membersBox(_ mine: [SpendingEntry]) -> some View {
         let byMember = Dictionary(grouping: mine, by: { $0.memberId ?? 0 })
-        return Box(title: "By Family Member", symbol: "person.2", help: "\(name) spending by the family member its target accounts or tags name.") {
+        return Box(title: "By Family Member", symbol: "person.2", help: "\(name) spending by the family member its merchants or tags name.") {
             if byMember.keys.allSatisfy({ $0 == 0 }) {
-                Text("None of it names a family member yet: give a target account (Allocation) or a tag a member.").foregroundStyle(.secondary).font(.callout)
+                Text("None of it names a family member yet: give a merchant (Allocation) or a tag a member.").foregroundStyle(.secondary).font(.callout)
             } else {
                 Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 3) {
                     GridRow { Text("Member").gridColumnAlignment(.leading); Text(priorYear); Text(year); Text("Change") }
@@ -3311,7 +3311,7 @@ private struct SpendingTaxTab: View {
     }
 
     private func itemsBox(_ r: TaxReport) -> some View {
-        Box(title: "Tax Items", symbol: "list.bullet.rectangle", help: "What makes a payment a tax item: a target account, a cash-ledger line, or a name the card companies use (when the charge has no target account). Each has its section, category, jurisdiction, deductible share and whether it follows estimated-tax quarters.") {
+        Box(title: "Tax Items", symbol: "list.bullet.rectangle", help: "What makes a payment a tax item: a merchant, a cash-ledger line, or a name the card companies use (when the charge has no merchant). Each has its section, category, jurisdiction, deductible share and whether it follows estimated-tax quarters.") {
             HStack { Button("Add Tax Item…") { editing = .some(nil) }; Spacer() }
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                 GridRow { Text("Item"); Text("Section"); Text("Category"); Text("Comes from"); Text("Share").gridColumnAlignment(.trailing); Text("") }
@@ -3385,7 +3385,7 @@ private struct TaxItemSheet: View {
             Text(item == nil ? "Add Tax Item" : "Edit \(item!.label)").heading(.heading)
             Form {
                 Picker("Payments from", selection: $origin) {
-                    Text("A target account").tag("payee"); Text("A cash-ledger line").tag("line"); Text("Card names containing").tag("pattern")
+                    Text("A merchant").tag("payee"); Text("A cash-ledger line").tag("line"); Text("Card names containing").tag("pattern")
                 }
                 switch origin {
                 case "line":
@@ -3396,7 +3396,7 @@ private struct TaxItemSheet: View {
                 case "pattern":
                     TextField("Name contains", text: $pattern, prompt: Text("TURBOTAX"))
                 default:
-                    Picker("Target account", selection: $payeeId) {
+                    Picker("Merchant", selection: $payeeId) {
                         Text("—").tag(0)
                         ForEach(setup.payees) { p in Text(p.name).tag(p.id) }
                     }

@@ -9,11 +9,11 @@
 //  * Spending categories (V047, V061): every one with what each checking account and credit card spent in it this year
 //    and what sets it, to add, edit, remove or put in order (SpendingCategoriesDrivers.swift's sheets). Right-click one
 //    for the transactions behind it.
-//  * Card company categories (V061): what a new card line's target account takes when it has no category.
+//  * Card company categories (V061): what a new card line's merchant takes when it has no category.
 //  * Spending drivers (V047): the same for why spending changed.
-//  * Driver and category: two dimensions on every dollar, allocated on target accounts (V052) and overridden by an
+//  * Driver and category: two dimensions on every dollar, allocated on merchants (V052) and overridden by an
 //    entry's own tag. The Category × Driver table shows this year's spending in both; a click on a cell shows which
-//    target accounts put its entries there, with Allocate… to change one.
+//    merchants put its entries there, with Allocate… to change one.
 //
 
 import SwiftUI
@@ -29,13 +29,15 @@ struct TargetCategoriesView: View {
     @State private var cardCategories: [CardCategory] = []
     @State private var problem: String?
     @State private var busy = false
+    /// The category the Merchants list shows; empty for all of them.
+    @AppStorage("merchantsFilter") private var merchantFilter = ""
 
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
     var body: some View {
         StepPage(store: store, subtitle: "One list of categories across every checking account, credit card and cash ledger: what the money bought, with the drivers of why it changed.", lesson: [
-            "Every payment to a target account takes the target account's category, set on Target Accounts or Spending Analysis ▸ Allocation, unless the entry has a tag of its own. So a category adds up the same on every register, here and on Spending Analysis.",
-            "Each category follows a consumer price index, which decides how much of its change is inflation. Removing one moves what is in it to another. A card company's own category gives a new target account its category until you choose one.",
+            "Every payment to a merchant takes the merchant's category, set on Target Categories or Spending Analysis ▸ Allocation, unless the entry has a tag of its own. So a category adds up the same on every register, here and on Spending Analysis.",
+            "Each category follows a consumer price index, which decides how much of its change is inflation. Removing one moves what is in it to another. A card company's own category gives a new merchant its category until you choose one.",
         ], scrollsHorizontally: true, widest: .infinity) {
             HStack(spacing: 12) {
                 Picker("Year", selection: $year) {
@@ -55,7 +57,8 @@ struct TargetCategoriesView: View {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
             if let setup, let data {
-                CategoriesAdmin(setup: setup, data: data, entries: data.entries, store: store, saved: { applied($0) })
+                CategoriesAdmin(setup: setup, data: data, entries: data.entries, store: store, saved: { applied($0) }, showMerchants: { merchantFilter = $0 })
+                MerchantsAdmin(setup: setup, data: data, entries: data.entries, filter: $merchantFilter, saved: { applied($0) })
                 CardCategoriesAdmin(setup: setup, categories: $cardCategories) { Task { await reload() } }
                 DriversAdmin(setup: setup, data: data, entries: data.entries, saved: { applied($0) })
                 DriverCategoryGuide(setup: setup, data: data, entries: data.entries,
@@ -90,6 +93,199 @@ struct TargetCategoriesView: View {
     }
 }
 
+// MARK: - Merchants
+
+/// Who the registers pay or are paid by, each with what it remembers: its category, driver and role (srm.payee). Press a
+/// column header's button to sort and filter; select several and right-click to change them together.
+private struct MerchantsAdmin: View {
+    var setup: SpendingSetup
+    var data: SpendingAnalysisData
+    var entries: [SpendingEntry]
+    @Binding var filter: String
+    var saved: (SpendingSetup) -> Void
+    /// The filter's value for merchants with no category.
+    static let none = "NONE"
+    private static let roles = [("spending", "Spending"), ("transfer", "Transfer"), ("income", "Income")]
+
+    @State private var book: TargetBook?
+    @State private var search = ""
+    @State private var selected = Set<Payee.ID>()
+    @State private var grid = GridQueryOptions()
+    @State private var problem: String?
+    @State private var allocating: RuleTarget?
+    @State private var renaming: Payee?
+    @State private var removing: Payee?
+    @State private var addingFromCards = false
+    @AppStorage(RowsStepper.key) private var tableRows = RowsStepper.standard
+
+    private func categoryName(_ code: String?) -> String? { code.flatMap { setup.category($0)?.name ?? $0 } }
+    private func roleName(_ p: Payee) -> String { Self.roles.first { $0.0 == p.role }?.1 ?? "Spending" }
+
+    private var columns: [String: LocalGridColumn<Payee>] {
+        [
+            "Name": .text { $0.name },
+            "Category": .text { categoryName($0.category) },
+            "Driver": .text { $0.driver == nil ? nil : setup.driverTitle($0.driver) },
+            "Role": .text { roleName($0) },
+            "This year": .number({ $0.yearTotal == 0 ? nil : abs($0.yearTotal) }, display: { $0.yearTotal == 0 ? nil : money2(abs($0.yearTotal)) }),
+            "Total paid": .number({ p in p.totalPaid.flatMap { $0 == 0 ? nil : abs($0) } },
+                                  display: { p in p.totalPaid.flatMap { $0 == 0 ? nil : money2(abs($0)) } }),
+            "Last paid": .date({ $0.lastPaid }, display: { $0.lastPaid.map(shortDay) }),
+        ]
+    }
+
+    private func listed(_ b: TargetBook) -> [Payee] {
+        let q = search.lowercased()
+        return b.payees.filter { p in
+            (filter.isEmpty || (filter == Self.none ? p.category == nil && p.role == "spending" : p.category == filter))
+                && (q.isEmpty || p.name.lowercased().contains(q))
+        }
+    }
+
+    var body: some View {
+        Box(title: "Merchants", symbol: "storefront", help: "Who the registers pay or are paid by, and what each remembers: its category, its driver and its role. Spending counts in Spending Analysis; Transfer and Income don't. A new payment to a merchant takes these. Select several and right-click to change them together; double-click one for its entries.") {
+            HStack {
+                Picker("Category", selection: $filter) {
+                    Text("All").tag("")
+                    Text("Not assigned").tag(Self.none)
+                    Divider()
+                    ForEach(setup.categories) { Text($0.name).tag($0.code) }
+                }
+                .frame(maxWidth: 240)
+                TextField("Search names", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                Button("Add from Card Registers…") { addingFromCards = true }
+                    .help("Make the names on credit card entries with no merchant yet into merchants")
+                Spacer()
+                if let book { Text("\(listed(book).count) of \(book.payees.count)").monospacedDigit().foregroundStyle(.secondary) }
+                RowsStepper(rows: $tableRows)
+            }
+            if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            if let book { table(book) } else { ProgressView().controlSize(.small) }
+        }
+        .task { await load() }
+        .onChange(of: PayeeLinks.shared.version) { Task { await load() } }
+        .sheet(item: $allocating) { t in TargetAllocationSheet(setup: setup, target: t, entries: entries) { changed($0) } }
+        .sheet(isPresented: $addingFromCards) { AddCardTargetsSheet { await load() } }
+        .sheet(item: $renaming) { p in
+            TargetNameSheet(payee: p, names: book?.payees.map(\.name) ?? []) { name in
+                do {
+                    book = try await BankClient.savePayee(p.id, ["version": p.version, "name": name])
+                    saved(try await SpendingClient.setup())
+                    return nil
+                } catch {
+                    await load()
+                    return describe(error)
+                }
+            }
+        }
+        .sheet(item: $removing) { p in
+            RemoveTargetAccountSheet(payee: p) { book = $0; selected.remove(p.id) }
+        }
+    }
+
+    private func table(_ b: TargetBook) -> some View {
+        let all = listed(b)
+        let shown = LocalGrid.rows(all, grid, columns)
+        return VStack(alignment: .leading, spacing: 6) {
+            GridFilterStatus(shown: shown.count, of: all.count, options: $grid)
+            Table(shown, selection: $selected) {
+                TableColumn("Name") { p in
+                    if let link = p.link?.link {
+                        PayeeLinks.shared.words(PayeeLinkTarget(p), link: link, testID: "payee:\(p.id)")
+                    } else {
+                        Text(p.name)
+                    }
+                }.width(min: 120, ideal: 240)
+                TableColumn("Category") { p in
+                    Text(categoryName(p.category) ?? "Not assigned").foregroundStyle(p.category == nil && p.role == "spending" ? .orange : .secondary)
+                }.width(min: 80, ideal: 130)
+                TableColumn("Driver") { p in Text(p.driver == nil ? "" : setup.driverTitle(p.driver)).foregroundStyle(.secondary) }.width(min: 70, ideal: 120)
+                TableColumn("Role") { p in Text(roleName(p)).foregroundStyle(p.role == "spending" ? .secondary : .primary) }.width(min: 60, ideal: 70)
+                TableColumn("This year") { p in
+                    Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary)
+                }.width(min: 60, ideal: 84)
+                TableColumn("Total paid") { p in
+                    let total = p.totalPaid ?? 0
+                    Text(total == 0 ? "" : money2(abs(total))).monospacedDigit().foregroundStyle(total < 0 ? .green : .primary)
+                }.width(min: 70, ideal: 90)
+                TableColumn("Last paid") { p in Text(shortDay(p.lastPaid)).monospacedDigit().foregroundStyle(.secondary) }.width(min: 60, ideal: 80)
+            }
+            .tableText()
+            .textSelection(.disabled)
+            .columnHeaderFilters(types: LocalGrid.types(columns), options: grid,
+                                 loadValues: { (LocalGrid.values(all, column: $0, grid, columns), false) },
+                                 apply: { grid = $0 })
+            .contextMenu(forSelectionType: Payee.ID.self) { ids in
+                let picked = b.payees.filter { ids.contains($0.id) }
+                if picked.count == 1, let p = picked.first {
+                    Button("Show Entries…") { showEntries(p) }
+                    Button("Allocate \(p.name)…") { allocating = RuleTarget(payeeId: p.id, name: p.name) }
+                    Divider()
+                }
+                if !picked.isEmpty { changeMenus(picked) }
+                if picked.count == 1, let p = picked.first {
+                    Divider()
+                    Button("Rename…") { renaming = p }
+                    payeeLinkMenu(PayeeLinkTarget(p))
+                    Divider()
+                    Button("Remove…", role: .destructive) { removing = p }
+                        .help("Take it off once nothing is filed under it: consolidate its entries into another first")
+                }
+            } primaryAction: { ids in
+                if ids.count == 1, let p = b.payees.first(where: { ids.contains($0.id) }) { showEntries(p) }
+            }
+            .frame(minHeight: PortSettings.shared.tableHeight(rows: min(max(shown.count, 6), tableRows)))
+        }
+    }
+
+    @ViewBuilder
+    private func changeMenus(_ picked: [Payee]) -> some View {
+        let n = picked.count == 1 ? "" : " of \(picked.count)"
+        let ids = picked.map(\.id)
+        Menu("Set Category\(n)") {
+            ForEach(setup.categories) { c in
+                Toggle(c.name, isOn: Binding(get: { picked.allSatisfy { $0.category == c.code } }, set: { _ in change(ids, ["category": c.code]) }))
+            }
+            Divider()
+            Button("None") { change(ids, ["category": NSNull()]) }
+        }
+        Menu("Set Driver\(n)") {
+            ForEach(setup.drivers) { d in
+                Toggle(d.title, isOn: Binding(get: { picked.allSatisfy { $0.driver == d.code } }, set: { _ in change(ids, ["driver": d.code]) }))
+            }
+            Divider()
+            Button("None") { change(ids, ["driver": NSNull()]) }
+        }
+        Menu("Set Role\(n)") {
+            ForEach(Self.roles, id: \.0) { r in
+                Toggle(r.1, isOn: Binding(get: { picked.allSatisfy { $0.role == r.0 } }, set: { _ in change(ids, ["role": r.0]) }))
+            }
+        }
+    }
+
+    private func change(_ ids: [Int], _ fields: [String: Any]) {
+        Task {
+            do { changed(try await SpendingClient.allocateTargets(ids, fields)) } catch { problem = describe(error) }
+        }
+    }
+
+    /// A change saved: the list and the page's figures again.
+    private func changed(_ s: SpendingSetup) {
+        problem = nil
+        saved(s)
+        Task { await load() }
+    }
+
+    /// Show Entries…: its entries in a window of their own; a change there reads the list again.
+    private func showEntries(_ p: Payee) {
+        TargetEntriesWindow.open(p, year: book?.year ?? Calendar.current.component(.year, from: .now)) { Task { await load() } }
+    }
+
+    private func load() async {
+        do { book = try await BankClient.book(); problem = nil } catch { problem = describe(error) }
+    }
+}
+
 // MARK: - Card company categories
 
 /// A card company's own category and the one of ours it maps to (srm.card_category, V061).
@@ -104,14 +300,14 @@ struct CardCategory: Decodable, Identifiable, Hashable {
 private struct CardCategoriesAdmin: View {
     var setup: SpendingSetup
     @Binding var categories: [CardCategory]
-    /// A change can give target accounts a category: the figures again.
+    /// A change can give merchants a category: the figures again.
     var changed: () -> Void
     @State private var problem: String?
     @State private var open = false
 
     var body: some View {
         let missing = categories.filter { $0.category == nil }.count
-        return Box(title: "Card Company Categories", symbol: "creditcard", help: "The card companies' downloads give each line a category of their own. When a line's target account has no category yet, it takes the one that company category maps to here. Choosing one also gives it to the target accounts with no category whose card lines have it.") {
+        return Box(title: "Card Company Categories", symbol: "creditcard", help: "The card companies' downloads give each line a category of their own. When a line's merchant has no category yet, it takes the one that company category maps to here. Choosing one also gives it to the merchants with no category whose card lines have it.") {
             HStack {
                 Text(missing > 0 ? "\(missing) of \(categories.count) have no category" : "All \(categories.count) are mapped")
                     .foregroundStyle(missing > 0 ? .orange : .secondary)
@@ -173,6 +369,8 @@ private struct CategoriesAdmin: View {
     var entries: [SpendingEntry]
     var store: PortStore
     var saved: (SpendingSetup) -> Void
+    /// Shows a category's merchants in the Merchants list.
+    var showMerchants: (String) -> Void
     /// New (.some(nil)) or Edit (.some(category)).
     @State private var editing: SpendingCategory??
     @State private var removing: SpendingCategory?
@@ -186,7 +384,7 @@ private struct CategoriesAdmin: View {
         let registers = Array(Set(year.map(registerOf))).sorted()
         var byRegister: [String: Double] = [:]
         for e in year { byRegister[(e.category ?? "") + "|" + registerOf(e), default: 0] += e.amount }
-        return Box(title: "Spending Categories", symbol: "cart", help: "What the money bought, across every checking account and credit card (a column each). Each follows a consumer price index (or an assumed rate), which decides how much of its change is inflation; the CPI series and the rate can also be changed on Spending Analysis ▸ Family & Lifecycle. Right-click one for the transactions behind it. The arrows set the order the page lists them in. Remove… moves the target accounts, tags and lifecycle triggers allocated to a category to another first.") {
+        return Box(title: "Spending Categories", symbol: "cart", help: "What the money bought, across every checking account and credit card (a column each). Each follows a consumer price index (or an assumed rate), which decides how much of its change is inflation; the CPI series and the rate can also be changed on Spending Analysis ▸ Family & Lifecycle. Right-click one for the transactions behind it. The arrows set the order the page lists them in. Remove… moves the merchants, tags and lifecycle triggers allocated to a category to another first.") {
             HStack {
                 Button("New Category…") { editing = .some(nil) }
                 Spacer()
@@ -213,14 +411,15 @@ private struct CategoriesAdmin: View {
                             if let d = c.description, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(d) }
                         }
                         .fillsGridColumn()
-                        .modifier(ShowsTransactions(name: c.name, entries: year.filter { $0.category == c.code }, data: data, setup: setup, store: store))
+                        .modifier(ShowsTransactions(name: c.name, entries: year.filter { $0.category == c.code }, data: data, setup: setup, store: store,
+                                                    merchants: rules, showMerchants: { showMerchants(c.code) }))
                         Text(c.cpiName ?? "—").foregroundStyle(.secondary).lineLimit(1)
                         Text(pct(c.assumedInflation, 1)).monospacedDigit().foregroundStyle(.secondary)
                         ForEach(registers, id: \.self) { r in amount(byRegister[c.code + "|" + r]) }
                         Text(money(spent?.amount ?? 0)).monospacedDigit()
                         Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
                         Text(setBy(rules: rules, triggers: triggers)).foregroundStyle(.secondary)
-                            .help("Target accounts allocated to it and lifecycle triggers in it (single entries' tags not counted)")
+                            .help("Merchants allocated to it and lifecycle triggers in it (single entries' tags not counted)")
                         HStack(spacing: 4) {
                             Button("Edit…") { editing = .some(c) }
                             Button("Remove…") { removing = c }.disabled(setup.categories.count <= 1)
@@ -232,14 +431,16 @@ private struct CategoriesAdmin: View {
                     GridRow {
                         Text("")
                         Text("Not assigned").foregroundStyle(.orange)
-                            .modifier(ShowsTransactions(name: "Not assigned", entries: year.filter { $0.category == nil }, data: data, setup: setup, store: store))
+                            .modifier(ShowsTransactions(name: "Not assigned", entries: year.filter { $0.category == nil }, data: data, setup: setup, store: store,
+                                                        merchants: setup.payees.filter { $0.category == nil && $0.role == "spending" }.count,
+                                                        showMerchants: { showMerchants(MerchantsAdmin.none) }))
                         Text(""); Text("")
                         ForEach(registers, id: \.self) { r in amount(byRegister["|" + r]) }
                         Text(money(spent.amount)).monospacedDigit().foregroundStyle(.orange)
                         Text("\(spent.count)").monospacedDigit().foregroundStyle(.secondary)
                         Text(""); Text("")
                     }
-                    .help("Entries whose target account has no category and no tag gives one")
+                    .help("Entries whose merchant has no category and no tag gives one")
                 }
             }
             .font(.callout)
@@ -257,7 +458,7 @@ private struct CategoriesAdmin: View {
     }
 
     private func setBy(rules: Int, triggers: Int) -> String {
-        let parts = [rules > 0 ? "\(rules) target\(rules == 1 ? "" : "s")" : nil, triggers > 0 ? "\(triggers) trigger\(triggers == 1 ? "" : "s")" : nil]
+        let parts = [rules > 0 ? "\(rules) merchant\(rules == 1 ? "" : "s")" : nil, triggers > 0 ? "\(triggers) trigger\(triggers == 1 ? "" : "s")" : nil]
         return parts.compactMap { $0 }.joined(separator: ", ")
     }
 
@@ -316,8 +517,8 @@ private struct DriversAdmin: View {
                         Text(d.effect.rawValue).foregroundStyle(d.effect.color).help(d.effect.help)
                         Text(money(spent?.amount ?? 0)).monospacedDigit()
                         Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
-                        Text(rules > 0 ? "\(rules) target\(rules == 1 ? "" : "s")" : "").foregroundStyle(.secondary)
-                            .help("Target accounts whose spending this driver is allocated to (single entries' tags not counted)")
+                        Text(rules > 0 ? "\(rules) merchant\(rules == 1 ? "" : "s")" : "").foregroundStyle(.secondary)
+                            .help("Merchants whose spending this driver is allocated to (single entries' tags not counted)")
                         HStack(spacing: 4) {
                             Button("Edit…") { editing = .some(d) }
                             Button("Remove…") { removing = d }
@@ -333,7 +534,7 @@ private struct DriversAdmin: View {
                     Text("\(now[""]?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
                     Text(""); Text("")
                 }
-                .help("Entries whose target account has no driver and no tag gives one: their growth counts as Usage")
+                .help("Entries whose merchant has no driver and no tag gives one: their growth counts as Usage")
             }
             .font(.callout)
         }
@@ -361,6 +562,9 @@ private struct ShowsTransactions: ViewModifier {
     var data: SpendingAnalysisData
     var setup: SpendingSetup
     var store: PortStore
+    /// How many merchants are in it, and showing them in the Merchants list.
+    var merchants: Int
+    var showMerchants: () -> Void
 
     func body(content: Content) -> some View {
         // Selectable text would open the text's own menu instead.
@@ -369,6 +573,8 @@ private struct ShowsTransactions: ViewModifier {
                 SpendingTransactionsWindow.open(name, period: "\(shortDay(data.start)) – \(shortDay(data.end))", entries: entries, setup: setup, store: store)
             }
             .disabled(entries.isEmpty)
+            Button("Show \(merchants) \(merchants == 1 ? "Merchant" : "Merchants")") { showMerchants() }
+                .disabled(merchants == 0)
         }
     }
 }
@@ -416,20 +622,19 @@ private struct DriverCategoryGuide: View {
                 AdminCard(title: "Driver: why the spending changed", symbol: "arrow.up.right",
                           text: "\(Self.either(setup.drivers.map(\.title))). The driver decides which effect the growth beyond inflation counts as (Spending Drivers, above); with no driver it counts as Usage.")
             }
-            Text("They are independent: any category can have any driver. Food can grow with Family Growth, Activities with Lifestyle & Hobbies, Housing with Taxes. Spending is the payments from the checking accounts and credit cards to target accounts whose role is Spending — the providers, merchants and vendors paid — and each gets its category and driver:")
+            Text("They are independent: any category can have any driver. Food can grow with Family Growth, Activities with Lifestyle & Hobbies, Housing with Taxes. Spending is the payments from the checking accounts and credit cards to merchants whose role is Spending — the providers, merchants and vendors paid — and each gets its category and driver:")
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 3) {
                 Text("1. From the entry's own tag, when it has one (Spending Analysis ▸ Entries: double-click, or select several and right-click) — a mixed merchant's purchase, a one-time event.")
-                Text("2. Else from its target account's allocation (Spending Analysis ▸ Allocation): every payment to it.")
+                Text("2. Else from its merchant's allocation (Spending Analysis ▸ Allocation): every payment to it.")
             }
             .font(.callout).padding(.leading, 8)
-            Text("Transfers between your own accounts and income aren't spending (Spending Analysis ▸ Sources ▸ Transfers & Income), and a payment no target account matches isn't in the analysis until it is allocated (Spending Analysis ▸ Sources ▸ Unallocated Payments). Cash ledgers are stand-alone project scratch pads: they don't feed the analysis.")
+            Text("Transfers between your own accounts and income aren't spending (Spending Analysis ▸ Sources ▸ Transfers & Income), and a payment no merchant matches isn't in the analysis until it is allocated (Spending Analysis ▸ Sources ▸ Unallocated Payments). Cash ledgers are stand-alone project scratch pads: they don't feed the analysis.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("Open Allocation") { openTab("rules") }
                 Button("Open Entries") { openTab("entries") }
                 Button("Open Sources") { openTab("sources") }
-                Button("Open Target Accounts") { go(.expenses) }
             }
         }
         matrix
@@ -496,7 +701,7 @@ private struct DriverCategoryGuide: View {
 
     // MARK: A cell's entries
 
-    /// What set an entry's category or driver: its target account's allocation or its own tag, and the target account.
+    /// What set an entry's category or driver: its merchant's allocation or its own tag, and the merchant.
     private struct Origin: Hashable {
         var kind: String
         var label: String
@@ -508,10 +713,10 @@ private struct DriverCategoryGuide: View {
         switch kind {
         case "entry":
             return (Origin(kind: "the entry's own tag", label: "Tagged on the entry", target: nil), nil)
-        case "target account":
-            return (Origin(kind: "target account", label: e.payee ?? "—", target: t?.id), t)
+        case "merchant":
+            return (Origin(kind: "merchant", label: e.payee ?? "—", target: t?.id), t)
         default:
-            // Its target account allocates nothing for it yet: Allocate… sets it.
+            // Its merchant allocates nothing for it yet: Allocate… sets it.
             return (Origin(kind: "not allocated", label: e.payee ?? "—", target: t?.id), t)
         }
     }

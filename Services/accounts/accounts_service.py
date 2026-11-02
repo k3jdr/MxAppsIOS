@@ -50,7 +50,7 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
                                          (observation_date, one column per series); format=ohlc with one id: as Cboe's
                                          history file (DATE,OPEN,HIGH,LOW,CLOSE with MM/DD/YYYY dates)
     /spending/...                        household spending attribution (V037, spending.py): the family, categories,
-                                         target accounts' allocation (V052), lifecycle triggers and per-entry tags;
+                                         merchants' allocation (V052), lifecycle triggers and per-entry tags;
                                          GET /spending/analysis gives every spending dollar of two periods with each
                                          category's CPI inflation between them
     /loans/...                           loan accounts (V053, loans.py): mortgages and vehicle loans, their billing
@@ -120,13 +120,13 @@ DESCRIBE = {
         {"method": "GET", "path": "/expense-ledgers/{code}", "summary": "A cash ledger's book: budget lines, entries, subscriptions, assets, training, trips and alerts"},
         {"method": "POST", "path": "/expense-ledgers/{code}/entries", "summary": "Add a cash ledger entry (an item bought, a refund, a funding transfer)"},
         {"method": "POST", "path": "/expense-ledgers/{code}/entries/delete", "summary": "Delete cash ledger entries for good (version-checked, all or none)"},
-        {"method": "GET", "path": "/bank/book", "summary": "The categories, and the target accounts with this year's totals"},
+        {"method": "GET", "path": "/bank/book", "summary": "The categories, and the merchants with this year's totals"},
         {"method": "GET", "path": "/loans", "summary": "Loan accounts: mortgages and vehicle loans with their balance, rate and next payment"},
         {"method": "GET", "path": "/loans/{code}", "summary": "A loan's billing statements, the lender's activity, the checks that paid it, the forecast to payoff and each year's interest"},
         {"method": "POST", "path": "/loans/{code}/statements", "summary": "Read billing statements (their PDFs' text; the PDFs kept in the loan's folder)"},
         {"method": "GET", "path": "/secure-accounts", "summary": "Secure accounts: products and services held an account with, their subscription payment and renewal"},
-        {"method": "GET", "path": "/spending/setup", "summary": "Spending Analysis: the family, spending categories with their CPI series, target accounts with their allocation and lifecycle triggers"},
-        {"method": "GET", "path": "/spending/unallocated", "summary": "Checks and card charges no target account matches, grouped by their statement words"},
+        {"method": "GET", "path": "/spending/setup", "summary": "Spending Analysis: the family, spending categories with their CPI series, merchants with their allocation and lifecycle triggers"},
+        {"method": "GET", "path": "/spending/unallocated", "summary": "Checks and card charges no merchant matches, grouped by their statement words"},
         {"method": "GET", "path": "/spending/find", "summary": "Every check, charge and downloaded line matching q, with where it is and why it isn't in the analysis (V059)"},
         {"method": "GET", "path": "/spending/analysis", "summary": "Every spending dollar of two periods with category, driver and member, and each category's inflation between them"},
         {"method": "PUT", "path": "/spending/tags/{source}/{entryId}", "summary": "One entry's own spending category, driver, family member or event"},

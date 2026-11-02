@@ -2,20 +2,20 @@
 //  TargetAccountEntries.swift
 //  MxAcctMGR
 //
-//  Banking ▸ Target Accounts ▸ Show Entries… (a row's context menu, or double-click the row), in a window of its own
-//  (moved, resized and kept open beside the books, one a target account; the last size and place are remembered): the
-//  checks and card charges behind a target account's This year — or, with All years, its Total paid — newest first
+//  Banking ▸ Target Categories ▸ Merchants ▸ Show Entries… (a row's context menu, or double-click the row), in a window of its own
+//  (moved, resized and kept open beside the books, one a merchant; the last size and place are remembered): the
+//  checks and card charges behind a merchant's This year — or, with All years, its Total paid — newest first
 //  (GET /payees/<id>/entries). Above the table, each month's sum (each year's, with All years) and each Spending
 //  Analysis category's: press one to show only its entries. An Amazon charge matched to its order shows what it
 //  bought, all of it on hover. Right-click entries for Spending Analysis's menu — tag them, set their category or
-//  driver, allocate the target account — or double-click one to tag it: the same
+//  driver, allocate the merchant — or double-click one to tag it: the same
 //  entries as Spending Analysis gives them (GET /spending/targets/<id>/entries) carry the changes.
 //
 
 import AppKit
 import SwiftUI
 
-/// One check or card charge with a target account as its target.
+/// One check or card charge with a merchant as its target.
 struct TargetEntry: Decodable, Identifiable, Hashable {
     var source: String
     var entryId: Int
@@ -28,7 +28,7 @@ struct TargetEntry: Decodable, Identifiable, Hashable {
     var memo: String?
     /// Spent (negative: money that came in).
     var amount: Double
-    /// Its Spending Analysis category: its own tag's, else the target account's.
+    /// Its Spending Analysis category: its own tag's, else the merchant's.
     var spending: String?
     var orders: String?
     /// What an Amazon charge bought, one item a line.
@@ -47,7 +47,7 @@ struct TargetEntries: Decodable {
 }
 
 extension BankClient {
-    /// The entries behind a target account's This year in `year` (nil: every year's, its Total paid).
+    /// The entries behind a merchant's This year in `year` (nil: every year's, its Total paid).
     static func payeeEntries(_ id: Int, year: Int?) async throws -> TargetEntries {
         try await AccountsClient.request("GET", "/payees/\(id)/entries?year=\(year.map(String.init) ?? "all")", as: TargetEntries.self)
     }
@@ -55,13 +55,13 @@ extension BankClient {
 
 extension SpendingClient {
     private struct Entries: Decodable { var entries: [SpendingEntry] }
-    /// A target account's entries in `year` (nil: every year) as Spending Analysis gives them, to tag.
+    /// A merchant's entries in `year` (nil: every year) as Spending Analysis gives them, to tag.
     static func targetEntries(_ id: Int, year: Int?) async throws -> [SpendingEntry] {
         try await AccountsClient.request("GET", "/spending/targets/\(id)/entries?year=\(year.map(String.init) ?? "all")", as: Entries.self).entries
     }
 }
 
-/// Show Entries…' windows: one a target account, brought forward when it is open already.
+/// Show Entries…' windows: one a merchant, brought forward when it is open already.
 @MainActor
 enum TargetEntriesWindow {
     private static var windows: [Int: NSWindow] = [:]
@@ -83,7 +83,7 @@ enum TargetEntriesWindow {
             w.setContentSize(NSSize(width: 1240, height: 760))
             w.center()
         }
-        // Another target account's window is open: this one goes just below and right of it.
+        // Another merchant's window is open: this one goes just below and right of it.
         if let other = windows.values.first(where: \.isVisible) {
             w.setFrameTopLeftPoint(NSPoint(x: other.frame.minX + 24, y: other.frame.maxY - 24))
         }
@@ -101,11 +101,11 @@ enum TargetEntriesWindow {
 
 struct TargetEntriesView: View {
     let payee: Payee
-    /// After a change to the target account's entries or allocation: Target Accounts reads its book again.
+    /// After a change to the merchant's entries or allocation: Merchants reads its book again.
     var changed: () -> Void = {}
     /// Closes its window.
     var close: () -> Void
-    /// The year shown (nil: all years); it starts at the one Target Accounts shows.
+    /// The year shown (nil: all years); it starts at the one Merchants shows.
     @State private var year: Int?
     @State private var data: TargetEntries?
     @State private var error: String?
@@ -117,7 +117,7 @@ struct TargetEntriesView: View {
     @State private var selected = Set<TargetEntry.ID>()
     /// The categories, drivers and family members the menus offer.
     @State private var setup: SpendingSetup?
-    /// Each entry as Spending Analysis gives it, which the menus change (none for a target account that isn't spending).
+    /// Each entry as Spending Analysis gives it, which the menus change (none for a merchant that isn't spending).
     @State private var editable: [TargetEntry.ID: SpendingEntry] = [:]
     @State private var tagging: [SpendingEntry]?
     @State private var allocating: RuleTarget?
@@ -239,13 +239,13 @@ struct TargetEntriesView: View {
                     if s?.tagged == true { Image(systemName: "tag.fill").font(.caption2).foregroundStyle(.secondary) }
                     Text(e.spending ?? Self.none).foregroundStyle(e.spending == nil ? .secondary : .primary)
                 }
-                .help(s?.categoryFrom.map { "From the \($0)" } ?? (s == nil ? "Not in Spending Analysis" : "Its target account has no category, and no tag gives one"))
+                .help(s?.categoryFrom.map { "From the \($0)" } ?? (s == nil ? "Not in Spending Analysis" : "Its merchant has no category, and no tag gives one"))
             }.width(min: 90, ideal: 130)
             TableColumn("Driver") { e in
                 let s = editable[e.id]
                 Text(s.map { setup?.driverTitle($0.driver) ?? ($0.driver ?? "") } ?? "")
                     .foregroundStyle(s?.driver == nil ? .secondary : .primary)
-                    .help(s?.driverFrom.map { "From the \($0)" } ?? (s == nil ? "Not in Spending Analysis" : "No driver from its target account or a tag: counts as usage"))
+                    .help(s?.driverFrom.map { "From the \($0)" } ?? (s == nil ? "Not in Spending Analysis" : "No driver from its merchant or a tag: counts as usage"))
             }.width(min: 80, ideal: 120)
             TableColumn("Amount") { e in
                 Text(money2(abs(e.amount))).monospacedDigit().foregroundStyle(e.amount < 0 ? .green : .primary)
@@ -258,7 +258,7 @@ struct TargetEntriesView: View {
             }.width(min: 120, ideal: 260)
         }
         .tableText()
-        // One menu on the whole row, as on Target Accounts.
+        // One menu on the whole row, as on Target Categories.
         .textSelection(.disabled)
         .contextMenu(forSelectionType: TargetEntry.ID.self) { ids in
             menu(rows.filter { ids.contains($0.id) }.compactMap { editable[$0.id] })
@@ -300,8 +300,8 @@ struct TargetEntriesView: View {
                 Button(c.name) { Task { await setField(picked, "category", c.code) } }
             }
             Divider()
-            Button("Follow the Target Account") { Task { await setField(picked, "category", "") } }
-                .help("Take the entries' own category off: their target account's allocation sets it again")
+            Button("Follow the Merchant") { Task { await setField(picked, "category", "") } }
+                .help("Take the entries' own category off: their merchant's allocation sets it again")
         }
     }
 
@@ -311,12 +311,12 @@ struct TargetEntriesView: View {
                 Button(d.title) { Task { await setField(picked, "driver", d.code) } }.help(d.help ?? "")
             }
             Divider()
-            Button("Follow the Target Account") { Task { await setField(picked, "driver", "") } }
-                .help("Take the entries' own driver off: their target account's allocation sets it again")
+            Button("Follow the Merchant") { Task { await setField(picked, "driver", "") } }
+                .help("Take the entries' own driver off: their merchant's allocation sets it again")
         }
     }
 
-    /// Sets one dimension (category or driver; "" follows the target account again) on each entry, leaving the rest of
+    /// Sets one dimension (category or driver; "" follows the merchant again) on each entry, leaving the rest of
     /// its own tag as it is (the service's merge). Entries already tagged that way are skipped.
     private func setField(_ picked: [SpendingEntry], _ field: String, _ value: String) async {
         let todo = picked.filter { e in
@@ -345,7 +345,7 @@ struct TargetEntriesView: View {
         return failed == picked.count ? last : "\(failed) of \(picked.count) entries: \(last)"
     }
 
-    /// Allocate… saved: the setup they answer with, the entries again, and Target Accounts.
+    /// Allocate… saved: the setup they answer with, the entries again, and the Merchants list.
     private func saved(_ s: SpendingSetup) {
         setup = s
         Task { await refresh(); changed() }

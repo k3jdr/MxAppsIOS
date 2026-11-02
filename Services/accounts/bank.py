@@ -10,9 +10,11 @@
                                                  status: cleared | open}: all or none (409 when one changed since)
     POST /bank/lines/<id>/accept                 add the bank's line to the register (its payee found by name), cleared
     POST /bank/lines/<id>/match                  match it to an entry {txnId}
+    POST /bank/accounts/<code>/category          give entries a category {entries: [id], category, by}: each one's own tag,
+                                                 or none where it is their merchant's
     POST /bank/accounts/<code>/import            read the bank's downloads now (srm-loader POST /load/pnc-bank)
-    GET  /bank/book                              the categories, and the target accounts with this year's totals
-    PUT  /payees/<id>                            create (id 0) or change a target account {version, name, nickname, description,
+    GET  /bank/book                              the categories, and the merchants with this year's totals
+    PUT  /payees/<id>                            create (id 0) or change a merchant {version, name, nickname, description,
                                                  status, reference (its identifier), institution, last4, category,
                                                  defaultAmount, nextPaymentDate, nextPaymentAmount, logonUrl, userName,
                                                  address1, address2, city, state, zipCode, phone, notes, bankNames,
@@ -25,15 +27,15 @@
     DELETE /payees/<id>/link                     take the link off
     GET  /payees/<id>/usage                      what still files under it: checking, card and cash-ledger entries, the
                                                  cards paid as it, the cash ledgers funded through it, its tax items
-    DELETE /payees/<id>                          remove a target account nothing files under (400 while anything does:
+    DELETE /payees/<id>                          remove a merchant nothing files under (400 while anything does:
                                                  consolidate its entries first); its link and spending rule go with it
 
-A target account (an external account: srm.payee, V028 / V033) is offered as a target by the registers its funding
+A merchant (an external account: srm.payee, V028 / V033) is offered as a target by the registers its funding
 sources name — the Checking Accounts register's (checking) and the card registers' (card); one first named in a
 register (typed, or a bank line accepted) is created with that register's source, and gains it when another register
 names it. Its password and user keys are never sent here: MxAcctMGR keeps them in the Keychain.
 
-A target account's link — a web page, an email address or a page in MxNoteONE, with words of its own and
+A merchant's link — a web page, an email address or a page in MxNoteONE, with words of its own and
 formatted hover text (srm.payee_link) — comes with it wherever it is a target: each register entry's payeeLink and
 each payee's link, {address, text, tip (the hover text as RTF), title}, or null.
 
@@ -202,7 +204,7 @@ def _payee(conn, body, source="checking"):
 
 def file_category(conn, column, txn_id, payee_id, body):
     """An entry's category from a register (body's category, when it sends one): its own tag (srm.spending_tag, column
-    bank_txn_id or card_txn_id) only where it differs from its target account's; none, or the same, takes that off."""
+    bank_txn_id or card_txn_id) only where it differs from its merchant's; none, or the same, takes that off."""
     if "category" not in body:
         return
     code = body["category"] or None
@@ -335,6 +337,23 @@ def set_status(conn, code, body):
     return {"changed": len(ids), **register(conn, code)}
 
 
+def set_category(conn, code, body):
+    """Gives the entries listed a category {entries: [id], category, by}, in one transaction: each entry's own tag, or
+    with none or its merchant's category, no tag (file_category). Answers with the register."""
+    aid = _account_id(conn, code)
+    ids = [int(i) for i in body.get("entries") or []]
+    if not ids or "category" not in body:
+        raise ValueError("entries lists the entries to change, and category is what they get")
+    rows = fetch(conn, "SELECT txn_id, payee_id FROM srm.bank_txn WHERE bank_account_id = %s AND txn_id = ANY (%s)", (aid, ids))
+    if len(rows) != len(set(ids)):
+        conn.rollback()
+        raise LookupError("not every entry is in %s" % code)
+    for r in rows:
+        file_category(conn, "bank_txn_id", r["txn_id"], r["payee_id"], body)
+    conn.commit()
+    return register(conn, code)
+
+
 def move_transaction(conn, txn_id, body):
     """Moves an entry one line up or down in its register (swaps it with its neighbour); answers with the register.
     The first line can't move up, nor the last down: nothing changes."""
@@ -426,7 +445,7 @@ def book(conn, q=None):
     year = int((q or {}).get("year") or dt.date.today().year)
     categories = fetch(conn, "SELECT code, name FROM srm.spending_category ORDER BY sort_order, name")
     payees = fetch(conn, """
-        SELECT p.payee_id AS id, p.name, p.category_code AS category, p.default_amount AS "defaultAmount",
+        SELECT p.payee_id AS id, p.name, p.category_code AS category, p.driver, p.spending_role AS role, p.default_amount AS "defaultAmount",
                p.address_1 AS "address1", p.address_2 AS "address2", p.city, p.state, p.zip_code AS "zipCode",
                p.reference, p.phone, p.logon_url AS "logonUrl", p.user_name AS "userName", p.nickname, p.description,
                p.status, p.next_payment_date AS "nextPaymentDate", p.next_payment_amount AS "nextPaymentAmount",
@@ -441,12 +460,12 @@ def book(conn, q=None):
 
 
 def payee_entries(conn, pid, q=None):
-    """The entries behind a target account's This year (yearTotal) or, with year=all, its Total paid: SPEND's checks
+    """The entries behind a merchant's This year (yearTotal) or, with year=all, its Total paid: SPEND's checks
     and card charges with it as the target, newest first — each with its register, the statement's name, its
     category, and what an Amazon or Apple charge bought (V046, V056)."""
     rows = fetch(conn, "SELECT name FROM srm.payee WHERE payee_id = %s", (int(pid),))
     if not rows:
-        raise LookupError("no target account %s" % pid)
+        raise LookupError("no merchant %s" % pid)
     raw = str((q or {}).get("year") or dt.date.today().year)
     year = None if raw == "all" else int(raw)
     entries = fetch(conn, """
@@ -478,7 +497,7 @@ def payee_entries(conn, pid, q=None):
 
 PAYEE_STATUSES = ("active", "inactive", "closed")
 FUNDING_SOURCES = ("checking", "card")
-# The target account's columns as save_payee writes them, in order.
+# The merchant's columns as save_payee writes them, in order.
 PAYEE_COLUMNS = ("name", "nickname", "description", "status", "active", "reference", "institution", "account_last4",
                  "category_code", "default_amount", "next_payment_date", "next_payment_amount", "logon_url",
                  "user_name", "address_1", "address_2", "city", "state", "zip_code", "phone", "notes", "bank_names",
@@ -493,7 +512,7 @@ def _payee_category(conn, body):
 
 
 def save_payee(conn, pid, body):
-    """A target account, created (id 0) or changed from the version it was read at. A change keeps the saved value of
+    """A merchant, created (id 0) or changed from the version it was read at. A change keeps the saved value of
     each field it doesn't send (an older MxAcctMGR sends fewer, and names three of them address, website and active:
     read as address1, logonUrl and status)."""
     name = (body.get("name") or "").strip()
@@ -503,16 +522,16 @@ def save_payee(conn, pid, body):
     if int(pid) != 0:
         rows = fetch(conn, "SELECT * FROM srm.payee WHERE payee_id = %s FOR UPDATE", (int(pid),))
         if not rows:
-            raise LookupError("no target account %s" % pid)
+            raise LookupError("no merchant %s" % pid)
         cur = rows[0]
         if int(body.get("version", -1)) != cur["version"]:
             conn.rollback()
-            raise Conflict("%s changed this target account since you opened it" % (cur["updated_by"] or "someone"),
+            raise Conflict("%s changed this merchant since you opened it" % (cur["updated_by"] or "someone"),
                            version=cur["version"])
         # Names are unique whatever their case (srm.payee's index on lower(name)): say so rather than fail on the index.
         if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s) AND payee_id <> %s", (name, int(pid))):
             conn.rollback()
-            raise Conflict("there is already a target account named %s" % name, version=cur["version"])
+            raise Conflict("there is already a merchant named %s" % name, version=cur["version"])
 
     def given(*keys):
         return next((k for k in keys if k in body), None)
@@ -526,7 +545,7 @@ def save_payee(conn, pid, body):
 
     last4 = text("account_last4", 4, "last4")
     if last4 and not re.match(r"^[0-9A-Za-z]{4}$", last4):
-        raise ValueError("last4 is the target account's last four characters (never the whole number)")
+        raise ValueError("last4 is the merchant's last four characters (never the whole number)")
     k = given("status", "active")
     status = cur.get("status", "active") if k is None else (body["status"] if k == "status" else ("active" if body["active"] else "inactive"))
     if status not in PAYEE_STATUSES:
@@ -553,7 +572,7 @@ def save_payee(conn, pid, body):
     row = tuple(values[c] for c in PAYEE_COLUMNS)
     if int(pid) == 0:
         if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s)", (name,)):
-            raise Conflict("there is already a target account %s" % name)
+            raise Conflict("there is already a merchant %s" % name)
         fetch(conn, "INSERT INTO srm.payee (%s) VALUES (%s)" % (", ".join(PAYEE_COLUMNS), ", ".join(["%s"] * len(PAYEE_COLUMNS))), row)
     else:
         fetch(conn, "UPDATE srm.payee SET %s, version = version + 1, updated_at = now() WHERE payee_id = %%s"
@@ -602,7 +621,7 @@ def delete_payee_link(conn, pid):
     return {"id": int(pid), "link": None}
 
 
-# What still files under a target account, so it can't be removed: (what, one of them, count query).
+# What still files under a merchant, so it can't be removed: (what, one of them, count query).
 PAYEE_USES = (
     ("checking entries", "checking entry", "SELECT count(*) FROM srm.bank_txn WHERE payee_id = %s"),
     ("card entries", "card entry", "SELECT count(*) FROM srm.card_txn WHERE payee_id = %s"),
@@ -615,10 +634,10 @@ PAYEE_USES = (
 
 
 def payee_usage(conn, pid):
-    """What still files under a target account (counts by kind), and whether it has a spending rule or a link."""
+    """What still files under a merchant (counts by kind), and whether it has a spending rule or a link."""
     rows = fetch(conn, "SELECT name FROM srm.payee WHERE payee_id = %s", (int(pid),))
     if not rows:
-        raise LookupError("no target account %s" % pid)
+        raise LookupError("no merchant %s" % pid)
     uses = {what: fetch(conn, count, (int(pid),))[0]["count"] for what, _, count in PAYEE_USES}
     rule = fetch(conn, "SELECT 1 FROM srm.spending_rule WHERE payee_id = %s", (int(pid),))
     link = fetch(conn, "SELECT 1 FROM srm.payee_link WHERE payee_id = %s", (int(pid),))
@@ -627,14 +646,14 @@ def payee_usage(conn, pid):
 
 
 def delete_payee(conn, pid):
-    """Removes a target account nothing files under any more (its entries consolidated into another). Refused while
+    """Removes a merchant nothing files under any more (its entries consolidated into another). Refused while
     a checking, card or cash-ledger entry, a card account, a cash ledger's funding or a tax item still names it:
     those would lose their target silently (ON DELETE SET NULL). Its link and spending rule go with it (CASCADE);
     MxAcctMGR takes its password and user keys out of the Keychain."""
     usage = payee_usage(conn, pid)
     if usage["inUse"]:
         one = {what: single for what, single, _ in PAYEE_USES}
-        raise ValueError("%s is still in use (%s): consolidate them into another target account first" % (
+        raise ValueError("%s is still in use (%s): consolidate them into another merchant first" % (
             usage["name"], ", ".join("%d %s" % (n, one[w] if n == 1 else w) for w, n in usage["uses"].items() if n)))
     fetch(conn, "DELETE FROM srm.payee WHERE payee_id = %s", (int(pid),))
     conn.commit()
@@ -653,6 +672,8 @@ def route(conn, method, parts, body, q):
         return add_transaction(conn, parts[2], body)
     if len(parts) == 4 and parts[:2] == ["bank", "accounts"] and parts[3] == "status" and method == "POST":
         return set_status(conn, parts[2], body)
+    if len(parts) == 4 and parts[:2] == ["bank", "accounts"] and parts[3] == "category" and method == "POST":
+        return set_category(conn, parts[2], body)
     if len(parts) == 4 and parts[:2] == ["bank", "accounts"] and parts[3] == "import" and method == "POST":
         return import_downloads(conn, parts[2])
     if len(parts) == 3 and parts[:2] == ["bank", "transactions"] and method == "PUT":

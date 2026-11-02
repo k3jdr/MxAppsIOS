@@ -2,7 +2,7 @@
 //  AppleLookup.swift
 //  MxAcctMGR
 //
-//  Apple Purchase Lookup (right-click APPLE.COM/BILL charges in Spending Analysis ▸ Entries or Target Accounts ▸ Show
+//  Apple Purchase Lookup (right-click APPLE.COM/BILL charges in Spending Analysis ▸ Entries or the Merchants list ▸ Show
 //  Entries… ▸ Look Up Apple Purchases…): what the Apple charges bought — the App Store, in-app purchases,
 //  subscriptions, iCloud+, Apple TV — read from your Apple Account's purchase history (reportaproblem.apple.com) in a
 //  window of the app's own. Apple e-mails a receipt for some purchases, not every renewal, and has no API for an
@@ -408,7 +408,7 @@ struct AppleLookupView: View {
             ScrollView {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                     GridRow {
-                        Text("Date"); Text("From"); Text("Target account"); Text("Amount").gridColumnAlignment(.trailing); Text("Bought")
+                        Text("Date"); Text("From"); Text("Merchant"); Text("Amount").gridColumnAlignment(.trailing); Text("Bought")
                     }
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     ForEach(lookup.charges) { c in

@@ -5,7 +5,7 @@
 //  Spending Analysis ▸ Overview ▸ right-click All spending, This year, a category or a register left out of the comparison
 //  (the tiles and the Key Metrics table's rows) ▸ Show N Transactions…, in a window of its own (moved, resized and kept
 //  open beside the page; the last size and place are remembered): every entry behind that figure, newest first, adding
-//  up to it. Above the table, each target account's sum, each category's, each month's and, with several registers,
+//  up to it. Above the table, each merchant's sum, each category's, each month's and, with several registers,
 //  each register's: press one to show only its entries. Each column header's button sorts and filters it. Double-click
 //  an entry to open it in its register; tagging stays on Entries. What the window shows is the page's figures when it
 //  was opened: Show … Transactions again reads them anew.
@@ -73,7 +73,7 @@ struct SpendingTransactionsView: View {
         [
             "Date": .date({ $0.date }, display: { shortDay($0.date) }),
             "From": .text { registerOf($0) },
-            "Target": .text { $0.payee },
+            "Name": .text { $0.payee },
             "Statement name": .text { $0.statementName ?? $0.description },
             "Category": .text { categoryOf($0) },
             "Driver": .text { setup.driverTitle($0.driver) },
@@ -97,14 +97,14 @@ struct SpendingTransactionsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("\(entries.count) \(entries.count == 1 ? "transaction" : "transactions"), \(period): \(money2(Self.total(entries)))")
                 .monospacedDigit().foregroundStyle(.secondary)
-            sums("By target account", by: targetOf, selection: $target, largestFirst: true)
+            sums("By merchant", by: targetOf, selection: $target, largestFirst: true)
             sums("By spending category", by: categoryOf, selection: $category, largestFirst: true)
             sums("By month", by: monthOf, selection: $month, largestFirst: false, label: monthLabel)
             if Set(entries.map(registerOf)).count > 1 {
                 sums("By register", by: registerOf, selection: $register, largestFirst: true)
             }
             HStack {
-                TextField("Search targets, statement names and memos", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
+                TextField("Search names, statement names and memos", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 320)
                 GridFilterStatus(shown: shown.count, of: picked.count, options: $grid)
                 Spacer()
                 Text("Showing \(shown.count) of \(entries.count): \(money2(Self.total(shown)))").monospacedDigit().foregroundStyle(.secondary)
@@ -145,7 +145,7 @@ struct SpendingTransactionsView: View {
         Table(rows, selection: $selected) {
             TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 84)
             TableColumn("From") { e in Text(registerOf(e)).foregroundStyle(.secondary) }.width(min: 60, ideal: 100)
-            TableColumn("Target") { e in Text(e.payee ?? "").help(e.notes ?? "") }.width(min: 120, ideal: 180)
+            TableColumn("Name") { e in Text(e.payee ?? "").help(e.notes ?? "") }.width(min: 120, ideal: 180)
             TableColumn("Statement name") { e in Text(e.statementName ?? e.description ?? "").foregroundStyle(.secondary) }.width(min: 100, ideal: 170)
             TableColumn("Category") { e in
                 Text(categoryOf(e)).foregroundStyle(e.category == nil ? .secondary : .primary).help(e.categoryFrom.map { "From the \($0)" } ?? "")
@@ -158,7 +158,7 @@ struct SpendingTransactionsView: View {
             }.width(min: 80, ideal: 100)
         }
         .tableText()
-        // One menu on the whole row, as on Target Accounts.
+        // One menu on the whole row, as on Target Categories.
         .textSelection(.disabled)
         .contextMenu(forSelectionType: SpendingEntry.ID.self) { ids in
             let chosen = rows.filter { ids.contains($0.id) }
@@ -183,7 +183,7 @@ struct SpendingTransactionsView: View {
     }
 
     private func text(_ list: [SpendingEntry]) -> String {
-        let head = ["Date", "From", "Target", "Statement name", "Category", "Driver", "Amount"].joined(separator: "\t")
+        let head = ["Date", "From", "Name", "Statement name", "Category", "Driver", "Amount"].joined(separator: "\t")
         let lines = list.map { e in
             [e.date, registerOf(e), e.payee ?? "", e.statementName ?? e.description ?? "", categoryOf(e),
              setup.driverTitle(e.driver), String(format: "%.2f", e.amount)].joined(separator: "\t")

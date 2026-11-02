@@ -51,18 +51,19 @@
     PUT    /spending/sources/<source>/<code>       include or leave out a register {included, by} (source bank, card
                                                    or ledger); answers with the sources
     GET    /spending/transfers?start=&end=&priorStart=&priorEnd=
-                                                   target accounts left out of the analysis because their category is a
+                                                   merchants left out of the analysis because their category is a
                                                    transfer or income account (what moved each period), the ones that
                                                    look like they should be (each with why: a card is paid with it, a
                                                    cash ledger is funded from it, its name), and the accounts to file
                                                    them under
-    PUT    /spending/transfers/<payeeId>           a target account's role {role: spending | transfer | income, by}:
+    PUT    /spending/transfers/<payeeId>           a merchant's role {role: spending | transfer | income, by}:
                                                    transfer or income leaves its payments out; answers as GET
-    PUT    /spending/targets/<payeeId>             a target account's spending allocation (V052) {role, category, driver,
+    POST   /spending/targets/bulk                  several merchants' role, category or driver {ids, role?, category?, driver?, by}
+    PUT    /spending/targets/<payeeId>             a merchant's spending allocation (V052) {role, category, driver,
                                                    memberId, patterns: statement names containing any of them are its
                                                    payments, by}: only the fields sent change; unallocated payments its
                                                    patterns now match are given to it (`assigned`)
-    POST   /spending/targets                       a new target account {name, patterns, role, category, driver,
+    POST   /spending/targets                       a new merchant {name, patterns, role, category, driver,
                                                    memberId, entries: [{source, id}], by}, given those payments and
                                                    every unallocated one it matches
     POST   /spending/targets/<payeeId>/assign      give it these unallocated payments {entries: [{source, id}], by}
@@ -72,12 +73,12 @@
     GET    /spending/targets/<payeeId>/entries?year=
                                                    its entries as analysis gives them (every register's), newest
                                                    first: one year's (this year's unless year=) or, with year=all, every
-                                                   one — Banking ▸ Target Accounts ▸ Show Entries… tags them
+                                                   one — Banking ▸ Target Categories ▸ Merchants ▸ Show Entries… tags them
     GET    /spending/unallocated?start=&end=&priorStart=&priorEnd=
-                                                   checks and card charges no target account matches (not in the
+                                                   checks and card charges no merchant matches (not in the
                                                    analysis), grouped by their statement's own words, most money
                                                    first: names, entries, both periods, a pattern to start from and
-                                                   target accounts like it
+                                                   merchants like it
     GET    /spending/sources/<source>/<code>/links what disconnecting it undoes (its links to the other sources) and
                                                    what stays with its register
     POST   /spending/sources/<source>/<code>/disconnect
@@ -202,8 +203,8 @@ def _drivers(conn):
 # ------------------------------------------------------------------------------------------------------------ setup
 
 def setup(conn, details=False):
-    """The family, categories, drivers, triggers and target accounts with their spending role and
-    allocation (V052). With details (MxAcctMGR's, not the family page's login): each target account's bank, last four
+    """The family, categories, drivers, triggers and merchants with their spending role and
+    allocation (V052). With details (MxAcctMGR's, not the family page's login): each merchant's bank, last four
     digits, logon page, nickname, notes and link (srm.payee_link, V032)."""
     members = fetch(conn, """
         SELECT member_id AS id, name, relation, birth_year AS "birthYear", birth_month AS "birthMonth", notes, active,
@@ -367,9 +368,9 @@ def save_category(conn, code, body):
 
 
 # What stores a category, and the column that does.
-CATEGORY_USES = (("target accounts", "srm.payee"), ("tags", "srm.spending_tag"), ("lifecycle triggers", "srm.lifecycle_trigger"),
+CATEGORY_USES = (("merchants", "srm.payee"), ("tags", "srm.spending_tag"), ("lifecycle triggers", "srm.lifecycle_trigger"),
                  ("card company categories", "srm.card_category"), ("cash-ledger lines", "srm.expense_line"))
-DRIVER_USES = (("target accounts", "srm.payee"), ("tags", "srm.spending_tag"))
+DRIVER_USES = (("merchants", "srm.payee"), ("tags", "srm.spending_tag"))
 
 
 def category_usage(conn, code):
@@ -407,7 +408,7 @@ def _drop_empty(conn):
 
 def card_categories(conn):
     """The card companies' categories, those in their downloads with none of ours first, each with how many lines have
-    it and the category it maps to (srm.post_card_lines gives a new line's target account that category if it has none)."""
+    it and the category it maps to (srm.post_card_lines gives a new line's merchant that category if it has none)."""
     return {"categories": fetch(conn, """
         WITH seen AS (SELECT lower(btrim(category)) AS c, count(*) AS n FROM srm.card_line
                        WHERE btrim(coalesce(category, '')) <> '' GROUP BY 1)
@@ -417,7 +418,7 @@ def card_categories(conn):
 
 
 def save_card_category(conn, body):
-    """Maps a card company's category {issuerCategory, category, by}. Target accounts with no category whose card lines
+    """Maps a card company's category {issuerCategory, category, by}. Merchants with no category whose card lines
     have it take the new one as well."""
     issuer = (body.get("issuerCategory") or "").strip().lower()
     if not issuer:
@@ -602,7 +603,8 @@ def save_tag(conn, source, entry_id, body):
 ENTRY_SQL = """
     SELECT source, entry_id AS "entryId", txn_date AS date, register, payee_id AS "payeeId", payee, description,
            amount,
-           category_code AS category, category_from AS "categoryFrom", driver, driver_from AS "driverFrom",
+           category_code AS category, replace(category_from, 'target account', 'merchant') AS "categoryFrom", driver,
+           replace(driver_from, 'target account', 'merchant') AS "driverFrom",
            member_id AS "memberId", event, notes, tagged, rule_pattern AS "rulePattern",
            statement_name AS "statementName"
       FROM srm.v_spending_entry"""
@@ -771,7 +773,7 @@ def _run(conn, load_id=None, loader=None):
 TABLES = [
     ("srm.v_spending_entry", "view", "Every spending dollar of the three registers, with its category, driver and member resolved — what the analysis adds up",
      "SELECT count(*) AS rows, max(txn_date) AS newest, NULL::timestamptz AS changed FROM srm.v_spending_entry"),
-    ("srm.bank_txn", "table", "The check register: checks, debits and fees to target accounts whose role is Spending count as spending",
+    ("srm.bank_txn", "table", "The check register: checks, debits and fees to merchants whose role is Spending count as spending",
      "SELECT count(*) AS rows, max(txn_date) AS newest, max(updated_at) AS changed FROM srm.bank_txn WHERE status <> 'void'"),
     ("srm.bank_line", "table", "The bank's own lines from its downloads (pnc-bank); they clear register entries, they aren't spending themselves",
      "SELECT count(*) AS rows, max(posted_date) AS newest, (SELECT finished_at FROM srm.load_run WHERE load_id = max(l.load_id)) AS changed FROM srm.bank_line l"),
@@ -779,9 +781,9 @@ TABLES = [
      "SELECT count(*) AS rows, max(txn_date) AS newest, max(updated_at) AS changed FROM srm.card_txn WHERE status <> 'void'"),
     ("srm.card_line", "table", "The card companies' lines from their downloads (card-downloads), posted to the card registers",
      "SELECT count(*) AS rows, max(posted_date) AS newest, (SELECT finished_at FROM srm.load_run WHERE load_id = max(l.load_id)) AS changed FROM srm.card_line l"),
-    ("srm.payee", "table", "The target accounts: who each payment went to, its role (spending, transfer, income) and the category, driver and member its spending is allocated to",
+    ("srm.payee", "table", "The merchants: who each payment went to, its role (spending, transfer, income) and the category, driver and member its spending is allocated to",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.payee"),
-    ("srm.v_unallocated_payment", "view", "Checks and card charges with no target account yet: not in the analysis until allocated (Sources ▸ Unallocated Payments)",
+    ("srm.v_unallocated_payment", "view", "Checks and card charges with no merchant yet: not in the analysis until allocated (Sources ▸ Unallocated Payments)",
      "SELECT count(*) AS rows, max(txn_date) AS newest, NULL::timestamptz AS changed FROM srm.v_unallocated_payment"),
     ("srm.spending_tag", "table", "One entry's own category, driver, member or event, overriding the rules",
      "SELECT count(*) AS rows, NULL::date AS newest, max(updated_at) AS changed FROM srm.spending_tag"),
@@ -1384,9 +1386,9 @@ def set_source(conn, source, code, body, q):
 
 
 # ------------------------------------------------------------------------------------------------- transfers and income
-# A target account whose role is transfer or income (V052) is not spending: the view leaves its checks and card
+# A merchant whose role is transfer or income (V052) is not spending: the view leaves its checks and card
 # entries out. Sources ▸ Transfers & Income lists those and suggests the ones that would count a
-# dollar twice — the target account checking pays a card with (its charges count), a cash ledger's funding account
+# dollar twice — the merchant checking pays a card with (its charges count), a cash ledger's funding account
 # (its items count), names that look like moving money (transfers, investment buys and sells, card payments, pay and
 # deposits) and the ones money only ever comes in from.
 
@@ -1394,7 +1396,7 @@ TRANSFER_NAME = re.compile(r"^tx\b|\btransfer\b|\bach\b|\bvanguard (buy|sell)\b|
 PAY_NAME = re.compile(r"\bpay( \[|\s*$)|\bpayroll\b|\bsalary\b|\bbonus\b|\bdirect dep", re.I)
 CARD_NAME = re.compile(r"\bvisa\b|\bmastercard\b|\bamex\b|\bcard\b", re.I)
 DEPOSIT_NAME = re.compile(r"\bdeposit\b", re.I)
-# What each target account moved, signed as spending: a check out is positive, a deposit in negative.
+# What each merchant moved, signed as spending: a check out is positive, a deposit in negative.
 TARGET_ACTIVITY = """
     SELECT payee_id, txn_date, -amount AS spent FROM srm.bank_txn WHERE status <> 'void' AND payee_id IS NOT NULL
     UNION ALL
@@ -1453,21 +1455,21 @@ def transfers(conn, q):
 
 
 def file_target(conn, pid, body, q):
-    """A target account's role (V052): spending puts its payments in the analysis, transfer or income leaves them out."""
+    """A merchant's role (V052): spending puts its payments in the analysis, transfer or income leaves them out."""
     pid = int(pid)
     role = body.get("role")
     if role not in ROLES:
         raise ValueError("role must be one of " + ", ".join(ROLES))
     if not fetch(conn, """UPDATE srm.payee SET spending_role = %s, version = version + 1, updated_by = %s, updated_at = now()
                            WHERE payee_id = %s RETURNING payee_id""", (role, _by(body), pid)):
-        raise LookupError("no target account %s" % pid)
+        raise LookupError("no merchant %s" % pid)
     conn.commit()
     return dict(transfers(conn, q), filed={"id": pid, "role": role})
 
 
 # ------------------------------------------------------------------------------------------------- allocation
-# Spending is allocated on target accounts (V052): a role, a category, a driver, a family member, and the statement
-# names it matches. A payment no target account matches is unallocated and not in the analysis.
+# Spending is allocated on merchants (V052): a role, a category, a driver, a family member, and the statement
+# names it matches. A payment no merchant matches is unallocated and not in the analysis.
 
 ROLES = ("spending", "transfer", "income")
 # A statement's own words, for grouping unallocated payments: a processor's prefix ("SQ *") and store numbers off.
@@ -1510,7 +1512,7 @@ def _common_prefix(names):
 
 
 def _assign_matching(conn, by):
-    """Gives each unallocated payment the target account its name now matches (srm.payee_for); answers how many."""
+    """Gives each unallocated payment the merchant its name now matches (srm.payee_for); answers how many."""
     n = 0
     for source, sql in PAYMENT_NAME.items():
         for r in fetch(conn, """SELECT srm.payee_for(name) AS pid, array_agg(entry_id) AS ids FROM srm.v_unallocated_payment
@@ -1529,8 +1531,8 @@ def _patterns(body):
 
 
 def target_entries(conn, pid, q):
-    """A target account's entries as analysis gives them (with what Amazon charges bought, and from every register,
-    included or not), newest first: one year's or, with year=all, every one — for Banking ▸ Target Accounts ▸ Show
+    """A merchant's entries as analysis gives them (with what Amazon charges bought, and from every register,
+    included or not), newest first: one year's or, with year=all, every one — for Banking ▸ Target Categories ▸ Merchants ▸ Show
     Entries…, whose menus tag them."""
     raw = str(q.get("year") or dt.date.today().year)
     year = None if raw == "all" else int(raw)
@@ -1539,11 +1541,11 @@ def target_entries(conn, pid, q):
 
 
 def allocate_target(conn, pid, body):
-    """A target account's role, category, driver, member and patterns (only the fields sent change); unallocated
+    """A merchant's role, category, driver, member and patterns (only the fields sent change); unallocated
     payments its patterns now match are given to it. Answers with the setup and how many were."""
     pid = int(pid)
     if not fetch(conn, "SELECT 1 FROM srm.payee WHERE payee_id = %s", (pid,)):
-        raise LookupError("no target account %s" % pid)
+        raise LookupError("no merchant %s" % pid)
     sets, params = [], []
     if "role" in body:
         if body["role"] not in ROLES:
@@ -1566,14 +1568,40 @@ def allocate_target(conn, pid, body):
     return dict(setup(conn, details=True), assigned=assigned)
 
 
+def allocate_targets(conn, body):
+    """Several merchants' role, category or driver {ids, role?, category?, driver?, by} in one transaction (only
+    the fields sent change). Answers with the setup."""
+    ids = [int(i) for i in body.get("ids") or []]
+    if not ids:
+        raise ValueError("ids lists the merchants to change")
+    sets, params = [], []
+    if "role" in body:
+        if body["role"] not in ROLES:
+            raise ValueError("role must be one of " + ", ".join(ROLES))
+        sets.append("spending_role = %s"); params.append(body["role"])
+    if "category" in body:
+        sets.append("category_code = %s"); params.append(_category(conn, body))
+    if "driver" in body:
+        sets.append("driver = %s"); params.append(_driver(conn, body))
+    if not sets:
+        raise ValueError("send a role, category or driver")
+    found = fetch(conn, "UPDATE srm.payee SET %s, version = version + 1, updated_by = %%s, updated_at = now() "
+                        "WHERE payee_id = ANY (%%s) RETURNING payee_id" % ", ".join(sets), params + [_by(body), ids])
+    if len(found) != len(set(ids)):
+        conn.rollback()
+        raise LookupError("not every merchant exists")
+    conn.commit()
+    return setup(conn, details=True)
+
+
 def add_target(conn, body):
-    """A new target account {name, patterns, role, category, driver, memberId, entries: [{source, id}]}: the entries
+    """A new merchant {name, patterns, role, category, driver, memberId, entries: [{source, id}]}: the entries
     sent and every unallocated payment its name or patterns match are given to it."""
     name = " ".join(str(body.get("name") or "").split())[:120]
     if not name:
         raise ValueError("name is required")
     if fetch(conn, "SELECT 1 FROM srm.payee WHERE lower(name) = lower(%s)", (name,)):
-        raise Conflict("there is already a target account named %s" % name)
+        raise Conflict("there is already a merchant named %s" % name)
     role = body.get("role") or "spending"
     if role not in ROLES:
         raise ValueError("role must be one of " + ", ".join(ROLES))
@@ -1596,10 +1624,10 @@ def add_target(conn, body):
 
 
 def assign_payments(conn, pid, body):
-    """Gives these unallocated payments {entries: [{source, id}]} to a target account."""
+    """Gives these unallocated payments {entries: [{source, id}]} to a merchant."""
     pid = int(pid)
     if not fetch(conn, "SELECT 1 FROM srm.payee WHERE payee_id = %s", (pid,)):
-        raise LookupError("no target account %s" % pid)
+        raise LookupError("no merchant %s" % pid)
     by, assigned = _by(body), 0
     for source in ("bank", "card"):
         ids = [int(e["id"]) for e in body.get("entries") or [] if e.get("source") == source and str(e.get("id", "")).isdigit()]
@@ -1610,8 +1638,8 @@ def assign_payments(conn, pid, body):
 
 
 def unallocated(conn, q):
-    """The payments no target account matches, grouped by their statement's own words, the most money first: each
-    group's names, entries, what it moved in both periods, a pattern to start from and target accounts like it."""
+    """The payments no merchant matches, grouped by their statement's own words, the most money first: each
+    group's names, entries, what it moved in both periods, a pattern to start from and merchants like it."""
     start, end, prior_start, prior_end = _window(q)
     rows = fetch(conn, "SELECT source, entry_id AS id, txn_date AS date, register, name, amount FROM srm.v_unallocated_payment")
     out = _unallocated_groups(conn, rows, start, end, prior_start, prior_end)
@@ -1620,7 +1648,7 @@ def unallocated(conn, q):
 
 
 def _unallocated_groups(conn, rows, start, end, prior_start, prior_end):
-    """Payments with no target account, grouped by their statement's own words, the most money first."""
+    """Payments with no merchant, grouped by their statement's own words, the most money first."""
     payees = fetch(conn, "SELECT payee_id AS id, name FROM srm.payee WHERE status <> 'closed'")
     groups = {}
     for r in rows:
@@ -1649,9 +1677,9 @@ def _unallocated_groups(conn, rows, start, end, prior_start, prior_end):
 
 
 def find_payments(conn, q):
-    """Find a Payment…: every check, card charge and downloaded line whose statement name, target account or memo
+    """Find a Payment…: every check, card charge and downloaded line whose statement name, merchant or memo
     contains q (ignoring case and spacing), newest first, each saying where it is and, if it isn't in the analysis,
-    why; with those no target account matches grouped as Unallocated Payments are, to allocate."""
+    why; with those no merchant matches grouped as Unallocated Payments are, to allocate."""
     text = " ".join(str(q.get("q") or "").split())
     if len(text) < 2:
         raise ValueError("search for at least two letters")
@@ -1686,9 +1714,9 @@ def _where_why(r):
     if state == "left_out":
         return "Its register is left out on Sources."
     if state == "unallocated":
-        return "No target account matches its statement name."
+        return "No merchant matches its statement name."
     if state == "not_spending":
-        return "Its target account, %s, is %s, not spending." % (r["payee"], {"transfer": "a transfer", "income": "income"}.get(r["role"], r["role"]))
+        return "Its merchant, %s, is %s, not spending." % (r["payee"], {"transfer": "a transfer", "income": "income"}.get(r["role"], r["role"]))
     if state == "card_payment":
         return "A payment on the card, not spending."
     if state == "void":
@@ -2235,6 +2263,8 @@ def route(conn, method, parts, body, q):
         return unallocated(conn, q)
     if parts == ["spending", "find"] and method == "GET":
         return find_payments(conn, q)
+    if parts == ["spending", "targets", "bulk"] and method == "POST":
+        return allocate_targets(conn, body)
     if parts == ["spending", "targets"] and method == "POST":
         return add_target(conn, body)
     if len(parts) == 3 and parts[1] == "targets" and method == "PUT":

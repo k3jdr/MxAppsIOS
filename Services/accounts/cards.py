@@ -26,11 +26,11 @@
                                                        PDF's text, pdf the file in base64, kept in the drop folder; each file
                                                        answers read, already, refused or otherNumber with why. Answers as
                                                        the register, with imported
-    GET  /cards/targets                               the card registers' targets that aren't target accounts: each name as
+    GET  /cards/targets                               the card registers' targets that aren't merchants: each name as
                                                        the card company gives it, with its entries, total, dates and kinds
-    POST /cards/targets                                make them target accounts {names: [...], by}: each a recipient of credit
+    POST /cards/targets                                make them merchants {names: [...], by}: each a recipient of credit
                                                        card payments, in the category its entries mostly have, its entries
-                                                       linked to it (a name a target account has already gets the card source)
+                                                       linked to it (a name a merchant has already gets the card source)
 
 Amounts are signed as a statement reads them: positive adds to the balance owed (charges, fees, interest), negative
 lowers it (payments, credits). An entry is never deleted: it is voided.
@@ -827,7 +827,7 @@ OWN_KINDS = ("payment", "interest", "fee", "adjustment")
 
 
 def card_targets(conn):
-    """The names card entries carry without a target account (as the card company gives them), each with its entries,
+    """The names card entries carry without a merchant (as the card company gives them), each with its entries,
     total, first and last date and kinds; `merchant` is false for the card company's own lines."""
     rows = fetch(conn, """
         SELECT t.payee_name AS name, count(*) AS entries, sum(t.amount) AS total, min(t.txn_date) AS first,
@@ -841,10 +841,10 @@ def card_targets(conn):
 
 
 def add_card_targets(conn, body):
-    """Makes card targets target accounts (recipients of credit card payments) and links their entries to them."""
+    """Makes card targets merchants (recipients of credit card payments) and links their entries to them."""
     names = [n.strip() for n in body.get("names") or [] if isinstance(n, str) and n.strip()]
     if not names:
-        raise ValueError("names lists the card targets to add")
+        raise ValueError("names lists the card names to add")
     by = str(body.get("by") or "MxAcctMGR")[:80]
     added = linked = 0
     for name in names:

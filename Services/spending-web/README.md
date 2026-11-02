@@ -21,7 +21,7 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
 - **Secret path.** Without the key, every path is a bare 404, so the page gives no hint that it exists. The key never
   goes to the server's log, and pages are sent with `Referrer-Policy: no-referrer`.
 - **Limited login.** The server signs in as `spending_web` (V039, V041). That login can read what the page shows, add
-  notes, write entries' tags, and change a lifecycle trigger's category and kind, and nothing else. It sees target accounts by name only: their logons and addresses are not readable. Its
+  notes, write entries' tags, and change a lifecycle trigger's category and kind, and nothing else. It sees merchants by name only: their logons and addresses are not readable. Its
   password exists only in the PC's config file, readable by the PC account, SYSTEM and Administrators.
 - **The link doesn't change, key included.** Publishing (`publish-to-pc.sh`), releases, restarts, reboots and
   re-running the installer all keep it. Nothing expires or rotates it. The publish script never copies the PC's
@@ -35,7 +35,7 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
 The tabs are Overview (the attribution), Deep Dive, Forward Curve, Year-End Tax (with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
 the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution and forward curve
 (`SpendingModel.swift`), and the Deep Dive charts a category's lifecycle triggers ahead. Rules shows the expense
-account, target account and statement text rules read-only, with both years' spending and *Suggest a change* on each;
+account, merchant and statement text rules read-only, with both years' spending and *Suggest a change* on each;
 MxAcctMGR's Target Categories page stays MxAcctMGR's only. Entries,
 the Deep Dive's list and Allocation show every register even when *Only registers covering both years* leaves one out of
 the comparison, with a note on the lists; the *All spending* tile and the Key Metrics table's last row still count it, and

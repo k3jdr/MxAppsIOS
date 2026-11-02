@@ -19,11 +19,11 @@ services) as interactive, explained steps, and can run them through the same **L
 
 **Renamed from MxPortMGR** (10/25/26): the personal accounts app — Banking as well as Investments — so it is named for
 accounts. Folder, Xcode project, target, product, bundle identifier (`com.k3jdr.MxAcctMGR`) and link scheme
-(`mxacctmgr://`; `mxportmgr://` links saved before still open it) all changed. Target accounts' passwords and user keys
+(`mxacctmgr://`; `mxportmgr://` links saved before still open it) all changed. Merchants' passwords and user keys
 saved under the old name move to the new Keychain service the first time they are read. The security master's values
 naming the app (`managed_by`, a benchmark's `provider`) are renamed by migration V034, and the apps and services read
 both names until it runs. The app's window and display preferences start fresh (macOS keeps each app's own); everything
-else — portfolios, registers, target accounts, links, notes — is in the security master. Commits before the rename say
+else — portfolios, registers, merchants, links, notes — is in the security master. Commits before the rename say
 "MxPortMGR:".
 
 ## The window
@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Spending Analysis — why the family's spending changed and the children's forward curve; Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a target account with its last four digits, a note on hover and its link; Loan Accounts — mortgages and vehicle loans, their lenders' billing statements read from the PDFs, a forecast of every payment to payoff and each year's interest for Year-End Tax; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Accounts — where the registers' money goes to or comes from, each with its details, its category, its funding sources and a link of its own; Target Categories — the one list of categories across every account, with the card companies' mapped to them and the spending drivers; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (the Morning Briefing and 6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Spending Analysis — why the family's spending changed and the children's forward curve; Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a merchant with its last four digits, a note on hover and its link; Loan Accounts — mortgages and vehicle loans, their lenders' billing statements read from the PDFs, a forecast of every payment to payoff and each year's interest for Year-End Tax; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Categories — the one list of categories across every account, the merchants in them, the card companies' categories mapped to them and the spending drivers; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (the Morning Briefing and 6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -450,16 +450,19 @@ are sent there the same way, unless the security master already has one for that
 The register's bar has **Hide entries before** a date (or **Recent** ▸ the last 7, 30 or 90 days, this month, this
 year) and **Rows**: how many of the register's rows show at once (6–40, 22 at first; the rest scroll inside it). Fewer
 rows leave room for the rest of the page, so it needs less scrolling. The same **Rows** control sits above the Credit Card
-Accounts register and its Statements, the Cash Ledger register, and the Target Accounts and Secure Accounts
+Accounts register and its Statements, the Cash Ledger register, and the Merchants and Secure Accounts
 tables: one choice for all of them, remembered — changing it in one table changes every one. Rows are as tall as Settings ▸ Text ▸ Registers
-and tables makes them. Its columns: Line, Date, Num, Target, Category, Payment, Deposit, ✓ (cleared) and Balance; an
+and tables makes them. Its columns: Line, Date, Num, Name, Category, Payment, Deposit, ✓ (cleared) and Balance; an
 entry's memo is in *Edit Entry…* (double-click) and in *Copy Entry*. The **New entry** line above it takes
-the date, the kind (or check number), the target and the amount; picking a known target fills in its usual amount and
-files the entry under the target's category. It starts as a **Debit** with no check number, on the date of the entry
+the date, the kind (or check number), the merchant and the amount; picking a known merchant fills in its usual amount and
+files the entry under the merchant's category. It starts as a **Debit** with no check number, on the date of the entry
 entered before; its gear button opens **Settings ▸ Banking**, where the kind, the check number (empty or the register's
 next) and the date (the entry before's or today) it starts with are set.
 
-Right-click selected rows for **Sum of N Payments: $…** and **Sum of N Deposits: $…**, each column added up over those
+Right-click selected rows for **Set Category of N Entries** ▸ a category from Banking ▸ Target Categories: each entry
+keeps it as its own tag, or as no tag where it is already its merchant's, and **Their Merchants' Categories**
+takes the tags' categories off (the entry's driver, member and event stay). It changes those entries only, not the merchant
+accounts. Right-click selected rows for **Sum of N Payments: $…** and **Sum of N Deposits: $…**, each column added up over those
 rows, right in the menu; choosing one copies its figure. A void entry is left out, as it is of the balance, and the item
 says how many were. A column with nothing in the selected rows has its item dimmed at $0.00.
 
@@ -478,7 +481,7 @@ Card No., a QFX's account) is refused — pick that card — and so is a file th
 
 **Import *N* New Lines** saves the file in the card's drop folder (`src-cards/<CODE>/`) and runs `srm.py load
 card-downloads` through srm-loader (it shows in the shared activity log): each line is read once and posts to the
-register — matching a charge entered by hand, else as a new entry with its target and category — and the card's
+register — matching a charge entered by hand, else as a new entry with its merchant and category — and the card's
 payments link to the checking entries that paid them once *Paid from checking as* is set.
 
 ### Importing a folder of statements (Banking ▸ Credit Card Accounts ▸ Import from Folder…)
@@ -510,8 +513,8 @@ imported again.
 **Remove…** beside Edit… first asks, in a sheet, with what removing the card would clean up (`GET
 /cards/accounts/<code>/removal`): its register entries (and how many were entered here rather than downloaded), the
 lines read from the card company's downloads, the statements entered, and the downloads in its drop folder — and what
-stays: its checking target and the checking entries that paid it, the cash-ledger entries naming its charges (both
-unlinked), the target accounts its charges were filed to, and the activity log. **Cancel** is the default; **Remove
+stays: its checking merchant and the checking entries that paid it, the cash-ledger entries naming its charges (both
+unlinked), the merchants its charges were filed to, and the activity log. **Cancel** is the default; **Remove
 *card*** takes it away (`DELETE /cards/accounts/<code>?confirm=<code>`), which can't be undone. Its drop folder is moved
 to `src-cards/_removed/<CODE>-<date-time>/`, not deleted, where card-downloads doesn't read it. Its place on
 Spending Analysis ▸ Sources goes with it, so a card added again with the same code starts included and connected.
@@ -529,7 +532,7 @@ Mortgages and vehicle loans (V053, `LoanViews.swift`, the accounts service's `lo
 **Mortgage** (a home loan, secured by the house) or **Vehicle Loan** (an auto, boat, RV or motorcycle loan): its name,
 a code, the lender, the last four digits of the loan number (a statement for another number is refused), the property
 or vehicle, the terms (amount borrowed, rate, term, first payment, maturity, principal and interest, escrow, the extra
-principal the forecast assumes), the target accounts the check register pays it with (two when the servicer changed:
+principal the forecast assumes), the merchants the check register pays it with (two when the servicer changed:
 Mortgage, then Wells Fargo), its statements folder, and whether its interest is deductible (a mortgage's is, at first).
 The terms can wait: the first statement fills in the rate, payment, maturity, lender and last four digits left empty.
 
@@ -557,7 +560,7 @@ The page shows:
   the forecast for the payments still to come, and **Enter 1098…** for the lender's Form 1098 (box 1 interest, box 6
   points, box 5 mortgage insurance, box 10 property tax from escrow), which then counts instead of the estimate;
 - **Statements** (✕ takes one off, its PDF kept), **What the Lender Applied**, and **Paid from Checking**: the checks
-  to the loan's target accounts, each matched to the lender's activity (the same total within five days), or newer
+  to the loan's merchants, each matched to the lender's activity (the same total within five days), or newer
   than the latest statement, or orange when no statement shows it.
 
 **Remove…** removes the loan with its statements and Forms 1098; the PDFs stay in its folder and the checks in the
@@ -572,126 +575,97 @@ one of them since the register was loaded. A card charge or check an entry was l
 entry's spending tag and any Year-End Tax move of it go with it, and assets or training records that named it keep no
 entry.
 
-### Target accounts (Banking ▸ Target Accounts)
+### Merchants (Banking ▸ Target Categories ▸ Merchants)
 
-**Spending is allocated on target accounts (V052).** Every payment from the checking accounts and the credit cards
-goes to a target account — the provider, merchant or vendor paid — and only payments to a target account whose role is
-*Spending* count in Spending Analysis; *Transfer* and *Income* target accounts are cash flow. A target account's
-category, driver and family member (Spending Analysis ▸ Allocation) allocate its spending, and its *statement names
-containing* patterns make one target account cover every way a statement spells it. Target accounts were taken out on 10/27/26 (V048) and put back the same day
-(V050), restored from the backup saved before: every account, link, check, cash-ledger entry, funding account and tax
-item, with card charges given their target accounts by name as posting does.
+**Spending is allocated on merchants (V052).** Every payment from the checking accounts and the credit cards goes to a
+merchant — the provider, vendor or person paid, shown as the entry's **Name** in the registers — and only payments to a
+merchant whose role is *Spending* count in Spending Analysis; *Transfer* and *Income* merchants are cash flow. A
+merchant remembers its category, driver and family member, which allocate its spending, and its *statement names
+containing* patterns make one merchant cover every way a statement spells it. They are `srm.payee` underneath. They had
+their own page, Name Accounts (called External Accounts before 2026-10-25, taken out by V048 and put back the same day
+by V050), until 2026-11-01, when it was merged here with its detail editor; the keys kept in this Mac's Keychain (service
+`com.k3jdr.MxAcctMGR.target-accounts`) stayed there.
 
-A target account is where a register entry's money goes to or comes from — a utility, a card, a brokerage, a person
-(`srm.payee`; called External Accounts before 2026-10-25). The page lists them all in one table (the *Show inactive
-and closed* box adds those): name (as its link when it has one, with its status when not active), category,
-**Funding** (a checkbook mark when the Checking register pays it, a card when the card registers do), *This year*
-(this calendar year's payments), *Total paid* (every payment in all registers and years — a card target last paid in
-2025 shows nothing this year but its total here) and *Last paid*. Each column header's button sorts and filters it, as in Excel (the registers' own: values
-to tick, text contains, number and date ranges), and *Clear Sort & Filters* above the table puts it back. Above the
-table: *New Target Account…* and *Add from Card Registers…*.
+The **Merchants** box on Target Categories lists them, with **Category** (a menu, *All* at first; right-click a category
+above for *Show N Merchants*, or Not assigned's) and a search. Its columns: *Name* (as its link when it has one),
+*Category*, *Driver*, *Role*, *This year*, *Total paid* (every payment in all registers and years) and *Last paid*; each
+column header's button sorts and filters it, as in Excel. Double-click a row for *Show Entries…*. Select several (⌘-click
+or ⇧-click) and right-click for **Set Category**, **Set Driver** and **Set Role of N**, changed together
+(`POST /spending/targets/bulk`). One selected also has *Show Entries…*, *Allocate…* (with its family member and
+statement-name patterns), *Rename…* (names are unique whatever their case), its link (*Add Link to … / Edit Link on …*,
+*Open Link*) and *Remove…* (once nothing is filed under it).
 
-**Add from Card Registers…** lists the targets credit card entries carry without a target account, as the card company
-names them (`GET /cards/targets`), with their entries, total, last date and kinds. The merchants (charges, credits)
-start ticked; the card company's own lines (payments, interest, fees, adjustments) don't. Adding makes each ticked one
-a target account that the card registers offer (a recipient of credit card payments), in the category the card company's categories of its entries
-mostly have, and links those entries to it (`POST /cards/targets`); a card line with the same name later is filed to
-it too, as card lines find their target by name. A name a target account already has just gains the card source.
+**Add from Card Registers…** lists the names credit card entries carry with no merchant, as the card company gives them
+(`GET /cards/targets`), with their entries, total, last date and kinds. The merchants (charges, credits) start ticked;
+the card company's own lines (payments, interest, fees, adjustments) don't. Adding makes each ticked one a merchant the
+card registers offer, in the category the card company's categories of its entries mostly map to, and links those
+entries to it (`POST /cards/targets`); a card line with the same name later is filed to it too.
 
-The rows aren't edited in place. Right-clicking anywhere on a row (its words aren't selectable text, so the menu is
-the same on every column) offers:
-
-* **Edit Target Account Name…** — renames it; Save closes the dialog. Names are unique whatever their case (the
-  security master's index on the lower-cased name): the dialog says when another account has the name and won't save
-  it, and the accounts service refuses one taken since. The registers show the new name for every entry with it.
-* **Edit Target Details…** — the account's details, in this order: *Nickname*, *Description*, *Status*,
-  *Identifier*; the *Next payment* (date, amount); *Logon URL*, *User name*, *Password*, *User keys*; *User notes*;
-  *Address 1*, *Address 2*, *City*, *State*, *Zip code*, *Phone number*; and its **Funding sources**. The account's
-  name, bank, last four digits, category, usual amount and bank names stay as they are (the service keeps what a save
-  doesn't send).
-* **Add Link to … / Edit Link on …** (the Link dialog, below) and *Open Link*.
-
-**New Target Account…** takes every detail of it: *Account name*, *Nickname* (the registers' target lists show it
-beside the name), *Description*, *Status* (active; inactive or closed — kept with their entries, offered by no
-register), *Identifier* (your account or customer number with them), *Bank / company*, *Last four digits*, *Category*,
-*Usual amount*; the *Next payment* (date and amount, shown on the target's hover in the registers); *Logon URL* (open
-it from there), *User name*, *Password* and *User keys* (security answers, recovery codes, PINs; hidden until *Show the
-password and user keys*, each with a copy button); *User notes* (the note shown on hover in the registers) and the
-bank's names for it; *Address 1*, *Address 2*, *City*, *State*, *Zip code*, *Phone number*; and its **Funding
-sources**.
-
-* **Funding sources** decide which registers offer it as a target: *Recipient of checking account payments* (the
-  Checking Accounts register's target list) and *Recipient of credit card payments* (the card registers'); either,
-  both, or neither (offered nowhere). Existing accounts started with the sources they had been paid from (V033), both
-  when not paid yet. A name typed in a register that isn't a target account becomes one with that register's source;
-  a target account a register names (typed, or a bank line accepted) gains that register's source.
-* **The password and user keys** are kept in this Mac's Keychain (service `com.k3jdr.MxAcctMGR.target-accounts`, one
-  item each per account), never in the security master: other Macs, and others using the registers, don't see them,
-  and they don't move to another Mac (the app can't use iCloud Keychain without a provisioning profile). Everything
-  else is in the security master with the account (V033), shared like the registers.
+A register's name list offers the merchants its register pays (`srm.payee.funding_sources`). A name typed in a register
+that isn't a merchant becomes one with that register's source, and a merchant a register names gains it.
 
 ### Target categories (Banking ▸ Target Categories)
 
 One list of categories across every account (V061). `srm.spending_category` replaced the second list, the expense
-accounts (called target expenses for a day): every payment to a target account takes the target account's category
-unless the entry has a tag of its own, and the registers, Target Accounts, the cash ledgers' budget lines and Spending
-Analysis all show that one category. V061 gave each target account with no category the one its expense account mapped
+accounts (called merchant expenses for a day): every payment to a merchant takes the merchant's category
+unless the entry has a tag of its own, and the registers, Merchants, the cash ledgers' budget lines and Spending
+Analysis all show that one category. V061 gave each merchant with no category the one its expense account mapped
 to and left categories and tags already set alone; `srm.expense_account` and its columns are still in the database,
 unused. The page has the Year and Year to date choices Spending Analysis has (the same ones), and its figures count
 every register, as nothing on it compares one year with another. It was Spending Analysis's Admin tab (MxAcctMGR only,
 not the family page):
 
 - **Spending Categories** (V047, V061): right-click one for **Show N Transactions…**. Every category in order with what it covers, its CPI series, its assumed rate, what
-  each checking account and credit card spent in it this year (a column each), this year's spending and entries and the target accounts and lifecycle triggers that set it, with **Edit…** (name, what
+  each checking account and credit card spent in it this year (a column each), this year's spending and entries and the merchants and lifecycle triggers that set it, with **Edit…** (name, what
   it covers, CPI series, assumed rate) and **Remove…** on each, **New Category…** (it goes before Other) and arrows
-  that set the order the page lists them in. A new category's code (what target accounts, tags and triggers store:
+  that set the order the page lists them in. A new category's code (what merchants, tags and triggers store:
   letters and _) is made from its name unless one is typed, and never changes. **Remove…** says what sets it and
-  what is in it now and moves its target accounts, tags, lifecycle triggers and family-page notes to the category
+  what is in it now and moves its merchants, tags, lifecycle triggers and family-page notes to the category
   chosen (required when it has triggers; with *Not assigned* they lose their category). Not assigned spending shows
   in orange;
 - **Card Company Categories** (V061): each category the card companies' downloads use, how many lines have it, and the
-  one of ours it maps to. A new line's target account with no category takes it. Choosing one also gives it to target
+  one of ours it maps to. A new line's merchant with no category takes it. Choosing one also gives it to merchant
   accounts with no category whose card lines have it. Those with none show first; **Show** lists them all;
 - **Spending Drivers** (V047): every driver in order with what it means, the effect it **counts as** (Inflation,
   Usage, Lifecycle, Behavior, One-Time or Taxes: the formula's terms, which stay fixed) and this year's spending,
-  entries and target accounts, with **Edit…** (title, meaning, effect), **Remove…**, **New Driver…** and the arrows;
-  *No driver* counts as Usage. **Remove…** moves its target accounts and tags to the driver chosen, or to none.
+  entries and merchants, with **Edit…** (title, meaning, effect), **Remove…**, **New Driver…** and the arrows;
+  *No driver* counts as Usage. **Remove…** moves its merchants and tags to the driver chosen, or to none.
   Every menu, table and chart of drivers (Entries, Allocation, the Tag sheet, Deep Dive, the family page) lists the
   drivers as they are kept here, in this order;
 - **Driver & Category**: a category is what the money bought (its CPI decides the inflation part), a driver why the
   spending changed (it decides the effect); they are independent, and each comes from the entry's tag, else its
-  target account's allocation. **This Year: Category × Driver** shows this year's spending in both, spending with no
-  driver or category in orange; a click on a cell lists what put its entries there (target account, the entry's own
+  merchant's allocation. **This Year: Category × Driver** shows this year's spending in both, spending with no
+  driver or category in orange; a click on a cell lists what put its entries there (merchant, the entry's own
   tag, not allocated) with *Allocate…*, and its largest entries.
 
 ### Links on sidebar pages
 
 Right-click a page in the sidebar for *Add Link to … / Edit Link on …*, *Open Link* and *Remove Link*: the same Link
-dialog as for securities and target accounts (Text to display, Address — a web page, an email address or a page in
+dialog as for securities and merchants (Text to display, Address — a web page, an email address or a page in
 MxNoteONE — and formatted Hover text). Kept on this Mac with MxAcctMGR's preferences, one per page: the pointer resting
 on the page's row shows its hover card, and the row's link mark opens it; a click on the row still opens the page.
 
-### Links on target accounts
+### Links on merchants
 
-A target account can carry a link the same way, made with the same **Link** dialog
+A merchant can carry a link the same way, made with the same **Link** dialog
 and shown with the same hover card: *Text to display* (the account's name unless you change it), *Address* (a web
 page, an email address, or a page in MxNoteONE — *Use the Link Copied in MxNoteONE*; the account's logon page is
 offered when it has one), and formatted **hover text** with links of its own, with a *Hover card preview* and *Remove
-Link*. Open it from a Checking or card register entry's target (the link button that shows on hover, or the row's
-context menu, *Add Link to … / Edit Link on …*), from a Target Accounts row's context menu, or *Edit Link…* on the
+Link*. Open it from a Checking or card register entry's merchant (the link button that shows on hover, or the row's
+context menu, *Add Link to … / Edit Link on …*), from a Merchants row's context menu, or *Edit Link…* on the
 hover card.
 
-The link belongs to the target account, so it shows wherever the account is a target: its name is shown as the link
-in the Checking Accounts register's Target column, the card registers' and the Target Accounts table. A click opens
+The link belongs to the merchant, so it shows wherever the account is a merchant: its name is shown as the link
+in the Checking Accounts register's Name column, the card registers' and the Merchants table. A click opens
 it; resting the pointer on it shows the hover card. It is kept in the security master (`srm.payee_link`, V032) through
 the accounts service (`PUT` / `DELETE /payees/<id>/link`), apart from the account's own details, so saving a link
 never conflicts with someone editing them. A change made on one screen shows on the others (each loads again after a
-save; the Checking register also every 30 seconds). The target's note (the pencil) stays as it was: with a link, it
+save; the Checking register also every 30 seconds). The merchant's note (the pencil) stays as it was: with a link, it
 shows on the last four digits and the note mark, and the link's hover text on its words.
 
 ### Secure accounts (Banking ▸ Secure Accounts)
 
-Modeled on Target Accounts: the products and services you hold an account with — software, data services, APIs —
+Modeled on Target Categories: the products and services you hold an account with — software, data services, APIs —
 kept in the security master (`srm.secure_account`, V035; the accounts service's `/secure-accounts`). Each has:
 
 * **Product**: its name (unique whatever its case), a description and its **product key** (a license key).
@@ -761,17 +735,17 @@ Household spending attribution: performance attribution for the family's spendin
 from one year to the next and forecasts what the children's ages bring. Everything is kept in the security master
 (V037) through the accounts service (`/spending/…`, `Services/accounts/spending.py`).
 
-* **Spending is what was paid to target accounts (V052).** Every payment from a checking account or a credit card goes
-  to a **target account** — the service provider, merchant or vendor paid — and the spending is the checks and card
-  charges and credits to target accounts whose role is *Spending* (`srm.v_spending_entry`). Everything else is cash
-  flow: transfers between your own accounts, card payments, income. A payment no target account matches yet is
+* **Spending is what was paid to merchants (V052).** Every payment from a checking account or a credit card goes
+  to a **merchant** — the service provider, merchant or vendor paid — and the spending is the checks and card
+  charges and credits to merchants whose role is *Spending* (`srm.v_spending_entry`). Everything else is cash
+  flow: transfers between your own accounts, card payments, income. A payment no merchant matches yet is
   *unallocated* and not in the analysis (Sources ▸ Unallocated Payments). The **cash ledgers** (Banking ▸ Cash Ledger)
   are stand-alone scratch pads for planning a project — a pool renovation's deposits and payments over two seasons —
   with the arithmetic but no reconciliation, and don't feed the analysis.
 * **Two dimensions on every dollar.** Each spending dollar gets a **spending category** (Food, Housing,
   Transportation, Education, Activities, Technology, Healthcare, Clothing, Travel, Other) and a **primary driver**
   (Inflation, Family Growth, New Activity, Lifecycle Transition, Preference Change, Lifestyle & Hobbies — V045,
-  One-Time Event, Taxes — V044), and optionally a family member, from its **target account's allocation** (set on
+  One-Time Event, Taxes — V044), and optionally a family member, from its **merchant's allocation** (set on
   *Allocation*). A **tag** on a single entry overrides it — a mixed merchant's one purchase, or an event ("Philmont
   2026") — set on *Entries* (double-click, or select several and right-click). **Open DISCOVER Transaction** (right-click
   one entry, on *Entries* or a Deep Dive's table; named for the entry's *From*) goes to that card's or checking account's
@@ -780,8 +754,8 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   by day), on top of the period, category and search above the table; *Clear Sort & Filters* puts the table back to
   newest first. With entries selected, a bar above the table shows how many and how much, with **Category** and
   **Driver** menus — also *Set Category* / *Set Driver* in the context menu — that change just that on all of them
-  (*Follow the Target Account* takes it off): each keeps the rest of its own tag, through the tag endpoint's `merge: true`. The
-  *Entries* context menu also has **Allocate *target account*…** for an entry's target account.
+  (*Follow the Merchant* takes it off): each keeps the rest of its own tag, through the tag endpoint's `merge: true`. The
+  *Entries* context menu also has **Allocate *merchant*…** for an entry's merchant.
 * **What Amazon charges bought.** An Amazon charge reads only "AMAZON MKTPL*BD9ZG3640". Once Amazon's order export or
   its order e-mails are read (Sources ▸ Amazon Orders), each charge matched to its order shows what was bought: the *Bought* column of the
   entries tables (Entries and the Deep Dive; "Kids' Swim Goggles, 3 Pack and 1 more", every item with its cost and the
@@ -823,7 +797,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   cookies from the window. Amazon's Conditions of Use don't allow robots: it runs only when you ask, at your own risk,
   and may stop working when Amazon changes its pages (its scripts read the pages' words, not their layout, to last
   longer).
-* **Look Up Apple Purchases…** (Entries or Target Accounts ▸ Show Entries…, right-click selected APPLE.COM/BILL
+* **Look Up Apple Purchases…** (Entries or Merchants ▸ Show Entries…, right-click selected APPLE.COM/BILL
   charges; `AppleLookup.swift`, V056): what they bought — the App Store, in-app purchases, subscriptions, iCloud+,
   Apple TV — from your Apple Account's purchase history (reportaproblem.apple.com), since Apple e-mails a receipt for
   some purchases, not every renewal. It opens its own window with Apple's page in it (WebKit); you sign in there
@@ -842,13 +816,13 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   member's purchase with Family Sharing is in their history, not yours. APPLE.COM/US (the Apple Store's hardware) isn't
   looked up. *Sign Out of Apple* clears Apple's cookies from the window. It runs only when you ask, and may stop
   working when Apple changes its page.
-* **Allocation.** *Spending Allocation by Target Account*: every target account with spending in either year, most
-  spent first (*Every target account* shows the rest; *Only without a category or driver* the ones still to do; the
+* **Allocation.** *Spending Allocation by Merchant*: every merchant with spending in either year, most
+  spent first (*Every merchant* shows the rest; *Only without a category or driver* the ones still to do; the
   search finds names and patterns), each with both years' spending and its **role** (Spending, Transfer, Income),
   **category**, **driver** and **family member**, saved as you pick them. ✎ opens **Allocate…**: the same, plus its
   **statement names containing** patterns, one a line — a card's or bank's line whose name contains one is its
-  payment, ignoring case, the longest pattern winning when several target accounts' do (`srm.payee_for`), so "GIANT"
-  covers "GIANT 6505" and "GIANT WEST CHESTER #6505". New card lines post to the target account they match. A family
+  payment, ignoring case, the longest pattern winning when several merchants' do (`srm.payee_for`), so "GIANT"
+  covers "GIANT 6505" and "GIANT WEST CHESTER #6505". New card lines post to the merchant they match. A family
   member can be picked once the family is set up on *Family & Lifecycle*. The expense accounts and their rules and the
   statement text rules (V037–V043) are gone.
 * **Overview (the attribution).** For each category, `change = inflation + usage + lifecycle + behavior + one-time + taxes`. Inflation is
@@ -867,9 +841,9 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - its spending month by month in both years;
   - **By Driver**: each driver's spending in both years and what it grew beyond prices, adding up to the change with
     the price change on last year's spending;
-  - **How Entries Got Here**: which target accounts and entry tags put its entries in it, each with the target
+  - **How Entries Got Here**: which merchants and entry tags put its entries in it, each with the merchant
     account's allocation, both years' spending and *Allocate…*;
-  - **Where It Went**: the target accounts paid, the 15 largest this year;
+  - **Where It Went**: the merchants paid, the 15 largest this year;
   - the ten largest entries this year, and spending by family member;
   - its lifecycle triggers and what they bring each child in the next ten years;
   - its entries, to tag. The entries tables (here and on Entries) keep their column widths, order and shown columns
@@ -898,17 +872,17 @@ from one year to the next and forecasts what the children's ages bring. Everythi
     - its last import (the `srm.load_run` that wrote its newest lines);
     - its register: entries, dates, how many came from downloads, the last edit;
     - its spending in both periods.
-  - **Unallocated Payments** (V052): the checks and card charges no target account matches, so not in the analysis
+  - **Unallocated Payments** (V052): the checks and card charges no merchant matches, so not in the analysis
     (`srm.v_unallocated_payment`), grouped by the statement's own words (a processor's "SQ *" and store numbers off:
     426 GIANT lines are one group), the largest this year first, each with its statement names, the pattern it
-    suggests, both years' amounts and how many. **Allocate…** makes a **new target account** for the group (name,
+    suggests, both years' amounts and how many. **Allocate…** makes a **new merchant** for the group (name,
     patterns, role, category, driver, member) or files it under an **existing** one (the ones like it first), with
     *Add "GIANT" to its patterns, so the next ones follow* — every payment the patterns match is assigned, and the
     analysis reads again (`GET /spending/unallocated`, `POST /spending/targets`, `POST /spending/targets/<id>/assign`).
   - **Transfers & Income (Not Spending):** money moved between your own accounts, or coming in, isn't spending and
     would count a dollar twice: the check that pays a card (its charges count on the card), a move to savings or an
-    investment, pay and deposits. A target account whose role is *Transfer* or *Income* is left out with its checks
-    and card entries. The box lists those (*Put Back* as Spending, or the other role), and suggests the target
+    investment, pay and deposits. A merchant whose role is *Transfer* or *Income* is left out with its checks
+    and card entries. The box lists those (*Put Back* as Spending, or the other role), and suggests the merchant
     accounts still in the analysis that look like they should be left out — certain, in bold, when a card is paid
     with it or a cash ledger is funded from it; else by its name (Tx to / Tx fr, ACH, Vanguard buys and sells, HYSA,
     Venmo, Zelle, card payments, Pay and Bonus as income, deposits) or because money only ever comes in from it (as
@@ -935,10 +909,10 @@ from one year to the next and forecasts what the children's ages bring. Everythi
     rows, its newest data and its last change.
   - **Last Loads:** the latest `pnc-bank`, `card-downloads`, `amazon-orders`, `amazon-email` and `fred-yields` runs.
 * **Year-End Tax.** A tax year's tax-applicable expenses, tax payments, real estate taxes, refunds and tax savings
-  account, built from **tax items** (V040). A tax item is a target account (Peco, H Federal Taxes …), an
+  account, built from **tax items** (V040). A tax item is a merchant (Peco, H Federal Taxes …), an
   cash-ledger line (Home Office Desk Buildout) or a name the card companies use (TURBOTAX). V040 seeds them from
-  the target accounts there are. Many of these payments are checking entries, and taxes may be filed as Transfer or Income
-  target accounts: the report reads the registers for them directly, whatever their role. The tab shows:
+  the merchants there are. Many of these payments are checking entries, and taxes may be filed as Transfer or Income
+  merchants: the report reads the registers for them directly, whatever their role. The tab shows:
   - the expenses by category, each with what it cost and its deductible share (type a percent, e.g. 15% of
     utilities for a home office) and the deductible amount;
   - estimated and local tax payments by jurisdiction and quarter. Estimated payments follow their quarter: January
@@ -977,14 +951,14 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   note on the lists, so its checks can be found and tagged.
 * **The transactions behind a figure.** Right-click the *All spending* or *This year* tile, or a Key Metrics row's name in the
   *Category* column (a category, *PNC_CHECKING, not compared*, *Registers compared* or *All spending*), for **Show N Transactions…**: a window of its
-  own (`SpendingTransactions.swift`) with every entry behind that figure, adding up to it. Above the table, each target
+  own (`SpendingTransactions.swift`) with every entry behind that figure, adding up to it. Above the table, each merchant
   account's sum, each category's, each month's and, with several registers, each register's: press one to show only its
   entries. Each column header's button sorts and filters it, and double-clicking an entry opens it in its register.
 * **Find a Payment.** A charge can be in its card's register and nowhere here: the analysis counts only payments to a
-  target account with the role Spending. *Find a Payment…* on Entries lists every check, charge and downloaded line
+  merchant with the role Spending. *Find a Payment…* on Entries lists every check, charge and downloaded line
   with the words searched for, each saying where it is and why it isn't in the analysis (`srm.v_payment_where`, V059),
-  with *Allocate…* for statement names no target account matches. Searching Entries or Allocation says when payments
-  match that the list can't show. Target accounts match a statement's whole name, or any of their patterns inside it;
+  with *Allocate…* for statement names no merchant matches. Searching Entries or Allocation says when payments
+  match that the list can't show. Merchants match a statement's whole name, or any of their patterns inside it;
   spacing and case don't matter. *Unallocated Payments* on Sources has a search too.
 * **Inflation.** It comes from FRED's CPI-U series in the security master (`market_series` family INFLATION, loaded by
   `srm.py load fred-yields`): food, shelter, transportation, tuition and childcare, recreation, information
@@ -1122,11 +1096,11 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
 | `LoanViews.swift` | Banking ▸ Loan Accounts: mortgages and vehicle loans (New… ▸ Mortgage or Vehicle Loan), Import Statements… (PDFKit reads each PDF's text for the service), the tiles, the forecast with its chart and what-if extra principal, Interest by Year with the Form 1098 sheet, the statements, the lender's activity and the checks that paid it |
-| `TargetAccounts.swift` | Target accounts: their funding sources, the password and user keys in this Mac's Keychain (`TargetSecrets`), the editor (New Target Account, a row's Edit Target Details) and Edit Target Account Name |
-| `TargetAccountLinks.swift` | Links on target accounts: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
+| `TargetAccounts.swift` | Merchants: their funding sources, Rename…, Add from Card Registers… and Remove… (the page's name is from when they had a page of their own) |
+| `TargetAccountLinks.swift` | Links on merchants: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |
 | `LearnViews.swift`, `PathViews.swift`, `PassiveViews.swift`, `ReportView.swift`, `SamplesView.swift` | The screens: Start Here and Learn the Why; the Investments steps (PassiveViews: Build the Tracker and Rebalance Bands); the report walkthrough; the samples |
-| `SpendingCategoriesDrivers.swift` | Banking ▸ Target Categories: New / Edit Category… and New / Edit Driver… (a new one's code made from its name), and Remove Category… / Remove Driver… with what sets it, what is in it now and where its target accounts, tags and triggers move |
-| `TargetCategoriesView.swift` | Banking ▸ Target Categories: the page, the Spending Categories and Spending Drivers lists with Edit…, Remove…, New… and their order, and the Driver & Category guide with the Category × Driver table and its cells' origins |
-| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, target accounts with their allocation, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Allocation, Family & Lifecycle, Sources (with Unallocated Payments and Transfers & Income) and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
+| `SpendingCategoriesDrivers.swift` | Banking ▸ Target Categories: New / Edit Category… and New / Edit Driver… (a new one's code made from its name), and Remove Category… / Remove Driver… with what sets it, what is in it now and where its merchants, tags and triggers move |
+| `TargetCategoriesView.swift` | Banking ▸ Target Categories: the page, the Merchants list, the Card Company Categories, the Spending Categories and Spending Drivers lists with Edit…, Remove…, New… and their order, and the Driver & Category guide with the Category × Driver table and its cells' origins |
+| `SpendingModel.swift`, `SpendingViews.swift` | Spending Analysis: the categories, drivers, family, merchants with their allocation, lifecycle triggers and entries as the accounts service sends them, the attribution and forward-curve engine, and the client; the page with its sources strip, its Overview (attribution), Deep Dive, Forward Curve, Year-End Tax, Entries, Allocation, Family & Lifecycle, Sources (with Unallocated Payments and Transfers & Income) and Feedback tabs, the tax item and move sheets, Send Family Link (FamilyLink: the link in the Keychain, Mail and Messages), its sheets, and the charts' Deep Dive menu |
 | `Components.swift`, `PortQuickHelp.swift` | Lesson cards, tiles, bars, step footer; Quick Help text and glossary |

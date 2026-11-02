@@ -55,7 +55,7 @@ enum TextKind: String, CaseIterable, Identifiable {
         case .subheading: "Cards, decisions, an earnings day, a simulation's result"
         case .name: "Box and lesson titles; report, account, ledger and sample names"
         case .figure: "The numbers in the metric tiles"
-        case .table: "Every register's and table's rows: checking, cards, expenses, targets, holdings, trades, securities"
+        case .table: "Every register's and table's rows: checking, cards, expenses, merchants, holdings, trades, securities"
         case .calendar: "The earnings calendar's days and its notable reports: dates, counts, symbols, EPS"
         case .ids: "Tickers, symbols and portfolio codes (monospaced in the system font)"
         case .results: "Calculation results: risk, trades, tracker, tax estimates, simulations, earnings history"

@@ -5,7 +5,7 @@
 //  Banking ▸ Spending Analysis: household spending attribution, kept in the security master (accounts service
 //  /spending, V037). Every dollar the registers and cash ledgers spend has two dimensions — a spending category
 //  (Food, Housing, Transportation …) and a primary driver (inflation, family growth, a new activity, a lifecycle
-//  transition, a preference change, a one-time event) — allocated on target accounts (V052) and by tags on
+//  transition, a preference change, a one-time event) — allocated on merchants (V052) and by tags on
 //  single entries. Like portfolio attribution, a category's change from one year to the next splits into effects:
 //
 //      change = inflation + usage + lifecycle + behavior + one-time + taxes
@@ -79,7 +79,7 @@ struct SpendingSetup: Decodable {
     struct Named: Decodable, Identifiable, Hashable {
         var id: Int
         var name: String
-        // A target account's spending role and allocation (V052): spending, transfer or income; the category, driver
+        // A merchant's spending role and allocation (V052): spending, transfer or income; the category, driver
         // and family member its spending goes to; the statement names it matches.
         var role: String?
         var category: String?
@@ -87,7 +87,7 @@ struct SpendingSetup: Decodable {
         var memberId: Int?
         var patterns: [String]?
         var bankNames: [String]?
-        // A target account's details and link (srm.payee_link, V032), for its name's hover text.
+        // A merchant's details and link (srm.payee_link, V032), for its name's hover text.
         var institution: String?
         var last4: String?
         var logonUrl: String?
@@ -111,7 +111,7 @@ struct SpendingSetup: Decodable {
     func member(_ id: Int?) -> HouseholdMember? { members.first { $0.id == id } }
     var children: [HouseholdMember] { members.filter { $0.isChild && $0.active } }
     func payee(_ id: Int?) -> Named? { payees.first { $0.id == id } }
-    /// What a target account's allocation says, in words: "Food · Family Growth · Ann"; nil when it says nothing.
+    /// What a merchant's allocation says, in words: "Food · Family Growth · Ann"; nil when it says nothing.
     func allocation(_ p: Named) -> String? {
         let parts = [category(p.category)?.name, p.driver.map { driverTitle($0) }, member(p.memberId)?.name].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -129,7 +129,7 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     var description: String?
     var amount: Double
     var category: String?
-    /// Where the category came from: entry or target account.
+    /// Where the category came from: entry or merchant.
     var categoryFrom: String?
     var driver: String?
     var driverFrom: String?
@@ -293,7 +293,7 @@ struct SpendingAnalysisData: Decodable {
 }
 
 /// Why spending changed (Family Growth, One-Time Event …): srm.spending_driver (V047), added and changed on Target Categories.
-/// Target accounts and tags store its code.
+/// Merchants and tags store its code.
 struct SpendingDriver: Decodable, Identifiable, Hashable {
     var code: String
     var title: String
@@ -478,7 +478,7 @@ enum SpendingEngine {
 /// Where the analysis's data comes from (Sources tab): each register, whether it is included, its drop folders and
 /// downloads, the tables its data lands in, its last import and its spending in both periods; every SRM table and view
 /// the analysis reads with its rows, newest data and last change; and the download and CPI loaders' last runs.
-/// An allocation call's answer: the setup with how many payments were given to the target account (and a new one's id).
+/// An allocation call's answer: the setup with how many payments were given to the merchant (and a new one's id).
 struct AllocatedAnswer: Decodable {
     var setup: SpendingSetup
     var assigned: Int?
@@ -517,7 +517,7 @@ struct SpendingFound: Decodable {
     var missing: Int { rows.filter { ["unallocated", "not_spending", "left_out", "not_in_register"].contains($0.state) }.count }
 }
 
-/// Sources ▸ Unallocated Payments (GET /spending/unallocated): checks and card charges no target account matches, not
+/// Sources ▸ Unallocated Payments (GET /spending/unallocated): checks and card charges no merchant matches, not
 /// in the analysis, grouped by their statement's own words.
 struct SpendingUnallocated: Decodable {
     struct Entry: Decodable, Identifiable, Hashable {
@@ -543,7 +543,7 @@ struct SpendingUnallocated: Decodable {
         var before: Double
         var total: Double
         var entries: [Entry]
-        /// Target accounts with a name like it.
+        /// Merchants with a name like it.
         var like: [Like]
         var id: String { key }
     }
@@ -557,7 +557,7 @@ struct SpendingUnallocated: Decodable {
     var before: Double
 }
 
-/// Sources ▸ Transfers & Income (GET /spending/transfers): target accounts left out of the analysis as moving money
+/// Sources ▸ Transfers & Income (GET /spending/transfers): merchants left out of the analysis as moving money
 /// (filed under a transfer or income account), the ones that look like they should be, and the accounts to file under.
 struct SpendingTransfers: Decodable {
     struct Why: Decodable, Hashable { var kind: String; var text: String }
@@ -830,7 +830,7 @@ struct TaxReport: Decodable {
 
         /// Where its payments come from, in words.
         var origin: String {
-            if let payee { return "Target account \(payee)" }
+            if let payee { return "Merchant \(payee)" }
             if let ledgerLine { return "Ledger \(ledger ?? "") line \(ledgerLine)" }
             if let namePattern { return "Card names containing \(namePattern)" }
             return ""
@@ -1001,7 +1001,7 @@ nonisolated enum SpendingClient {
     static func categoryUsage(_ code: String) async throws -> SpendingUsage {
         try await AccountsClient.request("GET", "/spending/categories/\(code)/usage", as: SpendingUsage.self)
     }
-    /// Removes a category; its target accounts, tags, lifecycle triggers and notes move to `moveTo` first (none: they lose it).
+    /// Removes a category; its merchants, tags, lifecycle triggers and notes move to `moveTo` first (none: they lose it).
     static func deleteCategory(_ code: String, moveTo: String?) async throws -> SpendingSetup {
         try await AccountsClient.request("DELETE", "/spending/categories/\(code)?moveTo=\(moveTo ?? "")&by=\(byQuery)", as: SpendingSetup.self)
     }
@@ -1017,7 +1017,7 @@ nonisolated enum SpendingClient {
     static func driverUsage(_ code: String) async throws -> SpendingUsage {
         try await AccountsClient.request("GET", "/spending/drivers/\(code)/usage", as: SpendingUsage.self)
     }
-    /// Removes a driver; its target accounts and tags move to `moveTo` first (none: they lose their driver).
+    /// Removes a driver; its merchants and tags move to `moveTo` first (none: they lose their driver).
     static func deleteDriver(_ code: String, moveTo: String?) async throws -> SpendingSetup {
         try await AccountsClient.request("DELETE", "/spending/drivers/\(code)?moveTo=\(moveTo ?? "")&by=\(byQuery)", as: SpendingSetup.self)
     }
@@ -1025,18 +1025,18 @@ nonisolated enum SpendingClient {
         try await AccountsClient.request("PUT", "/spending/driver-order", body: signed(["codes": codes]), as: SpendingSetup.self)
     }
     private static var byQuery: String { BankClient.by.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "" }
-    /// A target account's role, category, driver, member or patterns (the keys sent change); unallocated payments its
+    /// A merchant's role, category, driver, member or patterns (the keys sent change); unallocated payments its
     /// patterns now match are given to it.
     static func allocateTarget(_ id: Int, _ body: [String: Any]) async throws -> (SpendingSetup, Int) {
         let out = try await AccountsClient.request("PUT", "/spending/targets/\(id)", body: signed(body), as: AllocatedAnswer.self)
         return (out.setup, out.assigned ?? 0)
     }
-    /// A new target account for unallocated payments: the entries sent and every one its name or patterns match.
+    /// A new merchant for unallocated payments: the entries sent and every one its name or patterns match.
     static func addTarget(_ body: [String: Any]) async throws -> (SpendingSetup, Int) {
         let out = try await AccountsClient.request("POST", "/spending/targets", body: signed(body), as: AllocatedAnswer.self)
         return (out.setup, out.assigned ?? 0)
     }
-    /// Gives unallocated payments to a target account.
+    /// Gives unallocated payments to a merchant.
     static func assignPayments(_ id: Int, _ entries: [SpendingUnallocated.Entry]) async throws -> (SpendingSetup, Int) {
         let out = try await AccountsClient.request("POST", "/spending/targets/\(id)/assign",
                                                    body: signed(["entries": entries.map { ["source": $0.source, "id": $0.entryId] }]), as: AllocatedAnswer.self)
@@ -1072,7 +1072,7 @@ nonisolated enum SpendingClient {
         try await AccountsClient.request("GET", "/spending/transfers?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          as: SpendingTransfers.self)
     }
-    /// A target account's role (V052): transfer or income leaves its payments out of the analysis, spending puts them back.
+    /// A merchant's role (V052): transfer or income leaves its payments out of the analysis, spending puts them back.
     static func fileTarget(_ id: Int, role: String, window: SpendingSources) async throws -> SpendingTransfers {
         try await AccountsClient.request("PUT", "/spending/transfers/\(id)?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          body: signed(["role": role]), as: SpendingTransfers.self)
@@ -1185,6 +1185,12 @@ nonisolated enum SpendingClient {
 extension SpendingClient {
     private struct CardCategories: Decodable { var categories: [CardCategory] }
 
+    /// Several merchants' role, category or driver: only the fields in `fields` change (NSNull takes one off).
+    static func allocateTargets(_ ids: [Int], _ fields: [String: Any]) async throws -> SpendingSetup {
+        var body = fields
+        body["ids"] = ids
+        return try await AccountsClient.request("POST", "/spending/targets/bulk", body: signed(body), as: SpendingSetup.self)
+    }
     static func cardCategories() async throws -> [CardCategory] {
         try await AccountsClient.request("GET", "/spending/card-categories", as: CardCategories.self).categories
     }

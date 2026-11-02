@@ -3,7 +3,7 @@
 //  MxAcctMGR
 //
 //  Banking ▸ Loan Accounts (V053, the accounts service's loans.py): each mortgage and vehicle loan (auto, boat, RV)
-//  with its terms and the target accounts the check register pays it with. Import Statements… reads the lender's
+//  with its terms and the merchants the check register pays it with. Import Statements… reads the lender's
 //  billing statements from their PDFs — PDFKit gives the text, the service reads the figures and keeps each PDF in the
 //  loan's folder. The latest statement's balance, rate and payment drive the forecast of every payment's interest and
 //  principal to payoff, with an extra principal to try; Interest by Year gives each year's interest from the statements
@@ -56,7 +56,7 @@ struct LoanAccount: Decodable, Identifiable, Hashable {
     var escrowAmount: Double
     /// The extra principal the forecast assumes each month.
     var extraPrincipal: Double
-    /// The target accounts the check register pays it with.
+    /// The merchants the check register pays it with.
     var paymentPayees: [Int]
     var statementFolder: String?
     var interestDeductible: Bool
@@ -71,7 +71,7 @@ struct LoanAccount: Decodable, Identifiable, Hashable {
     var balanceAsOf: String?
     var nextDue: String?
     var statements: Int?
-    // The loan's own page: the folder its statements are kept in and its target accounts by name.
+    // The loan's own page: the folder its statements are kept in and its merchants by name.
     var folder: String?
     var payees: [LoanPayee]?
 
@@ -116,7 +116,7 @@ struct LoanActivity: Decodable, Identifiable, Hashable {
     var statementDate: String
 }
 
-/// A check to one of the loan's target accounts, with the statement activity it matches (the same total within five days).
+/// A check to one of the loan's merchants, with the statement activity it matches (the same total within five days).
 struct LoanCheck: Decodable, Identifiable, Hashable {
     var id: Int
     var date: String
@@ -309,7 +309,7 @@ struct LoanAccountsView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: "Each mortgage and vehicle loan: its balance, the lender's statements, and a forecast of every payment's interest and principal to payoff — the interest each year for Year-End Tax.", lesson: [
-            "New… ▸ Mortgage or Vehicle Loan (auto, boat, RV or motorcycle): its name, lender and the target accounts the check register pays it with. The terms can wait: the first statement fills in the rate, the payment, the maturity, the lender and the last four digits.",
+            "New… ▸ Mortgage or Vehicle Loan (auto, boat, RV or motorcycle): its name, lender and the merchants the check register pays it with. The terms can wait: the first statement fills in the rate, the payment, the maturity, the lender and the last four digits.",
             "Import Statements… reads the lender's billing statements (PDF; pick several, or a folder): the balance, the payment due and its split, the year-to-date interest and what the lender applied. Each PDF is kept in the loan's folder, and a statement read before is skipped.",
             "The forecast runs from the latest statement: each month's interest is the balance times the rate over 12, the rest of the payment is principal. Try an extra principal each month to see the payoff move. In January, enter the lender's Form 1098: Year-End Tax then counts it instead of the estimate.",
         ]) {
@@ -683,15 +683,15 @@ struct LoanAccountsView: View {
     }
 
     private func checksBox(_ d: LoanDetail) -> some View {
-        Box(title: "Paid from Checking", symbol: "checkmark.rectangle.stack", help: "The check register's payments to this loan's target accounts (the last three years), each matched to the lender's activity on a statement: the same total within five days. A payment no statement shows yet is newer than the latest statement, or its statement wasn't imported.") {
+        Box(title: "Paid from Checking", symbol: "checkmark.rectangle.stack", help: "The check register's payments to this loan's merchants (the last three years), each matched to the lender's activity on a statement: the same total within five days. A payment no statement shows yet is newer than the latest statement, or its statement wasn't imported.") {
             if d.loan.paymentPayees.isEmpty {
-                Text("Choose the target accounts the check register pays this loan with in Edit… to see its checks here.").foregroundStyle(.secondary)
+                Text("Choose the merchants the check register pays this loan with in Edit… to see its checks here.").foregroundStyle(.secondary)
             } else if d.checks.isEmpty {
                 Text("No check to \((d.loan.payees ?? []).map(\.name).joined(separator: " or ")) in the last three years.").foregroundStyle(.secondary)
             } else {
                 Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
                     GridRow {
-                        Text("Date"); Text("Target account"); Text("Amount").gridColumnAlignment(.trailing); Text("On the lender's statement").fillsGridColumn()
+                        Text("Date"); Text("Merchant"); Text("Amount").gridColumnAlignment(.trailing); Text("On the lender's statement").fillsGridColumn()
                     }
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     ForEach(d.checks) { c in
@@ -934,7 +934,7 @@ struct LoanSheet: View {
                             .help("What the forecast assumes you pay on top, each month")
                     }
                     Section("Paid from checking as") {
-                        TextField("Find a target account", text: $search)
+                        TextField("Find a merchant", text: $search)
                         ScrollView {
                             VStack(alignment: .leading, spacing: 3) {
                                 ForEach(shownPayees) { p in
@@ -945,7 +945,7 @@ struct LoanSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .frame(height: 110)
-                        Text("The target accounts the check register pays this loan with — two when the servicer changed (Mortgage, then Wells Fargo). Their checks show on the loan, matched to the statements.")
+                        Text("The merchants the check register pays this loan with — two when the servicer changed (Mortgage, then Wells Fargo). Their checks show on the loan, matched to the statements.")
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     Section("Statements and taxes") {
@@ -981,7 +981,7 @@ struct LoanSheet: View {
 
     private var defaultFolderFor: String { (defaultFolder as NSString).appendingPathComponent(code.isEmpty ? "CODE" : code) }
 
-    /// The target accounts chosen first, then the rest the search finds.
+    /// The merchants chosen first, then the rest the search finds.
     private var shownPayees: [LoanPayee] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
         let mine = payees.filter { chosen.contains($0.id) }

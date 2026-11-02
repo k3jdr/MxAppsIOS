@@ -2,7 +2,7 @@
 //  SecureAccounts.swift
 //  MxAcctMGR
 //
-//  Banking ▸ Secure Accounts, modeled on Target Accounts: the products and services you hold an account with
+//  Banking ▸ Secure Accounts, modeled on Target Categories: the products and services you hold an account with
 //  (srm.secure_account, V035) — each product's name and description; its service's address, API and status; your user
 //  name; and its subscription, the last payment and the renewal (auto-renew, renew by hand, or decline). The product
 //  key, the service key and the password are kept in this Mac's Keychain (SecureSecrets), never in the security master.

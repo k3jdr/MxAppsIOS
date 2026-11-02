@@ -1,7 +1,7 @@
 // Spending Analysis, read-only, on the home network (Services/spending-web). The same numbers as MxAcctMGR's
 // Reporting ▸ Spending Analysis (SpendingModel.swift's attribution and forward curve, ported here), its target
 // accounts' allocation shown read-only, without the controls that change anything, and with a note to John from every
-// section, entry and target account.
+// section, entry and merchant.
 "use strict";
 
 const BASE = location.pathname.replace(/\/[^/]*$/, "");   // /s/<key>
@@ -441,7 +441,7 @@ function diveTab() {
   const byDriver = group(mine, e => e.driver ?? "");
   h += box("By Driver", `<div class="scroll"><table><tr><th class="l">Driver</th><th>${py}</th><th>${y}</th><th>Change</th><th>Beyond prices</th><th class="l">Counts as</th></tr>
     <tr><td class="l">Prices on ${py}'s spending (${signedPct(r.rate)})</td><td></td><td></td><td></td><td>${money(r.prior * r.rate)}</td><td class="l">Inflation</td></tr>
-    ${Object.keys(DRIVERS).concat([""]).filter(d => byDriver[d]).map(d => { const s = sums(byDriver[d]); const eff = EFFECTS.find(e => e.id === (DRIVERS[d]?.effect ?? "usage")); return `<tr><td class="l" title="${esc(DRIVERS[d]?.help ?? "No target account or tag gives it a driver")}">${esc(DRIVERS[d]?.title ?? "No driver yet")}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${money(s.now - s.before * (1 + r.rate))}</td><td class="l">${eff.name}</td></tr>`; }).join("")}
+    ${Object.keys(DRIVERS).concat([""]).filter(d => byDriver[d]).map(d => { const s = sums(byDriver[d]); const eff = EFFECTS.find(e => e.id === (DRIVERS[d]?.effect ?? "usage")); return `<tr><td class="l" title="${esc(DRIVERS[d]?.help ?? "No merchant or tag gives it a driver")}">${esc(DRIVERS[d]?.title ?? "No driver yet")}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${money(s.now - s.before * (1 + r.rate))}</td><td class="l">${eff.name}</td></tr>`; }).join("")}
     <tr class="total"><td class="l">Change</td><td>${money(r.prior)}</td><td>${money(r.current)}</td><td>${money(r.change)}</td><td>${money(r.change)}</td><td></td></tr></table></div>`, { section: `Deep Dive ${name}: drivers` });
   // How entries got here.
   const origins = group(mine, e => (e.categoryFrom ?? "none") + "|" + (e.categoryFrom === "entry" ? "Tagged on the entry" : e.payee ?? "—"));
@@ -449,15 +449,15 @@ function diveTab() {
   h += box("How Entries Got Here", `<div class="scroll"><table><tr><th class="l">Put here by</th><th class="l">Allocated as</th><th>${py}</th><th>${y}</th><th>Change</th><th>Entries</th><th></th></tr>
     ${Object.entries(origins).sort((a, b) => Math.abs(sums(b[1]).now) + Math.abs(sums(b[1]).before) - Math.abs(sums(a[1]).now) - Math.abs(sums(a[1]).before)).map(([k, list]) => {
       const [kind, ...rest] = k.split("|"), label = rest.join("|"); const s = sums(list);
-      return `<tr><td class="l">${esc(label)}<br><span class="muted">${kind === "none" ? "target account not allocated" : kind === "entry" ? "entry tags" : "target account"}</span></td><td class="l muted">${esc(kind === "entry" ? "" : allocText(label))}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${s.countBefore} → ${s.count}</td>
-        <td>${kind === "entry" ? "" : `<button class="icon" data-action="feedback" data-kind="rule" data-section="Target account: ${esc(label)}" data-category="${esc(code)}">Suggest a change</button>`}</td></tr>`;
-    }).join("")}</table></div>`, { section: `Deep Dive ${name}: how entries got here`, help: "What put each entry in this category: its target account's allocation (the provider, merchant or vendor paid), or the entry's own tag" });
-  // Where it went: the target accounts paid, the largest first.
+      return `<tr><td class="l">${esc(label)}<br><span class="muted">${kind === "none" ? "merchant not allocated" : kind === "entry" ? "entry tags" : "merchant"}</span></td><td class="l muted">${esc(kind === "entry" ? "" : allocText(label))}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${s.countBefore} → ${s.count}</td>
+        <td>${kind === "entry" ? "" : `<button class="icon" data-action="feedback" data-kind="rule" data-section="Merchant: ${esc(label)}" data-category="${esc(code)}">Suggest a change</button>`}</td></tr>`;
+    }).join("")}</table></div>`, { section: `Deep Dive ${name}: how entries got here`, help: "What put each entry in this category: its merchant's allocation (the provider, merchant or vendor paid), or the entry's own tag" });
+  // Where it went: the merchants paid, the largest first.
   const byTarget = group(mine, e => e.payee ?? e.description ?? "—");
   const targets = Object.keys(byTarget).sort((p, q) => sums(byTarget[q]).now - sums(byTarget[p]).now);
   let w = targets.slice(0, 15).map(p => { const s = sums(byTarget[p]); return `<tr><td class="l">${esc(p)}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${s.countBefore} → ${s.count}</td></tr>`; }).join("");
   if (targets.length > 15) { const rest = sums(targets.slice(15).flatMap(p => byTarget[p])); w += `<tr class="muted"><td class="l">${targets.length - 15} more</td><td>${money(rest.before)}</td><td>${money(rest.now)}</td><td>${money(rest.change)}</td><td>${rest.countBefore} → ${rest.count}</td></tr>`; }
-  h += box("Where It Went", `<div class="scroll"><table><tr><th class="l">Target account</th><th>${py}</th><th>${y}</th><th>Change</th><th>Entries</th></tr>${w}</table></div>`, { section: `Deep Dive ${name}: where it went` });
+  h += box("Where It Went", `<div class="scroll"><table><tr><th class="l">Merchant</th><th>${py}</th><th>${y}</th><th>Change</th><th>Entries</th></tr>${w}</table></div>`, { section: `Deep Dive ${name}: where it went` });
   const top = mine.filter(inNow).sort((a, b) => b.amount - a.amount).slice(0, 10);
   const byMember = group(mine, e => e.memberId ?? 0);
   h += `<div class="row">${box("Largest This Year", `<div class="scroll"><table>${top.map(e => `<tr><td class="l muted">${day(e.date)}</td><td class="l" title="${esc(e.payee ?? e.description ?? "")}">${boughtLink(e, e.payee ?? e.description ?? "—")}</td><td>${money2(e.amount)}</td><td class="l muted">${esc(e.event ?? driverTitle(e.driver))}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>`, { section: `Deep Dive ${name}: largest` })}
@@ -483,7 +483,7 @@ function pick(field, e) {
   const now = field === "category" ? e.category : e.driver;
   const choices = field === "category" ? S.setup.categories.map(c => [c.code, c.name]) : Object.entries(DRIVERS).map(([k, d]) => [k, d.title]);
   return `<select class="cell" data-edit-entry="${esc(e.source)}:${e.entryId}" data-field="${field}">
-    <option value=""${now ? "" : " selected"}>${now ? "By the target account" : field === "category" ? "Not assigned" : "No driver"}</option>
+    <option value=""${now ? "" : " selected"}>${now ? "By the merchant" : field === "category" ? "Not assigned" : "No driver"}</option>
     ${choices.map(([v, t]) => `<option value="${esc(v)}"${v === now ? " selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
 }
 
@@ -506,7 +506,7 @@ function entriesBox(list, title, locked) {
     ${leftOutNote()}
     <div class="scroll"><table><tr><th class="l">Date</th><th class="l">From</th><th class="l payee">Payee<span class="grip" data-resize="payee" title="Drag to make Payee wider or narrower; double-click for the standard width"></span></th><th class="l bought">Bought<span class="grip" data-resize="bought" title="Drag to make Bought wider or narrower; double-click for the standard width"></span></th><th>Amount</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th class="l">Event</th><th></th></tr>
     ${rows.slice(0, S.shown).map(e => `<tr><td class="l">${day(e.date)}</td><td class="l muted">${esc(e.register ?? e.source)}</td><td class="l payee" title="${esc(e.payee ?? e.description ?? "")}">${esc(e.payee ?? e.description ?? "")}</td>
-      <td class="l bought">${boughtLink(e)}</td><td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "Its target account isn't allocated")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "Its target account has no driver: counts as usage")}">${pick("driver", e)}</td>
+      <td class="l bought">${boughtLink(e)}</td><td>${money2(e.amount)}</td><td class="l" title="${esc(e.categoryFrom ? "Now from the " + e.categoryFrom : "Its merchant isn't allocated")}">${pick("category", e)}</td><td class="l" title="${esc(e.driverFrom ? "Now from the " + e.driverFrom : "Its merchant has no driver: counts as usage")}">${pick("driver", e)}</td>
       <td class="l muted">${esc(memberName(e.memberId) ?? "")}</td><td class="l muted">${esc(e.event ?? "")}</td><td>${flag(e)}</td></tr>`).join("")}</table></div>
     ${rows.length > S.shown ? `<p><button data-action="more">Show ${Math.min(200, rows.length - S.shown)} more</button></p>` : ""}`;
   return box(title, body, { section: title, help: "Every spending dollar: its category and driver and where they came from, and for an Amazon charge what was bought — a link to the order on amazon.com. ⚑ tells John something about one entry." });
@@ -530,7 +530,7 @@ function curveTab() {
   return h;
 }
 
-// The target accounts' allocation, read-only (MxAcctMGR's Allocation tab changes it): each with both years' spending
+// The merchants' allocation, read-only (MxAcctMGR's Allocation tab changes it): each with both years' spending
 // and a note to John.
 function allocationTab() {
   const spent = {};
@@ -540,10 +540,10 @@ function allocationTab() {
     .sort((a, b) => (spent[b.id]?.now ?? 0) - (spent[a.id]?.now ?? 0) || (spent[b.id]?.before ?? 0) - (spent[a.id]?.before ?? 0));
   const left = S.setup.payees.filter(p => p.role === "transfer" || p.role === "income");
   const row = p => `<tr><td class="l">${esc(p.name)}${(p.patterns ?? []).length ? `<br><span class="muted">statement names containing ${esc(p.patterns.join(", "))}</span>` : ""}</td><td>${money(spent[p.id]?.before ?? 0)}</td><td>${money(spent[p.id]?.now ?? 0)}</td><td class="l">${esc(p.category ? catName(p.category) : "Not assigned")}</td><td class="l">${esc(p.driver ? driverTitle(p.driver) : "—")}</td><td class="l muted">${esc(memberName(p.memberId) ?? "")}</td>
-    <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Target account: ${esc(p.name)}" data-category="${esc(p.category ?? "")}">Suggest a change</button></td></tr>`;
-  return `<p class="hint">Every payment from the checking accounts and credit cards goes to a target account: the provider, merchant or vendor paid. Each dollar's category and driver come from the entry's own tag if it has one, else its target account's allocation. Transfers between our own accounts, income and the cash ledgers aren't spending. John changes the allocation in MxAcctMGR; Suggest a change tells him.</p>`
-    + box("Target Accounts", shown.length ? `<div class="scroll"><table><tr><th class="l">Target account</th><th>${py}</th><th>${y}</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th></th></tr>${shown.map(row).join("")}</table></div>` : `<p class="muted">No target account is allocated yet.</p>`,
-      { help: "The category, driver and family member of each target account's spending, the largest first" + (left.length ? `; ${left.length} more are transfers or income and left out` : "") });
+    <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Merchant: ${esc(p.name)}" data-category="${esc(p.category ?? "")}">Suggest a change</button></td></tr>`;
+  return `<p class="hint">Every payment from the checking accounts and credit cards goes to a merchant: the provider, merchant or vendor paid. Each dollar's category and driver come from the entry's own tag if it has one, else its merchant's allocation. Transfers between our own accounts, income and the cash ledgers aren't spending. John changes the allocation in MxAcctMGR; Suggest a change tells him.</p>`
+    + box("Merchants", shown.length ? `<div class="scroll"><table><tr><th class="l">Merchant</th><th>${py}</th><th>${y}</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th></th></tr>${shown.map(row).join("")}</table></div>` : `<p class="muted">No merchant is allocated yet.</p>`,
+      { help: "The category, driver and family member of each merchant's spending, the largest first" + (left.length ? `; ${left.length} more are transfers or income and left out` : "") });
 }
 
 function familyTab() {
@@ -569,7 +569,7 @@ function sourcesTab() {
         <tr><td class="l muted">Lands in</td><td class="l wrap">${[s.linesTable && `${s.linesTable} (${(s.lines ?? 0).toLocaleString()} lines${s.firstLine ? `, ${day(s.firstLine)} – ${day(s.lastLine)}` : ""})`, `${s.registerTable} (the register)`, "srm.v_spending_entry"].filter(Boolean).map(esc).join(" → ")}</td></tr>
         ${s.loader ? `<tr><td class="l muted">Last import</td><td class="l wrap">${s.lastImport ? `${when(s.lastImport.finishedAt)} (${age(s.lastImport.finishedAt)}), ${esc(s.lastImport.status)}` : "Never"}</td></tr>` : ""}
         <tr><td class="l muted">Register</td><td class="l wrap"${s.source !== "ledger" && s.included && daysAgo(s.last) > STALE_DAYS ? ' style="color:var(--warn)"' : ""}>${s.entries ? `${s.entries.toLocaleString()} entries, ${day(s.first)} – ${day(s.last)} (newest ${age(s.last)})` : "No entries yet"}</td></tr>
-        <tr><td class="l muted">In the analysis</td><td class="l wrap">${noSpend ? "None of its entries counts as spending: none goes to a target account whose role is Spending (card payments and transfers aren't spending)." : `${o.start.slice(0, 4)}: ${s.entriesNow.toLocaleString()} entries, ${money(s.spentNow)} · ${o.priorStart.slice(0, 4)}: ${s.entriesBefore.toLocaleString()} entries, ${money(s.spentBefore)}`}</td></tr>
+        <tr><td class="l muted">In the analysis</td><td class="l wrap">${noSpend ? "None of its entries counts as spending: none goes to a merchant whose role is Spending (card payments and transfers aren't spending)." : `${o.start.slice(0, 4)}: ${s.entriesNow.toLocaleString()} entries, ${money(s.spentNow)} · ${o.priorStart.slice(0, 4)}: ${s.entriesBefore.toLocaleString()} entries, ${money(s.spentBefore)}`}</td></tr>
       </table></div>`;
   }).join(""), { help: "Each checking account, credit card and cash ledger that can feed the analysis" });
   h += box("SRM Tables in the Aggregation", `<div class="scroll"><table><tr><th class="l">Table or view</th><th class="l">What it gives the analysis</th><th>Rows</th><th class="l">Newest data</th><th class="l">Last changed</th></tr>
@@ -638,7 +638,7 @@ function taxTab() {
     { section: "Year-End Tax: items", help: "What makes a payment a tax item" });
   return h;
 }
-const origin = i => i.payee ? `Target account ${i.payee}` : i.ledgerLine ? `Ledger ${i.ledger ?? ""} line ${i.ledgerLine}` : i.namePattern ? `Card names containing ${i.namePattern}` : "";
+const origin = i => i.payee ? `Merchant ${i.payee}` : i.ledgerLine ? `Ledger ${i.ledger ?? ""} line ${i.ledgerLine}` : i.namePattern ? `Card names containing ${i.namePattern}` : "";
 
 // As TaxReport.csv (SpendingModel.swift): every payment, then each item's totals and the payments by quarter.
 function taxCsv(r) {
