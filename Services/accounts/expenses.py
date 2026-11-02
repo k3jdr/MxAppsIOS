@@ -181,16 +181,16 @@ def book(conn, code):
         e["balance"] = round(balance, 2)
     year = today.year
     lines = fetch(conn, """
-        SELECT ln.line_id AS id, ln.name, ln.kind, ln.budget, ln.expense_account_id AS "expenseAccountId",
-               ea.name AS "expenseAccount", ln.color, ln.sort_order AS "sortOrder", ln.active,
+        SELECT ln.line_id AS id, ln.name, ln.kind, ln.budget, ln.category_code AS category,
+               c.name AS "categoryName", ln.color, ln.sort_order AS "sortOrder", ln.active,
                coalesce(sum(e.amount) FILTER (WHERE e.status = 'actual' AND e.kind <> 'funding'), 0) AS spent,
                coalesce(sum(e.amount) FILTER (WHERE e.status = 'actual' AND e.kind <> 'funding'
                                                 AND extract(year FROM e.entry_date) = %s), 0) AS "spentThisYear",
                count(e.*) FILTER (WHERE e.status <> 'void' AND e.kind <> 'funding') AS entries
           FROM srm.expense_line ln
-          LEFT JOIN srm.expense_account ea ON ea.expense_account_id = ln.expense_account_id
+          LEFT JOIN srm.spending_category c ON c.code = ln.category_code
           LEFT JOIN srm.expense_entry e ON e.line_id = ln.line_id
-         WHERE ln.ledger_id = %s GROUP BY ln.line_id, ea.name ORDER BY ln.sort_order, ln.name""", (year, lid))
+         WHERE ln.ledger_id = %s GROUP BY ln.line_id, c.name ORDER BY ln.sort_order, ln.name""", (year, lid))
     for ln in lines:
         ln["remaining"] = round(float(ln["budget"]) - float(ln["spent"]), 2) if ln["budget"] is not None else None
 
@@ -518,7 +518,7 @@ def save_line(conn, code, rid, body):
     if color and not re.match(r"^#[0-9A-Fa-f]{6}$", color):
         raise ValueError("color is #rrggbb")
     return _save_row(conn, code, "expense_line", "line_id", rid, body, {
-        "name": name, "kind": kind, "budget": _opt_num(body, "budget"), "expense_account_id": body.get("expenseAccountId") or None,
+        "name": name, "kind": kind, "budget": _opt_num(body, "budget"), "category_code": body.get("category") or None,
         "color": color, "sort_order": int(body.get("sortOrder") or 100), "active": bool(body.get("active", True))}, "line")
 
 
@@ -583,10 +583,11 @@ def card_charges(conn, code):
     _ledger(conn, code)
     return {"charges": fetch(conn, """
         SELECT t.txn_id AS id, a.code AS "cardAccount", a.name AS card, t.txn_date AS date,
-               coalesce(p.name, t.payee_name) AS payee, t.memo, t.amount, e.name AS "expenseAccount"
+               coalesce(p.name, t.payee_name) AS payee, t.memo, t.amount, c.name AS category
           FROM srm.card_txn t JOIN srm.card_account a USING (card_account_id)
           LEFT JOIN srm.payee p ON p.payee_id = t.payee_id
-          LEFT JOIN srm.expense_account e ON e.expense_account_id = t.expense_account_id
+          LEFT JOIN srm.spending_tag g ON g.card_txn_id = t.txn_id
+          LEFT JOIN srm.spending_category c ON c.code = coalesce(g.category_code, p.category_code)
          WHERE t.kind IN ('charge', 'credit') AND t.status <> 'void' AND t.txn_date >= current_date - 365
            AND NOT EXISTS (SELECT 1 FROM srm.expense_entry x WHERE x.card_txn_id = t.txn_id)
          ORDER BY t.txn_date DESC LIMIT 300""")}

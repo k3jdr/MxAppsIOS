@@ -92,8 +92,7 @@ nonisolated enum TargetSecrets {
 /// while the account's name, bank, last four digits, category, usual amount and bank names stay as saved.
 struct TargetAccountSheet: View {
     let payee: Payee?
-    var expenseAccounts: [ExpenseAccount]
-    var defaultAccount: Int? = nil
+    var categories: [BookCategory]
     var detailsOnly = false
     var save: ([String: Any]) async -> PayeeSaved
     @Environment(\.dismiss) private var dismiss
@@ -105,7 +104,7 @@ struct TargetAccountSheet: View {
     @State private var reference = ""
     @State private var institution = ""
     @State private var last4 = ""
-    @State private var expenseAccountId: Int?
+    @State private var category: String?
     @State private var defaultAmount: Double?
     @State private var hasNextPayment = false
     @State private var nextPaymentDate = Date()
@@ -158,9 +157,9 @@ struct TargetAccountSheet: View {
                         TextField("Bank / company", text: $institution)
                         TextField("Last four digits", text: $last4)
                             .help("Shown when this is picked as a register entry's target")
-                        Picker("Category", selection: $expenseAccountId) {
-                            Text("None").tag(Int?.none)
-                            ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                        Picker("Category", selection: $category) {
+                            Text("None").tag(String?.none)
+                            ForEach(categories) { Text($0.name).tag(Optional($0.code)) }
                         }
                         TextField("Usual amount", value: $defaultAmount, format: .number.precision(.fractionLength(2)))
                             .help("Filled in when it is picked as a register entry's target")
@@ -263,13 +262,10 @@ struct TargetAccountSheet: View {
     }
 
     private func load() {
-        guard let p = payee else {
-            expenseAccountId = defaultAccount
-            return
-        }
+        guard let p = payee else { return }
         name = p.name; nickname = p.nickname ?? ""; details = p.description ?? ""; status = p.status
         reference = p.reference ?? ""; institution = p.institution ?? ""; last4 = p.last4 ?? ""
-        expenseAccountId = p.expenseAccountId; defaultAmount = p.defaultAmount
+        category = p.category; defaultAmount = p.defaultAmount
         hasNextPayment = p.nextPaymentDate != nil || p.nextPaymentAmount != nil
         nextPaymentDate = p.nextPaymentDate.flatMap { isoDay.date(from: String($0.prefix(10))) } ?? Date()
         nextPaymentAmount = p.nextPaymentAmount
@@ -298,7 +294,7 @@ struct TargetAccountSheet: View {
             body["institution"] = institution
             body["last4"] = last4
             body["bankNames"] = bankNames.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
-            body["expenseAccountId"] = expenseAccountId ?? NSNull()
+            body["category"] = category ?? NSNull()
             body["defaultAmount"] = defaultAmount ?? NSNull()
         }
         if let payee { body["version"] = payee.version }
@@ -414,7 +410,7 @@ struct AddCardTargetsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Add from Card Registers").heading(.heading)
-            Text("The targets of credit card entries that aren't target accounts yet, as the card company names them. Those ticked become target accounts that the card registers offer, each in the category its entries mostly have, with those entries linked to it; a card line with the same name later is filed to it too. The card company's own lines (payments, interest, fees, adjustments) start unticked.")
+            Text("The targets of credit card entries that aren't target accounts yet, as the card company names them. Those ticked become target accounts that the card registers offer, each in the category the card company's categories of its entries mostly map to, with those entries linked to it; a card line with the same name later is filed to it too. The card company's own lines (payments, interest, fees, adjustments) start unticked.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let targets {
                 if targets.isEmpty {
@@ -507,8 +503,8 @@ extension BankClient {
         try await AccountsClient.request("GET", "/payees/\(id)/usage", as: PayeeUsage.self)
     }
     /// Removes a target account nothing files under (the accounts service refuses one still in use).
-    static func deletePayee(_ id: Int) async throws -> ExpenseBook {
-        try await AccountsClient.request("DELETE", "/payees/\(id)", as: ExpenseBook.self)
+    static func deletePayee(_ id: Int) async throws -> TargetBook {
+        try await AccountsClient.request("DELETE", "/payees/\(id)", as: TargetBook.self)
     }
 }
 
@@ -519,7 +515,7 @@ extension BankClient {
 /// Keychain.
 struct RemoveTargetAccountSheet: View {
     let payee: Payee
-    var removed: (ExpenseBook) -> Void
+    var removed: (TargetBook) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var usage: PayeeUsage?
     @State private var error: String?

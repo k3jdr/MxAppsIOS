@@ -322,9 +322,8 @@ def remove_loan(conn, code, q):
 
 # ------------------------------------------------------------------------------------------------- importing statements
 
-def _save_pdf(loan, name, data):
-    """Keeps the PDF in the loan's statement folder (as it is named; a different file of that name gets a number)."""
-    folder = _folder(loan)
+def save_pdf(folder, name, data):
+    """Keeps the PDF in the statements folder (as it is named; a different file of that name gets a number)."""
     os.makedirs(folder, exist_ok=True)
     base, ext = os.path.splitext(name)
     path, n = os.path.join(folder, name), 2
@@ -361,7 +360,7 @@ def import_statements(conn, code, body):
             fetch(conn, "SAVEPOINT statement")
             try:
                 if data is not None:
-                    name = os.path.basename(_save_pdf(loan, name, data))
+                    name = os.path.basename(save_pdf(_folder(loan), name, data))
                 sid = fetch(conn, """
                     INSERT INTO srm.loan_statement (loan_id, statement_date, payment_due_date, amount_due, regular_payment,
                            due_principal, due_interest, due_escrow, principal_balance, escrow_balance, interest_rate,

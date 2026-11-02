@@ -30,7 +30,7 @@ struct SpendingAnalysisView: View {
     @State private var linkSettings = false
 
     static let tabs = [("attribution", "Overview"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Allocation"),
-                       ("family", "Family & Lifecycle"), ("sources", "Sources"), ("admin", "Admin")]
+                       ("family", "Family & Lifecycle"), ("sources", "Sources")]
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
     var body: some View {
@@ -64,18 +64,14 @@ struct SpendingAnalysisView: View {
                 case "deepdive":
                     if let data {
                         SpendingDeepDiveTab(setup: setup, data: data, entries: shownEntries(data), code: $deepDive,
-                                            changed: { replace($0) }, ruleSaved: { applied($0) }, openSource: { store.openRegister(of: $0) }, back: { tab = "attribution" })
+                                            changed: { replace($0) }, ruleSaved: { applied($0) }, openSource: { store.openRegister(of: $0) }, back: { tab = "attribution" },
+                                            allEntries: data.entries, leftOutNote: leftOutNote(data))
                     }
                 case "entries":
-                    if let data { SpendingEntriesTab(setup: setup, data: data, entries: shownEntries(data), changed: { replace($0) }, ruleSaved: { applied($0) }, openSource: { store.openRegister(of: $0) }) }
+                    if let data { SpendingEntriesTab(setup: setup, data: data, entries: data.entries, changed: { replace($0) }, ruleSaved: { applied($0) }, openSource: { store.openRegister(of: $0) }, leftOutNote: leftOutNote(data)) }
                 case "rules":
-                    if let data { TargetAllocationTab(setup: setup, data: data, entries: shownEntries(data)) { applied($0) } }
+                    if let data { TargetAllocationTab(setup: setup, data: data, entries: data.entries) { applied($0) } }
                 case "family": SpendingFamilyTab(setup: setup, data: data) { applied($0) }
-                case "admin":
-                    if let data {
-                        SpendingAdminTab(setup: setup, data: data, entries: shownEntries(data), openTab: { tab = $0 }, go: { store.go($0) },
-                                         ruleSaved: { applied($0) })
-                    }
                 case "tax": SpendingTaxTab(setup: setup, openLoans: { store.go(.loans) })
                 case "feedback":
                     SpendingFeedbackTab(setup: setup, data: data, notes: notes, changed: { notes = $0 }, entryChanged: { replace($0) },
@@ -95,7 +91,11 @@ struct SpendingAnalysisView: View {
                 ProgressView("Reading the registers…").frame(maxWidth: .infinity)
             }
         }
-        .task { await reload() }
+        .task {
+            // Admin moved to Banking ▸ Target Categories.
+            if tab == "admin" { tab = "attribution" }
+            await reload()
+        }
         // A target account's link saved on Banking: the setup brings it.
         .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .quickHelpArea(PortHelp.about(.spending))
@@ -103,7 +103,10 @@ struct SpendingAnalysisView: View {
 
     // MARK: Period
 
-    private var periods: (start: String, end: String, priorStart: String, priorEnd: String) {
+    private var periods: (start: String, end: String, priorStart: String, priorEnd: String) { Self.periods(year: year, yearToDate: yearToDate) }
+
+    /// A year and the one before: January 1 to today's date in both, or the whole years.
+    static func periods(year: Int, yearToDate: Bool) -> (start: String, end: String, priorStart: String, priorEnd: String) {
         let today = Date.now, cal = Calendar.current
         let md = cal.dateComponents([.month, .day], from: today)
         func day(_ y: Int, _ m: Int, _ d: Int) -> String {
@@ -206,6 +209,38 @@ struct SpendingAnalysisView: View {
         return out.isEmpty ? data.entries : data.entries.filter { !out.contains($0.source + ($0.register ?? "")) }
     }
 
+    /// Entries and Deep Dive's list show every register, so that one left out of the comparison can still be found and tagged: this says which.
+    private func leftOutNote(_ data: SpendingAnalysisData) -> String? {
+        let partial = fullCoverage ? SpendingEngine.partialRegisters(data) : []
+        guard !partial.isEmpty else { return nil }
+        return partial.map { "\($0.register ?? $0.source) starts \(shortDay($0.first))" }.joined(separator: "; ")
+            + ": listed here, but left out of the comparison's totals, as it doesn't cover the earlier year."
+    }
+
+    /// What each register left out of the comparison spent this year: All spending still counts it.
+    private func leftOutSpending(_ data: SpendingAnalysisData) -> [(name: String, entries: [SpendingEntry], amount: Double)] {
+        guard fullCoverage else { return [] }
+        return SpendingEngine.partialRegisters(data).compactMap { c in
+            let entries = data.entries.filter { $0.source + ($0.register ?? "") == c.id && inCurrent($0, data) }
+            let amount = entries.reduce(0) { $0 + $1.amount }
+            return abs(amount) < 0.005 ? nil : (c.register ?? c.source, entries, amount)
+        }
+    }
+
+    /// A figure's right-click: the entries behind it, in a window of their own.
+    private func showsTransactions<V: View>(_ cell: V, _ name: String, _ entries: [SpendingEntry], _ data: SpendingAnalysisData) -> some View {
+        // Selectable text would open the text's own menu instead.
+        cell.textSelection(.disabled).contextMenu { transactionsItem(name, entries, data) }
+    }
+
+    private func transactionsItem(_ name: String, _ entries: [SpendingEntry], _ data: SpendingAnalysisData) -> some View {
+        Button("Show \(entries.count) \(entries.count == 1 ? "Transaction" : "Transactions")…") {
+            guard let setup else { return }
+            SpendingTransactionsWindow.open(name, period: "\(shortDay(data.start)) – \(shortDay(data.end))", entries: entries, setup: setup, store: store)
+        }
+        .disabled(entries.isEmpty)
+    }
+
     private func inCurrent(_ e: SpendingEntry, _ data: SpendingAnalysisData) -> Bool { e.date >= data.start && e.date <= data.end }
 
     /// An entry tagged on Entries, as the service now resolves it.
@@ -240,18 +275,19 @@ struct SpendingAnalysisView: View {
         let rows = SpendingEngine.attribute(data, entries: shownEntries(data), setup: setup)
         let total = SpendingEngine.total(rows)
         let partial = SpendingEngine.partialRegisters(data)
+        let leftOut = leftOutSpending(data)
         if !partial.isEmpty {
             Label(partial.map { "\($0.register ?? $0.source) starts \(shortDay($0.first))" }.joined(separator: "; ")
-                  + (fullCoverage ? ": left out, as it doesn't cover the earlier year." : ": its earlier-year spending is missing, so its whole spending counts as growth."),
+                  + (fullCoverage ? ": left out of the comparison, as it doesn't cover the earlier year, and counted in All spending." : ": its earlier-year spending is missing, so its whole spending counts as growth."),
                   systemImage: fullCoverage ? "info.circle" : "exclamationmark.triangle.fill")
                 .font(.callout).foregroundStyle(fullCoverage ? Color.secondary : Color.orange)
         }
-        tiles(total)
+        tiles(total, all: leftOut.isEmpty ? nil : leftOut.reduce(total.current) { $0 + $1.amount }, data)
         if rows.isEmpty {
             ContentUnavailableView("No spending in these periods", systemImage: "chart.bar.xaxis",
                                    description: Text("The check register, credit cards and cash ledgers have no spending entries in either year."))
         } else {
-            metricsTable(rows, total)
+            metricsTable(rows.sorted { ($0.current, $1.name) > ($1.current, $0.name) }, total, leftOut: leftOut, data)
             HStack(alignment: .top, spacing: 14) {
                 waterfall(total)
                 effectsChart(rows)
@@ -261,10 +297,17 @@ struct SpendingAnalysisView: View {
         }
     }
 
-    private func tiles(_ t: CategoryAttribution) -> some View {
+    /// `all`: this year's spending with the registers left out of the comparison, when any are.
+    private func tiles(_ t: CategoryAttribution, all: Double?, _ data: SpendingAnalysisData) -> some View {
         HStack(spacing: 10) {
-            MetricTile(title: "Earlier year", value: money(t.prior), help: "Spending in the earlier period, every category.")
-            MetricTile(title: "This year", value: money(t.current), help: "Spending in the later period, every category.")
+            if let all {
+                showsTransactions(MetricTile(title: "All spending", value: money(all), caption: "every register",
+                                             help: "Spending in the later period from every register, also those left out of the comparison. The other figures compare only the registers covering both years. Right-click for its transactions."),
+                                  "All spending", data.entries.filter { inCurrent($0, data) }, data)
+            }
+            MetricTile(title: "Earlier year", value: money(t.prior), caption: all == nil ? "" : "registers compared", help: "Spending in the earlier period, every category.")
+            showsTransactions(MetricTile(title: "This year", value: money(t.current), caption: all == nil ? "" : "registers compared", help: "Spending in the later period, every category. Right-click for its transactions."),
+                              all == nil ? "All spending" : "Registers compared", shownEntries(data).filter { inCurrent($0, data) }, data)
             MetricTile(title: "Change", value: money(t.change), caption: t.growth.map { signedPct($0, 1) } ?? "",
                        tint: t.change > 0 ? .red : .green, help: "This year less the earlier year.")
             MetricTile(title: "Inflation", value: money(t.effect(.inflation)), caption: t.share(.inflation).map { "\(pct($0, 0)) of the change" } ?? "",
@@ -281,8 +324,12 @@ struct SpendingAnalysisView: View {
         }
     }
 
-    private func metricsTable(_ rows: [CategoryAttribution], _ total: CategoryAttribution) -> some View {
-        Box(title: "Key Metrics by Category", symbol: "tablecells", help: "Each category's spending growth and how much of its change each effect explains (the contributions add to 100% of the change). Inflation and lifecycle are the unavoidable, age-related part; behavior is habit; one-time won't repeat; taxes is what changed with taxes. Usage is more or less of the same things, including spending with no driver assigned.") {
+    private func metricsTable(_ rows: [CategoryAttribution], _ total: CategoryAttribution, leftOut: [(name: String, entries: [SpendingEntry], amount: Double)], _ data: SpendingAnalysisData) -> some View {
+        var compared = total
+        if !leftOut.isEmpty { compared.name = "Registers compared" }
+        let thisYear = shownEntries(data).filter { inCurrent($0, data) }
+        let byCategory = Dictionary(grouping: thisYear) { $0.category ?? SpendingEngine.unassigned }
+        return Box(title: "Key Metrics by Category", symbol: "tablecells", help: "Each category's spending growth, the largest this year first, and how much of its change each effect explains (the contributions add to 100% of the change). Inflation and lifecycle are the unavoidable, age-related part; behavior is habit; one-time won't repeat; taxes is what changed with taxes. Usage is more or less of the same things, including spending with no driver assigned. Click a category for its Deep Dive; right-click it for the transactions behind its This year.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 5) {
                 GridRow {
                     Text("Category").gridColumnAlignment(.leading)
@@ -292,9 +339,14 @@ struct SpendingAnalysisView: View {
                 }
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Divider()
-                ForEach(rows) { r in metricsRow(r) }
+                ForEach(rows) { r in metricsRow(r, byCategory[r.code] ?? [], data) }
                 Divider()
-                metricsRow(total).fontWeight(.semibold)
+                metricsRow(compared, thisYear, data).fontWeight(.semibold)
+                if !leftOut.isEmpty {
+                    ForEach(leftOut, id: \.name) { thisYearRow("\($0.name), not compared", $0.name, $0.entries, $0.amount, data) }
+                    thisYearRow("All spending", "All spending", data.entries.filter { inCurrent($0, data) },
+                                leftOut.reduce(total.current) { $0 + $1.amount }, data).fontWeight(.semibold)
+                }
             }
             .monospacedDigit()
             Text("Contributions are shares of the change: a category whose spending fell shows how much each effect took off. CPI is the category's price change between the years (FRED in the security master; \"assumed\" where it has no values yet).")
@@ -302,17 +354,31 @@ struct SpendingAnalysisView: View {
         }
     }
 
-    private func metricsRow(_ r: CategoryAttribution) -> some View {
+    /// A row below the comparison: this year's spending only, with no earlier year to compare it with.
+    private func thisYearRow(_ label: String, _ name: String, _ entries: [SpendingEntry], _ amount: Double, _ data: SpendingAnalysisData) -> some View {
+        GridRow {
+            showsTransactions(Text(label), name, entries, data).gridColumnAlignment(.leading)
+            Text("—").foregroundStyle(.secondary)
+            showsTransactions(Text(money(amount)), name, entries, data)
+        }
+    }
+
+    /// `entries`: what makes up its This year, for its right-click.
+    private func metricsRow(_ r: CategoryAttribution, _ entries: [SpendingEntry], _ data: SpendingAnalysisData) -> some View {
         GridRow {
             Group {
                 if r.code == "TOTAL" {
-                    Text(r.name)
+                    showsTransactions(Text(r.name), r.name, entries, data)
                 } else {
                     Button(r.name) { openDeepDive(r.code) }
                         .buttonStyle(.link)
                         .foregroundStyle(r.code == SpendingEngine.unassigned ? .secondary : .primary)
                         .help("Deep dive into \(r.name): its entries, the target accounts and tags that put them here, and what changed")
-                        .contextMenu { Button("Deep Dive into \(r.name)") { openDeepDive(r.code) } }
+                        .textSelection(.disabled)
+                        .contextMenu {
+                            transactionsItem(r.name, entries, data)
+                            Button("Deep Dive into \(r.name)") { openDeepDive(r.code) }
+                        }
                 }
             }
             .gridColumnAlignment(.leading)
@@ -351,7 +417,7 @@ struct SpendingAnalysisView: View {
 
     private func twoDimensions(_ data: SpendingAnalysisData, _ setup: SpendingSetup) -> some View {
         var sums: [String: Double] = [:]
-        for e in shownEntries(data) where inCurrent(e, data) {
+        for e in data.entries where inCurrent(e, data) {
             sums[(setup.category(e.category)?.name ?? "Not assigned") + "|" + setup.driverTitle(e.driver), default: 0] += e.amount
         }
         let slices = sums.map { k, v in
@@ -540,6 +606,8 @@ private struct SpendingEntriesTab: View {
     /// The one category shown (Deep Dive), without the category picker.
     var lockedCategory: String? = nil
     var title = "Spending Entries"
+    /// Which registers shown here the comparison leaves out (Only registers covering both years).
+    var leftOutNote: String? = nil
     @AppStorage("spendingEntriesPeriod") private var period = "current"
     @AppStorage(RowsStepper.key) private var tableRows = RowsStepper.standard
     @State private var onlyUnassigned = false
@@ -548,17 +616,19 @@ private struct SpendingEntriesTab: View {
     @State private var selected = Set<SpendingEntry.ID>()
     @State private var tagging: [SpendingEntry]?
     @State private var ruleFor: RuleTarget?
-    /// The entries Change Expense Account… is open for.
-    @State private var refiling: [SpendingEntry]?
     /// The columns' widths (drag a header's edge), order and visibility, kept across reloads and launches: the Deep
     /// Dive builds a new table for each category, which would otherwise start from the standard widths.
     @AppStorage("spendingEntriesColumns") private var columnsStore = Data()
     @State private var columns = TableColumnCustomization<SpendingEntry>()
     /// Each column header's sort and filter (Excel-style), on top of the period, category and search above the table.
     @State private var grid = GridQueryOptions()
+    /// The charges the Amazon Order Lookup just attached: they stay in view under a filter on Bought, showing what was
+    /// bought, until a filter or sort changes.
+    @State private var justAttached = Set<SpendingEntry.ID>()
     /// Set Category / Set Driver on the selected entries: saving, and what went wrong.
     @State private var bulkSaving = false
     @State private var bulkError: String?
+    @State private var finding: FindRequest?
 
     private var shown: [SpendingEntry] {
         let q = search.lowercased()
@@ -566,7 +636,7 @@ private struct SpendingEntriesTab: View {
             (period == "both" || (period == "current") == (e.date >= data.start && e.date <= data.end))
                 && (!onlyUnassigned || e.driver == nil)
                 && ((lockedCategory ?? category).isEmpty || (e.category ?? SpendingEngine.unassigned) == (lockedCategory ?? category))
-                && (q.isEmpty || [e.payee, e.description, e.expenseAccount, e.event, e.register, e.amazonItems?.map(\.name).joined(separator: "\n"),
+                && (q.isEmpty || [e.payee, e.description, e.event, e.register, e.amazonItems?.map(\.name).joined(separator: "\n"),
                                    e.appleItems?.map(\.label).joined(separator: "\n")]
                     .contains { ($0 ?? "").lowercased().contains(q) })
         }
@@ -575,9 +645,9 @@ private struct SpendingEntriesTab: View {
 
     static func text(_ setup: SpendingSetup) -> TableText<SpendingEntry> {
         TableText(
-            titles: ["Date", "From", "Payee", "Description", "Bought", "Expense account", "Amount", "Category", "Driver", "Family member", "Event"],
+            titles: ["Date", "From", "Payee", "Description", "Bought", "Amount", "Category", "Driver", "Family member", "Event"],
             cells: { e in [e.date, e.register ?? e.sourceTitle, e.payee ?? "", e.description ?? "",
-                           ((e.amazonItems ?? []).map(\.label) + (e.appleItems ?? []).map(\.label)).joined(separator: "; "), e.expenseAccount ?? "",
+                           ((e.amazonItems ?? []).map(\.label) + (e.appleItems ?? []).map(\.label)).joined(separator: "; "),
                            String(format: "%.2f", e.amount), e.category ?? "", setup.driverTitle(e.driver), e.memberId.map(String.init) ?? "", e.event ?? ""] })
     }
 
@@ -589,7 +659,6 @@ private struct SpendingEntriesTab: View {
             "From": .text { $0.register ?? $0.sourceTitle },
             "Payee": .text { $0.payee },
             "Bought": .text { $0.bought },
-            "Expense account": .text { $0.expenseAccount },
             "Amount": .number({ $0.amount }, display: { money2($0.amount) }),
             "Category": .text { setup.category($0.category)?.name ?? "Not assigned" },
             "Driver": .text { setup.driverTitle($0.driver) },
@@ -601,9 +670,12 @@ private struct SpendingEntriesTab: View {
     var body: some View {
         let base = shown
         let gridColumns = Self.gridColumns(setup)
-        let rows = LocalGrid.rows(base, grid, gridColumns)
+        let filtered = LocalGrid.rows(base, grid, gridColumns)
+        let passing = Set(filtered.map(\.id))
+        let rows = justAttached.isEmpty || grid.filters["Bought"] == nil ? filtered
+            : LocalGrid.rows(base, grid, gridColumns, except: "Bought").filter { passing.contains($0.id) || justAttached.contains($0.id) }
         let picked = rows.filter { selected.contains($0.id) }
-        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and card charges and credits to target accounts whose role is Spending. Each shows its category and driver and where they came from (the entry's own tag, else its target account's allocation). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Each column header's button sorts and filters it, as in Excel. Select several entries (⇧ / ⌘ click, ⌘A) and use Category or Driver above the table, or right-click, to change just that for all of them; each keeps the rest of its own tag. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — to allocate their target account (Allocate…), or to file them under another expense account for Banking's books (Change Expense Account…).") {
+        Box(title: title, symbol: "list.bullet.rectangle", help: "Every spending dollar in the period: checks and card charges and credits to target accounts whose role is Spending. Each shows its category and driver and where they came from (the entry's own tag, else its target account's allocation). An Amazon charge matched to its order (Amazon's order export, Sources) shows what was bought. Each column header's button sorts and filters it, as in Excel. Select several entries (⇧ / ⌘ click, ⌘A) and use Category or Driver above the table, or right-click, to change just that for all of them; each keeps the rest of its own tag. Double-click an entry, or select several and right-click, to tag them — a category, a driver, a family member, an event — or to allocate their target account (Allocate…).") {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) { entryFilters; Spacer(); entryCount(rows) }
                 VStack(alignment: .leading, spacing: 6) {
@@ -611,7 +683,15 @@ private struct SpendingEntriesTab: View {
                     HStack(spacing: 10) { Spacer(); entryCount(rows) }
                 }
             }
+            if let leftOutNote {
+                Label(leftOutNote, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
+            }
+            MissingPaymentsLine(text: search, data: data) { finding = FindRequest(text: search) }
             GridFilterStatus(shown: rows.count, of: base.count, options: $grid)
+            if rows.count > filtered.count {
+                Text("\(rows.count - filtered.count) just attached \(rows.count - filtered.count == 1 ? "stays" : "stay") in view, though the Bought filter would hide \(rows.count - filtered.count == 1 ? "it" : "them"), until a filter or sort changes.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if !picked.isEmpty { selectionBar(picked) }
             Table(rows, selection: $selected, columnCustomization: $columns) {
                 TableColumn("Date") { e in Text(shortDay(e.date)).monospacedDigit() }.width(min: 70, ideal: 80).customizationID("date")
@@ -619,7 +699,6 @@ private struct SpendingEntriesTab: View {
                 TableColumn("Payee") { e in Text(e.payee ?? "").help([e.payee, e.description, e.boughtDetail].compactMap { $0 }.joined(separator: "\n")) }
                     .width(min: 80, ideal: 220, max: 900).customizationID("payee")
                 TableColumn("Bought") { e in boughtCell(e) }.width(min: 60, ideal: 200, max: 900).customizationID("bought")
-                TableColumn("Expense account") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 130).customizationID("account")
                 TableColumn("Amount") { e in Text(money2(e.amount)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(min: 70, ideal: 90).customizationID("amount")
                 TableColumn("Category") { e in
                     Text(setup.category(e.category)?.name ?? "Not assigned").foregroundStyle(e.category == nil ? .secondary : .primary)
@@ -641,6 +720,8 @@ private struct SpendingEntriesTab: View {
             .onAppear {
                 columns = (try? JSONDecoder().decode(TableColumnCustomization<SpendingEntry>.self, from: columnsStore)) ?? columns
                 #if DEBUG
+                if UserDefaults.standard.bool(forKey: "spendingBoughtEmpty") { grid.filters["Bought"] = .condition(.isEmpty, "", "") }
+                if lockedCategory == nil, let text = UserDefaults.standard.string(forKey: "spendingFindTest") { search = text; finding = FindRequest(text: text) }
                 if lockedCategory == nil, !Self.amazonTestDone, let ids = UserDefaults.standard.string(forKey: "amazonLookupTest") {
                     let wanted = Set(ids.split(separator: ",").map { $0.replacingOccurrences(of: ":", with: "-") })
                     let picked = entries.filter { wanted.contains($0.id) }
@@ -649,6 +730,7 @@ private struct SpendingEntriesTab: View {
                 #endif
             }
             .onChange(of: columns) { columnsStore = (try? JSONEncoder().encode(columns)) ?? columnsStore }
+            .onChange(of: grid) { justAttached = [] }
             .tableText()
             .copiesSelectedRows(rows, selected: selected, as: Self.text(setup))
             .columnHeaderFilters(types: LocalGrid.types(gridColumns), options: grid,
@@ -667,8 +749,6 @@ private struct SpendingEntriesTab: View {
                 if picked.contains(where: \.tagged) {
                     Button("Clear Tags") { Task { await clear(picked.filter(\.tagged)) } }
                 }
-                Button(picked.count > 1 ? "Change Expense Account of \(picked.count) Entries…" : "Change Expense Account…") { refiling = picked }
-                    .disabled(!picked.contains { $0.source != "ledger" })
                 if picked.contains(where: \.isAmazonLookupCharge) {
                     Button(picked.count == 1 ? "Look Up Amazon Order…" : "Look Up Amazon Orders…") { lookUp(picked) }
                         .help("Find what these Amazon charges bought on amazon.com, in a window where you sign in yourself")
@@ -708,11 +788,9 @@ private struct SpendingEntriesTab: View {
         .sheet(isPresented: Binding(get: { tagging != nil }, set: { if !$0 { tagging = nil } })) {
             if let picked = tagging { SpendingTagSheet(setup: setup, entries: picked) { body in await tag(picked, body) } }
         }
+        .sheet(item: $finding) { r in FindPaymentSheet(text: r.text, data: data, setup: setup, allocated: ruleSaved) }
         .sheet(item: $ruleFor) { target in
             TargetAllocationSheet(setup: setup, target: target, entries: entries) { ruleSaved($0) }
-        }
-        .sheet(isPresented: Binding(get: { refiling != nil }, set: { if !$0 { refiling = nil } })) {
-            if let picked = refiling { RefileSheet(setup: setup, entries: picked) { ruleSaved($0) } }
         }
         .alert("Some entries weren't changed", isPresented: Binding(get: { bulkError != nil }, set: { if !$0 { bulkError = nil } })) {
             Button("OK") { bulkError = nil }
@@ -799,6 +877,8 @@ private struct SpendingEntriesTab: View {
         }
         Toggle("No driver yet", isOn: $onlyUnassigned).toggleStyle(.checkbox)
         TextField("Search payee, item bought, event", text: $search).textFieldStyle(.roundedBorder).frame(minWidth: 160, maxWidth: 420)
+        Button("Find a Payment…") { finding = FindRequest(text: search) }
+            .help("Every check, card charge and downloaded line with these words, in the analysis or not, and why")
     }
 
     @ViewBuilder
@@ -847,7 +927,12 @@ private struct SpendingEntriesTab: View {
 
     /// The Amazon Order Lookup for these charges, in its own window; what it attaches comes back to the table.
     private func lookUp(_ picked: [SpendingEntry], scan: Bool = true) {
-        AmazonLookupWindow.open(picked, scan: scan) { found in for e in found { changed(e) } }
+        AmazonLookupWindow.open(picked, scan: scan) { found in
+            for e in found {
+                justAttached.insert(e.id)
+                changed(e)
+            }
+        }
     }
 
     private func unlink(_ e: SpendingEntry) async {
@@ -1023,84 +1108,8 @@ struct TargetAllocationSheet: View {
     }
 }
 
-/// Change Expense Account…: files card and check entries under another expense account (the bookkeeping category the
+
 /// registers show) and, unless turned off, what comes next with the same target account or statement name too.
-struct RefileSheet: View {
-    var setup: SpendingSetup
-    var entries: [SpendingEntry]
-    var saved: (SpendingSetup) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var account = 0
-    @State private var fileFuture = true
-    @State private var targetName = ""
-    @State private var error: String?
-    @State private var saving = false
-
-    private var changeable: [SpendingEntry] { entries.filter { $0.source != "ledger" } }
-    private var loose: [SpendingEntry] { changeable.filter { $0.payeeId == nil } }
-    private var targets: [String] { Array(Set(changeable.compactMap { $0.payeeId == nil ? nil : $0.payee })).sorted() }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(changeable.count == 1 ? "Change Expense Account" : "Change Expense Account of \(changeable.count) Entries").heading(.heading)
-            Text(summary).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Form {
-                Picker("Expense account", selection: $account) {
-                    Text("Choose…").tag(0)
-                    ForEach(setup.expenseAccounts) { a in Text(a.name).tag(a.id) }
-                }
-                Toggle("Also file future charges under it", isOn: $fileFuture)
-                if fileFuture && !loose.isEmpty {
-                    TextField("Target account", text: $targetName, prompt: Text("NJM Insurance"))
-                }
-            }
-            Text(futureNote).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
-            HStack {
-                Spacer()
-                if saving { ProgressView().controlSize(.small) }
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Change") { Task { await save() } }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(saving || account == 0 || (fileFuture && !loose.isEmpty && targetName.trimmingCharacters(in: .whitespaces).isEmpty))
-            }
-        }
-        .padding(18)
-        .frame(width: 500)
-        .onAppear {
-            // Start from the most common statement words of the entries without a target account.
-            targetName = loose.first.map { $0.statementKey.capitalized } ?? ""
-        }
-    }
-
-    private var summary: String {
-        let names = Array(Set(changeable.map { $0.payee ?? $0.description ?? "" })).sorted()
-        var s = "\(changeable.count) \(changeable.count == 1 ? "entry" : "entries"), \(money2(changeable.map(\.amount).reduce(0, +))): "
-            + names.prefix(3).joined(separator: "; ") + (names.count > 3 ? "; …" : "")
-        let now = Set(changeable.compactMap(\.expenseAccount))
-        if !now.isEmpty { s += ". Filed under \(now.sorted().joined(separator: ", ")) now." }
-        let ledger = entries.count - changeable.count
-        if ledger > 0 { s += " \(ledger) cash-ledger \(ledger == 1 ? "entry takes" : "entries take") its budget line's expense account and won't change." }
-        return s
-    }
-
-    private var futureNote: String {
-        guard fileFuture else { return "Only these entries change; the next charges come in as before." }
-        var parts: [String] = []
-        if !targets.isEmpty { parts.append("Their target account\(targets.count == 1 ? "" : "s") (\(targets.joined(separator: ", "))) will be filed under it, so new entries with \(targets.count == 1 ? "it" : "them") are too.") }
-        if !loose.isEmpty { parts.append("The entries with no target account get this one, with their statement names, so the card and checking downloads post the next charges to it, under this expense account. It shows on Banking ▸ Target Accounts.") }
-        return parts.joined(separator: " ")
-    }
-
-    private func save() async {
-        saving = true
-        defer { saving = false }
-        do {
-            saved(try await SpendingClient.changeExpenseAccount(changeable, to: account, fileFuture: fileFuture, targetName: targetName))
-            dismiss()
-        } catch { self.error = describe(error) }
-    }
-}
 
 // MARK: - Allocation
 
@@ -1110,7 +1119,7 @@ struct RefileSheet: View {
 private struct TargetAllocationTab: View {
     var setup: SpendingSetup
     var data: SpendingAnalysisData
-    /// Both periods' spending entries (of the registers shown).
+    /// Both periods' spending entries, of every register: a target account paid only from one left out of the comparison still needs allocating.
     var entries: [SpendingEntry]
     var saved: (SpendingSetup) -> Void
     @State private var search = ""
@@ -1119,6 +1128,7 @@ private struct TargetAllocationTab: View {
     @State private var editing: RuleTarget?
     @State private var problem: String?
     @State private var saving: Int?
+    @State private var finding: FindRequest?
 
     private var year: String { String(data.start.prefix(4)) }
     private var priorYear: String { String(data.priorStart.prefix(4)) }
@@ -1165,6 +1175,7 @@ private struct TargetAllocationTab: View {
                 if saving != nil { ProgressView().controlSize(.small) }
                 Text("\(list.count) target accounts\(open > 0 ? " · \(open) with no category" : "")").foregroundStyle(open > 0 ? .orange : .secondary)
             }
+            MissingPaymentsLine(text: search, data: data) { finding = FindRequest(text: search) }
             if list.isEmpty {
                 Text(q.isEmpty ? "No target account has spending in either period." : "No target account matches.").foregroundStyle(.secondary)
             } else {
@@ -1181,6 +1192,7 @@ private struct TargetAllocationTab: View {
             }
         }
         .sheet(item: $editing) { t in TargetAllocationSheet(setup: setup, target: t, entries: entries) { saved($0) } }
+        .sheet(item: $finding) { r in FindPaymentSheet(text: r.text, data: data, setup: setup, allocated: { saved($0) }) }
     }
 
     private func row(_ p: SpendingSetup.Named, _ s: Spent) -> some View {
@@ -1884,7 +1896,7 @@ private struct SpendingSourcesTab: View {
         let y = String(sources.start.prefix(4)), py = String(sources.priorStart.prefix(4))
         VStack(alignment: .leading, spacing: 2) {
             if s.entriesNow + s.entriesBefore == 0 && (s.entries ?? 0) > 0 && s.spendingFirst == nil {
-                Text("None of its \((s.entries ?? 0).formatted()) entries counts as spending: none is in an expense account (card payments and transfers are not spending). File an entry in an expense account, or give its target account one, for it to count.")
+                Text("None of its \((s.entries ?? 0).formatted()) entries counts as spending: none goes to a target account whose role is Spending (card payments and transfers are not spending). Set its target accounts' roles on Sources ▸ Transfers & Income for them to count.")
                     .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("\(y): \(s.entriesNow.formatted()) entries, \(money(s.spentNow)) · \(py): \(s.entriesBefore.formatted()) entries, \(money(s.spentBefore))"
@@ -1993,6 +2005,7 @@ private struct UnallocatedBox: View {
     @State private var notice: String?
     @State private var allocating: SpendingUnallocated.Group?
     @State private var showAll = false
+    @State private var search = ""
 
     var body: some View {
         Box(title: "Unallocated Payments", symbol: "questionmark.folder", help: "Checks and card charges no target account matches. They aren't in the analysis until they are allocated: Allocate… makes a target account for a group (its name, a pattern its statements start with, its role and the category, driver and family member its spending goes to) or adds the group to an existing one. With a pattern, the next downloads with those words go to it by themselves. Grouped by the statement's own words (a processor's prefix and store numbers left off), the most money first.") {
@@ -2004,7 +2017,9 @@ private struct UnallocatedBox: View {
                 } else {
                     Text("\(d.count.formatted()) payments in \(d.groups.count.formatted()) groups have no target account — \(money(d.now)) this year, \(money(d.before)) the year before — and aren't in the analysis.")
                         .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                    let shown = showAll ? d.groups : Array(d.groups.prefix(25))
+                    TextField("Search statement names", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
+                    let matching = d.groups.filter { g in search.isEmpty || ([g.label, g.pattern] + g.names).contains { $0.localizedCaseInsensitiveContains(search) } }
+                    let shown = showAll || !search.isEmpty ? matching : Array(matching.prefix(25))
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                         GridRow {
                             Text("Statement names").fillsGridColumn()
@@ -2029,7 +2044,7 @@ private struct UnallocatedBox: View {
                         }
                     }
                     .font(.callout)
-                    if d.groups.count > 25 {
+                    if search.isEmpty && d.groups.count > 25 {
                         Button(showAll ? "Show the first 25" : "Show all \(d.groups.count)") { showAll.toggle() }.buttonStyle(.link)
                     }
                 }
@@ -2049,6 +2064,128 @@ private struct UnallocatedBox: View {
 
     private func load() async {
         do { data = try await SpendingClient.unallocated(window: window); problem = nil } catch { problem = describe(error) }
+    }
+}
+
+/// What Find a Payment… opens on.
+private struct FindRequest: Identifiable {
+    var text: String
+    var id: String { text }
+}
+
+/// Under a search: how many payments match it but aren't in the analysis, which the list being searched can't show.
+private struct MissingPaymentsLine: View {
+    var text: String
+    var data: SpendingAnalysisData
+    var open: () -> Void
+    @State private var missing = 0
+
+    var body: some View {
+        // Not a Group: with nothing in it, its task would never start.
+        VStack(alignment: .leading, spacing: 0) {
+            if missing > 0 {
+                HStack(spacing: 8) {
+                    Label("\(missing) payment\(missing == 1 ? "" : "s") matching \u{201C}\(text)\u{201D} \(missing == 1 ? "isn't" : "aren't") in the analysis.", systemImage: "exclamationmark.triangle")
+                        .font(.callout).foregroundStyle(.orange)
+                    Button("See Why…", action: open).controlSize(.small)
+                }
+            }
+        }
+        .task(id: text) {
+            let q = text.trimmingCharacters(in: .whitespaces)
+            guard q.count >= 2 else { missing = 0; return }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let found = try? await SpendingClient.find(q, data: data) else { return }
+            missing = found.missing
+        }
+    }
+}
+
+/// Find a Payment…: every check, card charge and downloaded line with these words, wherever it is. A statement name no
+/// target account matches can be allocated here, and those payments join the analysis.
+private struct FindPaymentSheet: View {
+    @State var text: String
+    var data: SpendingAnalysisData
+    var setup: SpendingSetup
+    var allocated: (SpendingSetup) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var found: SpendingFound?
+    @State private var problem: String?
+    @State private var notice: String?
+    @State private var busy = false
+    @State private var allocating: SpendingUnallocated.Group?
+    /// The setup as the last allocation left it, for the next one's target accounts.
+    @State private var latest: SpendingSetup?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Find a Payment").heading(.heading)
+            Text("Every check, card charge and downloaded line with these words in its statement name, target account or memo, in the analysis or not.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                TextField("Statement name, target account or memo", text: $text).textFieldStyle(.roundedBorder)
+                if busy { ProgressView().controlSize(.small) }
+            }
+            if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            if let notice { Label(notice, systemImage: "checkmark.circle").foregroundStyle(.secondary).font(.callout) }
+            if let found {
+                ForEach(found.groups) { g in
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("\(g.count) with no target account: \(g.label)").font(.callout).lineLimit(1)
+                            Text("\(g.nameCount) statement name\(g.nameCount == 1 ? "" : "s"), \(money2(g.total))" + (g.like.isEmpty ? "" : " · like \(g.like.map(\.name).joined(separator: ", "))"))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer()
+                        Button("Allocate…") { allocating = g }.controlSize(.small)
+                    }
+                }
+                if found.rows.isEmpty {
+                    Text("Nothing has \u{201C}\(found.query)\u{201D} in it. A charge the card company hasn't sent yet isn't here: read its download or statement on the card's page.")
+                        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Table(found.rows) {
+                    TableColumn("Date") { r in Text(shortDay(r.date)).monospacedDigit() }.width(min: 70, ideal: 80)
+                    TableColumn("From") { r in Text(r.register).foregroundStyle(.secondary) }.width(min: 60, ideal: 90)
+                    TableColumn("Statement name") { r in Text(r.name).help(r.name) }.width(min: 120, ideal: 230)
+                    TableColumn("Target account") { r in Text(r.payee ?? "").foregroundStyle(.secondary).help(r.payee ?? "") }.width(min: 60, ideal: 120)
+                    TableColumn("Amount") { r in Text(money2(r.amount)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing) }.width(min: 60, ideal: 80)
+                    TableColumn("Where it is") { r in
+                        Text(r.why).foregroundStyle(["spending", "other_period", "void", "card_payment"].contains(r.state) ? Color.secondary : Color.orange).help(r.why)
+                    }.width(min: 160, ideal: 300)
+                }
+                .frame(minHeight: 260)
+                if found.rows.count >= 1000 { Text("The newest 1,000: search for more of the name to see the rest.").font(.caption).foregroundStyle(.secondary) }
+            } else {
+                Spacer(minLength: 260)
+            }
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 1060, height: 620)
+        .task(id: text) {
+            try? await Task.sleep(for: .milliseconds(300))
+            if !Task.isCancelled { await load() }
+        }
+        .sheet(item: $allocating) { g in
+            AllocateGroupSheet(group: g, setup: latest ?? setup) { s, n, name in
+                latest = s
+                allocated(s)
+                notice = "\(n) payment\(n == 1 ? "" : "s") allocated to \(name)."
+                await load()
+            }
+        }
+    }
+
+    private func load() async {
+        let q = text.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else { found = nil; problem = nil; return }
+        busy = true
+        defer { busy = false }
+        do { found = try await SpendingClient.find(q, data: data); problem = nil } catch { problem = describe(error) }
     }
 }
 
@@ -2115,7 +2252,7 @@ private struct AllocateGroupSheet: View {
         .onAppear {
             name = group.pattern.capitalized
             patterns = group.pattern
-            if let first = group.like.first { payeeId = first.id }
+            if let first = group.like.first { payeeId = first.id; existing = true }
         }
     }
 
@@ -2204,7 +2341,7 @@ private struct TransfersBox: View {
                         }
                         .fillsGridColumn()
                         amounts(t)
-                        Text(t.expenseAccount ?? "—").foregroundStyle(.secondary)
+                        Text(t.category ?? "—").foregroundStyle(.secondary)
                         fileMenu(t, label: "File as", roles: ["transfer", "income"], suggested: t.suggest)
                     }
                 }
@@ -2319,7 +2456,7 @@ private struct DisconnectSourceSheet: View {
                         ForEach(undone, id: \.kind) { k in Text("• \(k.count.formatted()) \(k.what)") }
                     }
                     .font(.callout)
-                    Text("While it is disconnected the payment and funding matches leave it alone, and Admin's Counted Twice finder doesn't offer its entries.")
+                    Text("While it is disconnected the payment and funding matches leave it alone.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Text("\(l.spendingEntries.formatted()) of its entries count as spending now; disconnected, none does.")
@@ -2464,6 +2601,9 @@ private struct SpendingDeepDiveTab: View {
     var ruleSaved: (SpendingSetup) -> Void
     var openSource: (SpendingEntry) -> Void
     var back: () -> Void
+    /// The list at the bottom shows every register's entries, though the comparison above leaves some out.
+    var allEntries: [SpendingEntry]
+    var leftOutNote: String?
     @AppStorage("spendingCurveInflate") private var inflate = true
     @State private var ruleFor: RuleTarget?
 
@@ -2507,8 +2647,8 @@ private struct SpendingDeepDiveTab: View {
                                    description: Text("Nothing in \(priorYear) or \(year) is in \(name). Target accounts' allocation (Allocation) and tags (Entries) put spending in a category."))
         }
         lifecycleBox
-        SpendingEntriesTab(setup: setup, data: data, entries: entries, changed: changed, ruleSaved: ruleSaved, openSource: openSource,
-                           lockedCategory: code, title: "\(name) Entries")
+        SpendingEntriesTab(setup: setup, data: data, entries: allEntries, changed: changed, ruleSaved: ruleSaved, openSource: openSource,
+                           lockedCategory: code, title: "\(name) Entries", leftOutNote: leftOutNote)
             .id(code)
     }
 

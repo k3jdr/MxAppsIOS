@@ -1,14 +1,16 @@
 //
-//  SpendingAdminView.swift
+//  TargetCategoriesView.swift
 //  MxAcctMGR
 //
-//  Spending Analysis ▸ Admin: the bookkeeping expense accounts, the spending categories and drivers, and a guide to
-//  how spending is allocated.
+//  Banking ▸ Target Categories: the one list of spending categories across every account, the card companies' categories
+//  mapped to them, the spending drivers, and a guide to how spending is allocated. The year is Spending Analysis's; the
+//  figures count every register, as nothing here compares one year with another.
 //
-//  * Expense accounts: every one with its description and this year's spending, to add, edit or remove
-//    (SpendingExpenseAccounts.swift's sheets). They are Banking's bookkeeping categories, not the allocation.
-//  * Spending categories and drivers (V047): every one with this year's spending and the target accounts allocated to
-//    it, to add, edit, remove or put in order (SpendingCategoriesDrivers.swift's sheets).
+//  * Spending categories (V047, V061): every one with what each checking account and credit card spent in it this year
+//    and what sets it, to add, edit, remove or put in order (SpendingCategoriesDrivers.swift's sheets). Right-click one
+//    for the transactions behind it.
+//  * Card company categories (V061): what a new card line's target account takes when it has no category.
+//  * Spending drivers (V047): the same for why spending changed.
 //  * Driver and category: two dimensions on every dollar, allocated on target accounts (V052) and overridden by an
 //    entry's own tag. The Category × Driver table shows this year's spending in both; a click on a cell shows which
 //    target accounts put its entries there, with Allocate… to change one.
@@ -16,80 +18,138 @@
 
 import SwiftUI
 
-struct SpendingAdminTab: View {
-    var setup: SpendingSetup
-    var data: SpendingAnalysisData
-    /// Both periods' entries, of the registers in the analysis.
-    var entries: [SpendingEntry]
-    /// Opens another Spending Analysis tab (allocation, entries, sources).
-    var openTab: (String) -> Void
-    /// Opens another screen (Target Accounts).
-    var go: (Screen) -> Void
-    var ruleSaved: (SpendingSetup) -> Void
+struct TargetCategoriesView: View {
+    @Bindable var store: PortStore
+    @AppStorage("spendingYear") private var year = Calendar.current.component(.year, from: .now)
+    @AppStorage("spendingYTD") private var yearToDate = true
+    /// The Spending Analysis tab the guide's buttons open.
+    @AppStorage("spendingTab") private var spendingTab = "attribution"
+    @State private var setup: SpendingSetup?
+    @State private var data: SpendingAnalysisData?
+    @State private var cardCategories: [CardCategory] = []
+    @State private var problem: String?
+    @State private var busy = false
+
+    private static let thisYear = Calendar.current.component(.year, from: .now)
 
     var body: some View {
-        ExpenseAccountsAdmin(setup: setup, data: data, entries: entries, ruleSaved: ruleSaved)
-        CategoriesAdmin(setup: setup, data: data, entries: entries, saved: ruleSaved)
-        DriversAdmin(setup: setup, data: data, entries: entries, saved: ruleSaved)
-        DriverCategoryGuide(setup: setup, data: data, entries: entries, openTab: openTab, go: go, ruleSaved: ruleSaved)
+        StepPage(store: store, subtitle: "One list of categories across every checking account, credit card and cash ledger: what the money bought, with the drivers of why it changed.", lesson: [
+            "Every payment to a target account takes the target account's category, set on Target Accounts or Spending Analysis ▸ Allocation, unless the entry has a tag of its own. So a category adds up the same on every register, here and on Spending Analysis.",
+            "Each category follows a consumer price index, which decides how much of its change is inflation. Removing one moves what is in it to another. A card company's own category gives a new target account its category until you choose one.",
+        ], scrollsHorizontally: true, widest: .infinity) {
+            HStack(spacing: 12) {
+                Picker("Year", selection: $year) {
+                    ForEach((Self.thisYear - 5)...Self.thisYear, id: \.self) { y in Text(verbatim: "\(y)").tag(y) }
+                }
+                .frame(maxWidth: 140)
+                Toggle("Year to date", isOn: $yearToDate).toggleStyle(.checkbox)
+                    .help("January 1 to today's date; off, the whole year. The same choices as on Spending Analysis")
+                Spacer()
+                if busy { ProgressView().controlSize(.small) }
+                Button { Task { await reload() } } label: { Image(systemName: "arrow.clockwise") }
+                    .help("Read the registers again")
+            }
+            .onChange(of: year) { Task { await reload() } }
+            .onChange(of: yearToDate) { Task { await reload() } }
+            if let problem {
+                Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
+            }
+            if let setup, let data {
+                CategoriesAdmin(setup: setup, data: data, entries: data.entries, store: store, saved: { applied($0) })
+                CardCategoriesAdmin(setup: setup, categories: $cardCategories) { Task { await reload() } }
+                DriversAdmin(setup: setup, data: data, entries: data.entries, saved: { applied($0) })
+                DriverCategoryGuide(setup: setup, data: data, entries: data.entries,
+                                    openTab: { spendingTab = $0; store.go(.spending) }, go: { store.go($0) }, ruleSaved: { applied($0) })
+            } else if busy {
+                ProgressView("Reading the registers…").frame(maxWidth: .infinity)
+            }
+        }
+        .task { await reload() }
+        .quickHelpArea(PortHelp.about(.targetCategories))
+    }
+
+    private func reload() async {
+        busy = true
+        defer { busy = false }
+        let p = SpendingAnalysisView.periods(year: year, yearToDate: yearToDate)
+        do {
+            async let s = SpendingClient.setup()
+            async let d = SpendingClient.analysis(start: p.start, end: p.end, priorStart: p.priorStart, priorEnd: p.priorEnd)
+            async let c = SpendingClient.cardCategories()
+            (setup, data, cardCategories) = try await (s, d, c)
+            problem = nil
+        } catch {
+            problem = describe(error)
+        }
+    }
+
+    /// A category or driver saved: the entries are resolved again with it.
+    private func applied(_ s: SpendingSetup) {
+        setup = s
+        Task { await reload() }
     }
 }
 
-// MARK: - Expense accounts
+// MARK: - Card company categories
 
-/// The expense accounts with Edit… and Remove… on each, and New Expense Account….
-private struct ExpenseAccountsAdmin: View {
+/// A card company's own category and the one of ours it maps to (srm.card_category, V061).
+struct CardCategory: Decodable, Identifiable, Hashable {
+    var issuerCategory: String
+    var category: String?
+    var lines: Int
+    var id: String { issuerCategory }
+}
+
+/// Each card company category with a menu of ours; those with none first.
+private struct CardCategoriesAdmin: View {
     var setup: SpendingSetup
-    var data: SpendingAnalysisData
-    var entries: [SpendingEntry]
-    var ruleSaved: (SpendingSetup) -> Void
-    /// New (.some(nil)) or Edit (.some(account)).
-    @State private var editing: SpendingSetup.Named??
-    @State private var removing: SpendingSetup.Named?
-    @State private var ruleFor: RuleTarget?
+    @Binding var categories: [CardCategory]
+    /// A change can give target accounts a category: the figures again.
+    var changed: () -> Void
+    @State private var problem: String?
+    @State private var open = false
 
     var body: some View {
-        var now: [Int: (amount: Double, count: Int)] = [:]
-        for e in entries where e.date >= data.start && e.date <= data.end {
-            guard let id = e.expenseAccountId else { continue }
-            now[id, default: (0, 0)].amount += e.amount
-            now[id, default: (0, 0)].count += 1
-        }
-        return Box(title: "Expense Accounts", symbol: "folder", help: "The bookkeeping categories the card and checking registers and target accounts file entries under (Banking's yearly totals). Spending Analysis doesn't use them to allocate spending: target accounts do (Allocation). Edit… renames one or changes its description; Remove… moves what files under it to another first.") {
+        let missing = categories.filter { $0.category == nil }.count
+        return Box(title: "Card Company Categories", symbol: "creditcard", help: "The card companies' downloads give each line a category of their own. When a line's target account has no category yet, it takes the one that company category maps to here. Choosing one also gives it to the target accounts with no category whose card lines have it.") {
             HStack {
-                Button("New Expense Account…") { editing = .some(nil) }
+                Text(missing > 0 ? "\(missing) of \(categories.count) have no category" : "All \(categories.count) are mapped")
+                    .foregroundStyle(missing > 0 ? .orange : .secondary)
                 Spacer()
-                Text("\(setup.expenseAccounts.count) expense accounts").foregroundStyle(.secondary)
+                Button(open ? "Hide" : "Show") { open.toggle() }
             }
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
-                GridRow {
-                    Text("Expense account"); Text("This year").gridColumnAlignment(.trailing)
-                    Text("Entries").gridColumnAlignment(.trailing); Text("")
-                }
-                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                ForEach(setup.expenseAccounts) { a in
-                    let spent = now[a.id]
+            if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
+            if open || missing > 0 {
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
                     GridRow {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(a.name)
-                            if let d = a.description, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                        Text("Card company category").fillsGridColumn(); Text("Lines").gridColumnAlignment(.trailing); Text("Category")
+                    }
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(categories.filter { open || $0.category == nil }) { c in
+                        GridRow {
+                            Text(c.issuerCategory).fillsGridColumn()
+                            Text("\(c.lines)").monospacedDigit().foregroundStyle(.secondary)
+                            Picker("", selection: Binding(get: { c.category }, set: { save(c, $0) })) {
+                                Text("None").tag(String?.none)
+                                ForEach(setup.categories) { Text($0.name).tag(Optional($0.code)) }
+                            }
+                            .labelsHidden().frame(width: 180)
                         }
-                        Text(money(spent?.amount ?? 0)).monospacedDigit()
-                        Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
-                        HStack(spacing: 4) {
-                            Button("Edit…") { editing = .some(a) }
-                            Button("Remove…") { removing = a }
-                        }
-                        .controlSize(.small)
                     }
                 }
+                .font(.callout)
             }
-            .font(.callout)
         }
-        .sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
-            ExpenseAccountEditor(setup: setup, account: editing ?? nil) { ruleSaved($0) }
+    }
+
+    private func save(_ c: CardCategory, _ code: String?) {
+        Task {
+            do {
+                categories = try await SpendingClient.saveCardCategory(c.issuerCategory, category: code)
+                problem = nil
+                changed()
+            } catch { problem = describe(error) }
         }
-        .sheet(item: $removing) { a in RemoveExpenseAccountSheet(setup: setup, account: a) { ruleSaved($0) } }
     }
 }
 
@@ -105,11 +165,13 @@ private func thisYear(_ entries: [SpendingEntry], _ data: SpendingAnalysisData, 
     return now
 }
 
-/// The spending categories in their order, with Edit… and Remove… on each, New Category…, and arrows to reorder.
+/// The spending categories in their order, with what each register spent in them, Edit… and Remove… on each, New
+/// Category…, and arrows to reorder. Right-click one for its transactions.
 private struct CategoriesAdmin: View {
     var setup: SpendingSetup
     var data: SpendingAnalysisData
     var entries: [SpendingEntry]
+    var store: PortStore
     var saved: (SpendingSetup) -> Void
     /// New (.some(nil)) or Edit (.some(category)).
     @State private var editing: SpendingCategory??
@@ -120,7 +182,11 @@ private struct CategoriesAdmin: View {
     var body: some View {
         let now = thisYear(entries, data) { $0.category }
         let last = setup.categories.count - 1
-        return Box(title: "Spending Categories", symbol: "cart", help: "What the money bought. Each follows a consumer price index (or an assumed rate), which decides how much of its change is inflation; the CPI series and the rate can also be changed on Family & Lifecycle. The arrows set the order the page lists them in. Remove… moves the target accounts, tags and lifecycle triggers allocated to a category to another first.") {
+        let year = entries.filter { $0.date >= data.start && $0.date <= data.end }
+        let registers = Array(Set(year.map(registerOf))).sorted()
+        var byRegister: [String: Double] = [:]
+        for e in year { byRegister[(e.category ?? "") + "|" + registerOf(e), default: 0] += e.amount }
+        return Box(title: "Spending Categories", symbol: "cart", help: "What the money bought, across every checking account and credit card (a column each). Each follows a consumer price index (or an assumed rate), which decides how much of its change is inflation; the CPI series and the rate can also be changed on Spending Analysis ▸ Family & Lifecycle. Right-click one for the transactions behind it. The arrows set the order the page lists them in. Remove… moves the target accounts, tags and lifecycle triggers allocated to a category to another first.") {
             HStack {
                 Button("New Category…") { editing = .some(nil) }
                 Spacer()
@@ -131,6 +197,7 @@ private struct CategoriesAdmin: View {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
                 GridRow {
                     Text(""); Text("Category").fillsGridColumn(); Text("CPI series"); Text("Assumed").gridColumnAlignment(.trailing)
+                    ForEach(registers, id: \.self) { Text($0).gridColumnAlignment(.trailing) }
                     Text("This year").gridColumnAlignment(.trailing); Text("Entries").gridColumnAlignment(.trailing)
                     Text("Set by").gridColumnAlignment(.trailing); Text("")
                 }
@@ -146,8 +213,10 @@ private struct CategoriesAdmin: View {
                             if let d = c.description, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(d) }
                         }
                         .fillsGridColumn()
+                        .modifier(ShowsTransactions(name: c.name, entries: year.filter { $0.category == c.code }, data: data, setup: setup, store: store))
                         Text(c.cpiName ?? "—").foregroundStyle(.secondary).lineLimit(1)
                         Text(pct(c.assumedInflation, 1)).monospacedDigit().foregroundStyle(.secondary)
+                        ForEach(registers, id: \.self) { r in amount(byRegister[c.code + "|" + r]) }
                         Text(money(spent?.amount ?? 0)).monospacedDigit()
                         Text("\(spent?.count ?? 0)").monospacedDigit().foregroundStyle(.secondary)
                         Text(setBy(rules: rules, triggers: triggers)).foregroundStyle(.secondary)
@@ -163,7 +232,9 @@ private struct CategoriesAdmin: View {
                     GridRow {
                         Text("")
                         Text("Not assigned").foregroundStyle(.orange)
+                            .modifier(ShowsTransactions(name: "Not assigned", entries: year.filter { $0.category == nil }, data: data, setup: setup, store: store))
                         Text(""); Text("")
+                        ForEach(registers, id: \.self) { r in amount(byRegister["|" + r]) }
                         Text(money(spent.amount)).monospacedDigit().foregroundStyle(.orange)
                         Text("\(spent.count)").monospacedDigit().foregroundStyle(.secondary)
                         Text(""); Text("")
@@ -177,6 +248,12 @@ private struct CategoriesAdmin: View {
             CategoryEditor(setup: setup, category: editing ?? nil) { saved($0) }
         }
         .sheet(item: $removing) { c in RemoveCategorySheet(setup: setup, category: c) { saved($0) } }
+    }
+
+    private func registerOf(_ e: SpendingEntry) -> String { e.register ?? e.sourceTitle }
+
+    private func amount(_ a: Double?) -> some View {
+        Text(abs(a ?? 0) < 0.5 ? "" : money(a ?? 0)).monospacedDigit().foregroundStyle(.secondary)
     }
 
     private func setBy(rules: Int, triggers: Int) -> String {
@@ -277,6 +354,25 @@ private struct DriversAdmin: View {
     }
 }
 
+/// A right-click on a category: the entries behind it, in a window of their own.
+private struct ShowsTransactions: ViewModifier {
+    var name: String
+    var entries: [SpendingEntry]
+    var data: SpendingAnalysisData
+    var setup: SpendingSetup
+    var store: PortStore
+
+    func body(content: Content) -> some View {
+        // Selectable text would open the text's own menu instead.
+        content.textSelection(.disabled).contextMenu {
+            Button("Show \(entries.count) \(entries.count == 1 ? "Transaction" : "Transactions")…") {
+                SpendingTransactionsWindow.open(name, period: "\(shortDay(data.start)) – \(shortDay(data.end))", entries: entries, setup: setup, store: store)
+            }
+            .disabled(entries.isEmpty)
+        }
+    }
+}
+
 /// Move up and Move down, for a row of a list kept in order.
 private struct OrderButtons: View {
     var up: (() -> Void)?
@@ -316,18 +412,18 @@ private struct DriverCategoryGuide: View {
         Box(title: "Driver & Category", symbol: "square.grid.3x3", help: "How the two dimensions of every dollar relate, and where they are set.") {
             HStack(alignment: .top, spacing: 14) {
                 AdminCard(title: "Category: what the money bought", symbol: "cart",
-                          text: "\(Self.either(setup.categories.map(\.name))). Each category follows its own consumer price index (Sources), so the category decides how much of a change is inflation.")
+                          text: "\(Self.either(setup.categories.map(\.name))). Each category follows its own consumer price index (Spending Analysis ▸ Sources), so the category decides how much of a change is inflation.")
                 AdminCard(title: "Driver: why the spending changed", symbol: "arrow.up.right",
                           text: "\(Self.either(setup.drivers.map(\.title))). The driver decides which effect the growth beyond inflation counts as (Spending Drivers, above); with no driver it counts as Usage.")
             }
             Text("They are independent: any category can have any driver. Food can grow with Family Growth, Activities with Lifestyle & Hobbies, Housing with Taxes. Spending is the payments from the checking accounts and credit cards to target accounts whose role is Spending — the providers, merchants and vendors paid — and each gets its category and driver:")
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("1. From the entry's own tag, when it has one (Entries: double-click, or select several and right-click) — a mixed merchant's purchase, a one-time event.")
-                Text("2. Else from its target account's allocation (Allocation): every payment to it.")
+                Text("1. From the entry's own tag, when it has one (Spending Analysis ▸ Entries: double-click, or select several and right-click) — a mixed merchant's purchase, a one-time event.")
+                Text("2. Else from its target account's allocation (Spending Analysis ▸ Allocation): every payment to it.")
             }
             .font(.callout).padding(.leading, 8)
-            Text("Transfers between your own accounts and income aren't spending (Sources ▸ Transfers & Income), and a payment no target account matches isn't in the analysis until it is allocated (Sources ▸ Unallocated Payments). Cash ledgers are stand-alone project scratch pads: they don't feed the analysis.")
+            Text("Transfers between your own accounts and income aren't spending (Spending Analysis ▸ Sources ▸ Transfers & Income), and a payment no target account matches isn't in the analysis until it is allocated (Spending Analysis ▸ Sources ▸ Unallocated Payments). Cash ledgers are stand-alone project scratch pads: they don't feed the analysis.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("Open Allocation") { openTab("rules") }
@@ -357,7 +453,7 @@ private struct DriverCategoryGuide: View {
         let drivers = setup.drivers.map(\.code) + Set(sums.keys.map(\.driver)).filter { !$0.isEmpty && setup.driver($0) == nil }.sorted() + [""]
         let gaps = rows.filter { $0.driver == nil || $0.category == nil }.map(\.amount).reduce(0, +)
         return Box(title: "This Year: Category × Driver", symbol: "tablecells",
-                   help: "This year's spending by category (rows) and driver (columns), in the registers the analysis includes. Orange: spending with no driver (it counts as Usage) or no category. Click a cell to see what put its entries there and change it.") {
+                   help: "This year's spending by category (rows) and driver (columns), in every register. Orange: spending with no driver (it counts as Usage) or no category. Click a cell to see what put its entries there and change it.") {
             Text(gaps > 0.5 ? "\(money(gaps)) of this year's \(money(rows.map(\.amount).reduce(0, +))) has no driver or no category (orange). Click a cell to see why, and Rule… to give it one."
                  : "Every dollar this year has a category and a driver.")
                 .font(.callout).foregroundStyle(gaps > 0.5 ? .orange : .secondary)

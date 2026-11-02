@@ -159,6 +159,7 @@ struct ContentView: View {
         case .loans: LoanAccountsView(store: store)
         case .expenseLedgers: ExpenseLedgersView(store: store)
         case .expenses: TargetAccountsView(store: store)
+        case .targetCategories: TargetCategoriesView(store: store)
         case .secureAccounts: SecureAccountsView(store: store)
         case .welcome: WelcomeView(store: store)
         case .choosePath: ChoosePathView(store: store)

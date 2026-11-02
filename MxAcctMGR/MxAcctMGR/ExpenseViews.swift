@@ -43,8 +43,8 @@ struct ExpenseLine: Decodable, Identifiable, Hashable {
     var name: String
     var kind: String
     var budget: Double?
-    var expenseAccountId: Int?
-    var expenseAccount: String?
+    var category: String?
+    var categoryName: String?
     var color: String?
     var sortOrder: Int
     var active: Bool
@@ -194,7 +194,7 @@ struct CardCharge: Decodable, Identifiable, Hashable {
     var payee: String?
     var memo: String?
     var amount: Double
-    var expenseAccount: String?
+    var category: String?
 }
 
 nonisolated enum ExpenseClient {
@@ -262,7 +262,7 @@ struct ExpenseLedgersView: View {
     @AppStorage(RowsStepper.key) private var registerRows = RowsStepper.standard
     @State private var ledgers: [ExpenseLedger] = []
     @State private var data: ExpenseBookData?
-    @State private var book: ExpenseBook?
+    @State private var book: TargetBook?
     @State private var message: String?
     @State private var problem: String?
     @State private var busy = false
@@ -367,7 +367,7 @@ struct ExpenseLedgersView: View {
             }
         }
         .sheet(isPresented: Binding(get: { lineSheet != nil }, set: { if !$0 { lineSheet = nil } })) {
-            LineSheet(line: lineSheet ?? nil, expenseAccounts: book?.expenseAccounts ?? []) { body in
+            LineSheet(line: lineSheet ?? nil, categories: book?.categories ?? []) { body in
                 await savePart("lines", (lineSheet ?? nil)?.id ?? 0, body)
             }
         }
@@ -613,7 +613,7 @@ struct ExpenseLedgersView: View {
                 Circle().fill(Color(hex: l.color) ?? .secondary).frame(width: 10, height: 10)
                 Text(l.name).heading(.name).foregroundStyle(l.active ? .primary : .secondary)
                 Text(l.kind).font(.caption).foregroundStyle(.secondary)
-                if let a = l.expenseAccount { Text("→ \(a)").font(.caption).foregroundStyle(.secondary) }
+                if let a = l.categoryName { Text("→ \(a)").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
                 Text("\(l.entries) items").font(.caption).foregroundStyle(.secondary)
                 Text(money2(l.spent)).monospacedDigit().heading(.name)
@@ -1162,7 +1162,7 @@ struct CardChargesSheet: View {
                 TableColumn("Date") { c in Text(shortDay(c.date)).monospacedDigit() }.width(min: 70, ideal: 84)
                 TableColumn("Card") { c in Text(c.card).foregroundStyle(.secondary) }.width(min: 80, ideal: 120)
                 TableColumn("Payee") { c in Text(c.payee ?? "—") }.width(min: 120, ideal: 200)
-                TableColumn("Category") { c in Text(c.expenseAccount ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
+                TableColumn("Category") { c in Text(c.category ?? "").foregroundStyle(.secondary) }.width(min: 60, ideal: 110)
                 TableColumn("Amount") { c in Text(money2(c.amount)).monospacedDigit() }.width(min: 60, ideal: 80)
             }
             .tableText()
@@ -1201,13 +1201,13 @@ struct CardChargesSheet: View {
 
 struct LineSheet: View {
     let line: ExpenseLine?
-    var expenseAccounts: [ExpenseAccount]
+    var categories: [BookCategory]
     var save: ([String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var kind = "other"
     @State private var budget: Double?
-    @State private var expenseAccountId: Int?
+    @State private var category: String?
     @State private var color = Color.accentColor
     @State private var sortOrder = 100
     @State private var active = true
@@ -1222,11 +1222,11 @@ struct LineSheet: View {
                 TextField("Name", text: $name)
                 Picker("Kind", selection: $kind) { ForEach(Self.kinds, id: \.self) { Text($0).tag($0) } }
                 TextField("Budget", value: $budget, format: .number.precision(.fractionLength(2)))
-                Picker("Category", selection: $expenseAccountId) {
-                    Text("None").tag(Int?.none)
-                    ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                Picker("Category", selection: $category) {
+                    Text("None").tag(String?.none)
+                    ForEach(categories) { Text($0.name).tag(Optional($0.code)) }
                 }
-                .help("The expense account (category) the line rolls up to")
+                .help("The category the line rolls up to")
                 ColorPicker("Colour", selection: $color, supportsOpacity: false)
                 TextField("Order", value: $sortOrder, format: .number)
                 Toggle("Active", isOn: $active)
@@ -1238,7 +1238,7 @@ struct LineSheet: View {
                 Button(line == nil ? "Add" : "Save") {
                     Task {
                         let body: [String: Any] = ["name": name, "kind": kind, "budget": budget ?? NSNull(),
-                                                   "expenseAccountId": expenseAccountId ?? NSNull(), "color": hex(color),
+                                                   "category": category ?? NSNull(), "color": hex(color),
                                                    "sortOrder": sortOrder, "active": active]
                         if let e = await save(body) { error = e } else { dismiss() }
                     }
@@ -1250,7 +1250,7 @@ struct LineSheet: View {
         .frame(width: 420)
         .onAppear {
             guard let l = line else { return }
-            name = l.name; kind = l.kind; budget = l.budget; expenseAccountId = l.expenseAccountId
+            name = l.name; kind = l.kind; budget = l.budget; category = l.category
             color = Color(hex: l.color) ?? .accentColor; sortOrder = l.sortOrder; active = l.active
         }
     }

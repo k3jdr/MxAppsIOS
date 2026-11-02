@@ -36,7 +36,7 @@ The tabs are Overview (the attribution), Deep Dive, Forward Curve, Year-End Tax 
 the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution and forward curve
 (`SpendingModel.swift`), and the Deep Dive charts a category's lifecycle triggers ahead. Rules shows the expense
 account, target account and statement text rules read-only, with both years' spending and *Suggest a change* on each;
-MxAcctMGR's Admin tab stays MxAcctMGR's only. The entries tables and Allocation show each one's expense account. Entries,
+MxAcctMGR's Target Categories page stays MxAcctMGR's only. Entries,
 the Deep Dive's list and Allocation show every register even when *Only registers covering both years* leaves one out of
 the comparison, with a note on the lists; the *All spending* tile and the Key Metrics table's last row still count it, and
 *This Year by Category and Driver* shows every dollar. The entries tables' *Bought* column shows what an Amazon charge bought

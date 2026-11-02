@@ -1,9 +1,9 @@
-"""Checking accounts for the accounts service: the shared check register, payees and expense accounts (V027).
+"""Checking accounts for the accounts service: the shared check register and payees (V027).
 
     GET  /bank/accounts                          checking accounts with register, cleared and bank balances
     PUT  /bank/accounts/<code>                   create or change one {name, institution, last4, openingDate, openingBalance}
     GET  /bank/accounts/<code>/register          its entries (running balance) and the bank's lines not in it
-    POST /bank/accounts/<code>/transactions      add an entry {date, kind, checkNo, payeeId|payee, expenseAccountId, memo, amount, by}
+    POST /bank/accounts/<code>/transactions      add an entry {date, kind, checkNo, payeeId|payee, category, memo, amount, by}
     PUT  /bank/transactions/<id>                 change one {version, …}: refused (409) when someone changed it since
     POST /bank/transactions/<id>/move            move it one line up or down in the register {direction: up | down}
     POST /bank/accounts/<code>/status            mark several entries cleared or not cleared {entries: [{id, version}],
@@ -11,20 +11,14 @@
     POST /bank/lines/<id>/accept                 add the bank's line to the register (its payee found by name), cleared
     POST /bank/lines/<id>/match                  match it to an entry {txnId}
     POST /bank/accounts/<code>/import            read the bank's downloads now (srm-loader POST /load/pnc-bank)
-    GET  /expense-accounts                       expense accounts with their payees and this year's totals
-    PUT  /expense-accounts/<id>                  create (id 0) or change one {name, kind, description}; names are unique
-                                                 (ignoring case); answers with the list and the account's id
-    GET  /expense-accounts/<id>/usage            what files under it: card and checking entries, target accounts,
-                                                 cash-ledger lines, card categories, its spending rule
-    DELETE /expense-accounts/<id>?moveTo=&by=    take one off; what files under it moves to moveTo (another of the
-                                                 same kind), which is required when anything does
+    GET  /bank/book                              the categories, and the target accounts with this year's totals
     PUT  /payees/<id>                            create (id 0) or change a target account {version, name, nickname, description,
-                                                 status, reference (its identifier), institution, last4, expenseAccountId,
+                                                 status, reference (its identifier), institution, last4, category,
                                                  defaultAmount, nextPaymentDate, nextPaymentAmount, logonUrl, userName,
                                                  address1, address2, city, state, zipCode, phone, notes, bankNames,
                                                  fundingSources: checking and / or card} (V033)
     GET  /payees/<id>/entries?year=              the entries behind its yearTotal (year=all: its totalPaid), newest
-                                                 first: register, statement name, category, Spending Analysis
+                                                 first: register, statement name, Spending Analysis
                                                  category, and what an Amazon or Apple charge bought
     PUT  /payees/<id>/note                       change only its note (the register's hover text) {note}
     PUT  /payees/<id>/link                       its link (V032): {address, text, hoverText, hoverRtf, title, by}
@@ -146,15 +140,15 @@ TXN_SQL = """
            coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
            p.notes AS "payeeNote", p.nickname AS "payeeNickname", p.next_payment_date AS "payeeNextDate",
            p.next_payment_amount AS "payeeNextAmount", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
-           coalesce(t.expense_account_id, p.expense_account_id) AS "expenseAccountId",
-           e.name AS "expenseAccount", t.memo, t.amount, t.status, t.bank_line_id AS "bankLineId",
+           coalesce(g.category_code, p.category_code) AS category, c.name AS "categoryName", t.memo, t.amount, t.status, t.bank_line_id AS "bankLineId",
            b.posted_date AS "bankDate", b.name AS "bankName", t.version, t.entered_by AS "enteredBy",
            t.created_at AS "enteredAt", t.updated_by AS "updatedBy", t.updated_at AS "updatedAt",
            t.register_seq AS line
       FROM srm.bank_txn t
       LEFT JOIN srm.payee p USING (payee_id)
       LEFT JOIN srm.payee_link pl ON pl.payee_id = t.payee_id
-      LEFT JOIN srm.expense_account e ON e.expense_account_id = coalesce(t.expense_account_id, p.expense_account_id)
+      LEFT JOIN srm.spending_tag g ON g.bank_txn_id = t.txn_id
+      LEFT JOIN srm.spending_category c ON c.code = coalesce(g.category_code, p.category_code)
       LEFT JOIN srm.bank_line b ON b.bank_line_id = t.bank_line_id"""
 
 
@@ -186,25 +180,47 @@ def register(conn, code):
 
 
 def _payee(conn, body, source="checking"):
-    """(payee_id, payee_name, expense_account_id default) from payeeId or a payee name (found or created). A target
+    """(payee_id, payee_name) from payeeId or a payee name (found or created, with the entry's category). A target
     named in a register (source: checking or card) is offered by that register's target list from then on."""
     if body.get("payeeId"):
-        rows = fetch(conn, "SELECT payee_id, name, expense_account_id, default_amount FROM srm.payee WHERE payee_id = %s",
-                     (int(body["payeeId"]),))
+        rows = fetch(conn, "SELECT payee_id, name FROM srm.payee WHERE payee_id = %s", (int(body["payeeId"]),))
         if not rows:
             raise ValueError("no payee %s" % body["payeeId"])
-        return rows[0]["payee_id"], rows[0]["name"], rows[0]["expense_account_id"]
+        return rows[0]["payee_id"], rows[0]["name"]
     name = (body.get("payee") or "").strip()
     if not name:
-        return None, None, None
-    rows = fetch(conn, "SELECT payee_id, name, expense_account_id FROM srm.payee WHERE lower(name) = lower(%s)", (name,))
+        return None, None
+    rows = fetch(conn, "SELECT payee_id, name FROM srm.payee WHERE lower(name) = lower(%s)", (name,))
     if rows:
         fetch(conn, """UPDATE srm.payee SET funding_sources = array_append(funding_sources, %s)
                         WHERE payee_id = %s AND NOT (%s = ANY (funding_sources))""", (source, rows[0]["payee_id"], source))
-        return rows[0]["payee_id"], rows[0]["name"], rows[0]["expense_account_id"]
-    rows = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, updated_by, funding_sources) VALUES (%s, %s, %s, %s)
-                          RETURNING payee_id""", (name[:120], body.get("expenseAccountId") or None, body.get("by"), [source]))
-    return rows[0]["payee_id"], name, body.get("expenseAccountId")
+        return rows[0]["payee_id"], rows[0]["name"]
+    rows = fetch(conn, """INSERT INTO srm.payee (name, category_code, updated_by, funding_sources) VALUES (%s, %s, %s, %s)
+                          RETURNING payee_id""", (name[:120], body.get("category") or None, body.get("by"), [source]))
+    return rows[0]["payee_id"], name
+
+
+def file_category(conn, column, txn_id, payee_id, body):
+    """An entry's category from a register (body's category, when it sends one): its own tag (srm.spending_tag, column
+    bank_txn_id or card_txn_id) only where it differs from its target account's; none, or the same, takes that off."""
+    if "category" not in body:
+        return
+    code = body["category"] or None
+    if code and not fetch(conn, "SELECT 1 FROM srm.spending_category WHERE code = %s", (code,)):
+        raise ValueError("no category %s" % code)
+    own = fetch(conn, "SELECT category_code FROM srm.payee WHERE payee_id = %s", (payee_id,)) if payee_id else []
+    if code and own and own[0]["category_code"] == code:
+        code = None
+    by = str(body.get("by") or "MxAcctMGR")[:80]
+    if code:
+        fetch(conn, """INSERT INTO srm.spending_tag (%s, category_code, updated_by) VALUES (%%s, %%s, %%s)
+                       ON CONFLICT (%s) DO UPDATE SET category_code = excluded.category_code,
+                              updated_by = excluded.updated_by, updated_at = now()""" % (column, column), (txn_id, code, by))
+    else:
+        fetch(conn, "UPDATE srm.spending_tag SET category_code = NULL, updated_by = %%s, updated_at = now() WHERE %s = %%s" % column,
+              (by, txn_id))
+        fetch(conn, """DELETE FROM srm.spending_tag WHERE %s = %%s AND category_code IS NULL AND driver IS NULL
+                          AND member_id IS NULL AND event IS NULL AND notes IS NULL""" % column, (txn_id,))
 
 
 def _fields(conn, body, current=None):
@@ -227,12 +243,11 @@ def _fields(conn, body, current=None):
     if kind == "check" and not check_no:
         raise ValueError("a check needs its check number")
     if "payeeId" in body or "payee" in body:
-        payee_id, payee_name, default_account = _payee(conn, body)
+        payee_id, payee_name = _payee(conn, body)
     else:
-        payee_id, payee_name, default_account = cur.get("payeeId"), cur.get("payee"), None
-    expense = body.get("expenseAccountId", cur.get("expenseAccountId")) or default_account
+        payee_id, payee_name = cur.get("payeeId"), cur.get("payee")
     return {"txn_date": _date(body.get("date", cur.get("date")) or dt.date.today()), "kind": kind, "check_no": check_no,
-            "payee_id": payee_id, "payee_name": payee_name, "expense_account_id": expense,
+            "payee_id": payee_id, "payee_name": payee_name,
             "memo": (body.get("memo", cur.get("memo")) or "").strip()[:200] or None, "amount": amount, "status": status}
 
 
@@ -245,11 +260,12 @@ def add_transaction(conn, code, body, match=True):
         if dup:
             raise Conflict("check %s is already in the register" % f["check_no"], txnId=dup[0]["txn_id"])
     rows = fetch(conn, """
-        INSERT INTO srm.bank_txn (bank_account_id, txn_date, kind, check_no, payee_id, payee_name, expense_account_id,
+        INSERT INTO srm.bank_txn (bank_account_id, txn_date, kind, check_no, payee_id, payee_name,
                                   memo, amount, status, entered_by, updated_by)
-        VALUES (%(aid)s, %(txn_date)s, %(kind)s, %(check_no)s, %(payee_id)s, %(payee_name)s, %(expense_account_id)s,
+        VALUES (%(aid)s, %(txn_date)s, %(kind)s, %(check_no)s, %(payee_id)s, %(payee_name)s,
                 %(memo)s, %(amount)s, %(status)s, %(by)s, %(by)s) RETURNING txn_id""",
                  dict(f, aid=aid, by=str(body.get("by") or "MxAcctMGR")[:80]))
+    file_category(conn, "bank_txn_id", rows[0]["txn_id"], f["payee_id"], body)
     if match:
         fetch(conn, "SELECT srm.match_bank_lines(%s)", (aid,))
         conn.commit()
@@ -273,13 +289,14 @@ def update_transaction(conn, txn_id, body):
     unmatch = f["status"] in ("open", "void") and cur["bankLineId"] is not None
     with conn.cursor() as c:
         c.execute("""UPDATE srm.bank_txn SET txn_date = %(txn_date)s, kind = %(kind)s, check_no = %(check_no)s,
-                            payee_id = %(payee_id)s, payee_name = %(payee_name)s, expense_account_id = %(expense_account_id)s,
+                            payee_id = %(payee_id)s, payee_name = %(payee_name)s,
                             memo = %(memo)s, amount = %(amount)s, status = %(status)s,
                             bank_line_id = CASE WHEN %(unmatch)s THEN NULL ELSE bank_line_id END,
                             version = version + 1, updated_by = %(by)s, updated_at = now()
                       WHERE txn_id = %(id)s RETURNING bank_account_id""",
                   dict(f, id=txn_id, unmatch=unmatch, by=str(body.get("by") or "MxAcctMGR")[:80]))
         aid = c.fetchone()[0]
+    file_category(conn, "bank_txn_id", txn_id, f["payee_id"], body)
     code = fetch(conn, "SELECT code FROM srm.bank_account WHERE bank_account_id = %s", (aid,))[0]["code"]
     conn.commit()
     return register(conn, code)
@@ -348,12 +365,12 @@ def accept_line(conn, line_id, body):
     b = _line(conn, line_id)
     amount = float(b["amount"])
     kind = "check" if b["check_no"] else ("deposit" if amount > 0 else ("fee" if (b["trn_type"] or "").upper() in ("FEE", "SRVCHG") else "debit"))
-    found = fetch(conn, """SELECT payee_id, name, expense_account_id FROM srm.payee
+    found = fetch(conn, """SELECT payee_id, name FROM srm.payee
                             WHERE lower(%s) = ANY (SELECT lower(x) FROM unnest(bank_names) x) OR lower(name) = lower(%s)
                             LIMIT 1""", (b["name"] or "", b["name"] or ""))
     payee = body.get("payee") or (found[0]["name"] if found else (b["name"] or "").strip()[:120] or None)
     out = add_transaction(conn, b["code"], {"date": b["posted_date"].isoformat(), "kind": kind, "checkNo": b["check_no"],
-                                             "payee": payee, "expenseAccountId": body.get("expenseAccountId"),
+                                             "payee": payee,
                                              "memo": b["memo"], "amount": amount, "by": body.get("by") or "MxAcctMGR"},
                           match=False)
     # The new entry is this line: matched and cleared.
@@ -393,30 +410,23 @@ def import_downloads(conn, code):
             **register(conn, code)}
 
 
-# ----------------------------------------------------------------------------------------------- payees and expense accounts
+# ------------------------------------------------------------------------------------------------------------- payees
 
 # What was spent (positive) or received (negative), from the check registers and the credit card registers. A card
 # payment isn't spending: its charges are (V029), so the checking entry that pays a card goes in Transfers.
 SPEND = """
-    SELECT b.txn_date, b.payee_id, coalesce(b.expense_account_id, p.expense_account_id) AS expense_account_id,
-           -b.amount AS spent
-      FROM srm.bank_txn b LEFT JOIN srm.payee p USING (payee_id) WHERE b.status <> 'void'
+    SELECT b.txn_date, b.payee_id, -b.amount AS spent
+      FROM srm.bank_txn b WHERE b.status <> 'void'
     UNION ALL
-    SELECT c.txn_date, c.payee_id, c.expense_account_id, c.amount
+    SELECT c.txn_date, c.payee_id, c.amount
       FROM srm.card_txn c WHERE c.status <> 'void' AND c.kind <> 'payment'"""
 
 
-def expense_accounts(conn, q=None):
+def book(conn, q=None):
     year = int((q or {}).get("year") or dt.date.today().year)
-    accts = fetch(conn, """
-        WITH t AS (%s)
-        SELECT e.expense_account_id AS id, e.name, e.kind, e.description,
-               coalesce(sum(t.spent) FILTER (WHERE extract(year FROM t.txn_date) = %%s), 0) AS "yearTotal",
-               count(t.*) FILTER (WHERE extract(year FROM t.txn_date) = %%s) AS "yearEntries"
-          FROM srm.expense_account e LEFT JOIN t ON t.expense_account_id = e.expense_account_id
-         GROUP BY e.expense_account_id ORDER BY e.sort_order, e.name""" % SPEND, (year, year))
+    categories = fetch(conn, "SELECT code, name FROM srm.spending_category ORDER BY sort_order, name")
     payees = fetch(conn, """
-        SELECT p.payee_id AS id, p.name, p.expense_account_id AS "expenseAccountId", p.default_amount AS "defaultAmount",
+        SELECT p.payee_id AS id, p.name, p.category_code AS category, p.default_amount AS "defaultAmount",
                p.address_1 AS "address1", p.address_2 AS "address2", p.city, p.state, p.zip_code AS "zipCode",
                p.reference, p.phone, p.logon_url AS "logonUrl", p.user_name AS "userName", p.nickname, p.description,
                p.status, p.next_payment_date AS "nextPaymentDate", p.next_payment_amount AS "nextPaymentAmount",
@@ -427,13 +437,13 @@ def expense_accounts(conn, q=None):
                coalesce(sum(t.spent), 0) AS "totalPaid", max(t.txn_date) AS "lastPaid"
           FROM srm.payee p LEFT JOIN (%s) t USING (payee_id) LEFT JOIN srm.payee_link pl USING (payee_id)
          GROUP BY p.payee_id, pl.payee_id ORDER BY lower(p.name)""" % SPEND, (year,))
-    return {"year": year, "expenseAccounts": accts, "payees": [nest_link(p, "link") for p in payees]}
+    return {"year": year, "categories": categories, "payees": [nest_link(p, "link") for p in payees]}
 
 
 def payee_entries(conn, pid, q=None):
     """The entries behind a target account's This year (yearTotal) or, with year=all, its Total paid: SPEND's checks
     and card charges with it as the target, newest first — each with its register, the statement's name, its
-    category (expense account), its Spending Analysis category, and what an Amazon or Apple charge bought (V046, V056)."""
+    category, and what an Amazon or Apple charge bought (V046, V056)."""
     rows = fetch(conn, "SELECT name FROM srm.payee WHERE payee_id = %s", (int(pid),))
     if not rows:
         raise LookupError("no target account %s" % pid)
@@ -443,20 +453,19 @@ def payee_entries(conn, pid, q=None):
         WITH t AS (
             SELECT 'bank'::text AS source, b.txn_id AS "entryId", b.txn_date AS date, a.code AS register, b.kind,
                    b.check_no AS "checkNo", coalesce(nullif(btrim(l.name), ''), b.payee_name) AS name, b.memo,
-                   coalesce(b.expense_account_id, p.expense_account_id) AS expense_account_id, -b.amount AS amount
-              FROM srm.bank_txn b JOIN srm.bank_account a USING (bank_account_id) LEFT JOIN srm.payee p USING (payee_id)
+                   -b.amount AS amount
+              FROM srm.bank_txn b JOIN srm.bank_account a USING (bank_account_id)
               LEFT JOIN srm.bank_line l USING (bank_line_id)
              WHERE b.payee_id = %(pid)s AND b.status <> 'void'
             UNION ALL
             SELECT 'card', c.txn_id, c.txn_date, a.code, c.kind, NULL, coalesce(nullif(btrim(l.name), ''), c.payee_name),
-                   c.memo, c.expense_account_id, c.amount
+                   c.memo, c.amount
               FROM srm.card_txn c JOIN srm.card_account a USING (card_account_id) LEFT JOIN srm.card_line l USING (card_line_id)
              WHERE c.payee_id = %(pid)s AND c.status <> 'void' AND c.kind <> 'payment')
         SELECT t.source, t."entryId", t.date, t.register, t.kind, t."checkNo", t.name, t.memo, t.amount,
-               ea.name AS category, sc.name AS spending, coalesce(ac.orders, ap.orders) AS orders,
+               sc.name AS spending, coalesce(ac.orders, ap.orders) AS orders,
                coalesce(ac.items_text, ap.items_text) AS bought
           FROM t
-          LEFT JOIN srm.expense_account ea USING (expense_account_id)
           LEFT JOIN srm.v_spending_entry se ON se.source = t.source AND se.entry_id = t."entryId"
           LEFT JOIN srm.spending_category sc ON sc.code = se.category_code
           LEFT JOIN srm.v_amazon_charge ac ON ac.source = t.source AND ac.entry_id = t."entryId"
@@ -467,93 +476,20 @@ def payee_entries(conn, pid, q=None):
             "total": round(sum(float(e["amount"]) for e in entries), 2)}
 
 
-def save_expense_account(conn, eid, body):
-    eid = int(eid)
-    name = " ".join((body.get("name") or "").split())[:80]
-    if not name:
-        raise ValueError("name is required")
-    cur = None
-    if eid:
-        rows = fetch(conn, "SELECT kind, description FROM srm.expense_account WHERE expense_account_id = %s", (eid,))
-        if not rows:
-            raise LookupError("no expense account %s" % eid)
-        cur = rows[0]
-    kind = body.get("kind") or (cur["kind"] if cur else "expense")
-    if kind not in ("expense", "income", "transfer"):
-        raise ValueError("kind must be expense, income or transfer")
-    if fetch(conn, "SELECT 1 FROM srm.expense_account WHERE lower(name) = lower(%s) AND expense_account_id <> %s", (name, eid)):
-        raise ValueError("there is already an expense account named %s" % name)
-    # A change keeps the description it doesn't send.
-    description = (str(body["description"]).strip() or None) if "description" in body else (cur["description"] if cur else None)
-    if not eid:
-        eid = fetch(conn, """INSERT INTO srm.expense_account (name, kind, description, sort_order)
-                             VALUES (%s, %s, %s, coalesce((SELECT max(sort_order) FROM srm.expense_account WHERE kind = %s), 100) + 1)
-                             RETURNING expense_account_id""", (name, kind, description, kind))[0]["expense_account_id"]
-    else:
-        fetch(conn, "UPDATE srm.expense_account SET name = %s, kind = %s, description = %s WHERE expense_account_id = %s",
-              (name, kind, description, eid))
-    conn.commit()
-    return dict(expense_accounts(conn), id=eid)
-
-
-# What files under an expense account, and how to move it elsewhere: (what, count query, move statement).
-EXPENSE_USES = (
-    ("card entries", "SELECT count(*) FROM srm.card_txn WHERE expense_account_id = %s",
-     "UPDATE srm.card_txn SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now() WHERE expense_account_id = %s"),
-    ("checking entries", "SELECT count(*) FROM srm.bank_txn WHERE expense_account_id = %s",
-     "UPDATE srm.bank_txn SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now() WHERE expense_account_id = %s"),
-    ("target accounts", "SELECT count(*) FROM srm.payee WHERE expense_account_id = %s",
-     "UPDATE srm.payee SET expense_account_id = %s, version = version + 1, updated_by = %s, updated_at = now() WHERE expense_account_id = %s"),
-    ("cash-ledger lines", "SELECT count(*) FROM srm.expense_line WHERE expense_account_id = %s",
-     "UPDATE srm.expense_line SET expense_account_id = %s WHERE expense_account_id = %s"),
-    ("card categories", "SELECT count(*) FROM srm.card_category WHERE expense_account_id = %s",
-     "UPDATE srm.card_category SET expense_account_id = %s WHERE expense_account_id = %s"),
-)
-
-
-def expense_account_usage(conn, eid):
-    rows = fetch(conn, "SELECT name, kind FROM srm.expense_account WHERE expense_account_id = %s", (int(eid),))
-    if not rows:
-        raise LookupError("no expense account %s" % eid)
-    uses = {what: fetch(conn, count, (int(eid),))[0]["count"] for what, count, _ in EXPENSE_USES}
-    rule = fetch(conn, "SELECT 1 FROM srm.spending_rule WHERE expense_account_id = %s", (int(eid),))
-    return {"id": int(eid), "name": rows[0]["name"], "kind": rows[0]["kind"], "uses": uses, "inUse": sum(uses.values()),
-            "spendingRule": bool(rule)}
-
-
-def delete_expense_account(conn, eid, q):
-    """Takes an expense account off. What files under it — card and checking entries, target accounts, cash-ledger
-    lines, the card categories mapped to it — moves to moveTo first (required when anything does); its spending rule
-    goes with it (moveTo keeps its own)."""
-    usage = expense_account_usage(conn, eid)
-    move_to = int(q.get("moveTo") or 0)
-    by = str(q.get("by") or "MxAcctMGR")[:80]
-    if usage["inUse"]:
-        if not move_to:
-            one = {"card entries": "card entry", "checking entries": "checking entry", "target accounts": "target account",
-                   "cash-ledger lines": "cash-ledger line", "card categories": "card category"}
-            raise ValueError("%s is in use (%s): choose an expense account to move it to" % (
-                usage["name"], ", ".join("%d %s" % (n, one[w] if n == 1 else w) for w, n in usage["uses"].items() if n)))
-        target = fetch(conn, "SELECT kind FROM srm.expense_account WHERE expense_account_id = %s", (move_to,))
-        if not target or move_to == int(eid):
-            raise ValueError("moveTo must be another expense account")
-        if target[0]["kind"] != usage["kind"]:
-            raise ValueError("moveTo must be an %s account, as %s is" % (usage["kind"], usage["name"]))
-        for what, _, move in EXPENSE_USES:
-            params = (move_to, by, int(eid)) if "updated_by" in move else (move_to, int(eid))
-            fetch(conn, move, params)
-    fetch(conn, "DELETE FROM srm.expense_account WHERE expense_account_id = %s", (int(eid),))
-    conn.commit()
-    return expense_accounts(conn)
-
-
 PAYEE_STATUSES = ("active", "inactive", "closed")
 FUNDING_SOURCES = ("checking", "card")
 # The target account's columns as save_payee writes them, in order.
 PAYEE_COLUMNS = ("name", "nickname", "description", "status", "active", "reference", "institution", "account_last4",
-                 "expense_account_id", "default_amount", "next_payment_date", "next_payment_amount", "logon_url",
+                 "category_code", "default_amount", "next_payment_date", "next_payment_amount", "logon_url",
                  "user_name", "address_1", "address_2", "city", "state", "zip_code", "phone", "notes", "bank_names",
                  "funding_sources", "updated_by")
+
+
+def _payee_category(conn, body):
+    code = body.get("category") or None
+    if code and not fetch(conn, "SELECT 1 FROM srm.spending_category WHERE code = %s", (code,)):
+        raise ValueError("no category %s" % code)
+    return code
 
 
 def save_payee(conn, pid, body):
@@ -603,7 +539,7 @@ def save_payee(conn, pid, body):
         name=name[:120], nickname=text("nickname", 80, "nickname"), description=text("description", 2000, "description"),
         status=status, active=status == "active", reference=text("reference", 120, "reference"),
         institution=text("institution", 120, "institution"), account_last4=last4,
-        expense_account_id=(body.get("expenseAccountId") or None) if "expenseAccountId" in body else cur.get("expense_account_id"),
+        category_code=_payee_category(conn, body) if "category" in body else cur.get("category_code"),
         default_amount=amount("default_amount", "defaultAmount"),
         next_payment_date=cur.get("next_payment_date") if k is None else (_date(body[k]) if body[k] else None),
         next_payment_amount=amount("next_payment_amount", "nextPaymentAmount"),
@@ -623,7 +559,7 @@ def save_payee(conn, pid, body):
         fetch(conn, "UPDATE srm.payee SET %s, version = version + 1, updated_at = now() WHERE payee_id = %%s"
               % ", ".join("%s = %%s" % c for c in PAYEE_COLUMNS), row + (int(pid),))
     conn.commit()
-    return expense_accounts(conn)
+    return book(conn)
 
 
 def save_payee_note(conn, pid, body):
@@ -702,7 +638,7 @@ def delete_payee(conn, pid):
             usage["name"], ", ".join("%d %s" % (n, one[w] if n == 1 else w) for w, n in usage["uses"].items() if n)))
     fetch(conn, "DELETE FROM srm.payee WHERE payee_id = %s", (int(pid),))
     conn.commit()
-    return expense_accounts(conn)
+    return book(conn)
 
 
 def route(conn, method, parts, body, q):
@@ -725,14 +661,8 @@ def route(conn, method, parts, body, q):
         return move_transaction(conn, int(parts[2]), body)
     if len(parts) == 4 and parts[:2] == ["bank", "lines"] and parts[3] in ("accept", "match") and method == "POST":
         return (accept_line if parts[3] == "accept" else match_line)(conn, int(parts[2]), body)
-    if parts == ["expense-accounts"] and method == "GET":
-        return expense_accounts(conn, q)
-    if len(parts) == 2 and parts[0] == "expense-accounts" and method == "PUT":
-        return save_expense_account(conn, parts[1], body)
-    if len(parts) == 2 and parts[0] == "expense-accounts" and method == "DELETE":
-        return delete_expense_account(conn, parts[1], q)
-    if len(parts) == 3 and parts[0] == "expense-accounts" and parts[2] == "usage" and method == "GET":
-        return expense_account_usage(conn, parts[1])
+    if parts == ["bank", "book"] and method == "GET":
+        return book(conn, q)
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "entries" and method == "GET":
         return payee_entries(conn, parts[1], q)
     if len(parts) == 3 and parts[0] == "payees" and parts[2] == "note" and method == "PUT":

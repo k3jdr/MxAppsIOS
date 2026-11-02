@@ -2,7 +2,7 @@
 //  SpendingCategoriesDrivers.swift
 //  MxAcctMGR
 //
-//  Adding, editing and removing spending categories and drivers from Spending Analysis ▸ Admin (V047): the two
+//  Adding, editing and removing spending categories and drivers from Banking ▸ Target Categories (V047): the two
 //  dimensions on every dollar. A category is what the money bought, with the CPI series its inflation follows; a
 //  driver is why the spending changed, with the attribution effect its growth beyond inflation counts as. Both are
 //  stored by a code made from the name when added, which never changes. Removing one in use moves its target accounts, tags (and

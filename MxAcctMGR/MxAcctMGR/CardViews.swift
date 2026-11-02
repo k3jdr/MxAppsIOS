@@ -9,9 +9,12 @@
 //  holds for the card (new lines, already read, totals by kind), then saves it in the card's drop folder and reads it; each line is read once, also when downloads overlap, and posts to the
 //  register — matching a charge entered by hand, else as a new entry with its target and category. A card's payments
 //  link to the checking entries that paid them (Pay… writes both). Remove… takes a card away with its register, the
-//  card company's lines and its statements, once its sheet has shown what goes and what stays.
+//  card company's lines and its statements, once its sheet has shown what goes and what stays. Import from Folder…
+//  reads every statement PDF in a folder: PDFKit gives the text, the service reads the figures and lines and keeps the
+//  PDF in the card's drop folder.
 //
 
+import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -52,8 +55,8 @@ struct CardEntry: Decodable, Identifiable, Hashable {
     var payeeLast4: String?
     var payeeInstitution: String?
     var payeeNote: String?
-    var expenseAccountId: Int?
-    var expenseAccount: String?
+    var category: String?
+    var categoryName: String?
     var memo: String?
     var amount: Double
     var status: String
@@ -77,8 +80,8 @@ struct CardEntry: Decodable, Identifiable, Hashable {
     /// The entry as the check register's target cell shows it (target, last four digits, note on hover).
     var target: RegisterEntry {
         RegisterEntry(id: id, date: date, kind: kind, checkNo: nil, payeeId: payeeId, payee: payee, payeeLast4: payeeLast4,
-                      payeeInstitution: payeeInstitution, payeeNote: payeeNote, expenseAccountId: expenseAccountId,
-                      expenseAccount: expenseAccount, memo: memo, amount: amount, status: status, bankLineId: cardLineId,
+                      payeeInstitution: payeeInstitution, payeeNote: payeeNote, category: category,
+                      categoryName: categoryName, memo: memo, amount: amount, status: status, bankLineId: cardLineId,
                       bankDate: postedDate, bankName: issuerName, version: version, enteredBy: enteredBy,
                       updatedBy: updatedBy, balance: balance, line: 0, payeeLink: payeeLink, payeeNickname: payeeNickname,
                       payeeNextDate: payeeNextDate, payeeNextAmount: payeeNextAmount)
@@ -128,6 +131,26 @@ struct CardRegister: Decodable {
     var statements: [CardStatement]
     var unlinkedPayments: [CheckingPayment]
     var load: Load?
+    /// The periods between two statements read from their PDFs that none covers.
+    var missingStatements: [MissingStatement]?
+    /// What Import from Folder… made of each file it sent.
+    var imported: [Imported]?
+
+    struct MissingStatement: Decodable, Hashable {
+        var from: String
+        var to: String
+        var before: Double?
+        var after: Double?
+    }
+    struct Imported: Decodable, Identifiable, Hashable {
+        var fileName: String
+        /// read, already, refused or otherNumber (a number no card has: sent again once the others are read).
+        var status: String
+        var message: String?
+        var lines: Int?
+        var downloaded: Int?
+        var id: String { fileName + status }
+    }
 }
 
 /// What a download holds for a card before it is imported (POST …/import with preview): nothing is saved yet.
@@ -246,6 +269,10 @@ nonisolated enum CardClient {
         if let filename, let text { body = ["filename": filename, "text": text] }
         return try await AccountsClient.request("POST", "/cards/accounts/\(code)/import", body: body, timeout: 300, as: CardRegister.self)
     }
+    /// Reads statement PDFs: each file's text, and the file for the card's drop folder.
+    static func importStatements(_ code: String, _ files: [[String: Any]]) async throws -> CardRegister {
+        try await AccountsClient.request("POST", "/cards/accounts/\(code)/statements", body: signed(["files": files]), timeout: 300, as: CardRegister.self)
+    }
 }
 
 // MARK: - Credit Card Accounts
@@ -259,7 +286,7 @@ struct CardsView: View {
     @AppStorage(RowsStepper.key) private var registerRows = RowsStepper.standard
     @State private var accounts: [CardAccount] = []
     @State private var register: CardRegister?
-    @State private var book: ExpenseBook?
+    @State private var book: TargetBook?
     @State private var checking: [BankAccount] = []
     @State private var message: String?
     @State private var problem: String?
@@ -273,6 +300,10 @@ struct CardsView: View {
     @State private var pending: PendingCardImport?
     /// Remove… asks first: what goes with the card and what stays.
     @State private var removing: CardRemoval?
+    /// The last Import from Folder…'s files that weren't read, with why.
+    @State private var notRead: [CardRegister.Imported] = []
+    /// Import from Folder… is reading: the card stays the one it reads for.
+    @State private var importingFolder = false
     #if DEBUG
     /// The launch arguments' self-test ran (once: the arguments can't be taken back).
     @State private var selfTested = false
@@ -287,6 +318,7 @@ struct CardsView: View {
     var body: some View {
         StepPage(store: store, subtitle: "Each card's register: what was charged and paid, the balance owed and the credit left, statement by statement. The card company's downloads post to it.", lesson: [
             "Download the card's activity — Chase: Spreadsheet (CSV) or Quicken (QFX); Discover and Capital One: CSV — and Import File… it here: what it holds for the card shows first. Downloads that overlap are fine: each line is read once.",
+            "Import from Folder… reads every statement PDF in a folder (Chase's layout) at once: its balance, minimum due and due date, and its transactions, each once, also when a download gave them already. A statement whose transactions don't add up to its balance isn't kept.",
             "Each line posts to the register with its target (found by the name the card company uses, once you have picked a target for it) and category (the target's, else the card company's). Enter a charge by hand from a receipt and the download's line matches it.",
             "Pay… writes the checking entry and the card's payment together, linked; a payment already in the check register links by itself (same amount within a week). A statement is paid when the payments by its due date cover its balance.",
         ]) {
@@ -294,9 +326,10 @@ struct CardsView: View {
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
+            if !notRead.isEmpty { notReadBox }
             if let r = register {
                 tiles(r)
-                CardEntryForm(draft: $draft, payees: activePayees, expenseAccounts: book?.expenseAccounts ?? []) { await add() }
+                CardEntryForm(draft: $draft, payees: activePayees, categories: book?.categories ?? []) { await add() }
                 registerTable(r)
                 if !r.unlinkedPayments.isEmpty { unlinked(r) }
                 statements(r)
@@ -315,12 +348,16 @@ struct CardsView: View {
         .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         #if DEBUG
         // Self-tests, once the register is loaded: Import File… with this file picked (-cardImportFile PATH; an
-        // unsandboxed test build reads it), or Remove… (-cardRemove YES).
+        // unsandboxed test build reads it), Import from Folder… with this folder (-cardImportFolder PATH), or Remove…
+        // (-cardRemove YES).
         .task(id: register == nil) {
             guard register != nil, !selfTested else { return }
             selfTested = true
             let defaults = UserDefaults.standard
             if let path = defaults.string(forKey: "cardImportFile") { preview(URL(fileURLWithPath: path)) }
+            if let path = defaults.string(forKey: "cardImportFolder"), let code = register?.account.code {
+                Task { await readFolder(URL(fileURLWithPath: path), code: code) }
+            }
             if defaults.bool(forKey: "cardRemove") { Task { await askRemoval() } }
         }
         #endif
@@ -342,7 +379,7 @@ struct CardsView: View {
             }
         }
         .sheet(item: $editing) { e in
-            CardEditSheet(entry: e, payees: activePayees, expenseAccounts: book?.expenseAccounts ?? []) { body in
+            CardEditSheet(entry: e, payees: activePayees, categories: book?.categories ?? []) { body in
                 await run { try await CardClient.update(e.id, body) }
             }
         }
@@ -393,7 +430,7 @@ struct CardsView: View {
                 ForEach(accounts) { a in Text("\(a.name)\(a.last4.map { " ···\($0)" } ?? "")").tag(a.code) }
             }
             .frame(maxWidth: 340)
-            .disabled(accounts.isEmpty)
+            .disabled(accounts.isEmpty || importingFolder)
             Button("New…") { accountSheet = .some(nil) }
             Button("Edit…") { accountSheet = .some(register?.account) }.disabled(register == nil)
             Button("Remove…") { Task { await askRemoval() } }
@@ -405,13 +442,30 @@ struct CardsView: View {
             Button { importFile() } label: { Label("Import File…", systemImage: "arrow.down.doc") }
                 .disabled(register == nil || busy)
                 .help("Read a download from the card company (Chase CSV / QFX / OFX, Discover or Capital One CSV): what it holds shows first; imported, it is saved in the card's drop folder, and lines already read are skipped")
+            Button { importFolder() } label: { Label("Import from Folder…", systemImage: "folder") }
+                .disabled(register == nil || busy)
+                .help("Read every statement PDF in a folder and the folders inside it (Chase's layout), with no sheet for each: its balance, minimum due and due date and its transactions. A statement read before and a line already downloaded are skipped; each PDF is kept in the card's drop folder")
             Button { paying = true } label: { Label("Pay…", systemImage: "arrow.right.circle") }
                 .disabled(register == nil || busy)
                 .help("Pay the card from a checking account: the checking entry and the card's payment, linked")
             Button { Task { await refresh() } } label: { Image(systemName: "arrow.clockwise") }
                 .help("Show what others entered since")
         }
-        .onChange(of: selected) { period = ""; Task { await refresh() } }
+        .onChange(of: selected) { period = ""; notRead = []; Task { await refresh() } }
+    }
+
+    private var notReadBox: some View {
+        Box(title: "Not Read", symbol: "exclamationmark.triangle", help: "Files the last Import from Folder… didn't read, with why: not a statement it reads, another card's, or transactions that don't add up to the statement's balance.") {
+            ForEach(notRead) { r in
+                HStack(alignment: .firstTextBaseline) {
+                    Image(systemName: "xmark.octagon").foregroundStyle(.orange)
+                    Text(r.fileName)
+                    Text(r.message ?? "").foregroundStyle(.secondary)
+                }
+                .font(.callout)
+            }
+            HStack { Spacer(); Button("Dismiss") { notRead = [] }.controlSize(.small) }
+        }
     }
 
     private func tiles(_ r: CardRegister) -> some View {
@@ -458,7 +512,7 @@ struct CardsView: View {
         "Date": .date({ $0.date }, display: { shortDay($0.date) }),
         "Kind": .text { ["charge": "Charge", "credit": "Credit", "payment": "Payment", "fee": "Fee", "interest": "Interest", "adjustment": "Adjust"][$0.kind] ?? $0.kind },
         "Target": .text { $0.payee },
-        "Category": .text { $0.expenseAccount },
+        "Category": .text { $0.categoryName },
         "Memo": .text { $0.memo },
         "Charge": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
         "Credit": .number({ $0.amount < 0 ? -$0.amount : nil }, display: { $0.amount < 0 ? money2(-$0.amount) : nil }),
@@ -490,7 +544,7 @@ struct CardsView: View {
                 TableColumn("Target") { e in
                     TargetCell(entry: e.target, website: e.payeeId.flatMap { id in book?.payees.first { $0.id == id }?.logonUrl }) { id, note in await saveNote(id, note) }
                 }.width(min: 140, ideal: 200)
-                TableColumn("Category") { e in Text(e.expenseAccount ?? "").foregroundStyle(.secondary).help(e.issuerCategory.map { "\(r.account.issuer): \($0)" } ?? "") }.width(min: 80, ideal: 130)
+                TableColumn("Category") { e in Text(e.categoryName ?? "").foregroundStyle(.secondary).help(e.issuerCategory.map { "\(r.account.issuer): \($0)" } ?? "") }.width(min: 80, ideal: 130)
                 TableColumn("Memo") { e in Text(e.memo ?? "").foregroundStyle(.secondary) }.width(min: 50, ideal: 90)
                 TableColumn("Charge") { e in Text(e.amount > 0 ? money2(e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("Credit") { e in Text(e.amount < 0 ? money2(-e.amount) : "").monospacedDigit().foregroundStyle(.green) }.width(min: 60, ideal: 90)
@@ -556,7 +610,12 @@ struct CardsView: View {
     }
 
     private func statements(_ r: CardRegister) -> some View {
-        Box(title: "Statements", symbol: "doc.text", help: "Each statement period, newest first, from the closing day: what the register adds up to, and what the statement itself says once entered (double-click a period to enter its balance, minimum due and due date from the statement). Paid when the payments after it closed, by its due date, cover its balance.") {
+        Box(title: "Statements", symbol: "doc.text", help: "Each statement period, newest first, from the closing day: what the register adds up to, and what the statement itself says once entered or read by Import from Folder… (double-click a period to enter its balance, minimum due and due date from the statement). Paid when the payments after it closed, by its due date, cover its balance.") {
+            ForEach(r.missingStatements ?? [], id: \.self) { m in
+                Label("No statement read for \(shortDay(m.from)) – \(shortDay(m.to)): the balance went from \(m.before.map(money2) ?? "—") to \(m.after.map(money2) ?? "—"), and that period's transactions aren't in the register. Put its PDF in the folder and Import from Folder… again.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).font(.callout)
+            }
             if r.statements.isEmpty {
                 Text(r.account.closeDay == nil ? "Set the statement closing day (Edit…) to see the periods." : "No statement has closed since the register starts.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -627,7 +686,7 @@ struct CardsView: View {
     static func text(_ entries: [CardEntry]) -> String {
         let head = ["Date", "Posted", "Kind", "Target", "Category", "Memo", "Charge", "Credit", "Status", "Owed"].joined(separator: "\t")
         let lines = entries.map { e -> String in
-            let cells: [String] = [e.date, e.postedDate ?? "", e.kind, e.payee ?? "", e.expenseAccount ?? "", e.memo ?? "",
+            let cells: [String] = [e.date, e.postedDate ?? "", e.kind, e.payee ?? "", e.categoryName ?? "", e.memo ?? "",
                                    e.amount > 0 ? String(format: "%.2f", e.amount) : "", e.amount < 0 ? String(format: "%.2f", -e.amount) : "",
                                    e.status, String(format: "%.2f", e.balance)]
             return cells.joined(separator: "\t")
@@ -737,6 +796,98 @@ struct CardsView: View {
         }
     }
 
+    private func importFolder() {
+        guard let code = register?.account.code else { return }
+        let key = "cardStatementsFolder.\(code)"
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.prompt = "Import"
+        panel.message = "A folder of this card's statements (PDF): every PDF in it, and in the folders inside it, is read"
+        if let last = UserDefaults.standard.string(forKey: key) { panel.directoryURL = URL(fileURLWithPath: last) }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        UserDefaults.standard.set(url.path, forKey: key)
+        Task { await readFolder(url, code: code) }
+    }
+
+    /// Every PDF in the folder and the folders inside it, in order of their paths.
+    private func statementPDFs(in folder: URL) -> [URL] {
+        let walk = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+        return (walk?.compactMap { $0 as? URL } ?? [])
+            .filter { $0.pathExtension.lowercased() == "pdf" }
+            .sorted { $0.path < $1.path }
+    }
+
+    /// Reads the folder's PDFs with PDFKit and sends them to the service six at a time. Statements under another number
+    /// go again once the rest are read, for as long as more of them are: a reissued card's carry on from the ones read.
+    private func readFolder(_ folder: URL, code: String) async {
+        let pdfs = statementPDFs(in: folder)
+        guard !pdfs.isEmpty else {
+            message = "No PDF files in \(folder.lastPathComponent)"
+            return
+        }
+        busy = true
+        importingFolder = true
+        defer { busy = false; importingFolder = false }
+        notRead = []
+        var results: [CardRegister.Imported] = []
+        var waiting = pdfs
+        var held: [CardRegister.Imported] = []
+        var more = true
+        while more {
+            let round = waiting
+            waiting = []
+            held = []
+            more = false
+            for start in stride(from: 0, to: round.count, by: 6) {
+                let part = round[start..<min(start + 6, round.count)]
+                message = "Reading \(start + 1)–\(start + part.count) of \(round.count) in \(folder.lastPathComponent)…"
+                var files: [[String: Any]] = []
+                var sent: [URL] = []
+                for u in part {
+                    guard let data = try? Data(contentsOf: u), let doc = PDFDocument(data: data) else {
+                        results.append(.init(fileName: u.lastPathComponent, status: "refused", message: "it couldn't be opened as a PDF"))
+                        continue
+                    }
+                    files.append(["fileName": u.lastPathComponent, "text": doc.string ?? "", "pdf": data.base64EncodedString()])
+                    sent.append(u)
+                }
+                guard !files.isEmpty else { continue }
+                do {
+                    let r = try await CardClient.importStatements(code, files)
+                    register = r
+                    for (u, i) in zip(sent, r.imported ?? []) {
+                        if i.status == "otherNumber" {
+                            waiting.append(u)
+                            held.append(i)
+                        } else {
+                            results.append(i)
+                            if i.status == "read" { more = true }
+                        }
+                    }
+                } catch {
+                    problem = describe(error)
+                    waiting = []
+                    held = []
+                    more = false
+                    break
+                }
+            }
+            more = more && !waiting.isEmpty
+        }
+        results += held
+        notRead = results.filter { $0.status != "read" && $0.status != "already" }
+        let count = { (s: String) in results.filter { $0.status == s }.count }
+        let lines = results.reduce(0) { $0 + ($1.lines ?? 0) }
+        let downloaded = results.reduce(0) { $0 + ($1.downloaded ?? 0) }
+        message = "\(count("read")) statements read, \(lines) new lines"
+            + (downloaded > 0 ? " · \(downloaded) already downloaded" : "")
+            + (count("already") > 0 ? " · \(count("already")) read before" : "")
+            + (notRead.isEmpty ? "" : " · \(notRead.count) not read")
+        if let list = try? await CardClient.accounts() { accounts = list }
+        book = try? await BankClient.book()
+    }
+
     /// Shows what removing the selected card would clean up (the removal sheet).
     private func askRemoval() async {
         guard let code = register?.account.code else { return }
@@ -790,13 +941,15 @@ struct CardDraft {
     var date = Date()
     var kind = "charge"
     var payee = ""
-    var expenseAccountId: Int?
+    var category: String?
+    /// What the Edit sheet opened with: a category is only sent when it changes.
+    var openedCategory: String?
     var memo = ""
     var amount: Double?
 
     var body: [String: Any] {
         var b: [String: Any] = ["date": isoDay.string(from: date), "kind": kind, "payee": payee, "memo": memo, "amount": amount ?? 0]
-        if let expenseAccountId { b["expenseAccountId"] = expenseAccountId }
+        if category != openedCategory { b["category"] = category ?? NSNull() }
         return b
     }
 }
@@ -804,7 +957,7 @@ struct CardDraft {
 struct CardEntryForm: View {
     @Binding var draft: CardDraft
     var payees: [Payee]
-    var expenseAccounts: [ExpenseAccount]
+    var categories: [BookCategory]
     var save: () async -> String?
     @State private var error: String?
     @State private var saving = false
@@ -819,9 +972,9 @@ struct CardEntryForm: View {
                 Picker("", selection: $draft.kind) { ForEach(Self.kinds, id: \.0) { Text($0.1).tag($0.0) } }
                     .labelsHidden().frame(width: 130)
                 TargetPicker(target: $draft.payee, payees: payees, prompt: draft.kind == "credit" ? "From" : "Paid to") { fill() }
-                Picker("", selection: $draft.expenseAccountId) {
-                    Text("Category").tag(Int?.none)
-                    ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                Picker("", selection: $draft.category) {
+                    Text("Category").tag(String?.none)
+                    ForEach(categories) { Text($0.name).tag(Optional($0.code)) }
                 }
                 .labelsHidden().frame(width: 170)
                 TextField("Memo", text: $draft.memo).frame(minWidth: 100)
@@ -839,7 +992,7 @@ struct CardEntryForm: View {
     private func fill() {
         guard let p = payees.first(where: { $0.name.caseInsensitiveCompare(draft.payee) == .orderedSame }) else { return }
         draft.payee = p.name
-        if draft.expenseAccountId == nil { draft.expenseAccountId = p.expenseAccountId }
+        if draft.category == nil { draft.category = p.category }
         if draft.amount == nil, let a = p.defaultAmount { draft.amount = a }
     }
 
@@ -854,7 +1007,7 @@ struct CardEntryForm: View {
 struct CardEditSheet: View {
     let entry: CardEntry
     var payees: [Payee]
-    var expenseAccounts: [ExpenseAccount]
+    var categories: [BookCategory]
     var save: ([String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var draft = CardDraft()
@@ -870,10 +1023,11 @@ struct CardEditSheet: View {
                 DatePicker("Date", selection: $draft.date, displayedComponents: .date)
                 Picker("Kind", selection: $draft.kind) { ForEach(CardEntryForm.kinds, id: \.0) { Text($0.1).tag($0.0) } }
                 TargetPicker(target: $draft.payee, payees: payees, prompt: "Paid to", label: "Target") {}
-                Picker("Category", selection: $draft.expenseAccountId) {
-                    Text("None").tag(Int?.none)
-                    ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                Picker("Category", selection: $draft.category) {
+                    Text("Its target account's").tag(String?.none)
+                    ForEach(categories) { Text($0.name).tag(Optional($0.code)) }
                 }
+                .help("Set here, it is this entry's own tag; the target account's category otherwise")
                 .disabled(draft.kind == "payment")
                 TextField("Memo", text: $draft.memo)
                 TextField("Amount", value: $draft.amount, format: .number.precision(.fractionLength(2)))
@@ -908,7 +1062,8 @@ struct CardEditSheet: View {
             draft.date = isoDay.date(from: entry.date) ?? Date()
             draft.kind = entry.kind
             draft.payee = entry.payee ?? ""
-            draft.expenseAccountId = entry.expenseAccountId
+            draft.category = entry.category
+            draft.openedCategory = entry.category
             draft.memo = entry.memo ?? ""
             draft.amount = entry.kind == "adjustment" ? entry.amount : abs(entry.amount)
             status = entry.status
@@ -1150,7 +1305,7 @@ struct StatementSheet: View {
 
 /// What a card company's download holds for the card before it is imported: its lines, each new or already read; the
 /// new lines' totals by kind; and what to look at first — another card company's file, lines dated before the
-/// register starts, categories with no expense account. Import saves it in the card's drop folder and reads it.
+/// register starts, card company categories with no category of ours. Import saves it in the card's drop folder and reads it.
 struct CardImportSheet: View {
     let card: CardAccount
     let pending: PendingCardImport
@@ -1253,7 +1408,7 @@ struct CardImportSheet: View {
             w.append("\(p.beforeOpening.formatted()) new line\(p.beforeOpening == 1 ? " is" : "s are") dated before the register starts (\(shortDay(opening))), and the register adds \(p.beforeOpening == 1 ? "it" : "them") to what was owed then. To begin with the download, set Edit… ▸ Register starts to \(shortDay(p.first)) or earlier, and Owed then to the balance owed that day.")
         }
         if !p.unmapped.isEmpty {
-            w.append("No expense account for the card company's \(p.unmapped.count == 1 ? "category" : "categories") \(p.unmapped.joined(separator: ", ")): \(p.unmapped.count == 1 ? "its" : "their") charges post without a category unless their target has one.")
+            w.append("No category for the card company's \(p.unmapped.joined(separator: ", ")), so a new target account with \(p.unmapped.count == 1 ? "it" : "them") starts Not assigned. Map \(p.unmapped.count == 1 ? "it" : "them") on Banking ▸ Target Categories.")
         }
         return w
     }

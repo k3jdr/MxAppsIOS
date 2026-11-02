@@ -79,9 +79,6 @@ struct SpendingSetup: Decodable {
     struct Named: Decodable, Identifiable, Hashable {
         var id: Int
         var name: String
-        var expenseAccountId: Int?
-        /// An expense account's description.
-        var description: String?
         // A target account's spending role and allocation (V052): spending, transfer or income; the category, driver
         // and family member its spending goes to; the statement names it matches.
         var role: String?
@@ -102,10 +99,9 @@ struct SpendingSetup: Decodable {
     var members: [HouseholdMember]
     var categories: [SpendingCategory]
     var triggers: [LifecycleTrigger]
-    var expenseAccounts: [Named]
     var payees: [Named]
     var cpiSeries: [Series]
-    /// Why spending changed, in their order (srm.spending_driver, V047; changed on Admin).
+    /// Why spending changed, in their order (srm.spending_driver, V047; changed on Target Categories).
     var drivers: [SpendingDriver]
 
     func category(_ code: String?) -> SpendingCategory? { categories.first { $0.code == code } }
@@ -131,11 +127,9 @@ struct SpendingEntry: Decodable, Identifiable, Hashable {
     var payeeId: Int?
     var payee: String?
     var description: String?
-    var expenseAccountId: Int?
-    var expenseAccount: String?
     var amount: Double
     var category: String?
-    /// Where the category came from: entry, target account, statement text or expense account.
+    /// Where the category came from: entry or target account.
     var categoryFrom: String?
     var driver: String?
     var driverFrom: String?
@@ -298,7 +292,7 @@ struct SpendingAnalysisData: Decodable {
     var coverage: [RegisterCoverage]
 }
 
-/// Why spending changed (Family Growth, One-Time Event …): srm.spending_driver (V047), added and changed on Admin.
+/// Why spending changed (Family Growth, One-Time Event …): srm.spending_driver (V047), added and changed on Target Categories.
 /// Target accounts and tags store its code.
 struct SpendingDriver: Decodable, Identifiable, Hashable {
     var code: String
@@ -499,6 +493,30 @@ struct AllocatedAnswer: Decodable {
     private enum Keys: String, CodingKey { case assigned, created }
 }
 
+/// Find a Payment… (GET /spending/find, V059): every check, charge and downloaded line matching a search, saying where
+/// it is and why it isn't in the analysis.
+struct SpendingFound: Decodable {
+    struct Row: Decodable, Identifiable, Hashable {
+        var source: String
+        var entryId: Int
+        var date: String
+        var register: String
+        var name: String
+        var amount: Double
+        var payee: String?
+        /// spending, unallocated, not_spending, left_out, other_period, card_payment, void or not_in_register.
+        var state: String
+        var why: String
+        var id: String { state + source + String(entryId) }
+        private enum CodingKeys: String, CodingKey { case source, entryId = "id", date, register, name, amount, payee, state, why }
+    }
+    var query: String
+    var rows: [Row]
+    var groups: [SpendingUnallocated.Group]
+    /// Those the analysis doesn't count though they may be spending: not voided ones, card payments, or other years'.
+    var missing: Int { rows.filter { ["unallocated", "not_spending", "left_out", "not_in_register"].contains($0.state) }.count }
+}
+
 /// Sources ▸ Unallocated Payments (GET /spending/unallocated): checks and card charges no target account matches, not
 /// in the analysis, grouped by their statement's own words.
 struct SpendingUnallocated: Decodable {
@@ -546,8 +564,7 @@ struct SpendingTransfers: Decodable {
     struct Target: Decodable, Identifiable, Hashable {
         var id: Int
         var name: String
-        var expenseAccountId: Int?
-        var expenseAccount: String?
+        var category: String?
         /// Its account's kind: expense, income or transfer (nil: no category).
         var kind: String?
         /// Its spending role (V052): spending, transfer or income.
@@ -1025,17 +1042,18 @@ nonisolated enum SpendingClient {
                                                    body: signed(["entries": entries.map { ["source": $0.source, "id": $0.entryId] }]), as: AllocatedAnswer.self)
         return (out.setup, out.assigned ?? 0)
     }
+    /// Find a Payment…: every payment matching the text, saying where it is.
+    static func find(_ text: String, data: SpendingAnalysisData) async throws -> SpendingFound {
+        let q = text.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+        return try await AccountsClient.request("GET", "/spending/find?q=\(q)&start=\(data.start)&end=\(data.end)&priorStart=\(data.priorStart)&priorEnd=\(data.priorEnd)",
+                                                as: SpendingFound.self)
+    }
     static func unallocated(window: SpendingSources) async throws -> SpendingUnallocated {
         try await AccountsClient.request("GET", "/spending/unallocated?start=\(window.start)&end=\(window.end)&priorStart=\(window.priorStart)&priorEnd=\(window.priorEnd)",
                                          as: SpendingUnallocated.self)
     }
-    /// Files card and check entries under another expense account; with fileFuture, their target account (or a new
+
     /// one named targetName, with their statement names) too, so future downloads land there.
-    static func changeExpenseAccount(_ entries: [SpendingEntry], to account: Int, fileFuture: Bool, targetName: String) async throws -> SpendingSetup {
-        try await AccountsClient.request("POST", "/spending/expense-account",
-                                         body: signed(["entries": entries.map { ["source": $0.source, "id": $0.entryId] }, "expenseAccountId": account,
-                                                       "fileFuture": fileFuture, "targetName": targetName]), as: SpendingSetup.self)
-    }
     static func saveTrigger(_ id: Int, _ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/triggers/\(id)", body: signed(body), as: SpendingSetup.self)
     }
@@ -1159,5 +1177,19 @@ nonisolated enum SpendingClient {
     }
     static func tag(_ entry: SpendingEntry, _ body: [String: Any]) async throws -> SpendingEntry? {
         try await AccountsClient.request("PUT", "/spending/tags/\(entry.source)/\(entry.entryId)", body: signed(body), as: TagAnswer.self).entry
+    }
+}
+
+// MARK: - Card company categories
+
+extension SpendingClient {
+    private struct CardCategories: Decodable { var categories: [CardCategory] }
+
+    static func cardCategories() async throws -> [CardCategory] {
+        try await AccountsClient.request("GET", "/spending/card-categories", as: CardCategories.self).categories
+    }
+    static func saveCardCategory(_ issuer: String, category: String?) async throws -> [CardCategory] {
+        let body: [String: Any] = ["issuerCategory": issuer, "category": category ?? NSNull()]
+        return try await AccountsClient.request("PUT", "/spending/card-categories", body: signed(body), as: CardCategories.self).categories
     }
 }

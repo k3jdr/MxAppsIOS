@@ -20,7 +20,9 @@
 //       shows with them, unless the security master has them already (from the export, the e-mails or an earlier
 //       lookup: Steps says which).
 //  Pages are opened one at a time, 3 seconds apart, at most 40 Transactions pages, 30 Your Orders pages a year and 25
-//  orders a run. A single order can be attached to a charge too: its number typed or pasted (or its page's link), or
+//  orders a run. Each charge is attached as soon as its orders are read: a page that can't be read costs only its own
+//  charge (Steps and its row say why), a stopped lookup keeps what it attached, and Look Up again goes on with the rest,
+//  without looking for what was found. A single order can be attached to a charge too: its number typed or pasted (or its page's link), or
 //  the order the window shows (This Order) — only that order's page is read; one placed after the charge, or already
 //  on another charge, asks first (Attach Anyway). Amazon's Conditions of Use don't allow robots: it runs only when you ask, and may stop working when
 //  Amazon changes its pages. The results attach to the charges as the export's do (POST /spending/amazon/attach): the
@@ -35,8 +37,12 @@ import WebKit
 struct AmazonLookupCharge: Identifiable, Hashable {
     let entry: SpendingEntry
     var orders: [String] = []
-    /// Where they were found: "Transactions", "Your Orders (total and date)".
+    /// Where they were found, with the date and amount that matched: "Your Orders: placed 01/20/2025, $45.49".
     var foundIn: String?
+    /// On the charge in the security master: a stopped lookup keeps it, and the next one leaves it alone.
+    var saved = false
+    /// Why its order's page couldn't be read.
+    var unreadable: String?
     var id: String { entry.id }
     var cents: Int { Int((abs(entry.amount) * 100).rounded()) }
     var isCredit: Bool { entry.amount < 0 }
@@ -135,7 +141,8 @@ final class AmazonLookup {
 
     func start() {
         guard !running, !charges.isEmpty else { return }
-        for i in charges.indices { charges[i].orders = []; charges[i].foundIn = nil }
+        // What a lookup before this one found stays: only what is still missing is looked for, and its pages read.
+        for i in charges.indices { charges[i].unreadable = nil }
         steps = []
         problem = nil
         running = true
@@ -223,6 +230,8 @@ final class AmazonLookup {
         if let j = charges.firstIndex(where: { $0.id == charge.id }) {
             charges[j].orders = ids
             charges[j].foundIn = "yours"
+            charges[j].saved = true
+            charges[j].unreadable = nil
         }
         attached(entries)
         status = "Attached order\(ids.count == 1 ? "" : "s") \(ids.joined(separator: ", ")) to the \(money2(charge.entry.amount)) charge of \(shortDay(charge.entry.date))."
@@ -263,10 +272,13 @@ final class AmazonLookup {
     private func run() async throws {
         let earliest = Freshness.date(charges.map(\.entry.date).min())!
         // 1. Your Payments ▸ Transactions: each charge with its orders.
-        status = "Reading Amazon's Transactions list…"
-        try await open(Self.base.appending(path: "cpe/yourpayments/transactions"))
+        if charges.contains(where: { $0.orders.isEmpty }) {
+            status = "Reading Amazon's Transactions list…"
+            try await open(Self.base.appending(path: "cpe/yourpayments/transactions"))
+        }
         var seen = Set<String>()
         for page in 1...Self.maxTransactionPages {
+            guard charges.contains(where: { $0.orders.isEmpty }) else { break }
             try onPage("transactions", "Amazon's Transactions list")
             let read = try await json(Self.transactionsScript, as: AmazonTransactionsPage.self)
             let fresh = read.lines.filter { seen.insert("\($0.date ?? "")|\($0.amount)|\($0.orders.joined())").inserted }
@@ -341,33 +353,67 @@ final class AmazonLookup {
                 }
             }
         }
-        // 3. Each order's page, for what it holds, unless the security master has it.
-        let ids = Array(Set(charges.flatMap(\.orders))).sorted()
-        let known = try await SpendingClient.amazonKnown(ids)
-        for id in ids {
-            if let k = known[id], k.items > 0 {
-                steps.append("Order \(id): \(k.items) item\(k.items == 1 ? "" : "s") kept already, from \(Self.origin(k.origin)): its page isn't read")
-            }
-        }
-        var pages: [[String: Any]] = []
-        for (n, id) in ids.filter({ (known[$0]?.items ?? 0) == 0 }).prefix(Self.maxOrderPages).enumerated() {
-            try await wait()
-            status = "Reading order \(id) (\(n + 1) of \(min(ids.count, Self.maxOrderPages)))…"
-            if let page = try await readOrder(id) { pages.append(page) }
-        }
-        // 4. Attach them, as the export's matches are.
-        let found = charges.filter { !$0.orders.isEmpty }
-        guard !found.isEmpty else {
+        guard charges.contains(where: { !$0.orders.isEmpty }) else {
             status = "No order found for \(charges.count == 1 ? "this charge" : "these charges") on Amazon's Transactions list or Your Orders."
             return
         }
-        status = "Attaching the orders…"
+        // 3. Each order's page, for what it holds, unless the security master has it; and 4. each charge attached as soon
+        //    as its orders are read, as the export's matches are. A page that can't be read costs only its own charge, and
+        //    a stopped lookup keeps what it attached.
+        let ids = Array(Set(charges.filter { !$0.saved }.flatMap(\.orders))).sorted()
+        let known = ids.isEmpty ? [:] : try await SpendingClient.amazonKnown(ids)
+        var readable = Set<String>()
+        for id in ids {
+            if let k = known[id], k.items > 0 {
+                readable.insert(id)
+                steps.append("Order \(id): \(k.items) item\(k.items == 1 ? "" : "s") kept already, from \(Self.origin(k.origin)): its page isn't read")
+            }
+        }
+        try await attachRead(readable, pages: [])
+        let toRead = ids.filter { !readable.contains($0) }
+        for (n, id) in toRead.prefix(Self.maxOrderPages).enumerated() {
+            try await wait()
+            status = "Reading order \(id) (\(n + 1) of \(min(toRead.count, Self.maxOrderPages)))…"
+            let page: [String: Any]?
+            do {
+                page = try await readOrder(id)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                noteUnreadable(id, describe(error))
+                continue
+            }
+            guard let page else {
+                noteUnreadable(id, "its page shows no items")
+                continue
+            }
+            readable.insert(id)
+            try await attachRead(readable, pages: [page])
+        }
+        let done = charges.filter(\.saved).count, unread = charges.filter { !$0.saved && !$0.orders.isEmpty }.count
+        let bad = charges.filter { $0.unreadable != nil }.count
+        let missing = charges.count - done - unread
+        problem = bad > 0 ? "unreadable" : nil
+        status = "Attached \(done) of \(charges.count) charge\(charges.count == 1 ? "" : "s") to their orders"
+            + (missing > 0 ? "; \(missing) not found" : "")
+            + (bad > 0 ? "; \(bad) with an order page that can't be read (Steps says why; attach another order or open it)" : "")
+            + (unread > bad ? "; \(unread - bad) found, their pages not read yet (\(Self.maxOrderPages) a run): Look Up reads the next" : "")
+            + ". Hover a Bought link in Entries to see what was bought."
+    }
+
+    /// Attaches the charges not attached yet whose orders are all readable now, with the page just read.
+    private func attachRead(_ readable: Set<String>, pages: [[String: Any]]) async throws {
+        let ready = charges.indices.filter { !charges[$0].saved && !charges[$0].orders.isEmpty && charges[$0].orders.allSatisfy(readable.contains) }
+        guard !ready.isEmpty else { return }
         let entries = try await SpendingClient.attachAmazon(
-            charges: found.map { ["source": $0.entry.source, "entryId": $0.entry.entryId, "orderIds": $0.orders] }, orders: pages)
+            charges: ready.map { ["source": charges[$0].entry.source, "entryId": charges[$0].entry.entryId, "orderIds": charges[$0].orders] }, orders: pages)
+        for i in ready { charges[i].saved = true }
         attached(entries)
-        let missing = charges.count - found.count
-        status = "Attached \(found.count) of \(charges.count) charge\(charges.count == 1 ? "" : "s") to their orders"
-            + (missing > 0 ? "; \(missing) not found" : "") + ". Hover a Bought link in Entries to see what was bought."
+    }
+
+    private func noteUnreadable(_ id: String, _ why: String) {
+        steps.append("Order \(id): not attached, \(why)")
+        for i in charges.indices where charges[i].orders.contains(id) { charges[i].unreadable = why }
     }
 
     /// Where a kept order was read, in words.
@@ -427,7 +473,7 @@ final class AmazonLookup {
         for p in pairs.sorted(by: { ($0.days, $0.card) < ($1.days, $1.card) }) where charges[p.charge].orders.isEmpty && !usedLines.contains(p.line) {
             usedLines.insert(p.line)
             charges[p.charge].orders = lines[p.line].orders
-            charges[p.charge].foundIn = "Transactions"
+            charges[p.charge].foundIn = "Transactions: \(lines[p.line].date ?? "no date"), \(money2(lines[p.line].amount))"
         }
     }
 
@@ -447,7 +493,7 @@ final class AmazonLookup {
                 .min { $0.1 < $1.1 }
             if let (i, _) = best, !charges.contains(where: { $0.orders.contains(card.orderId) }) {
                 charges[i].orders = [card.orderId]
-                charges[i].foundIn = "\(digital ? "Digital Orders" : "Your Orders") (total and date)"
+                charges[i].foundIn = "\(digital ? "Digital Orders" : "Your Orders"): placed \(shortDay(Self.iso(placed))), \(money2(total))"
             }
         }
     }
@@ -796,6 +842,7 @@ struct AmazonLookupView: View {
                 .help(lookup.shownOrder.map { "Attach order \($0), shown below, to this charge" } ?? "Open an order below (Your Orders ▸ View order details) to attach it here")
         }
         .controlSize(.small)
+        .fixedSize()
         .disabled(lookup.running)
     }
 
@@ -831,10 +878,13 @@ struct AmazonLookupView: View {
                         GridRow {
                             Text(shortDay(c.entry.date)).monospacedDigit()
                             Text(c.entry.register ?? c.entry.sourceTitle).foregroundStyle(.secondary)
-                            Text(c.entry.payee ?? "").lineLimit(1).frame(maxWidth: 320, alignment: .leading)
+                            Text(c.entry.statementName ?? c.entry.payee ?? "").lineLimit(1).frame(maxWidth: 320, alignment: .leading)
+                                .help(c.entry.statementName ?? c.entry.payee ?? "")
                             Text(money2(c.entry.amount)).monospacedDigit()
-                            Text(c.orders.isEmpty ? (lookup.running ? "…" : "—") : c.orders.joined(separator: ", ") + (c.foundIn.map { " (\($0))" } ?? ""))
-                                .foregroundStyle(c.orders.isEmpty ? .secondary : .primary).textSelection(.enabled)
+                            Text(c.orders.isEmpty ? (lookup.running ? "…" : "—")
+                                 : (c.saved ? "✓ " : "") + c.orders.joined(separator: ", ") + (c.foundIn.map { " (\($0))" } ?? "")
+                                   + (c.unreadable.map { " — not attached: \($0)" } ?? ""))
+                                .foregroundStyle(c.unreadable != nil ? Color.orange : c.orders.isEmpty ? .secondary : .primary).textSelection(.enabled)
                             attachControls(c)
                         }
                         .font(.callout)

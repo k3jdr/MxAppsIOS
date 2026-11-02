@@ -9,7 +9,7 @@
 //  the register doesn't have yet, to accept or match.
 //
 //  Banking ▸ Target Accounts: where the money goes to or comes from — a utility, a card, a brokerage, a person —
-//  each with its bank or company, last four digits, category (an expense account: Utilities, Insurance …), usual
+//  each with its bank or company, last four digits, category (Home, Food …), usual
 //  amount and a note, and the details kept for it (TargetAccounts.swift: nickname, status, identifier, next payment,
 //  logon, address, and which registers pay it). They are the registers' targets, not books MxAcctMGR keeps: a new
 //  entry's target is picked from the accounts that register pays (its funding sources), with their last four digits
@@ -49,8 +49,9 @@ struct RegisterEntry: Decodable, Identifiable, Hashable {
     var payeeLast4: String?
     var payeeInstitution: String?
     var payeeNote: String?
-    var expenseAccountId: Int?
-    var expenseAccount: String?
+    /// Its category's code and name: its own tag's, else its target account's.
+    var category: String?
+    var categoryName: String?
     var memo: String?
     var amount: Double
     var status: String
@@ -90,13 +91,11 @@ struct CheckRegister: Decodable {
     var load: Load?
 }
 
-struct ExpenseAccount: Decodable, Identifiable, Hashable {
-    var id: Int
+/// A category, for the registers' and target accounts' pickers (Banking ▸ Target Categories manages them).
+struct BookCategory: Decodable, Identifiable, Hashable {
+    var code: String
     var name: String
-    var kind: String
-    var description: String?
-    var yearTotal: Double
-    var yearEntries: Int
+    var id: String { code }
 }
 
 /// A target account (srm.payee): where a register's money goes to or comes from (TargetAccounts.swift edits it).
@@ -107,7 +106,8 @@ struct Payee: Decodable, Identifiable, Hashable {
     var description: String?
     /// active, inactive (kept, not offered in the registers) or closed.
     var status: String
-    var expenseAccountId: Int?
+    /// Its category's code.
+    var category: String?
     var defaultAmount: Double?
     /// Its identifier: the account or customer number it knows you by.
     var reference: String?
@@ -140,11 +140,9 @@ struct Payee: Decodable, Identifiable, Hashable {
     func offered(in source: FundingSource) -> Bool { active && fundingSources.contains(source.rawValue) }
 }
 
-struct ExpenseBook: Decodable {
-    /// The expense account just saved (PUT /expense-accounts/<id>).
-    var id: Int?
+struct TargetBook: Decodable {
     var year: Int
-    var expenseAccounts: [ExpenseAccount]
+    var categories: [BookCategory]
     var payees: [Payee]
 }
 
@@ -188,11 +186,11 @@ nonisolated enum BankClient {
     static func importDownloads(_ code: String) async throws -> CheckRegister {
         try await AccountsClient.request("POST", "/bank/accounts/\(code)/import", body: [:], timeout: 300, as: CheckRegister.self)
     }
-    static func book() async throws -> ExpenseBook {
-        try await AccountsClient.request("GET", "/expense-accounts", as: ExpenseBook.self)
+    static func book() async throws -> TargetBook {
+        try await AccountsClient.request("GET", "/bank/book", as: TargetBook.self)
     }
-    static func savePayee(_ id: Int, _ body: [String: Any]) async throws -> ExpenseBook {
-        try await AccountsClient.request("PUT", "/payees/\(id)", body: body.merging(["by": by]) { a, _ in a }, as: ExpenseBook.self)
+    static func savePayee(_ id: Int, _ body: [String: Any]) async throws -> TargetBook {
+        try await AccountsClient.request("PUT", "/payees/\(id)", body: body.merging(["by": by]) { a, _ in a }, as: TargetBook.self)
     }
     struct Note: Decodable { var id: Int; var note: String?; var version: Int }
     static func savePayeeNote(_ id: Int, _ note: String) async throws -> Note {
@@ -209,9 +207,6 @@ nonisolated enum BankClient {
         } else {
             _ = try await AccountsClient.request("DELETE", "/payees/\(id)/link", as: LinkAnswer.self)
         }
-    }
-    static func saveExpenseAccount(_ id: Int, _ body: [String: Any]) async throws -> ExpenseBook {
-        try await AccountsClient.request("PUT", "/expense-accounts/\(id)", body: body, as: ExpenseBook.self)
     }
 }
 
@@ -235,7 +230,7 @@ struct CheckingView: View {
     @AppStorage("checkingAccount") private var selected = ""
     @State private var accounts: [BankAccount] = []
     @State private var register: CheckRegister?
-    @State private var book: ExpenseBook?
+    @State private var book: TargetBook?
     @State private var message: String?
     @State private var problem: String?
     @State private var busy = false
@@ -303,7 +298,7 @@ struct CheckingView: View {
         // A target's link changed (here or in Target Accounts): every entry with that target shows it.
         .onChange(of: PayeeLinks.shared.version) { Task { await reload() } }
         .sheet(item: $editing) { e in
-            EditEntrySheet(entry: e, payees: activePayees, expenseAccounts: book?.expenseAccounts ?? []) { body in
+            EditEntrySheet(entry: e, payees: activePayees, categories: book?.categories ?? []) { body in
                 await run { try await BankClient.update(e.id, body) }
             }
         }
@@ -377,6 +372,7 @@ struct CheckingView: View {
         "Date": .date({ $0.date }, display: { shortDay($0.date) }),
         "Num": .text { $0.checkNo ?? $0.kind },
         "Target": .text { $0.payee },
+        "Category": .text { $0.categoryName },
         "Payment": .number({ $0.amount < 0 ? -$0.amount : nil }, display: { $0.amount < 0 ? money2(-$0.amount) : nil }),
         "Deposit": .number({ $0.amount > 0 ? $0.amount : nil }, display: { $0.amount > 0 ? money2($0.amount) : nil }),
         "✓": .text { ["cleared": "Cleared", "reconciled": "Reconciled", "void": "Void"][$0.status] ?? "Not cleared" },
@@ -398,6 +394,7 @@ struct CheckingView: View {
                 TableColumn("Target") { e in
                     TargetCell(entry: e, website: website(e)) { id, note in await saveNote(id, note) }
                 }.width(min: 140, ideal: 190)
+                TableColumn("Category") { e in Text(e.categoryName ?? "").foregroundStyle(.secondary).help("Its own tag's category, else its target account's") }.width(min: 80, ideal: 130)
                 TableColumn("Payment") { e in Text(e.amount < 0 ? money2(-e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("Deposit") { e in Text(e.amount > 0 ? money2(e.amount) : "").monospacedDigit() }.width(min: 60, ideal: 90)
                 TableColumn("✓") { e in statusMark(e) }.width(44)
@@ -430,6 +427,8 @@ struct CheckingView: View {
                     Divider()
                 }
                 if !chosen.isEmpty {
+                    columnSum(chosen, "Payment") { -$0.amount }
+                    columnSum(chosen, "Deposit") { $0.amount }
                     Button(chosen.count == 1 ? "Copy Entry" : "Copy \(chosen.count) Entries") { copy(Self.text(chosen)) }
                 }
             } primaryAction: { ids in
@@ -550,7 +549,7 @@ struct CheckingView: View {
             let pay = e.amount < 0 ? String(format: "%.2f", -e.amount) : ""
             let dep = e.amount > 0 ? String(format: "%.2f", e.amount) : ""
             let target = (e.payee ?? "") + (e.payeeLast4.map { " ···\($0)" } ?? "")
-            let cells: [String] = [e.date, e.checkNo ?? e.kind, target, e.expenseAccount ?? "", e.memo ?? "", pay, dep, e.status,
+            let cells: [String] = [e.date, e.checkNo ?? e.kind, target, e.categoryName ?? "", e.memo ?? "", pay, dep, e.status,
                                    String(format: "%.2f", e.balance)]
             return cells.joined(separator: "\t")
         }
@@ -560,6 +559,20 @@ struct CheckingView: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// The right-click menu's Sum: the chosen rows' Payment or Deposit column added up, in the item's own title; choosing
+    /// it copies the figure. `value` is what a row shows in that column, when above zero. A void entry is left out, as it
+    /// is of the balance, and the title says so.
+    private func columnSum(_ entries: [RegisterEntry], _ column: String, value: (RegisterEntry) -> Double) -> some View {
+        let inColumn = entries.filter { value($0) > 0 }
+        let counted = inColumn.filter { $0.status != "void" }
+        let voided = inColumn.count - counted.count
+        let total = counted.reduce(0) { $0 + value($1) }
+        let how = counted.isEmpty ? "\(column)s" : counted.count == 1 ? "1 \(column)" : "\(counted.count) \(column)s"
+        let left = voided == 0 ? "" : " (\(voided) void left out)"
+        return Button("Sum of \(how): \(money2(total))\(left)") { copy(String(format: "%.2f", total)) }
+            .disabled(counted.isEmpty)
     }
 
     /// The entry's target's logon page (Target Accounts), offered as a page in the Link dialog.
@@ -853,14 +866,16 @@ struct EntryDraft {
     var kind = "check"
     var checkNo = ""
     var payee = ""
-    var expenseAccountId: Int?
+    var category: String?
+    /// What the Edit sheet opened with: a category is only sent when it changes.
+    var openedCategory: String?
     var memo = ""
     var amount: Double?
 
     var body: [String: Any] {
         var b: [String: Any] = ["date": isoDay.string(from: date), "kind": kind, "payee": payee, "memo": memo, "amount": amount ?? 0]
         if !checkNo.isEmpty { b["checkNo"] = checkNo }
-        if let expenseAccountId { b["expenseAccountId"] = expenseAccountId }
+        if category != openedCategory { b["category"] = category ?? NSNull() }
         return b
     }
 }
@@ -927,7 +942,7 @@ struct EntryForm: View {
     private func fillFromPayee() {
         guard let p = payees.first(where: { $0.name.caseInsensitiveCompare(draft.payee) == .orderedSame }) else { return }
         draft.payee = p.name
-        if draft.expenseAccountId == nil { draft.expenseAccountId = p.expenseAccountId }
+        if draft.category == nil { draft.category = p.category }
         if draft.amount == nil, let a = p.defaultAmount { draft.amount = a }
     }
 
@@ -1082,7 +1097,7 @@ struct TargetNoteEditor: View {
 struct EditEntrySheet: View {
     let entry: RegisterEntry
     var payees: [Payee]
-    var expenseAccounts: [ExpenseAccount]
+    var categories: [BookCategory]
     var save: ([String: Any]) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var draft = EntryDraft()
@@ -1099,10 +1114,11 @@ struct EditEntrySheet: View {
                 Picker("Kind", selection: $draft.kind) { ForEach(EntryForm.kinds, id: \.0) { Text($0.1).tag($0.0) } }
                 if draft.kind == "check" { TextField("Check #", text: $draft.checkNo) }
                 TargetPicker(target: $draft.payee, payees: payees, prompt: draft.kind == "deposit" ? "From" : "Pay to", label: "Target") {}
-                Picker("Category", selection: $draft.expenseAccountId) {
-                    Text("None").tag(Int?.none)
-                    ForEach(expenseAccounts) { Text($0.name).tag(Optional($0.id)) }
+                Picker("Category", selection: $draft.category) {
+                    Text("Its target account's").tag(String?.none)
+                    ForEach(categories) { Text($0.name).tag(Optional($0.code)) }
                 }
+                .help("Set here, it is this entry's own tag; the target account's category otherwise")
                 TextField("Memo", text: $draft.memo)
                 TextField("Amount", value: $draft.amount, format: .number.precision(.fractionLength(2)))
                 Picker("Status", selection: $status) {
@@ -1135,7 +1151,8 @@ struct EditEntrySheet: View {
             draft.kind = entry.kind
             draft.checkNo = entry.checkNo ?? ""
             draft.payee = entry.payee ?? ""
-            draft.expenseAccountId = entry.expenseAccountId
+            draft.category = entry.category
+            draft.openedCategory = entry.category
             draft.memo = entry.memo ?? ""
             draft.amount = abs(entry.amount)
             status = entry.status
@@ -1240,7 +1257,7 @@ struct MatchSheet: View {
 
 struct TargetAccountsView: View {
     @Bindable var store: PortStore
-    @State private var book: ExpenseBook?
+    @State private var book: TargetBook?
     @State private var problem: String?
     @State private var adding = false
     /// Add from Card Registers… is open.
@@ -1252,7 +1269,6 @@ struct TargetAccountsView: View {
     @State private var renaming: Payee?
     /// Remove Target Account… (a row's context menu) is open for this account.
     @State private var removing: Payee?
-    @State private var newAccount = false
     @State private var showInactive = false
     /// How many of the table's rows show at once.
     @AppStorage(RowsStepper.key) private var tableRows = RowsStepper.standard
@@ -1262,7 +1278,7 @@ struct TargetAccountsView: View {
     var body: some View {
         StepPage(store: store, subtitle: "Where the registers' money goes to or comes from — a utility, a card, a brokerage, a person: their targets, not books MxAcctMGR keeps.", lesson: [
             "Each target account has its bank or company and its last four digits, so picking a register entry's target shows which account the money went to — and a note, shown on hover in the register and edited there. Its funding sources say which registers offer it: recipients of checking account payments, of credit card payments, or both.",
-            "Each is in a category (Utilities, Insurance, Housing …): the registers file every entry under its target's category, so a year's spending adds up by category. Its usual amount fills in the register; its next payment, nickname, identifier, logon and address are kept with it (New Target Account…). Its password and user keys stay in this Mac's Keychain, never in the security master.",
+            "Each is in a category (Home, Food, Transportation …; Banking ▸ Target Categories manages them): every entry paid to it takes its category unless the entry has a tag of its own, so a year's spending adds up by category across every account. Its usual amount fills in the register; its next payment, nickname, identifier, logon and address are kept with it (New Target Account…). Its password and user keys stay in this Mac's Keychain, never in the security master.",
             "PNC's downloads name them their own way (\"DUKE ENERGY PAYMENT\"): accepting a bank line under a target account remembers that name, so the next one is filed to it.",
         ]) {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
@@ -1293,13 +1309,13 @@ struct TargetAccountsView: View {
         }
         #endif
         .sheet(isPresented: $adding) {
-            TargetAccountSheet(payee: nil, expenseAccounts: book?.expenseAccounts ?? []) { body in await saveNew(body) }
+            TargetAccountSheet(payee: nil, categories: book?.categories ?? []) { body in await saveNew(body) }
         }
         .sheet(isPresented: $addingFromCards) {
             AddCardTargetsSheet { await load() }
         }
         .sheet(item: $details) { p in
-            TargetAccountSheet(payee: p, expenseAccounts: book?.expenseAccounts ?? [], detailsOnly: true) { body in await saveDetails(p.id, body) }
+            TargetAccountSheet(payee: p, categories: book?.categories ?? [], detailsOnly: true) { body in await saveDetails(p.id, body) }
         }
         .sheet(item: $renaming) { p in
             TargetNameSheet(payee: p, names: book?.payees.map(\.name) ?? []) { name in
@@ -1309,18 +1325,13 @@ struct TargetAccountsView: View {
         .sheet(item: $removing) { p in
             RemoveTargetAccountSheet(payee: p) { book = $0; if selected == p.id { selected = nil } }
         }
-        .sheet(isPresented: $newAccount) {
-            ExpenseAccountSheet { body in
-                do { book = try await BankClient.saveExpenseAccount(0, body); return nil } catch { return describe(error) }
-            }
-        }
     }
 
     /// The table's columns for sorting and filtering, by their titles.
-    static func columns(_ categories: [Int: String]) -> [String: LocalGridColumn<Payee>] {
+    static func columns(_ categories: [String: String]) -> [String: LocalGridColumn<Payee>] {
         [
             "Target account": .text { $0.name },
-            "Category": .text { p in p.expenseAccountId.flatMap { categories[$0] } },
+            "Category": .text { p in p.category.flatMap { categories[$0] } },
             "Funding": .text { p in
                 let sources = FundingSource.allCases.filter { p.fundingSources.contains($0.rawValue) }
                 return sources.isEmpty ? "None" : sources.map { $0 == .checking ? "Checking" : "Credit card" }.joined(separator: ", ")
@@ -1332,8 +1343,8 @@ struct TargetAccountsView: View {
         ]
     }
 
-    private func payeesTable(_ b: ExpenseBook) -> some View {
-        let names = Dictionary(uniqueKeysWithValues: b.expenseAccounts.map { ($0.id, $0.name) })
+    private func payeesTable(_ b: TargetBook) -> some View {
+        let names = Dictionary(uniqueKeysWithValues: b.categories.map { ($0.code, $0.name) })
         let columns = Self.columns(names)
         let listed = b.payees.filter { $0.active || showInactive }
         let shown = LocalGrid.rows(listed, grid, columns)
@@ -1342,8 +1353,6 @@ struct TargetAccountsView: View {
                 Button("New Target Account…") { adding = true }
                 Button("Add from Card Registers…") { addingFromCards = true }
                     .help("Make the credit card entries' targets (as the card company names them) target accounts the card registers offer")
-                Button("New Category…") { newAccount = true }
-                    .help("A category the registers file entries under (Utilities, Insurance …): each target account is in one")
                 Toggle("Show inactive and closed", isOn: $showInactive).toggleStyle(.checkbox)
                 Spacer()
                 Text("Paid in \(String(b.year)): \(money2(shown.reduce(0) { $0 + max(0, $1.yearTotal) }))").monospacedDigit().foregroundStyle(.secondary)
@@ -1361,7 +1370,7 @@ struct TargetAccountsView: View {
                         if p.status != "active" { Text(p.status).font(.caption).foregroundStyle(.secondary) }
                     }
                 }.width(min: 100)
-                TableColumn("Category") { p in Text(p.expenseAccountId.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }.width(min: 70, ideal: 110)
+                TableColumn("Category") { p in Text(p.category.flatMap { names[$0] } ?? "—").foregroundStyle(.secondary) }.width(min: 70, ideal: 110)
                 TableColumn("Funding") { p in FundingMarks(sources: p.fundingSources) }.width(min: 44, ideal: 56)
                 // The registers' own sums.
                 TableColumn("This year") { p in
@@ -1447,32 +1456,5 @@ struct FundingMarks: View {
             }
         }
         .font(.caption)
-    }
-}
-
-struct ExpenseAccountSheet: View {
-    var save: ([String: Any]) async -> String?
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var kind = "expense"
-    @State private var error: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("New Category").heading(.heading)
-            Form {
-                TextField("Name", text: $name)
-                Picker("Kind", selection: $kind) { Text("Expense").tag("expense"); Text("Income").tag("income"); Text("Transfer").tag("transfer") }
-            }
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Add") { Task { if let e = await save(["name": name, "kind": kind]) { error = e } else { dismiss() } } }
-                    .keyboardShortcut(.defaultAction).disabled(name.isEmpty)
-            }
-        }
-        .padding(18)
-        .frame(width: 360)
     }
 }

@@ -15,9 +15,11 @@ to, wherever the file is. Other CSV files (Discover's) go in a sub-folder named 
 Each run reads every download there (oldest first) and keeps each line once (srm.card_line, by the file's
 transaction id, or a hash of the CSV row and how many times the same row came before it in that file). Downloads of
 overlapping periods share their lines; a line already read from the other format (a Chase CSV and a QFX of the
-same weeks) is skipped: the same posted date and amount, as many times as the other format has it. The amounts are
-signed as the statement reads them: positive adds to the balance owed. Then srm.post_card_lines posts the new lines
-to the register and srm.match_card_payments links the card's payments to the checking entries that paid them.
+same weeks) is skipped: the same posted date and amount, as many times as the other format has it. A line a statement
+PDF gave (Import from Folder…, the accounts service's cards.py; file_format PDF) is skipped too: the same transaction
+date and amount. The amounts are signed as the statement reads them: positive adds to the balance owed. Then
+srm.post_card_lines posts the new lines to the register and srm.match_card_payments links the card's payments to the
+checking entries that paid them.
 """
 
 import csv
@@ -244,21 +246,31 @@ def config():
 
 def states(cur, aid, fmt, lines):
     """Each line against what the card has read: 'new', 'read' (the line itself, by its id) or 'other format' (the
-    same posted date and amount read from the other format, as many times as the other format has it)."""
+    same posted date and amount read from the other format, as many times as the other format has it). A statement
+    PDF gives no posted date, so against one, or reading one, it is the same transaction date and amount."""
     if not lines:
         return []
-    cur.execute("""SELECT posted_date, amount, count(*) FROM srm.card_line
+    days = [l["date"] for l in lines]
+    cur.execute("""SELECT file_format, coalesce(trans_date, posted_date), posted_date, amount, count(*) FROM srm.card_line
                     WHERE card_account_id = %s AND file_format <> %s AND posted_date BETWEEN %s AND %s
-                    GROUP BY 1, 2""", (aid, fmt, min(l["date"] for l in lines), max(l["date"] for l in lines)))
-    other = {(d, float(a)): n for d, a, n in cur.fetchall()}
+                    GROUP BY 1, 2, 3, 4""", (aid, fmt, min(days) - datetime.timedelta(days=10),
+                                             max(days) + datetime.timedelta(days=10)))
+    other, by_trans = {}, {}
+    for f, trans, posted, a, n in cur.fetchall():
+        if fmt == "PDF" or f == "PDF":
+            by_trans[(trans, float(a))] = by_trans.get((trans, float(a)), 0) + n
+        else:
+            other[(posted, float(a))] = other.get((posted, float(a)), 0) + n
     cur.execute("SELECT fitid FROM srm.card_line WHERE card_account_id = %s AND fitid = ANY(%s)",
                 (aid, [l["fitid"] for l in lines]))
     ids = {r[0] for r in cur.fetchall()}
     out, occurrence = [], {}
     for l in lines:
-        k = (l["date"], l["amount"])
+        k, t = (l["date"], l["amount"]), ("trans", l["transDate"] or l["date"], l["amount"])
         occurrence[k] = occurrence.get(k, 0) + 1
-        out.append("other format" if occurrence[k] <= other.get(k, 0) else "read" if l["fitid"] in ids else "new")
+        occurrence[t] = occurrence.get(t, 0) + 1
+        same = occurrence[k] <= other.get(k, 0) or occurrence[t] <= by_trans.get(t[1:], 0)
+        out.append("other format" if same else "read" if l["fitid"] in ids else "new")
     return out
 
 

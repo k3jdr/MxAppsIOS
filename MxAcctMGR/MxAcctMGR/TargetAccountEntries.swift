@@ -8,7 +8,7 @@
 //  (GET /payees/<id>/entries). Above the table, each month's sum (each year's, with All years) and each Spending
 //  Analysis category's: press one to show only its entries. An Amazon charge matched to its order shows what it
 //  bought, all of it on hover. Right-click entries for Spending Analysis's menu — tag them, set their category or
-//  driver, change their expense account, allocate the target account — or double-click one to tag it: the same
+//  driver, allocate the target account — or double-click one to tag it: the same
 //  entries as Spending Analysis gives them (GET /spending/targets/<id>/entries) carry the changes.
 //
 
@@ -28,8 +28,6 @@ struct TargetEntry: Decodable, Identifiable, Hashable {
     var memo: String?
     /// Spent (negative: money that came in).
     var amount: Double
-    /// Its expense account.
-    var category: String?
     /// Its Spending Analysis category: its own tag's, else the target account's.
     var spending: String?
     var orders: String?
@@ -117,12 +115,11 @@ struct TargetEntriesView: View {
     @State private var spending: String?
     @State private var search = ""
     @State private var selected = Set<TargetEntry.ID>()
-    /// The categories, drivers, family members and expense accounts the menus offer.
+    /// The categories, drivers and family members the menus offer.
     @State private var setup: SpendingSetup?
     /// Each entry as Spending Analysis gives it, which the menus change (none for a target account that isn't spending).
     @State private var editable: [TargetEntry.ID: SpendingEntry] = [:]
     @State private var tagging: [SpendingEntry]?
-    @State private var refiling: [SpendingEntry]?
     @State private var allocating: RuleTarget?
     /// Set Category / Set Driver / Clear Tags: saving, and what went wrong.
     @State private var saving = false
@@ -174,7 +171,7 @@ struct TargetEntriesView: View {
             HStack {
                 Text(editable.isEmpty
                      ? "Its role isn't Spending, so these entries aren't in Spending Analysis: Allocate… (right-click) makes it a spending account."
-                     : "Right-click entries (⇧ or ⌘ click for several) to tag them, set their category or driver, or change their expense account; double-click one to tag it. Drag a column header's edge to widen it.")
+                     : "Right-click entries (⇧ or ⌘ click for several) to tag them or set their category or driver; double-click one to tag it. Drag a column header's edge to widen it.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Close") { close() }.keyboardShortcut("w", modifiers: .command)
@@ -185,9 +182,6 @@ struct TargetEntriesView: View {
         .task(id: year) { await load() }
         .sheet(isPresented: Binding(get: { tagging != nil }, set: { if !$0 { tagging = nil } })) {
             if let picked = tagging, let setup { SpendingTagSheet(setup: setup, entries: picked) { body in await tag(picked, body) } }
-        }
-        .sheet(isPresented: Binding(get: { refiling != nil }, set: { if !$0 { refiling = nil } })) {
-            if let picked = refiling, let setup { RefileSheet(setup: setup, entries: picked) { saved($0) } }
         }
         .sheet(item: $allocating) { target in
             if let setup {
@@ -204,16 +198,9 @@ struct TargetEntriesView: View {
 
     // MARK: Sums
 
-    private struct Sum: Identifiable {
-        var key: String
-        var amount: Double
-        var count: Int
-        var id: String { key }
-    }
-
-    private static func sums(_ entries: [TargetEntry], by key: (TargetEntry) -> String) -> [Sum] {
+    private static func sums(_ entries: [TargetEntry], by key: (TargetEntry) -> String) -> [PressableSum] {
         Dictionary(grouping: entries, by: key)
-            .map { Sum(key: $0.key, amount: $0.value.reduce(0) { $0 + $1.amount }, count: $0.value.count) }
+            .map { PressableSum(key: $0.key, amount: $0.value.reduce(0) { $0 + $1.amount }, count: $0.value.count) }
             .sorted { $0.key < $1.key }
     }
 
@@ -224,29 +211,8 @@ struct TargetEntriesView: View {
         return d.formatted(.dateTime.month(.abbreviated))
     }
 
-    /// A row of sums; pressing one shows only its entries, pressing it again all of them.
-    private func sums(_ title: String, _ list: [Sum], selection: Binding<String?>, label: @escaping (String) -> String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(list) { s in
-                        Button {
-                            selection.wrappedValue = selection.wrappedValue == s.key ? nil : s.key
-                        } label: {
-                            VStack(spacing: 1) {
-                                Text(label(s.key)).font(.caption)
-                                Text(money2(s.amount)).monospacedDigit()
-                            }
-                            .padding(.horizontal, 2)
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(selection.wrappedValue == s.key ? Color.accentColor : nil)
-                        .help("\(s.count) \(s.count == 1 ? "entry" : "entries"): \(money2(s.amount)). Press to show only these; again for all")
-                    }
-                }
-            }
-        }
+    private func sums(_ title: String, _ list: [PressableSum], selection: Binding<String?>, label: @escaping (String) -> String) -> some View {
+        PressableSums(title: title, list: list, selection: selection, label: label)
     }
 
     // MARK: Entries
@@ -267,7 +233,6 @@ struct TargetEntriesView: View {
             TableColumn("Statement name") { e in
                 Text((e.checkNo.map { "#\($0) " } ?? "") + (e.name ?? "")).help([e.name, e.memo].compactMap { $0 }.joined(separator: "\n"))
             }.width(min: 140, ideal: 240)
-            TableColumn("Expense account") { e in Text(e.category ?? "").foregroundStyle(.secondary) }.width(min: 80, ideal: 120)
             TableColumn("Category") { e in
                 let s = editable[e.id]
                 HStack(spacing: 3) {
@@ -316,8 +281,6 @@ struct TargetEntriesView: View {
         if picked.contains(where: \.tagged) {
             Button("Clear Tags") { Task { await setTags(picked.filter(\.tagged), [:]) } }.disabled(!ready)
         }
-        Button(picked.count > 1 ? "Change Expense Account of \(picked.count) Entries…" : "Change Expense Account…") { refiling = picked }
-            .disabled(!ready || !picked.contains { $0.source != "ledger" })
         if picked.contains(where: \.isAppleCharge) {
             Divider()
             Button(picked.count == 1 ? "Look Up Apple Purchase…" : "Look Up Apple Purchases…") {
@@ -382,7 +345,7 @@ struct TargetEntriesView: View {
         return failed == picked.count ? last : "\(failed) of \(picked.count) entries: \(last)"
     }
 
-    /// Change Expense Account… or Allocate… saved: the setup they answer with, the entries again, and Target Accounts.
+    /// Allocate… saved: the setup they answer with, the entries again, and Target Accounts.
     private func saved(_ s: SpendingSetup) {
         setup = s
         Task { await refresh(); changed() }

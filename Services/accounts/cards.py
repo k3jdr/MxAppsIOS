@@ -10,7 +10,7 @@
                                                        code repeated as confirm); its drop folder is moved to _removed
     GET  /cards/accounts/<code>/register               its entries (running balance owed), statements and the checking
                                                        payments to it not linked to a card payment
-    POST /cards/accounts/<code>/transactions           add an entry {date, kind, payeeId|payee, expenseAccountId, memo, amount, by}
+    POST /cards/accounts/<code>/transactions           add an entry {date, kind, payeeId|payee, category, memo, amount, by}
     PUT  /cards/transactions/<id>                      change one {version, …}: refused (409) when someone changed it since
     POST /cards/transactions/<id>/link                 link a payment to the checking entry that paid it {bankTxnId} (null unlinks)
     POST /cards/accounts/<code>/pay                    pay it from a checking account {fromAccount, date, amount, memo, by}:
@@ -20,9 +20,13 @@
                                                        read (srm-loader POST /load/card-downloads); with no file, read them now.
                                                        With preview: true, what the file holds for the card, saving nothing:
                                                        each line new or already read, the totals by kind, the lines before
-                                                       the card's opening date, categories with no expense account. A file
+                                                       the card's opening date, categories with no category of ours. A file
                                                        that isn't a card download known here, or is another card's, is refused
-    GET  /cards/targets                                the card registers' targets that aren't target accounts: each name as
+    POST /cards/accounts/<code>/statements             read statement PDFs {files: [{fileName, text, pdf}], by}: text is the
+                                                       PDF's text, pdf the file in base64, kept in the drop folder; each file
+                                                       answers read, already, refused or otherNumber with why. Answers as
+                                                       the register, with imported
+    GET  /cards/targets                               the card registers' targets that aren't target accounts: each name as
                                                        the card company gives it, with its entries, total, dates and kinds
     POST /cards/targets                                make them target accounts {names: [...], by}: each a recipient of credit
                                                        card payments, in the category its entries mostly have, its entries
@@ -32,14 +36,17 @@ Amounts are signed as a statement reads them: positive adds to the balance owed 
 lowers it (payments, credits). An entry is never deleted: it is voided.
 """
 
+import base64
 import calendar
 import datetime as dt
+import hashlib
 import json
 import os
 import re
 import urllib.request
 
 import bank
+import loans
 from bank import Conflict, fetch, _date, _num, _payee
 
 CODE = re.compile(r"^[A-Za-z0-9_\-]{1,40}$")
@@ -90,9 +97,11 @@ def statements(conn, card, entries):
     today = dt.date.today()
     close_day, due_day = card["statement_close_day"], card["payment_due_day"]
     y, m = card["opening_date"].year, card["opening_date"].month
+    # A month's statement closes when it says it did, also when that isn't the card's usual day.
+    closed = {(c.year, c.month): c for c in stored}
     closings = []
     while True:
-        c = _closing(y, m, close_day)
+        c = closed.get((y, m)) or _closing(y, m, close_day)
         if c > today:
             break
         # The opening date stands for a statement's closing: the first period is the next full one.
@@ -205,7 +214,7 @@ TXN_SQL = """
            coalesce(p.name, t.payee_name) AS payee, p.account_last4 AS "payeeLast4", p.institution AS "payeeInstitution",
            p.notes AS "payeeNote", p.nickname AS "payeeNickname", p.next_payment_date AS "payeeNextDate",
            p.next_payment_amount AS "payeeNextAmount", pl.address AS "linkAddress", pl.display_text AS "linkText", pl.hover_rtf AS "linkTip", pl.link_title AS "linkTitle",
-           t.expense_account_id AS "expenseAccountId", e.name AS "expenseAccount", t.memo,
+           coalesce(g.category_code, p.category_code) AS category, c.name AS "categoryName", t.memo,
            t.amount, t.status, t.card_line_id AS "cardLineId", l.name AS "issuerName", l.category AS "issuerCategory",
            l.file_format AS "fileFormat", t.bank_txn_id AS "bankTxnId", ba.code AS "bankAccount", bt.txn_date AS "bankDate",
            bt.check_no AS "bankCheckNo", t.version, t.entered_by AS "enteredBy", t.created_at AS "enteredAt",
@@ -213,7 +222,8 @@ TXN_SQL = """
       FROM srm.card_txn t
       LEFT JOIN srm.payee p USING (payee_id)
       LEFT JOIN srm.payee_link pl ON pl.payee_id = t.payee_id
-      LEFT JOIN srm.expense_account e ON e.expense_account_id = t.expense_account_id
+      LEFT JOIN srm.spending_tag g ON g.card_txn_id = t.txn_id
+      LEFT JOIN srm.spending_category c ON c.code = coalesce(g.category_code, p.category_code)
       LEFT JOIN srm.card_line l ON l.card_line_id = t.card_line_id
       LEFT JOIN srm.bank_txn bt ON bt.txn_id = t.bank_txn_id
       LEFT JOIN srm.bank_account ba ON ba.bank_account_id = bt.bank_account_id"""
@@ -239,7 +249,8 @@ def register(conn, code):
              WHERE t.payee_id = %s AND t.status <> 'void' AND t.txn_date >= %s
                AND NOT EXISTS (SELECT 1 FROM srm.card_txn c WHERE c.bank_txn_id = t.txn_id)
              ORDER BY t.txn_date""", (card["payee_id"], card["opening_date"]))
-    return {"account": acct, "entries": rows, "statements": statements(conn, card, rows), "unlinkedPayments": unlinked}
+    return {"account": acct, "entries": rows, "statements": statements(conn, card, rows), "unlinkedPayments": unlinked,
+            "missingStatements": missing_statements(conn, card)}
 
 
 def _fields(conn, body, current=None):
@@ -259,14 +270,11 @@ def _fields(conn, body, current=None):
     if status not in STATUSES:
         raise ValueError("status must be one of " + ", ".join(STATUSES))
     if "payeeId" in body or "payee" in body:
-        payee_id, payee_name, default_account = _payee(conn, body, source="card")
+        payee_id, payee_name = _payee(conn, body, source="card")
     else:
-        payee_id, payee_name, default_account = cur.get("payeeId"), cur.get("payee"), None
-    expense = body.get("expenseAccountId", cur.get("expenseAccountId")) or default_account
-    if kind == "payment":
-        expense = None
+        payee_id, payee_name = cur.get("payeeId"), cur.get("payee")
     return {"txn_date": _date(body.get("date", cur.get("date")) or dt.date.today()), "kind": kind,
-            "payee_id": payee_id, "payee_name": payee_name, "expense_account_id": expense,
+            "payee_id": payee_id, "payee_name": payee_name,
             "memo": (body.get("memo", cur.get("memo")) or "").strip()[:200] or None, "amount": amount, "status": status}
 
 
@@ -274,11 +282,13 @@ def add_transaction(conn, code, body, commit=True):
     card = _card(conn, code)
     f = _fields(conn, body)
     rows = fetch(conn, """
-        INSERT INTO srm.card_txn (card_account_id, txn_date, kind, payee_id, payee_name, expense_account_id, memo, amount,
+        INSERT INTO srm.card_txn (card_account_id, txn_date, kind, payee_id, payee_name, memo, amount,
                                   status, bank_txn_id, entered_by, updated_by)
-        VALUES (%(cid)s, %(txn_date)s, %(kind)s, %(payee_id)s, %(payee_name)s, %(expense_account_id)s, %(memo)s, %(amount)s,
+        VALUES (%(cid)s, %(txn_date)s, %(kind)s, %(payee_id)s, %(payee_name)s, %(memo)s, %(amount)s,
                 %(status)s, %(bank)s, %(by)s, %(by)s) RETURNING txn_id""",
                  dict(f, cid=card["card_account_id"], bank=body.get("bankTxnId"), by=str(body.get("by") or "MxAcctMGR")[:80]))
+    if f["kind"] != "payment":
+        bank.file_category(conn, "card_txn_id", rows[0]["txn_id"], f["payee_id"], body)
     if not commit:
         return rows[0]["txn_id"]
     # A charge entered from a receipt may already be among the card company's lines: post them now.
@@ -304,7 +314,7 @@ def update_transaction(conn, txn_id, body):
     by = str(body.get("by") or "MxAcctMGR")[:80]
     with conn.cursor() as c:
         c.execute("""UPDATE srm.card_txn SET txn_date = %(txn_date)s, kind = %(kind)s, payee_id = %(payee_id)s,
-                            payee_name = %(payee_name)s, expense_account_id = %(expense_account_id)s, memo = %(memo)s,
+                            payee_name = %(payee_name)s, memo = %(memo)s,
                             amount = %(amount)s, status = %(status)s,
                             card_line_id = CASE WHEN %(unmatch)s THEN NULL ELSE card_line_id END,
                             posted_date = CASE WHEN %(unmatch)s THEN NULL ELSE posted_date END,
@@ -313,6 +323,8 @@ def update_transaction(conn, txn_id, body):
                       WHERE txn_id = %(id)s RETURNING card_account_id""",
                   dict(f, id=txn_id, unmatch=unmatch, void=f["status"] == "void", by=by))
         cid = c.fetchone()[0]
+    if f["kind"] != "payment":
+        bank.file_category(conn, "card_txn_id", txn_id, f["payee_id"], body)
     # The payee picked for a card company's line: its name there maps to that payee from now on.
     if f["payee_id"] and cur["issuerName"] and f["payee_id"] != cur["payeeId"]:
         fetch(conn, """UPDATE srm.payee SET bank_names = array_append(bank_names, %s)
@@ -442,7 +454,7 @@ def preview_download(conn, card, body):
     fmt = "CSV" if name.lower().endswith(".csv") else "OFX"
     with conn.cursor() as cur:
         states = card_downloads.states(cur, card["card_account_id"], fmt, lines)
-    mapped = {r["c"] for r in fetch(conn, "SELECT issuer_category AS c FROM srm.card_category WHERE expense_account_id IS NOT NULL")}
+    mapped = {r["c"] for r in fetch(conn, "SELECT issuer_category AS c FROM srm.card_category WHERE category_code IS NOT NULL")}
     new = [l for l, st in zip(lines, states) if st == "new"]
     kinds = {}
     for l in new:
@@ -493,6 +505,251 @@ def import_downloads(conn, code, body):
     return {"load": {"status": run.get("status") or out.get("status"), "message": run.get("message") or out.get("error"),
                      "file": saved and os.path.basename(saved)},
             **register(conn, code)}
+
+
+# --------------------------------------------------------------------------------------------- statements from their PDFs
+
+STATEMENT_MONEY = r"([-+]?\s*\$?\s*[\d,]+\.\d\d)"
+STATEMENT_ROW = re.compile(r"^(\d\d)/(\d\d)\s+(.+?)\s+(-?[\d,]*\.\d\d)\s*$")
+# Where the rows a statement lists end: its other tables list rewards or repeat rows that are already counted.
+STATEMENT_ACTIVITY = re.compile(r"ACCOUNT ACTIVITY.*?(?=^INTEREST CHARGES\s*$|^SHOP WITH POINTS ACTIVITY|\Z)", re.S | re.M)
+STATEMENT_TOTAL = re.compile(r"^TOTAL (FEES|INTEREST) FOR THIS PERIOD\s+\$?([\d,]+\.\d\d)", re.I)
+
+
+def _statement_money(text, label):
+    m = re.search(label + r"\s*:?\s+" + STATEMENT_MONEY, text)
+    return float(re.sub(r"[\s$,+]", "", m.group(1))) if m else None
+
+
+def _statement_day(s):
+    return dt.datetime.strptime(s, "%m/%d/%y").date()
+
+
+def _statement_kind(amount, name, section):
+    """charge, credit, payment or adjustment from the part of the statement that lists the row. A fee or interest row
+    is marked by the total that follows it (_statement_rows): merchants' names say "fee" as well."""
+    if amount < 0 and re.search(r"^(payment thank you|autopay|automatic payment)", name, re.I):
+        return "payment"   # whichever part of the statement it's read under
+    if section == "credits" and amount < 0 and re.search(r"\bpayment|autopay|thank you", name, re.I):
+        return "payment"
+    if amount < 0:
+        return "credit"
+    if section == "credits" or re.search(r"\bcredit balance refund\b", name, re.I):
+        return "adjustment"   # the card company paying a credit balance back: not spending
+    return "charge"
+
+
+def _statement_rows(text, start, closing):
+    """Each transaction a statement lists, in its order. A row gives only the month and day: the year is the last one
+    that doesn't put it after the closing date. posted_date isn't on a statement: it is the transaction date, or the
+    opening date when it was made before it, so the line falls in this statement's period. The same row twice in a
+    statement (two charges alike the same day) is two lines."""
+    rows, section, seen = [], "purchases", {}
+    for part in STATEMENT_ACTIVITY.findall(text):
+        for line in part.splitlines():
+            line = line.strip()
+            if line.startswith("PAYMENTS AND OTHER CREDITS"):
+                section = "credits"
+            elif line.startswith(("PURCHASE", "CASH ADVANCE", "BALANCE TRANSFER", "FEES CHARGED", "INTEREST CHARGED")):
+                section = "purchases"
+            total = STATEMENT_TOTAL.match(line)
+            if total:   # the rows just above add up to it
+                left = float(total.group(2).replace(",", ""))
+                for r in reversed(rows):
+                    if left < 0.005:
+                        break
+                    r["kind"] = "fee" if total.group(1).upper() == "FEES" else "interest"
+                    left = round(left - r["amount"], 2)
+                continue
+            m = STATEMENT_ROW.match(line)
+            if not m:
+                continue
+            amount, name = round(float(m.group(4).replace(",", "")), 2), m.group(3)
+            try:
+                day = dt.date(closing.year, int(m.group(1)), int(m.group(2)))
+                if day > closing:
+                    day = dt.date(closing.year - 1, int(m.group(1)), int(m.group(2)))
+            except ValueError:
+                raise ValueError("a row's date can't be read: %s/%s" % (m.group(1), m.group(2)))
+            key = "%s|%s|%s|%s" % (closing, day, name, amount)
+            seen[key] = seen.get(key, 0) + 1
+            rows.append({"fitid": "pdf:" + hashlib.sha1(("%s|%d" % (key, seen[key])).encode()).hexdigest()[:24],
+                         "transDate": day, "date": max(day, start), "amount": amount, "name": name, "type": None,
+                         "kind": _statement_kind(amount, name, section), "category": None, "memo": None})
+    return rows
+
+
+def parse_statement(text):
+    """What a card statement's text says: Chase's layout (PDFKit's reading order) is the one read. Refused (ValueError)
+    when it isn't one, or when its rows don't add up to the change in its balance: the lines can't be taken back."""
+    period = re.search(r"Opening/Closing Date\s+(\d\d/\d\d/\d\d)\s*-\s*(\d\d/\d\d/\d\d)", text)
+    if not period or "ACCOUNT SUMMARY" not in text:
+        raise ValueError("it isn't a statement layout MxAcctMGR reads (Chase's)")
+    start, closing = _statement_day(period.group(1)), _statement_day(period.group(2))
+    previous, balance = _statement_money(text, "Previous Balance"), _statement_money(text, "New Balance")
+    if previous is None or balance is None:
+        raise ValueError("its previous and new balance can't be read")
+    rows = _statement_rows(text, start, closing)
+    total = round(sum(r["amount"] for r in rows), 2)
+    if abs(round(balance - previous, 2) - total) >= 0.005:
+        raise ValueError("its transactions add up to ${:,.2f} and its balance changed by ${:,.2f}: nothing was kept"
+                         .format(total, round(balance - previous, 2)))
+    number = re.search(r"Account Number:\s*[X\s]*(\d{4})\b", text)
+    due = re.search(r"Payment Due Date:?\s+(\d\d/\d\d/\d\d)", text)
+    rate = re.search(r"^Purchases\s+(\d+\.\d+)%", text, re.M)
+    limit = re.search(r"Credit Access Line\s+\$([\d,]+)", text)
+    return {"start": start, "closing": closing, "previous": previous, "balance": balance, "rows": rows,
+            "last4": number.group(1) if number else None, "due": _statement_day(due.group(1)) if due else None,
+            "minimum": _statement_money(text, "Minimum Payment Due"), "apr": float(rate.group(1)) if rate else None,
+            "limit": float(limit.group(1).replace(",", "")) if limit else None}
+
+
+def _continues(conn, card, s):
+    """Whether a statement naming another number carries on from a statement of this card: the day after one closed or
+    the day before one starts, with the balance it left. A reissued card's number changes, its balance doesn't."""
+    if not s["balance"] and not s["previous"]:
+        return False
+    return bool(fetch(conn, """
+        SELECT 1 FROM srm.card_statement
+         WHERE card_account_id = %s AND ((period_start = %s AND previous_balance = %s AND %s <> 0)
+                                         OR (closing_date = %s AND statement_balance = %s AND %s <> 0))""",
+                      (card["card_account_id"], s["closing"] + dt.timedelta(days=1), s["balance"], s["balance"],
+                       s["start"] - dt.timedelta(days=1), s["previous"], s["previous"])))
+
+
+def _read_statement(conn, cur, card, s, name, data, sha, by, run):
+    """Keeps a statement's figures, PDF and lines; the lines a download already gave aren't read again. (new lines, lines
+    read from a download already)"""
+    from srmlib.loaders import card_downloads   # SRM's folder is on sys.path (accounts_service.SRM)
+    aid = card["card_account_id"]
+    states = card_downloads.states(cur, aid, "PDF", s["rows"])
+    if data is not None:
+        name = os.path.basename(loans.save_pdf(_drop_folder(card["code"]), name, data))
+    fetch(conn, """
+        INSERT INTO srm.card_statement (card_account_id, closing_date, statement_balance, minimum_due, due_date, updated_by,
+                                        period_start, previous_balance, card_last4, credit_limit, apr, file_name, file_sha256)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (card_account_id, closing_date) DO UPDATE SET statement_balance = excluded.statement_balance,
+               minimum_due = excluded.minimum_due, due_date = excluded.due_date, updated_by = excluded.updated_by,
+               period_start = excluded.period_start, previous_balance = excluded.previous_balance,
+               card_last4 = excluded.card_last4, credit_limit = excluded.credit_limit, apr = excluded.apr,
+               file_name = excluded.file_name, file_sha256 = excluded.file_sha256,
+               version = srm.card_statement.version + 1, updated_at = now()""",
+          (aid, s["closing"], s["balance"], s["minimum"], s["due"], by, s["start"], s["previous"], s["last4"], s["limit"], s["apr"], name, sha))
+    new = 0
+    for l, state in zip(s["rows"], states):
+        if state != "new":
+            continue
+        cur.execute("""INSERT INTO srm.card_line (card_account_id, fitid, trans_date, posted_date, amount, kind, trn_type,
+                                                  name, category, memo, file_format, load_id)
+                       VALUES (%s, %s, %s, %s, %s, %s, NULL, %s, NULL, NULL, 'PDF', %s)
+                       ON CONFLICT (card_account_id, fitid) DO NOTHING""",
+                    (aid, l["fitid"], l["transDate"], l["date"], l["amount"], l["kind"], l["name"][:200], run.load_id))
+        new += cur.rowcount
+    return new, states.count("other format")
+
+
+def _fill_card(conn, card, first):
+    """What the card leaves empty, from its latest statement: last four digits, closing and due days, limit and APR. The
+    digits, limit and APR follow the statements while they are what an earlier statement said (a reissued card, a new
+    rate); one typed in stays. A card only statements have filled starts where the earliest statement read (first)
+    starts, owing what that statement brought forward."""
+    aid = card["card_account_id"]
+    latest = fetch(conn, """
+        SELECT closing_date, due_date, card_last4, credit_limit, apr FROM srm.card_statement
+         WHERE card_account_id = %s AND file_sha256 IS NOT NULL ORDER BY closing_date DESC LIMIT 1""", (aid,))[0]
+
+    def follows(column):
+        return """%(col)s = CASE WHEN %(col)s IS NULL OR %(col)s IN
+                                      (SELECT %(from)s FROM srm.card_statement
+                                        WHERE card_account_id = %%(a)s AND closing_date < %%(c)s AND %(from)s IS NOT NULL)
+                                 THEN coalesce(%%(%(from)s)s, %(col)s) ELSE %(col)s END""" % {"col": column[0], "from": column[1]}
+
+    fetch(conn, "UPDATE srm.card_account SET " + ", ".join(follows(c) for c in (
+        ("account_last4", "card_last4"), ("credit_limit", "credit_limit"), ("apr", "apr"))) + """,
+               statement_close_day = coalesce(statement_close_day, %(close)s),
+               payment_due_day = coalesce(payment_due_day, %(due)s), updated_at = now()
+         WHERE card_account_id = %(a)s""",
+          {"a": aid, "c": latest["closing_date"], "card_last4": latest["card_last4"], "credit_limit": latest["credit_limit"],
+           "apr": latest["apr"], "close": latest["closing_date"].day,
+           "due": latest["due_date"].day if latest["due_date"] else None})
+    downloaded = fetch(conn, "SELECT 1 FROM srm.card_line WHERE card_account_id = %s AND file_format <> 'PDF' LIMIT 1", (aid,))
+    if not downloaded and first["start"] <= card["opening_date"]:
+        fetch(conn, """UPDATE srm.card_account SET opening_date = %s, opening_balance = %s, updated_at = now()
+                        WHERE card_account_id = %s""",
+              (first["start"] - dt.timedelta(days=1), first["previous"], aid))
+
+
+def import_statements(conn, code, body):
+    """Reads statement PDFs (their text; the service has no PDF reader). A statement read before, by its file's SHA-256,
+    is skipped; another card's is refused; one naming a number no card has waits as otherNumber until it carries on from
+    a statement of this card (a reissued card), so the app sends those again once the others are read."""
+    from srmlib.common import LoadRun
+    from srmlib.loaders import card_downloads
+    card = _card(conn, code)
+    by = str(body.get("by") or "MxAcctMGR")[:80]
+    results, read = [], []
+    with LoadRun(conn, "CARD_DOWNLOADS", "card_statements", {"card": card["code"], "files": len(body.get("files") or [])}) as run, conn.cursor() as cur:
+        aid = card["card_account_id"]
+        fetch(conn, "SELECT 1 FROM srm.card_account WHERE card_account_id = %s FOR UPDATE", (aid,))
+        card = _card(conn, code)
+        cards, by_last4 = card_downloads.last4_map(cur, card_downloads.config())
+        for f in body.get("files") or []:
+            name = os.path.basename(str(f.get("fileName") or "statement.pdf"))[:200]
+            r = {"fileName": name}
+            results.append(r)
+            run.read += 1
+            try:
+                text = str(f.get("text") or "")
+                if not text.strip():
+                    raise ValueError("it has no text to read (a scanned image?)")
+                data = base64.b64decode(f["pdf"]) if f.get("pdf") else None
+                sha = hashlib.sha256(data if data is not None else text.encode()).hexdigest()
+                if fetch(conn, "SELECT 1 FROM srm.card_statement WHERE card_account_id = %s AND file_sha256 = %s", (aid, sha)):
+                    r.update(status="already", message="read already")
+                    continue
+                s = parse_statement(text)
+                mine, owner, note = card["account_last4"], by_last4.get(s["last4"]), ""
+                if owner and owner != card["code"].upper():
+                    raise ValueError("it is the statement of card ···%s (%s)" % (s["last4"], owner))
+                if s["last4"] and mine and s["last4"] != mine and not owner:
+                    if not _continues(conn, card, s):
+                        r.update(status="otherNumber", message="it is for card ···%s, not ···%s, and doesn't carry on from a statement of this card" % (s["last4"], mine))
+                        continue
+                    note = " (under the card's other number ···%s)" % s["last4"]
+                fetch(conn, "SAVEPOINT statement")
+                try:
+                    new, skipped = _read_statement(conn, cur, card, s, name, data, sha, by, run)
+                    fetch(conn, "RELEASE SAVEPOINT statement")
+                except Exception:
+                    fetch(conn, "ROLLBACK TO SAVEPOINT statement")
+                    raise
+                run.inserted += new
+                read.append(s)
+                r.update(status="read", closingDate=s["closing"], lines=new, downloaded=skipped,
+                         message="closing %s: balance %s, %d new lines%s" % (s["closing"].strftime("%m/%d/%Y"), "${:,.2f}".format(s["balance"]), new, note))
+            except (ValueError, KeyError) as e:
+                r.update(status="refused", message=str(e).strip("'\""))
+        if read:
+            _fill_card(conn, card, min(read, key=lambda s: s["start"]))
+            cur.execute("SELECT srm.post_card_lines(%s), srm.match_card_payments(%s)", (aid, aid))
+            run.updated += cur.fetchone()[0]
+        run.message = "%s: %d of %d statements read, %d new lines" % (card["code"], len(read), len(results), run.inserted)
+        conn.commit()
+    return dict(register(conn, code), imported=results)
+
+
+def missing_statements(conn, card):
+    """The periods between two statements read from their PDFs that none covers: their lines aren't in the register."""
+    rows = fetch(conn, """
+        SELECT closing_date, period_start, previous_balance, statement_balance FROM srm.card_statement
+         WHERE card_account_id = %s AND period_start IS NOT NULL ORDER BY closing_date""", (card["card_account_id"],))
+    out = []
+    for a, b in zip(rows, rows[1:]):
+        if a["closing_date"] + dt.timedelta(days=1) < b["period_start"]:
+            out.append({"from": a["closing_date"] + dt.timedelta(days=1), "to": b["period_start"] - dt.timedelta(days=1),
+                        "before": _f(a["statement_balance"]), "after": _f(b["previous_balance"])})
+    return out
 
 
 # ------------------------------------------------------------------------------------------------------------ removal
@@ -597,13 +854,14 @@ def add_card_targets(conn, body):
             fetch(conn, """UPDATE srm.payee SET funding_sources = array_append(funding_sources, 'card')
                             WHERE payee_id = %s AND NOT ('card' = ANY (funding_sources))""", (pid,))
         else:
-            # Its category: the one its entries mostly have (the card company's category, or as entered).
-            category = fetch(conn, """SELECT expense_account_id FROM srm.card_txn
-                                     WHERE payee_id IS NULL AND lower(payee_name) = lower(%s) AND expense_account_id IS NOT NULL
-                                     GROUP BY 1 ORDER BY count(*) DESC LIMIT 1""", (name,))
-            pid = fetch(conn, """INSERT INTO srm.payee (name, expense_account_id, funding_sources, updated_by)
+            # Its category: the one the card company's categories of its entries mostly map to.
+            category = fetch(conn, """SELECT m.category_code FROM srm.card_txn t JOIN srm.card_line l USING (card_line_id)
+                                        JOIN srm.card_category m ON m.issuer_category = lower(l.category)
+                                       WHERE t.payee_id IS NULL AND lower(t.payee_name) = lower(%s) AND m.category_code IS NOT NULL
+                                       GROUP BY 1 ORDER BY count(*) DESC LIMIT 1""", (name,))
+            pid = fetch(conn, """INSERT INTO srm.payee (name, category_code, funding_sources, updated_by)
                                  VALUES (%s, %s, '{card}', %s) RETURNING payee_id""",
-                        (name[:120], category[0]["expense_account_id"] if category else None, by))[0]["payee_id"]
+                        (name[:120], category[0]["category_code"] if category else None, by))[0]["payee_id"]
             added += 1
         with conn.cursor() as cur:
             cur.execute("""UPDATE srm.card_txn SET payee_id = %s, version = version + 1, updated_by = %s, updated_at = now()
@@ -627,7 +885,7 @@ def route(conn, method, parts, body, q):
         return removal(conn, parts[2])
     if len(parts) == 4 and parts[:2] == ["cards", "accounts"] and method in ("GET", "POST"):
         action = {("GET", "register"): register, ("POST", "transactions"): add_transaction, ("POST", "pay"): pay,
-                  ("POST", "import"): import_downloads}.get((method, parts[3]))
+                  ("POST", "import"): import_downloads, ("POST", "statements"): import_statements}.get((method, parts[3]))
         if action is register:
             return register(conn, parts[2])
         if action:
