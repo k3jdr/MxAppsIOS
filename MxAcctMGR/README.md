@@ -736,7 +736,7 @@ from one year to the next and forecasts what the children's ages bring. Everythi
 (V037) through the accounts service (`/spending/…`, `Services/accounts/spending.py`).
 
 * **Spending is what was paid to merchants (V052).** Every payment from a checking account or a credit card goes
-  to a **merchant** — the service provider, merchant or vendor paid — and the spending is the checks and card
+  to a **merchant** — the service provider, store or vendor paid — and the spending is the checks and card
   charges and credits to merchants whose role is *Spending* (`srm.v_spending_entry`). Everything else is cash
   flow: transfers between your own accounts, card payments, income. A payment no merchant matches yet is
   *unallocated* and not in the analysis (Sources ▸ Unallocated Payments). The **cash ledgers** (Banking ▸ Cash Ledger)
@@ -949,8 +949,10 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   comparison: the **All spending** tile and the table's last row still count it, below a *Registers compared* row, and
   *This Year by Category and Driver* shows every dollar. Entries, Deep Dive's list and Allocation still show it, with a
   note on the lists, so its checks can be found and tagged.
+* **A register left out of the comparison** has two rows under *Registers compared* in Key Metrics: *…, in categories* (its spending with a category) and
+  *…, not compared* (with none). Neither counts in the category rows; *All spending* counts both.
 * **The transactions behind a figure.** Right-click the *All spending* or *This year* tile, or a Key Metrics row's name in the
-  *Category* column (a category, *PNC_CHECKING, not compared*, *Registers compared* or *All spending*), for **Show N Transactions…**: a window of its
+  *Category* column (a category, *PNC_CHECKING, in categories*, *PNC_CHECKING, not compared*, *Registers compared* or *All spending*), for **Show N Transactions…**: a window of its
   own (`SpendingTransactions.swift`) with every entry behind that figure, adding up to it. Above the table, each merchant
   account's sum, each category's, each month's and, with several registers, each register's: press one to show only its
   entries. Each column header's button sorts and filters it, and double-clicking an entry opens it in its register.

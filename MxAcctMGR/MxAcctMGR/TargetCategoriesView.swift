@@ -622,7 +622,7 @@ private struct DriverCategoryGuide: View {
                 AdminCard(title: "Driver: why the spending changed", symbol: "arrow.up.right",
                           text: "\(Self.either(setup.drivers.map(\.title))). The driver decides which effect the growth beyond inflation counts as (Spending Drivers, above); with no driver it counts as Usage.")
             }
-            Text("They are independent: any category can have any driver. Food can grow with Family Growth, Activities with Lifestyle & Hobbies, Housing with Taxes. Spending is the payments from the checking accounts and credit cards to merchants whose role is Spending — the providers, merchants and vendors paid — and each gets its category and driver:")
+            Text("They are independent: any category can have any driver. Food can grow with Family Growth, Activities with Lifestyle & Hobbies, Housing with Taxes. Spending is the payments from the checking accounts and credit cards to merchants whose role is Spending — the providers, stores and vendors paid — and each gets its category and driver:")
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 3) {
                 Text("1. From the entry's own tag, when it has one (Spending Analysis ▸ Entries: double-click, or select several and right-click) — a mixed merchant's purchase, a one-time event.")

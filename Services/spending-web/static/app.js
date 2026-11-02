@@ -451,7 +451,7 @@ function diveTab() {
       const [kind, ...rest] = k.split("|"), label = rest.join("|"); const s = sums(list);
       return `<tr><td class="l">${esc(label)}<br><span class="muted">${kind === "none" ? "merchant not allocated" : kind === "entry" ? "entry tags" : "merchant"}</span></td><td class="l muted">${esc(kind === "entry" ? "" : allocText(label))}</td><td>${money(s.before)}</td><td>${money(s.now)}</td><td class="${cls(s.change)}">${money(s.change)}</td><td>${s.countBefore} → ${s.count}</td>
         <td>${kind === "entry" ? "" : `<button class="icon" data-action="feedback" data-kind="rule" data-section="Merchant: ${esc(label)}" data-category="${esc(code)}">Suggest a change</button>`}</td></tr>`;
-    }).join("")}</table></div>`, { section: `Deep Dive ${name}: how entries got here`, help: "What put each entry in this category: its merchant's allocation (the provider, merchant or vendor paid), or the entry's own tag" });
+    }).join("")}</table></div>`, { section: `Deep Dive ${name}: how entries got here`, help: "What put each entry in this category: its merchant's allocation (the provider, store or vendor paid), or the entry's own tag" });
   // Where it went: the merchants paid, the largest first.
   const byTarget = group(mine, e => e.payee ?? e.description ?? "—");
   const targets = Object.keys(byTarget).sort((p, q) => sums(byTarget[q]).now - sums(byTarget[p]).now);
@@ -541,7 +541,7 @@ function allocationTab() {
   const left = S.setup.payees.filter(p => p.role === "transfer" || p.role === "income");
   const row = p => `<tr><td class="l">${esc(p.name)}${(p.patterns ?? []).length ? `<br><span class="muted">statement names containing ${esc(p.patterns.join(", "))}</span>` : ""}</td><td>${money(spent[p.id]?.before ?? 0)}</td><td>${money(spent[p.id]?.now ?? 0)}</td><td class="l">${esc(p.category ? catName(p.category) : "Not assigned")}</td><td class="l">${esc(p.driver ? driverTitle(p.driver) : "—")}</td><td class="l muted">${esc(memberName(p.memberId) ?? "")}</td>
     <td><button class="icon" data-action="feedback" data-kind="rule" data-section="Merchant: ${esc(p.name)}" data-category="${esc(p.category ?? "")}">Suggest a change</button></td></tr>`;
-  return `<p class="hint">Every payment from the checking accounts and credit cards goes to a merchant: the provider, merchant or vendor paid. Each dollar's category and driver come from the entry's own tag if it has one, else its merchant's allocation. Transfers between our own accounts, income and the cash ledgers aren't spending. John changes the allocation in MxAcctMGR; Suggest a change tells him.</p>`
+  return `<p class="hint">Every payment from the checking accounts and credit cards goes to a merchant: the provider, store or vendor paid. Each dollar's category and driver come from the entry's own tag if it has one, else its merchant's allocation. Transfers between our own accounts, income and the cash ledgers aren't spending. John changes the allocation in MxAcctMGR; Suggest a change tells him.</p>`
     + box("Merchants", shown.length ? `<div class="scroll"><table><tr><th class="l">Merchant</th><th>${py}</th><th>${y}</th><th class="l">Category</th><th class="l">Driver</th><th class="l">Family member</th><th></th></tr>${shown.map(row).join("")}</table></div>` : `<p class="muted">No merchant is allocated yet.</p>`,
       { help: "The category, driver and family member of each merchant's spending, the largest first" + (left.length ? `; ${left.length} more are transfers or income and left out` : "") });
 }

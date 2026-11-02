@@ -35,7 +35,7 @@ struct SpendingAnalysisView: View {
 
     var body: some View {
         StepPage(store: store, subtitle: "Household spending attribution: like portfolio attribution, for the family's spending — why it changed from last year (prices, more of the same, the children's ages, habits, one-time events) and what the children's ages bring in the next ten years.", lesson: [
-            "Spending is the payments from the checking accounts and credit cards to merchants — the providers, merchants and vendors paid — whose role is Spending; transfers, income and cash ledgers aren't. Each dollar has two dimensions: a spending category (Food, Housing, Transportation …) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event), allocated on its merchant (Allocation); tag a single entry (Philmont as a one-time event) on Entries.",
+            "Spending is the payments from the checking accounts and credit cards to merchants — the providers, stores and vendors paid — whose role is Spending; transfers, income and cash ledgers aren't. Each dollar has two dimensions: a spending category (Food, Housing, Transportation …) and a primary driver (inflation, family growth, a new activity, a lifecycle transition, a preference change, a one-time event), allocated on its merchant (Allocation); tag a single entry (Philmont as a one-time event) on Entries.",
             "Each category's change splits as in performance attribution: change = inflation + usage + lifecycle + behavior + one-time + taxes. Inflation is last year's spending times the category's CPI change (FRED, in the security master); each driver's effect is what its spending grew beyond inflation. Inflation and lifecycle are the unavoidable part; behavior is habit.",
             "The forward curve stacks each child's lifecycle costs — club sports at 10, a phone at 12, a laptop at 13, tutors at 14, driving at 16, college visits and applications at 16–17, college at 18 — so the waves show three to five years ahead.",
         ], scrollsHorizontally: true, widest: .infinity) {
@@ -343,7 +343,16 @@ struct SpendingAnalysisView: View {
                 Divider()
                 metricsRow(compared, thisYear, data).fontWeight(.semibold)
                 if !leftOut.isEmpty {
-                    ForEach(leftOut, id: \.name) { thisYearRow("\($0.name), not compared", $0.name, $0.entries, $0.amount, data) }
+                    ForEach(leftOut, id: \.name) { r in
+                        // Its spending with a category apart from what still has none.
+                        let inCategories = r.entries.filter { $0.category != nil }, none = r.entries.filter { $0.category == nil }
+                        if !inCategories.isEmpty {
+                            thisYearRow("\(r.name), in categories", "\(r.name), in categories", inCategories, inCategories.reduce(0) { $0 + $1.amount }, data)
+                        }
+                        if !none.isEmpty {
+                            thisYearRow("\(r.name), not compared", "\(r.name), not compared", none, none.reduce(0) { $0 + $1.amount }, data)
+                        }
+                    }
                     thisYearRow("All spending", "All spending", data.entries.filter { inCurrent($0, data) },
                                 leftOut.reduce(total.current) { $0 + $1.amount }, data).fontWeight(.semibold)
                 }
@@ -1165,7 +1174,7 @@ private struct TargetAllocationTab: View {
         }
         let open = list.filter { ($0.role ?? "spending") == "spending" && $0.category == nil }.count
         if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
-        Box(title: "Spending Allocation by Merchant", symbol: "arrow.left.arrow.right.square", help: "Every payment from a checking account or a credit card goes to a merchant — the provider, merchant or vendor paid — and only payments to merchants whose role is Spending are spending. Each merchant's category, driver and family member allocate its spending (an entry's own tag, set on Entries, overrides them for a mixed merchant's purchase or a one-time event). Changes save as you pick, and the attribution follows. ✎ opens Allocate…, which also sets the statement names the merchant matches (GIANT covers GIANT 6505 and GIANT WEST CHESTER #6505). Payments no merchant matches aren't in the analysis: Sources ▸ Unallocated Payments lists them to allocate. Transfers and income are on Sources ▸ Transfers & Income.") {
+        Box(title: "Spending Allocation by Merchant", symbol: "arrow.left.arrow.right.square", help: "Every payment from a checking account or a credit card goes to a merchant — the provider, store or vendor paid — and only payments to merchants whose role is Spending are spending. Each merchant's category, driver and family member allocate its spending (an entry's own tag, set on Entries, overrides them for a mixed merchant's purchase or a one-time event). Changes save as you pick, and the attribution follows. ✎ opens Allocate…, which also sets the statement names the merchant matches (GIANT covers GIANT 6505 and GIANT WEST CHESTER #6505). Payments no merchant matches aren't in the analysis: Sources ▸ Unallocated Payments lists them to allocate. Transfers and income are on Sources ▸ Transfers & Income.") {
             HStack {
                 TextField("Search merchants and their patterns", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
                 Toggle("Only without a category or driver", isOn: $onlyOpen).toggleStyle(.checkbox)
