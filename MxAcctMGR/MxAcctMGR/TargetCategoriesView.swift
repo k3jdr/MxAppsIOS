@@ -120,6 +120,11 @@ private struct MerchantsAdmin: View {
 
     private func categoryName(_ code: String?) -> String? { code.flatMap { setup.category($0)?.name ?? $0 } }
     private func roleName(_ p: Payee) -> String { Self.roles.first { $0.0 == p.role }?.1 ?? "Spending" }
+    /// What its spending does in retirement: its own label, else its category's. Only spending has one.
+    private func retirementName(_ p: Payee) -> String? {
+        guard p.role == "spending" || p.role == nil else { return nil }
+        return RetirementLabel.title(p.retirement ?? setup.category(p.category)?.retirement)
+    }
 
     private var columns: [String: LocalGridColumn<Payee>] {
         [
@@ -127,6 +132,8 @@ private struct MerchantsAdmin: View {
             "Category": .text { categoryName($0.category) },
             "Driver": .text { $0.driver == nil ? nil : setup.driverTitle($0.driver) },
             "Role": .text { roleName($0) },
+            "In retirement": .text { retirementName($0) },
+            "Statement line": .text { StatementLine.title($0.statementLine) },
             "This year": .number({ $0.yearTotal == 0 ? nil : abs($0.yearTotal) }, display: { $0.yearTotal == 0 ? nil : money2(abs($0.yearTotal)) }),
             "Total paid": .number({ p in p.totalPaid.flatMap { $0 == 0 ? nil : abs($0) } },
                                   display: { p in p.totalPaid.flatMap { $0 == 0 ? nil : money2(abs($0)) } }),
@@ -143,7 +150,7 @@ private struct MerchantsAdmin: View {
     }
 
     var body: some View {
-        Box(title: "Merchants", symbol: "storefront", help: "Who the registers pay or are paid by, and what each remembers: its category, its driver and its role. Spending counts in Spending Analysis; Transfer and Income don't. A new payment to a merchant takes these. Select several and right-click to change them together; double-click one for its entries.") {
+        Box(title: "Merchants", symbol: "storefront", help: "Who the registers pay or are paid by, and what each remembers: its category, its driver and its role. Spending counts in Spending Analysis; Transfer and Income don't. In retirement and Statement line feed Spending Analysis ▸ Retirement. A new payment to a merchant takes these. Select several and right-click to change them together; double-click one for its entries.") {
             HStack {
                 Picker("Category", selection: $filter) {
                     Text("All").tag("")
@@ -201,6 +208,11 @@ private struct MerchantsAdmin: View {
                 }.width(min: 80, ideal: 130)
                 TableColumn("Driver") { p in Text(p.driver == nil ? "" : setup.driverTitle(p.driver)).foregroundStyle(.secondary) }.width(min: 70, ideal: 120)
                 TableColumn("Role") { p in Text(roleName(p)).foregroundStyle(p.role == "spending" ? .secondary : .primary) }.width(min: 60, ideal: 70)
+                TableColumn("In retirement") { p in
+                    Text(retirementName(p) ?? "").foregroundStyle(p.retirement == nil ? .secondary : .primary)
+                        .help(p.retirement == nil ? "From its category" : "Its own, not its category's")
+                }.width(min: 80, ideal: 130)
+                TableColumn("Statement line") { p in Text(StatementLine.title(p.statementLine) ?? "") }.width(min: 70, ideal: 110)
                 TableColumn("This year") { p in
                     Text(p.yearTotal == 0 ? "" : money2(abs(p.yearTotal))).monospacedDigit().foregroundStyle(p.yearTotal < 0 ? .green : .primary)
                 }.width(min: 60, ideal: 84)
@@ -260,6 +272,20 @@ private struct MerchantsAdmin: View {
             ForEach(Self.roles, id: \.0) { r in
                 Toggle(r.1, isOn: Binding(get: { picked.allSatisfy { $0.role == r.0 } }, set: { _ in change(ids, ["role": r.0]) }))
             }
+        }
+        Menu("Set In Retirement\(n)") {
+            ForEach(RetirementLabel.all, id: \.0) { r in
+                Toggle(r.1, isOn: Binding(get: { picked.allSatisfy { $0.retirement == r.0 } }, set: { _ in change(ids, ["retirement": r.0]) }))
+            }
+            Divider()
+            Button("Use Its Category's") { change(ids, ["retirement": NSNull()]) }
+        }
+        Menu("Set Statement Line\(n)") {
+            ForEach(StatementLine.all, id: \.0) { l in
+                Toggle(l.1, isOn: Binding(get: { picked.allSatisfy { $0.statementLine == l.0 } }, set: { _ in change(ids, ["statementLine": l.0, "role": l.2]) }))
+            }
+            Divider()
+            Button("Use Its Role") { change(ids, ["statementLine": NSNull()]) }
         }
     }
 
@@ -394,7 +420,7 @@ private struct CategoriesAdmin: View {
             if let problem { Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 5) {
                 GridRow {
-                    Text(""); Text("Category").fillsGridColumn(); Text("CPI series"); Text("Assumed").gridColumnAlignment(.trailing)
+                    Text(""); Text("Category").fillsGridColumn(); Text("In retirement"); Text("CPI series"); Text("Assumed").gridColumnAlignment(.trailing)
                     ForEach(registers, id: \.self) { Text($0).gridColumnAlignment(.trailing) }
                     Text("This year").gridColumnAlignment(.trailing); Text("Entries").gridColumnAlignment(.trailing)
                     Text("Set by").gridColumnAlignment(.trailing); Text("")
@@ -413,6 +439,7 @@ private struct CategoriesAdmin: View {
                         .fillsGridColumn()
                         .modifier(ShowsTransactions(name: c.name, entries: year.filter { $0.category == c.code }, data: data, setup: setup, store: store,
                                                     merchants: rules, showMerchants: { showMerchants(c.code) }))
+                        Text(RetirementLabel.title(c.retirement)).foregroundStyle(.secondary).fixedSize()
                         Text(c.cpiName ?? "—").foregroundStyle(.secondary).lineLimit(1)
                         Text(pct(c.assumedInflation, 1)).monospacedDigit().foregroundStyle(.secondary)
                         ForEach(registers, id: \.self) { r in amount(byRegister[c.code + "|" + r]) }
@@ -434,7 +461,7 @@ private struct CategoriesAdmin: View {
                             .modifier(ShowsTransactions(name: "Not assigned", entries: year.filter { $0.category == nil }, data: data, setup: setup, store: store,
                                                         merchants: setup.payees.filter { $0.category == nil && $0.role == "spending" }.count,
                                                         showMerchants: { showMerchants(MerchantsAdmin.none) }))
-                        Text(""); Text("")
+                        Text(RetirementLabel.title(nil)).foregroundStyle(.secondary); Text(""); Text("")
                         ForEach(registers, id: \.self) { r in amount(byRegister["|" + r]) }
                         Text(money(spent.amount)).monospacedDigit().foregroundStyle(.orange)
                         Text("\(spent.count)").monospacedDigit().foregroundStyle(.secondary)

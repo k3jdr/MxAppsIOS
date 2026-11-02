@@ -110,6 +110,9 @@ struct Payee: Decodable, Identifiable, Hashable {
     var category: String?
     var driver: String?
     var role: String?
+    /// What its spending does in retirement and its household statement line, when they aren't its category's and role's (V062).
+    var retirement: String?
+    var statementLine: String?
     var defaultAmount: Double?
     /// Its identifier: the account or customer number it knows you by.
     var reference: String?

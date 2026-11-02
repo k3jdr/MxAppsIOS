@@ -145,6 +145,8 @@ class Handler(BaseHTTPRequestHandler):
                     out = spending.setup(conn)     # its target accounts carry the spending allocation (V052)
                 elif method == "GET" and name == "analysis":
                     out = spending.analysis(conn, q)
+                elif method == "GET" and name == "baseline":
+                    out = spending.baseline(conn, q)
                 elif method == "GET" and name == "sources":
                     out = spending.sources(conn, q)
                 elif method == "GET" and name == "tax":

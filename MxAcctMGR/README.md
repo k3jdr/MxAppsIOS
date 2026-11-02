@@ -908,6 +908,16 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   - **SRM Tables in the Aggregation:** every table and view the analysis reads, with what it gives the analysis, its
     rows, its newest data and its last change.
   - **Last Loads:** the latest `pnc-bank`, `card-downloads`, `amazon-orders`, `amazon-email` and `fred-yields` runs.
+* **Retirement.** The baseline retirement spending is compared with (V062), the same figures as the family page. The
+  **Household Statement** runs from take-home pay through income taxes, living costs, home improvements, mortgage
+  principal, other money in and money moved to the change in checking, and says whether it ties to the cent. Each line
+  opens to show its merchants. A mortgage payment splits into interest, a living cost, and principal, from the loan's
+  statements (estimated from the nearest statement until one is in). **What Carries Into Retirement** splits the living
+  costs by what each does when work stops: Continues, Depends on the house, Ends with the kids, Ends with work or
+  One-time. A category says this for its spending (Target Categories ▸ Edit…), a merchant can override it, and an entry
+  with the One-Time Event driver or for a child counts that way. A merchant's *Statement line* (Earned income, Tax
+  refund, Other money in, Home improvement) is set on Target Categories ▸ Merchants; the Income.Taxes category makes
+  spending an income tax. Pay deductions don't reach checking, so health coverage in retirement isn't shown.
 * **Year-End Tax.** A tax year's tax-applicable expenses, tax payments, real estate taxes, refunds and tax savings
   account, built from **tax items** (V040). A tax item is a merchant (Peco, H Federal Taxes …), an
   cash-ledger line (Home Office Desk Buildout) or a name the card companies use (TURBOTAX). V040 seeds them from
@@ -1101,6 +1111,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
 | `LoanViews.swift` | Banking ▸ Loan Accounts: mortgages and vehicle loans (New… ▸ Mortgage or Vehicle Loan), Import Statements… (PDFKit reads each PDF's text for the service), the tiles, the forecast with its chart and what-if extra principal, Interest by Year with the Form 1098 sheet, the statements, the lender's activity and the checks that paid it |
+| `SpendingBaseline.swift` | Spending Analysis ▸ Retirement: the household statement and what each living cost does in retirement |
 | `TaxTransactions.swift` | Year-End Tax: the payments behind a Tax-Applicable Expenses figure, in a window of their own |
 | `TargetAccounts.swift` | Merchants: their funding sources, Rename…, Add from Card Registers… and Remove… (the page's name is from when they had a page of their own) |
 | `TargetAccountLinks.swift` | Links on merchants: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |

@@ -60,6 +60,7 @@ struct CategoryEditor: View {
     @State private var series = ""
     /// Percent a year.
     @State private var rate = 3.0
+    @State private var retirement = "continues"
     @State private var error: String?
     @State private var saving = false
 
@@ -86,6 +87,10 @@ struct CategoryEditor: View {
                 .help("The consumer price index its inflation follows (FRED, in the security master)")
                 TextField("Assumed inflation a year (%)", value: $rate, format: .number.precision(.fractionLength(0...2)))
                     .help("The yearly price change used when the CPI series has no values for the months compared")
+                Picker("In retirement", selection: $retirement) {
+                    ForEach(RetirementLabel.all, id: \.0) { r in Text(r.1).tag(r.0) }
+                }
+                .help("What its spending does when work stops, on Spending Analysis ▸ Retirement. A merchant can override it.")
             }
             if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout) }
             HStack {
@@ -104,13 +109,14 @@ struct CategoryEditor: View {
             description = category?.description ?? ""
             series = category?.cpiSeries ?? ""
             rate = (category?.assumedInflation ?? 0.03) * 100
+            retirement = category?.retirement ?? "continues"
         }
     }
 
     private func save() async {
         saving = true
         defer { saving = false }
-        var body: [String: Any] = ["name": name, "description": description, "cpiSeries": series, "assumedInflation": rate / 100]
+        var body: [String: Any] = ["name": name, "description": description, "cpiSeries": series, "assumedInflation": rate / 100, "retirement": retirement]
         do {
             if let category {
                 saved(try await SpendingClient.saveCategory(category.code, body))

@@ -29,6 +29,8 @@
     PUT    /spending/tags/<source>/<entryId>       one entry's own {category, driver, memberId, event, notes, by}
                                                    (source bank, card or ledger); nothing set removes the tag. With
                                                    merge: true only the fields sent change, the rest of its tag stays
+    GET    /spending/baseline?year=                the household statement, tied to the change in checking, and what each
+                                                   living cost does in retirement (V062)
     GET    /spending/analysis?start=&end=&priorStart=&priorEnd=
                                                    every spending dollar of both periods (srm.v_spending_entry) from
                                                    the registers included (V038), each category's inflation between
@@ -211,7 +213,7 @@ def setup(conn, details=False):
                version FROM srm.household_member ORDER BY relation DESC, birth_year, name""")
     categories = fetch(conn, """
         SELECT c.code, c.name, c.description, c.cpi_series AS "cpiSeries", s.name AS "cpiName",
-               c.assumed_inflation AS "assumedInflation", c.sort_order AS "sortOrder",
+               c.assumed_inflation AS "assumedInflation", c.sort_order AS "sortOrder", c.retirement,
                (SELECT max(v.obs_date) FROM srm.market_series_value v WHERE v.series_code = c.cpi_series) AS "cpiThrough"
           FROM srm.spending_category c LEFT JOIN srm.market_series s ON s.series_code = c.cpi_series
          ORDER BY c.sort_order""")
@@ -220,7 +222,7 @@ def setup(conn, details=False):
                every_years AS "everyYears", annual_cost AS "annualCost", notes, active
           FROM srm.lifecycle_trigger ORDER BY sort_order, age_from, name""")
     allocation = ('p.spending_role AS role, p.category_code AS category, p.driver, p.member_id AS "memberId", '
-                  'p.match_patterns AS patterns')
+                  'p.match_patterns AS patterns, p.retirement, p.statement_line AS "statementLine"')
     if details:
         payees = [nest_link(p, "link") for p in fetch(conn, """
             SELECT p.payee_id AS id, p.name, %s, p.institution,
@@ -333,10 +335,13 @@ def add_category(conn, body):
     if last and last[0]["code"] == "OTHER":
         sort -= 1
         fetch(conn, "UPDATE srm.spending_category SET sort_order = sort_order + 1 WHERE code = 'OTHER'")
+    retirement = body.get("retirement") or "continues"
+    if retirement not in RETIREMENT:
+        raise ValueError("retirement must be one of " + ", ".join(RETIREMENT))
     fetch(conn, """INSERT INTO srm.spending_category (code, name, description, cpi_series, assumed_inflation, sort_order,
-                                                      updated_by)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-          (code, name, _text(body, "description", 400), _series(conn, body), _rate(body), sort, _by(body)))
+                                                      retirement, updated_by)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+          (code, name, _text(body, "description", 400), _series(conn, body), _rate(body), sort, retirement, _by(body)))
     conn.commit()
     return setup(conn, details=True)
 
@@ -360,6 +365,10 @@ def save_category(conn, code, body):
         sets.append("cpi_series = %s"); params.append(_series(conn, body))
     if "assumedInflation" in body:
         sets.append("assumed_inflation = %s"); params.append(_rate(body))
+    if "retirement" in body:
+        if body["retirement"] not in RETIREMENT:
+            raise ValueError("retirement must be one of " + ", ".join(RETIREMENT))
+        sets.append("retirement = %s"); params.append(body["retirement"])
     if sets:
         fetch(conn, "UPDATE srm.spending_category SET %s, updated_by = %%s, updated_at = now() WHERE code = %%s"
               % ", ".join(sets), params + [_by(body), code])
@@ -696,6 +705,110 @@ def analysis(conn, q):
                 if (c["source"], c["register"]) not in out]
     return {"start": start, "end": end, "priorStart": prior_start, "priorEnd": prior_end, "entries": entries,
             "inflation": inflation(conn, start, end), "coverage": coverage}
+
+
+# ------------------------------------------------------------------------------------------------------------ baseline
+# The household statement and what each living cost does in retirement (V062), the baseline retirement spending is
+# compared with. It is on both the family page and MxAcctMGR, so both show the same figures, and it must tie to checking:
+# earned - income tax - living - improvements - principal + other money in + cards unpaid - moved = change in checking.
+
+RETIREMENT = {
+    "continues": ("Continues", "Carries into retirement, more or less as it is today"),
+    "house": ("Depends on the house", "Changes if you downsize: the mortgage's interest, property taxes, upkeep and utilities"),
+    "kids": ("Ends with the kids", "Stops as the children finish school and leave home"),
+    "work": ("Ends with work", "Stops when work does"),
+    "one_time": ("One-time", "Won't repeat, so it isn't part of a normal year"),
+}
+STATEMENT_LINES = ("earned", "tax_refund", "other_income", "improvement", "card_payment")
+# Each line's title, in the statement's order.
+BASELINE_LINES = (("earned", "Take-home pay"), ("income_tax", "Income taxes paid from checking"), ("living", "Living costs"),
+                  ("improvement", "Home improvements"), ("principal", "Mortgage principal"),
+                  ("tax_refund", "Tax refunds"), ("other_income", "Other money in"), ("card_payment", "Card payments"),
+                  ("moved", "Moved to savings and family accounts"), ("card_unallocated", "Card charges with no merchant"))
+
+
+def _sums(rows, amount):
+    """Merchants by name, the largest first: [{name, amount, entries}] with their amounts by the function given."""
+    by = {}
+    for r in rows:
+        a = amount(r)
+        if a:
+            m = by.setdefault(r["name"] or "No merchant", {"name": r["name"] or "No merchant", "amount": 0.0, "entries": 0})
+            m["amount"] += a
+            m["entries"] += 1
+    return sorted(by.values(), key=lambda m: -abs(m["amount"]))
+
+
+def baseline(conn, q):
+    today = dt.date.today()
+    year = int(q.get("year") or today.year)
+    start, end = dt.date(year, 1, 1), min(dt.date(year, 12, 31), today)
+    out = _left_out(conn)
+    keep = lambda r: (r["source"], r["register"]) not in out
+    rows = [dict(r, amount=float(r["amount"]), principal=float(r["principal"]))
+            for r in fetch(conn, """SELECT source, entry_id, txn_date, register, name, amount, line, category_code, retirement,
+                                           principal, principal_estimated
+                                      FROM srm.v_statement_entry WHERE txn_date BETWEEN %s AND %s""", (start, end)) if keep(r)]
+    names = {c["code"]: c["name"] for c in fetch(conn, "SELECT code, name FROM srm.spending_category")}
+
+    def living(r):
+        return r["amount"] - r["principal"] if r["line"] == "living" else 0.0
+
+    def of(line):
+        return [r for r in rows if r["line"] == line]
+    # Money in has a negative amount: every line is shown as positive money.
+    lines = {"living": _sums(of("living"), living), "principal": _sums(rows, lambda r: r["principal"])}
+    for key in ("earned", "tax_refund", "other_income"):
+        lines[key] = _sums(of(key), lambda r: -r["amount"])
+    for key in ("income_tax", "improvement", "card_payment", "moved", "card_unallocated"):
+        lines[key] = _sums(of(key), lambda r: r["amount"])
+    total = {k: sum(m["amount"] for m in v) for k, v in lines.items()}
+    charged = sum(r["amount"] for r in rows if r["source"] == "card" and r["line"] != "card_unallocated")
+    unpaid = charged - total["card_payment"]
+    change = -sum(r["amount"] for r in rows if r["source"] == "bank")
+    after_tax = total["earned"] - total["income_tax"]
+    left = after_tax - total["living"]
+    other = total["tax_refund"] + total["other_income"]
+    tied = left - total["improvement"] - total["principal"] + other + unpaid - total["moved"]
+
+    # How far the registers go: a card's newest entry, as cards lag checking.
+    covered = {}
+    for r in fetch(conn, "SELECT source, register, min(txn_date) AS first, max(txn_date) AS last FROM srm.v_statement_entry GROUP BY 1, 2"):
+        if keep(r):
+            covered[(r["source"], r["register"])] = r
+    newest = {}
+    for (source, _), c in covered.items():
+        last = min(c["last"], end)
+        newest[source] = max(newest.get(source, start), last)
+    through = min(newest.values()) if newest else end
+    months = max(((through - start).days + 1) / 30.4375, 1 / 30.4375)
+    partial = [{"register": reg, "first": c["first"]} for (_, reg), c in covered.items() if c["first"] > start + dt.timedelta(days=31)]
+    partial += [{"register": reg, "first": None} for (_, reg), c in covered.items() if c["last"] < start]
+
+    retirement = []
+    for code, (title, help_text) in RETIREMENT.items():
+        mine = [r for r in of("living") if r["retirement"] == code]
+        amount = sum(living(r) for r in mine)
+        by = {}
+        for r in mine:
+            by.setdefault(r["category_code"], []).append(r)
+        categories = [{"code": k, "name": names.get(k, "Not assigned"), "amount": sum(living(r) for r in v), "merchants": _sums(v, living)}
+                      for k, v in by.items()]
+        retirement.append({"code": code, "title": title, "help": help_text, "amount": amount,
+                           "share": amount / total["living"] if total["living"] else 0.0,
+                           "categories": sorted(categories, key=lambda c: -c["amount"])})
+    return {"year": year, "start": start, "end": end, "through": through, "months": months,
+            "checkingThrough": newest.get("bank"), "cardsThrough": newest.get("card"),
+            "summary": {"earned": total["earned"], "incomeTax": total["income_tax"], "afterTax": after_tax, "living": total["living"],
+                        "leftOver": left, "improvement": total["improvement"], "principal": total["principal"],
+                        "principalEstimated": sum(1 for r in rows if r["principal_estimated"]),
+                        "taxRefunds": total["tax_refund"], "otherIncome": total["other_income"], "cardsUnpaid": unpaid,
+                        "moved": total["moved"], "change": change, "difference": round(tied - change, 2),
+                        "cardUnallocated": total["card_unallocated"], "monthlyLiving": total["living"] / months,
+                        "allMoneyOut": total["income_tax"] + total["improvement"] + total["principal"] + total["living"]},
+            "lines": [{"key": k, "title": t, "amount": total[k], "merchants": lines[k]} for k, t in BASELINE_LINES],
+            "moneyBack": [m for m in lines["living"] if m["amount"] < 0],
+            "retirement": retirement, "partial": partial}
 
 
 # ------------------------------------------------------------------------------------------------------------ sources
@@ -1540,8 +1653,20 @@ def target_entries(conn, pid, q):
                                                          ORDER BY txn_date DESC, entry_id DESC""", (int(pid), year, year))}
 
 
+def _statement_fields(body, sets, params):
+    """A merchant's retirement label and statement line (V062), when sent: null takes its category's or its role's."""
+    if "retirement" in body:
+        if body["retirement"] is not None and body["retirement"] not in RETIREMENT:
+            raise ValueError("retirement must be one of " + ", ".join(RETIREMENT))
+        sets.append("retirement = %s"); params.append(body["retirement"])
+    if "statementLine" in body:
+        if body["statementLine"] is not None and body["statementLine"] not in STATEMENT_LINES:
+            raise ValueError("statementLine must be one of " + ", ".join(STATEMENT_LINES))
+        sets.append("statement_line = %s"); params.append(body["statementLine"])
+
+
 def allocate_target(conn, pid, body):
-    """A merchant's role, category, driver, member and patterns (only the fields sent change); unallocated
+    """A merchant's role, category, driver, member, patterns, retirement label and statement line (only the fields sent change); unallocated
     payments its patterns now match are given to it. Answers with the setup and how many were."""
     pid = int(pid)
     if not fetch(conn, "SELECT 1 FROM srm.payee WHERE payee_id = %s", (pid,)):
@@ -1559,6 +1684,7 @@ def allocate_target(conn, pid, body):
         sets.append("member_id = %s"); params.append(_opt_int(body, "memberId"))
     if "patterns" in body:
         sets.append("match_patterns = %s"); params.append(_patterns(body))
+    _statement_fields(body, sets, params)
     by = _by(body)
     if sets:
         fetch(conn, "UPDATE srm.payee SET %s, version = version + 1, updated_by = %%s, updated_at = now() WHERE payee_id = %%s"
@@ -1583,8 +1709,9 @@ def allocate_targets(conn, body):
         sets.append("category_code = %s"); params.append(_category(conn, body))
     if "driver" in body:
         sets.append("driver = %s"); params.append(_driver(conn, body))
+    _statement_fields(body, sets, params)
     if not sets:
-        raise ValueError("send a role, category or driver")
+        raise ValueError("send a role, category, driver, retirement or statement line")
     found = fetch(conn, "UPDATE srm.payee SET %s, version = version + 1, updated_by = %%s, updated_at = now() "
                         "WHERE payee_id = ANY (%%s) RETURNING payee_id" % ", ".join(sets), params + [_by(body), ids])
     if len(found) != len(set(ids)):
@@ -2251,6 +2378,8 @@ def route(conn, method, parts, body, q):
         return setup(conn, details=True)
     if parts == ["spending", "analysis"] and method == "GET":
         return analysis(conn, q)
+    if parts == ["spending", "baseline"] and method == "GET":
+        return baseline(conn, q)
     if parts == ["spending", "card-categories"] and method == "GET":
         return card_categories(conn)
     if parts == ["spending", "card-categories"] and method == "PUT":

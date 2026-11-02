@@ -29,7 +29,7 @@ struct SpendingAnalysisView: View {
     /// Link and Recipients… (the family page's link and whom Email… and Message… address).
     @State private var linkSettings = false
 
-    static let tabs = [("attribution", "Overview"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Allocation"),
+    static let tabs = [("retirement", "Retirement"), ("attribution", "Overview"), ("deepdive", "Deep Dive"), ("curve", "Forward Curve"), ("tax", "Year-End Tax"), ("entries", "Entries"), ("rules", "Allocation"),
                        ("family", "Family & Lifecycle"), ("sources", "Sources")]
     private static let thisYear = Calendar.current.component(.year, from: .now)
 
@@ -60,6 +60,7 @@ struct SpendingAnalysisView: View {
             .sheet(isPresented: $linkSettings) { FamilyLinkSheet() }
             if let setup {
                 switch tab {
+                case "retirement": SpendingBaselineTab(year: year)
                 case "curve": SpendingCurveTab(setup: setup, data: data) { tab = "family" }
                 case "deepdive":
                     if let data {

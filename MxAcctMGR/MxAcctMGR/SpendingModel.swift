@@ -31,6 +31,8 @@ struct SpendingCategory: Decodable, Identifiable, Hashable {
     var assumedInflation: Double
     var sortOrder: Int
     var cpiThrough: String?
+    /// What its spending does in retirement (V062).
+    var retirement: String?
     var id: String { code }
 }
 
@@ -86,6 +88,9 @@ struct SpendingSetup: Decodable {
         var driver: String?
         var memberId: Int?
         var patterns: [String]?
+        // What its spending does in retirement and its household statement line, when they aren't its category's and role's (V062).
+        var retirement: String?
+        var statementLine: String?
         var bankNames: [String]?
         // A merchant's details and link (srm.payee_link, V032), for its name's hover text.
         var institution: String?
@@ -985,6 +990,9 @@ nonisolated enum SpendingClient {
     static func analysis(start: String, end: String, priorStart: String, priorEnd: String) async throws -> SpendingAnalysisData {
         try await AccountsClient.request("GET", "/spending/analysis?start=\(start)&end=\(end)&priorStart=\(priorStart)&priorEnd=\(priorEnd)",
                                          as: SpendingAnalysisData.self)
+    }
+    static func baseline(year: Int) async throws -> SpendingBaseline {
+        try await AccountsClient.request("GET", "/spending/baseline?year=\(year)", as: SpendingBaseline.self)
     }
     static func saveMember(_ id: Int, _ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/members/\(id)", body: signed(body), as: SpendingSetup.self)

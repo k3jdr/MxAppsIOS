@@ -28,7 +28,7 @@ let DRIVERS = {
 const DRIVER_COLORS = ["#e67e22", "#2e86de", "#17a2b8", "#8e44ad", "#d6336c", "#5c6bc0", "#16a085", "#8d6e63", "#2ecc71", "#c0392b", "#f1c40f", "#34495e"];
 const driverColor = (d, i) => d ? DRIVER_COLORS[i % DRIVER_COLORS.length] : "#a0a0a0";   // "": no driver
 const CHILD_COLORS = ["#2e86de", "#e67e22", "#8e44ad", "#16a085", "#d6336c", "#b9770e"];
-const TABS = [["attribution", "Overview"], ["deepdive", "Deep Dive"], ["curve", "Forward Curve"], ["tax", "Year-End Tax"], ["entries", "Entries"],
+const TABS = [["retirement", "Retirement"], ["attribution", "Overview"], ["deepdive", "Deep Dive"], ["curve", "Forward Curve"], ["tax", "Year-End Tax"], ["entries", "Entries"],
               ["rules", "Allocation"], ["family", "Family & Lifecycle"], ["sources", "Sources"], ["notes", "My Notes"]];
 const STALE_DAYS = 14, STALE_CPI_DAYS = 75;
 
@@ -43,8 +43,11 @@ const S = {
   dive: saved("dive", "HEALTHCARE"), stackBy: saved("stackBy", "child"), inflate: saved("inflate", true),
   taxYear: saved("taxYear", new Date().getMonth() < 4 ? thisYear - 1 : thisYear), tax: null, taxProblem: null,
   period: "current", unassignedOnly: false, cat: "", search: "", shown: 200,
+  baseYear: saved("baseYear", thisYear), base: null, baseOpen: new Set(),
   setup: null, data: null, sources: null, notes: [], problem: null, busy: false,
 };
+// The Retirement tab is where the page opens for the first time since it was added, then wherever it was left.
+if (!saved("retirementOpened", false)) { keep("retirementOpened", true); S.tab = "retirement"; keep("tab", S.tab); }
 
 // ---------------------------------------------------------------------------------------------------------- format
 
@@ -103,7 +106,7 @@ async function api(path, init) {
 }
 
 async function load() {
-  S.busy = true; render();
+  S.busy = true; S.base = null; render();
   const p = periods(), q = new URLSearchParams(p).toString();
   try {
     const [setup, data, sources] = await Promise.all([api("setup"), api("analysis?" + q), api("sources?" + q)]);
@@ -595,6 +598,60 @@ function notesTab() {
 
 // ---------------------------------------------------------------------------------------------------------- tax
 
+// ------------------------------------------------------------------------------------------------------- retirement
+
+async function loadBaseline() {
+  S.baseProblem = null;
+  try { S.base = await api("baseline?year=" + S.baseYear); } catch (e) { S.baseProblem = e.message; }
+  render();
+}
+
+// Who's behind a line, shown under it when it's opened.
+const baseDetail = (key, list, colspan = 2) => S.baseOpen.has(key) ? list.map(m => `<tr class="sub"><td class="l muted" colspan="${colspan - 1}">${esc(m.name)}${m.entries > 1 ? ` <span class="muted">(${m.entries})</span>` : ""}</td><td class="muted">${money(m.amount)}</td></tr>`).join("") : "";
+const baseOpener = (key, title) => `<button class="link" data-action="base-open" data-key="${esc(key)}" title="Show or hide what's in this line">${S.baseOpen.has(key) ? "▾" : "▸"} ${esc(title)}</button>`;
+
+function baselineTab() {
+  const years = []; for (let y = thisYear; y >= thisYear - 5; y--) years.push(y);
+  let h = `<div class="bar"><label>Year <select data-set="baseYear">${years.map(y => `<option value="${y}"${y === S.baseYear ? " selected" : ""}>${y}</option>`).join("")}</select></label>
+    <span class="spacer"></span><button data-action="reload" title="Read the registers again">↻</button></div>`;
+  if (S.baseProblem) return h + `<p class="notice warn">${esc(S.baseProblem)}</p>`;
+  const b = S.base;
+  if (!b || b.year !== S.baseYear) {
+    if (!S.baseLoading) { S.baseLoading = true; loadBaseline().finally(() => S.baseLoading = false); }
+    return h + `<div class="loading">Reading the registers…</div>`;
+  }
+  const s = b.summary, line = k => b.lines.find(l => l.key === k);
+  h += `<p class="notice">Today's real spending, the starting point for what retirement will cost: ${b.year} so far, with checking through ${day(b.checkingThrough)} and the cards through ${day(b.cardsThrough)}. Monthly figures count the ${b.months.toFixed(1)} months to the earlier date.</p>`;
+  if (b.partial.length) h += `<p class="notice warn">Not a whole year: ${esc(b.partial.map(p => p.first ? `${p.register} starts ${day(p.first)}` : `${p.register} has nothing this year`).join("; "))}, so these figures miss what came before.</p>`;
+  h += `<div class="tiles">
+    ${tile("After-tax income", money(s.afterTax), "take-home pay less income taxes", "What was earned, after the income taxes paid from checking. Pay already has its withholding taken out.")}
+    ${tile("Living costs", money(s.living), `${money(s.monthlyLiving)} a month`, "What it cost to live: not income taxes, home improvements or mortgage principal.")}
+    ${tile("Left over from income", money(s.leftOver), s.afterTax > 0 ? `${pct(s.leftOver / s.afterTax, 0)} of after-tax income` : "", "After-tax income less living costs.", s.leftOver < 0 ? "var(--warn)" : "")}
+    ${tile("A year at this pace", money(s.monthlyLiving * 12), "living costs", "The monthly average times twelve. Bills that come once a year make this rough until the year is whole.")}</div>`;
+  const row = (key, title, amount, sign = 1) => `<tr><td class="l">${baseOpener(key, title)}</td><td>${money(sign * amount)}</td></tr>${baseDetail(key, line(key).merchants)}`;
+  const sum = (title, amount) => `<tr class="total"><td class="l">${esc(title)}</td><td>${money(amount)}</td></tr>`;
+  const plain = (title, amount, tip) => `<tr><td class="l" title="${esc(tip)}">${esc(title)}</td><td>${money(amount)}</td></tr>`;
+  h += box("Household Statement", `<div class="scroll"><table>
+      ${row("earned", "Take-home pay", s.earned)}${row("income_tax", "Income taxes paid from checking", s.incomeTax, -1)}${sum("After-tax income", s.afterTax)}
+      ${row("living", "Living costs", s.living, -1)}${sum("Left over from income", s.leftOver)}
+      ${row("improvement", "Home improvements", s.improvement, -1)}${row("principal", "Mortgage principal", s.principal, -1)}
+      ${row("tax_refund", "Tax refunds", s.taxRefunds)}${row("other_income", "Other money in", s.otherIncome)}
+      ${plain("Card charges not yet paid", s.cardsUnpaid, "Charged on the cards this year and counted above, less what checking paid the cards")}
+      ${row("moved", "Moved to savings and family accounts, net", s.moved, -1)}${sum("Change in checking", s.change)}</table></div>
+      <p class="hint">${Math.abs(s.difference) < 0.01 ? "✓ This ties to checking to the cent." : `⚠︎ This is ${money2(s.difference)} away from checking.`} Open a line to see what's in it.
+      Living costs, income taxes, improvements and principal add up to ${money(s.allMoneyOut)}, the All spending figure on the Overview tab.
+      ${s.principalEstimated ? `Principal is estimated on ${s.principalEstimated} payment${s.principalEstimated === 1 ? "" : "s"} whose mortgage statement isn't in yet.` : ""}
+      ${b.moneyBack.some(m => m.amount <= -500) ? `Living costs are after money that came back: ${esc(b.moneyBack.filter(m => m.amount <= -500).map(m => `${m.name} ${money(-m.amount)}`).join(", "))}.` : ""}</p>`,
+    { help: "Where this year's money came from and went, tied to the change in checking" });
+  const cats = r => S.baseOpen.has("r:" + r.code) ? r.categories.map(c => `<tr class="sub"><td class="l muted">${baseOpener(`c:${r.code}:${c.code}`, c.name)}</td><td class="muted">${money(c.amount)}</td><td></td><td class="muted">${money(c.amount / b.months)}</td></tr>${S.baseOpen.has(`c:${r.code}:${c.code}`) ? c.merchants.map(m => `<tr class="sub sub2"><td class="l muted">${esc(m.name)}${m.entries > 1 ? ` (${m.entries})` : ""}</td><td class="muted">${money(m.amount)}</td><td colspan="2"></td></tr>`).join("") : ""}`).join("") : "";
+  h += box("What Carries Into Retirement", `<div class="scroll"><table><tr><th class="l">Living costs that…</th><th>So far</th><th>Share</th><th>A month</th></tr>
+      ${b.retirement.filter(r => Math.abs(r.amount) >= 0.5).map(r => `<tr title="${esc(r.help)}"><td class="l">${baseOpener("r:" + r.code, r.title)}<div class="muted small">${esc(r.help)}</div></td><td>${money(r.amount)}</td><td>${pct(r.share, 0)}</td><td>${money(r.amount / b.months)}</td></tr>${cats(r)}`).join("")}
+      <tr class="total"><td class="l">Living costs</td><td>${money(s.living)}</td><td></td><td>${money(s.monthlyLiving)}</td></tr></table></div>
+      <p class="hint">Not here: health insurance, retirement contributions and anything else taken out of pay before it reaches checking. Health coverage in retirement is a new cost that today's spending doesn't show.</p>`,
+    { help: "Each living cost by what it does when work stops. Use Note to tell John when one is in the wrong place." });
+  return h;
+}
+
 const TAX_SECTIONS = { expense: "Tax-applicable expense", payment: "Tax payment", real_estate: "Real estate tax", refund: "Refund received", savings: "Tax savings account" };
 const JURISDICTIONS = [["federal", "Federal"], ["state", "State (PA)"], ["local", "Local"]];
 
@@ -670,10 +727,10 @@ function downloadTaxCsv() {
 function render() {
   const app = document.getElementById("app");
   if (!S.setup || !S.data) { app.innerHTML = S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : `<div class="loading">Reading the registers…</div>`; return; }
-  const body = { deepdive: diveTab, curve: curveTab, tax: taxTab, entries: () => entriesBox(S.data.entries, "Spending Entries", false), rules: allocationTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
+  const body = { retirement: baselineTab, deepdive: diveTab, curve: curveTab, tax: taxTab, entries: () => entriesBox(S.data.entries, "Spending Entries", false), rules: allocationTab, family: familyTab, sources: sourcesTab, notes: notesTab }[S.tab] ?? attributionTab;
   let inner;
   try { inner = body(); } catch (e) { inner = `<p class="notice warn">This part of the page failed: ${esc(e.message)}</p>`; console.error(e); }
-  app.innerHTML = controls() + strip() + (S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : "") + tabsBar() + inner;
+  app.innerHTML = (S.tab === "retirement" ? "" : controls()) + strip() + (S.problem ? `<p class="notice warn">${esc(S.problem)}</p>` : "") + tabsBar() + inner;
 }
 
 // ---------------------------------------------------------------------------------------------------------- feedback
@@ -769,6 +826,7 @@ document.addEventListener("click", ev => {
   if (a === "reload") load();
   else if (a === "more") { S.shown += 200; render(); }
   else if (a === "taxcsv" && S.tax) downloadTaxCsv();
+  else if (a === "base-open") { const k = el.dataset.key; S.baseOpen.has(k) ? S.baseOpen.delete(k) : S.baseOpen.add(k); render(); }
   else if (a === "feedback") {
     let entry = null;
     if (el.dataset.entry) { const [src, id] = el.dataset.entry.split(":"); entry = S.data.entries.find(e => e.source === src && String(e.entryId) === id); }
@@ -782,6 +840,7 @@ document.addEventListener("change", ev => {
   const v = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
   if (k === "year") { S.year = +v; keep("year", S.year); return load(); }
   if (k === "ytd") { S.ytd = v; keep("ytd", v); return load(); }
+  if (k === "baseYear") { S.baseYear = +v; keep("baseYear", S.baseYear); S.base = null; return render(); }
   if (k === "taxYear") { S.taxYear = +v; keep("taxYear", S.taxYear); S.tax = null; return render(); }
   if (["full", "stackBy", "inflate", "dive"].includes(k)) { S[k] = v; keep(k, v); }
   else S[k] = v;

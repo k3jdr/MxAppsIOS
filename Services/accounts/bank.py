@@ -445,7 +445,7 @@ def book(conn, q=None):
     year = int((q or {}).get("year") or dt.date.today().year)
     categories = fetch(conn, "SELECT code, name FROM srm.spending_category ORDER BY sort_order, name")
     payees = fetch(conn, """
-        SELECT p.payee_id AS id, p.name, p.category_code AS category, p.driver, p.spending_role AS role, p.default_amount AS "defaultAmount",
+        SELECT p.payee_id AS id, p.name, p.category_code AS category, p.driver, p.spending_role AS role, p.retirement, p.statement_line AS "statementLine", p.default_amount AS "defaultAmount",
                p.address_1 AS "address1", p.address_2 AS "address2", p.city, p.state, p.zip_code AS "zipCode",
                p.reference, p.phone, p.logon_url AS "logonUrl", p.user_name AS "userName", p.nickname, p.description,
                p.status, p.next_payment_date AS "nextPaymentDate", p.next_payment_amount AS "nextPaymentAmount",

@@ -99,6 +99,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 .kinds label:has(input:checked) { border-color: var(--accent); background: var(--soft); }
 .suggest { display: none; gap: 10px; }
 .suggest.on { display: grid; grid-template-columns: 1fr 1fr; }
+.small { font-size: 11px; }
+tr.sub td { font-size: 12px; padding-left: 22px; }
+tr.sub2 td { padding-left: 40px; }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 .error { color: var(--up); font-size: 13px; min-height: 1em; margin: 4px 0; }
 .buttons { display: flex; justify-content: flex-end; gap: 8px; }
