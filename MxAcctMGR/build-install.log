@@ -1,16 +1,16 @@
 
-=== Build (00:35:42)
-2026-10-31 00:35:43.249 xcodebuild[30150:264147]  iOSSimulator: [SimServiceContext sharedServiceContextForDeveloperDir:error:] returned nil (Error Domain=DVTCoreSimulatorAdditionsErrorDomain Code=3 "CoreSimulator is out of date. Current version (1174.9.2) is older than build version (1174.21.0)." UserInfo={NSLocalizedDescription=CoreSimulator is out of date. Current version (1174.9.2) is older than build version (1174.21.0).}). Simulator device support disabled.
+=== Build (20:57:37)
+    Signing Identity:     "Apple Development: callahan.john.3@gmail.com (4A77UM62JT)"
 ** BUILD SUCCEEDED **
 
-=== Install in /Applications (00:35:43)
+=== Install in /Applications (20:58:49)
 Signature OK
 Installed 1.0 build 1
 
-=== Restart the accounts service (00:35:43)
+=== Restart the accounts service (20:58:49)
 accounts        stopped
-accounts        started on http://127.0.0.1:8774 (pid 30186)
-database        srm_app@192.168.0.223:5432/srm  migrations 57 of 57  (password from Keychain)
+accounts        started on http://127.0.0.1:8774 (pid 2422)
+database        srm_app@192.168.0.223:5432/srm  migrations 61 of 61  (password from Keychain)
 SERVICE         LANG   PORT  STATE    WHAT IT IS FOR
 srm-loader      Python 8770  running  Refresh the security master by data category (runs MxDataHUB/SRM/srm.py loaders)
 analytics       Python 8772  running  Optimization inputs (covariance, alpha) and performance attribution from the security master
@@ -19,10 +19,10 @@ portfolio-java  Java   8766  running  Active (benchmark-relative) portfolio cons
 portfolio-cpp   C++    8767  running  Passive index tracking (minimum tracking error) and portfolio risk
 market-sample   Python 8765  running  Synthetic quotes and indicators for building and testing jobspaces
 
-database        srm_app@192.168.0.223:5432/srm  migrations 57 of 57  (password from Keychain)
+database        srm_app@192.168.0.223:5432/srm  migrations 61 of 61  (password from Keychain)
 
 Start them all: python3 ~/MyCodeGIT/MxAppsIOS/Services/mxservices.py start
 
-=== Open (00:35:46)
+=== Open (20:58:52)
 
 === END OK
