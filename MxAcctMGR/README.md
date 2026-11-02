@@ -914,7 +914,10 @@ from one year to the next and forecasts what the children's ages bring. Everythi
   the merchants there are. Many of these payments are checking entries, and taxes may be filed as Transfer or Income
   merchants: the report reads the registers for them directly, whatever their role. The tab shows:
   - the expenses by category, each with what it cost and its deductible share (type a percent, e.g. 15% of
-    utilities for a home office) and the deductible amount;
+    utilities for a home office) and the deductible amount. Right-click an item, a category, the total or the
+    tile for **Show N Transactions…**: a window of its own (`TaxTransactions.swift`) with every payment the year counted,
+    adding up to that figure, with sums by item, tax category, month and register to press, and each payment's deductible
+    part. Double-click a payment to open it in its register or cash ledger;
   - estimated and local tax payments by jurisdiction and quarter. Estimated payments follow their quarter: January
     counts as Q4 of the year before. *Move…* puts a payment in another year or quarter, e.g. an April payment that
     settles last year's return;
@@ -1098,6 +1101,7 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `ReportSources.swift` | Each report's official sources: latest release, release schedule, history or live data |
 | `Earnings.swift`, `EarningsViews.swift` | Real earnings: the Nasdaq.com and FMP (accounts service) clients, merging by symbol, the day files kept on this Mac, the store; Earnings Calendar (month, week) and Earnings by Day with the company detail |
 | `LoanViews.swift` | Banking ▸ Loan Accounts: mortgages and vehicle loans (New… ▸ Mortgage or Vehicle Loan), Import Statements… (PDFKit reads each PDF's text for the service), the tiles, the forecast with its chart and what-if extra principal, Interest by Year with the Form 1098 sheet, the statements, the lender's activity and the checks that paid it |
+| `TaxTransactions.swift` | Year-End Tax: the payments behind a Tax-Applicable Expenses figure, in a window of their own |
 | `TargetAccounts.swift` | Merchants: their funding sources, Rename…, Add from Card Registers… and Remove… (the page's name is from when they had a page of their own) |
 | `TargetAccountLinks.swift` | Links on merchants: the link as the service sends it, the Link dialog's target and its save (with the shared `../Shared/Links/LinkSheet.swift`: linked words, their hover card and the Link dialog for links that aren't on a security) |
 | `SecurityLinkTargets.swift` | Links on symbols and names: Earnings by Day's and My Holdings' securities, and the accounts service as where links are kept. The rest is shared with MxDataHUB in `../Shared/Links`: the link store, linked cell, Link dialog and its pages about a security (`SecurityLinks.swift`); the hover card, also the reports' (`LinkHover.swift`); the hover text and its editor (`LinkTips.swift`), after MxNoteONE's |

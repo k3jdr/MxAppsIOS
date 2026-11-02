@@ -665,9 +665,19 @@ final class PortStore {
     /// Opens the card's or checking account's register a spending entry came from, on that entry: the page picks the
     /// account from the same saved choice as its picker, and brings the entry up once the register is loaded.
     func openRegister(of e: SpendingEntry) {
-        UserDefaults.standard.set(e.register, forKey: e.source == "card" ? "cardAccount" : "checkingAccount")
-        registerEntryRequest = e.entryId
-        go(e.source == "card" ? .cards : .checking)
+        openEntry(source: e.source, register: e.register, entryId: e.entryId)
+    }
+
+    /// Goes to an entry where it is kept: a check or card entry in its register, a cash-ledger item's ledger.
+    func openEntry(source: String, register: String?, entryId: Int) {
+        if source == "ledger" {
+            UserDefaults.standard.set(register, forKey: "expenseLedger")
+            go(.expenseLedgers)
+            return
+        }
+        UserDefaults.standard.set(register, forKey: source == "card" ? "cardAccount" : "checkingAccount")
+        registerEntryRequest = entryId
+        go(source == "card" ? .cards : .checking)
     }
 
     // MARK: Runs

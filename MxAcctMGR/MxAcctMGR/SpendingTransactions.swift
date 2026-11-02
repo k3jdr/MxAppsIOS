@@ -23,13 +23,18 @@ enum SpendingTransactionsWindow {
     private static let frameName = "SpendingTransactionsWindow"
 
     static func open(_ name: String, period: String, entries: [SpendingEntry], setup: SpendingSetup, store: PortStore) {
+        present(name, title: "\(name): Transactions") { close in
+            SpendingTransactionsView(name: name, period: period, entries: entries, setup: setup, store: store, close: close)
+        }
+    }
+
+    /// A figure's window, closing the one it had: `content` is told how to close it.
+    static func present<V: View>(_ name: String, title: String, content: (@escaping () -> Void) -> V) {
         windows[name]?.close()
-        let host = NSHostingController(rootView: SpendingTransactionsView(name: name, period: period, entries: entries, setup: setup, store: store) {
-            windows[name]?.close()
-        })
+        let host = NSHostingController(rootView: content { windows[name]?.close() })
         host.sizingOptions = [.minSize]     // as wide and tall as you drag it, not the table's ideal size
         let w = NSWindow(contentViewController: host)
-        w.title = "\(name): Transactions"
+        w.title = title
         w.styleMask.insert(.resizable)
         w.isReleasedWhenClosed = false
         if !w.setFrameUsingName(frameName) {

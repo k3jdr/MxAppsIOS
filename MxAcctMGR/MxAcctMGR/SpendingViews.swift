@@ -72,7 +72,7 @@ struct SpendingAnalysisView: View {
                 case "rules":
                     if let data { TargetAllocationTab(setup: setup, data: data, entries: data.entries) { applied($0) } }
                 case "family": SpendingFamilyTab(setup: setup, data: data) { applied($0) }
-                case "tax": SpendingTaxTab(setup: setup, openLoans: { store.go(.loans) })
+                case "tax": SpendingTaxTab(setup: setup, store: store, openLoans: { store.go(.loans) })
                 case "feedback":
                     SpendingFeedbackTab(setup: setup, data: data, notes: notes, changed: { notes = $0 }, entryChanged: { replace($0) },
                                         openDeepDive: { openDeepDive($0) }, reload: { Task { await reload() } })
@@ -3051,6 +3051,7 @@ private struct FeedbackCard: View {
 /// taxes, refunds and the tax savings account, from the tax items (V040) — with the CSV the accountant gets.
 private struct SpendingTaxTab: View {
     var setup: SpendingSetup
+    var store: PortStore
     /// Opens Banking ▸ Loan Accounts, where a loan's statements and Form 1098 are kept.
     var openLoans: () -> Void
     @AppStorage("taxYear") private var year = Calendar.current.component(.year, from: .now) - (Calendar.current.component(.month, from: .now) <= 4 ? 1 : 0)
@@ -3136,7 +3137,8 @@ private struct SpendingTaxTab: View {
         let s = r.summary
         return HStack(spacing: 10) {
             MetricTile(title: "Tax-applicable expenses", value: money(s.expensesPaid), caption: "\(money(s.expensesDeductible)) deductible",
-                       help: "What the tax-applicable expenses cost in the year, and the deductible part (each item's share).")
+                       help: "What the tax-applicable expenses cost in the year, and the deductible part (each item's share). Right-click for the transactions.")
+                .modifier(ShowsTaxTransactions(name: "All tax-applicable expenses", entries: r.entries(of: "expense"), report: r, store: store))
             MetricTile(title: "Tax payments", value: money(s.paymentsTotal),
                        caption: TaxReport.jurisdictions.compactMap { j, t in s.payments[j].flatMap { $0.total > 0 ? "\(t) \(money($0.total))" : nil } }.joined(separator: " · "),
                        help: "Estimated and local tax payments that count toward the year, by quarter below.")
@@ -3223,7 +3225,7 @@ private struct SpendingTaxTab: View {
     private func expenses(_ r: TaxReport) -> some View {
         let items = r.items.filter { $0.section == "expense" && $0.active }
         let byCategory = Dictionary(grouping: items, by: \.taxCategory)
-        return Box(title: "Tax-Applicable Expenses", symbol: "doc.text", help: "What each tax-applicable item cost in the year and its deductible part: the share is the business or home-office part (15% for utilities when the office is 15% of the home). Type a share and press Return to save it.") {
+        return Box(title: "Tax-Applicable Expenses", symbol: "doc.text", help: "Right-click an item, a category or the total for the transactions behind it. What each tax-applicable item cost in the year and its deductible part: the share is the business or home-office part (15% for utilities when the office is 15% of the home). Type a share and press Return to save it.") {
             Grid(alignment: .trailing, horizontalSpacing: 14, verticalSpacing: 4) {
                 GridRow {
                     Text("Item").gridColumnAlignment(.leading); Text("Comes from").gridColumnAlignment(.leading)
@@ -3234,15 +3236,20 @@ private struct SpendingTaxTab: View {
                     let list = byCategory[c]!
                     GridRow {
                         Text(c).fontWeight(.semibold).gridCellColumns(3).gridColumnAlignment(.leading)
-                        Text(money(list.map(\.paid).reduce(0, +))).fontWeight(.semibold); Text("")
+                            .modifier(ShowsTaxTransactions(name: c, entries: r.entries.filter { e in list.contains { $0.id == e.itemId } }, report: r, store: store))
+                        Text(money(list.map(\.paid).reduce(0, +))).fontWeight(.semibold)
+                            .modifier(ShowsTaxTransactions(name: c, entries: r.entries.filter { e in list.contains { $0.id == e.itemId } }, report: r, store: store))
+                        Text("")
                         Text(money(list.compactMap(\.deductible).reduce(0, +))).fontWeight(.semibold)
                     }
                     ForEach(list) { i in
                         GridRow {
                             Text(i.label).padding(.leading, 14).help(i.notes ?? "")
+                                .modifier(ShowsTaxTransactions(name: i.label, entries: r.entries.filter { $0.itemId == i.id }, report: r, store: store))
                             Text(i.origin).foregroundStyle(.secondary).lineLimit(1)
                             Text("\(i.entries)").foregroundStyle(.secondary)
                             Text(money(i.paid))
+                                .modifier(ShowsTaxTransactions(name: i.label, entries: r.entries.filter { $0.itemId == i.id }, report: r, store: store))
                             ShareField(share: i.deductibleShare) { v in
                                 Task { _ = await run { try await SpendingClient.saveTaxItem(i.id, body(i, share: v), year: year) } }
                             }
@@ -3253,7 +3260,10 @@ private struct SpendingTaxTab: View {
                 Divider()
                 GridRow {
                     Text("All tax-applicable expenses").fontWeight(.semibold).gridCellColumns(3).gridColumnAlignment(.leading)
-                    Text(money(r.summary.expensesPaid)).fontWeight(.semibold); Text("")
+                        .modifier(ShowsTaxTransactions(name: "All tax-applicable expenses", entries: r.entries(of: "expense"), report: r, store: store))
+                    Text(money(r.summary.expensesPaid)).fontWeight(.semibold)
+                        .modifier(ShowsTaxTransactions(name: "All tax-applicable expenses", entries: r.entries(of: "expense"), report: r, store: store))
+                    Text("")
                     Text(money(r.summary.expensesDeductible)).fontWeight(.semibold)
                 }
             }
