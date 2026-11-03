@@ -328,11 +328,17 @@ final class NoteTextView: NSTextView {
     /// selects them).
     var textDragHandler: ((NSEvent) -> Bool)?
 
+    /// Called with the range of text a paste put in (table cells: the pasted paragraphs lose their spacing).
+    var didPaste: ((NSRange) -> Void)?
+
     override func paste(_ sender: Any?) {
         if pasteHandler?() == true { return }
         // A link on the clipboard links the selected words (or goes in with its target's name).
         if TextFormatter.pasteLink(into: self) { return }
+        let start = selectedRange().location
+        let kept = (textStorage?.length ?? 0) - selectedRange().length
         super.paste(sender)
+        didPaste?(NSRange(location: start, length: max(0, (textStorage?.length ?? 0) - kept)))
     }
 
     // MARK: Code typed as written

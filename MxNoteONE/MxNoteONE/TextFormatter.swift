@@ -528,10 +528,16 @@ enum TextFormatter {
         }
     }
 
-    /// Line spacing of the selected paragraphs (or of what's typed next), in lines: 1.0 single, 2.0 double.
+    /// Line spacing of the selected paragraphs (or of what's typed next), in lines: 1.0 single, 2.0 double. Space
+    /// before and after the paragraphs goes too: pasted web pages and Word documents bring it (a <p>'s margin is a
+    /// blank line), nothing in the app shows or sets it, and with it 1.0 looks double spaced.
     static func setLineSpacing(_ multiple: CGFloat) {
         perform { tv in
-            modifyParagraphStyle(tv, actionName: "Line Spacing") { $0.lineHeightMultiple = multiple }
+            modifyParagraphStyle(tv, actionName: "Line Spacing") { style in
+                style.lineHeightMultiple = multiple
+                style.paragraphSpacing = 0
+                style.paragraphSpacingBefore = 0
+            }
         }
     }
 

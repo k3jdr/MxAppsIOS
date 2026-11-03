@@ -7,6 +7,9 @@
 //  multiple of single spacing — 1.0, 1.15, 1.5, 2.0 … or a custom value, as
 //  in Word and Pages. It's the paragraph style's line height multiple, which
 //  RTFD saves with the text (in 240ths of a line: 1.37 reads back as 1.367).
+//  Setting it also clears the space before and after the paragraphs that
+//  pasted text brings, so 1.0 is single spacing; text pasted into a table
+//  cell leaves that space behind.
 //
 //  Shift-Return breaks the line inside a paragraph (U+2028, RTF's \line): the
 //  paragraph's bullet, tag and formatting carry on, and Return still starts a

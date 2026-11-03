@@ -636,9 +636,11 @@ final class TableModel {
                 case .foregroundColor:
                     if !isBlack(value as? NSColor) { plain = false }
                 case .paragraphStyle:
+                    // Any line spacing but single counts (0.8 too), and so does space around paragraphs.
                     if let style = value as? NSParagraphStyle,
                        !(style.alignment == .natural || style.alignment == .left) || style.headIndent != 0
-                        || style.firstLineHeadIndent != 0 || style.lineHeightMultiple > 1.001 { plain = false }
+                        || style.firstLineHeadIndent != 0 || (style.lineHeightMultiple > 0 && abs(style.lineHeightMultiple - 1) > 0.001)
+                        || style.paragraphSpacing != 0 || style.paragraphSpacingBefore != 0 { plain = false }
                 case .mxAutoColor:
                     break
                 default:
@@ -1108,6 +1110,7 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         editor.focusRingType = .none
         editor.delegate = self
         editor.pasteHandler = { [weak self] in self?.pasteWhileTyping() ?? false }
+        editor.didPaste = { [weak self] in self?.removeParagraphSpacing(in: $0) }
         // A picture's edges resize it in the cell being typed in too.
         editor.cursorHandler = { [weak self] event in
             guard let self, let edge = self.picture(at: self.convert(event.locationInWindow, from: nil))?.edge else { return nil }
@@ -2400,12 +2403,13 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         }
     }
 
-    /// Right-click while typing: the table commands come first, then the usual text commands.
+    /// Right-click while typing: the usual text commands, with the table's in one Table submenu (spread through the
+    /// text menu they made it some 70 items long, too tall for the screen, with Cut, Copy and Paste out of sight).
     func textView(_ view: NSTextView, menu: NSMenu, for event: NSEvent, at charIndex: Int) -> NSMenu? {
         guard let cell = editing else { return menu }
-        let table = tableMenu(for: cell)
-        var items = table.items
-        table.removeAllItems()
+        let table = NSMenuItem(title: "Table", action: nil, keyEquivalent: "")
+        table.submenu = tableMenu(for: cell)
+        var items = [table]
         if let owner, let ref = owner.controller?.ref {
             let ns = view.string as NSString
             let index = min(max(charIndex, 0), max(ns.length - 1, 0))
@@ -2416,7 +2420,6 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
             items.insert(ClosureMenuItem("Copy Link to this Paragraph") {
                 NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: paragraph, cell: cell, text: text)
             }, at: 0)
-            items.insert(.separator(), at: 1)
         }
         TextFormatter.insertAfterSpelling(TextFormatter.editMenuItems(for: view, at: charIndex) + [.separator()] + items + [.separator()], into: menu)
         return menu
@@ -3810,6 +3813,27 @@ final class TableGridView: NSView, NSTextViewDelegate, SetsOwnPointer {
         selection = [cell]
         pasteCells(table, at: cell)
         return true
+    }
+
+    /// Text pasted into a cell from a web page or Word comes with space before and after its paragraphs (a <p>'s
+    /// margin), which made the cell's lines look double spaced: the cell takes the text without it, as an HTML table
+    /// pasted into cells does.
+    private func removeParagraphSpacing(in range: NSRange) {
+        guard let cell = editing, let storage = editor.textStorage, range.length > 0, NSMaxRange(range) <= storage.length else { return }
+        var changed = false
+        storage.beginEditing()
+        storage.enumerateAttribute(.paragraphStyle, in: range) { value, sub, _ in
+            guard let style = value as? NSParagraphStyle, style.paragraphSpacing != 0 || style.paragraphSpacingBefore != 0 else { return }
+            let single = style.mutableCopy() as! NSMutableParagraphStyle
+            single.paragraphSpacing = 0
+            single.paragraphSpacingBefore = 0
+            storage.addAttribute(.paragraphStyle, value: single, range: sub)
+            changed = true
+        }
+        storage.endEditing()
+        guard changed else { return }
+        model.store(storage, in: cell)
+        relayout()
     }
 
     /// Pasted text in the cell's own font when it came without formatting.
