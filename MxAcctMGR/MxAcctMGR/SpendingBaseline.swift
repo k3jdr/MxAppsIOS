@@ -5,7 +5,8 @@
 //  Spending Analysis ▸ Retirement: the baseline retirement spending is compared with (V062). The household statement
 //  says where the year's money came from and went, and ties to the change in checking; the living costs then split by
 //  what each does in retirement. A category says that for its spending and a merchant can override it, both on
-//  Target Categories. The accounts service works it all out, as the family page shows the same figures.
+//  Target Categories. The accounts service works it all out, as the family page shows the same figures. Everyday
+//  spending opens by category; right-click it, a category, Big bills or their tiles for the transactions behind them.
 //
 
 import SwiftUI
@@ -35,8 +36,16 @@ struct SpendingBaseline: Decodable {
         /// Living costs split into each bill under bigBillLimit and the big ones, so far and a month.
         var everyday, everydayMonthly, bigBills, bigBillsMonthly, bigBillLimit: Double
     }
+    /// An entry and the part of it that is a living cost (a mortgage payment's interest).
+    struct EntryKey: Decodable {
+        var source: String
+        var entryId: Int
+        var amount: Double
+    }
     /// A living cost of bigBillLimit or more in one entry.
     struct Bill: Decodable {
+        var source: String?
+        var entryId: Int?
         var date: String
         var name: String
         var register: String
@@ -88,6 +97,8 @@ struct SpendingBaseline: Decodable {
     var cardMonths: Double?
     var summary: Summary
     var bills: [Bill]
+    /// Each everyday entry (asked for with entries=1).
+    var everydayEntries: [EntryKey]?
     var lines: [Line]
     var moneyBack: [Merchant]
     var retirement: [Label]
@@ -98,6 +109,10 @@ struct SpendingBaseline: Decodable {
 
 struct SpendingBaselineTab: View {
     var year: Int
+    /// Spending Analysis's entries, for the transactions behind a figure (nil while they load).
+    var data: SpendingAnalysisData?
+    var setup: SpendingSetup
+    var store: PortStore
     @State private var base: SpendingBaseline?
     @State private var problem: String?
     @State private var busy = false
@@ -131,6 +146,49 @@ struct SpendingBaselineTab: View {
             }
         }
         .task(id: year) { await load() }
+        #if DEBUG
+        // Self-test: -baselineTransactionsTest everyday opens its transactions once both have loaded.
+        .task(id: (data?.entries.count ?? 0) + (base?.everydayEntries?.count ?? 0)) {
+            guard !testOpened, UserDefaults.standard.string(forKey: "baselineTransactionsTest") == "everyday", let b = base, data != nil else { return }
+            testOpened = true
+            SpendingTransactionsWindow.open("Everyday spending", period: "\(String(b.year)) so far", entries: everyday(b), setup: setup, store: store)
+        }
+        #endif
+    }
+
+    #if DEBUG
+    @State private var testOpened = false
+    #endif
+
+    // MARK: Transactions
+
+    /// Spending Analysis's entries for these keys, each with the part of it that is a living cost.
+    private func entries(_ keys: [(source: String, entryId: Int, amount: Double)]) -> [SpendingEntry] {
+        guard let data else { return [] }
+        let byKey = Dictionary(data.entries.map { ("\($0.source):\($0.entryId)", $0) }, uniquingKeysWith: { a, _ in a })
+        return keys.compactMap { k in
+            guard var e = byKey["\(k.source):\(k.entryId)"] else { return nil }
+            e.amount = k.amount
+            return e
+        }
+    }
+
+    private func everyday(_ b: SpendingBaseline) -> [SpendingEntry] {
+        entries((b.everydayEntries ?? []).map { ($0.source, $0.entryId, $0.amount) })
+    }
+
+    private func bigBills(_ b: SpendingBaseline) -> [SpendingEntry] {
+        entries(b.bills.compactMap { x in x.source.flatMap { s in x.entryId.map { (s, $0, x.amount) } } })
+    }
+
+    /// Everyday spending by category, the largest first: its entries and a month of it.
+    private func byCategory(_ list: [SpendingEntry], _ b: SpendingBaseline) -> [(name: String, entries: [SpendingEntry], amount: Double, monthly: Double)] {
+        Dictionary(grouping: list) { setup.category($0.category)?.name ?? "Not assigned" }
+            .map { name, v in
+                (name, v, v.reduce(0) { $0 + $1.amount },
+                 v.reduce(0) { $0 + $1.amount / (($1.source == "card" ? b.cardMonths : b.checkingMonths) ?? b.months) })
+            }
+            .sorted { $0.amount > $1.amount }
     }
 
     private func load() async {
@@ -147,9 +205,11 @@ struct SpendingBaselineTab: View {
             MetricTile(title: "Living costs", value: money(s.living), caption: "\(money(s.monthlyLiving)) a month, about \(money(s.monthlyLiving * 12)) a year",
                        help: "What it cost to live: not income taxes, home improvements or mortgage principal. A year at this pace is rough until the year is whole.")
             MetricTile(title: "Everyday spending", value: money(s.everydayMonthly), caption: "a month: each bill under \(money(s.bigBillLimit))",
-                       help: "Living costs less the big bills: a normal month.")
+                       help: "Living costs less the big bills: a normal month. Right-click for the transactions.")
+                .modifier(ShowsBaselineTransactions(name: "Everyday spending", period: "\(String(b.year)) so far", entries: everyday(b), setup: setup, store: store))
             MetricTile(title: "Big bills", value: money(s.bigBillsMonthly), caption: "a month: \(b.bills.count) bill\(b.bills.count == 1 ? "" : "s") of \(money(s.bigBillLimit)) or more",
-                       help: "Taxes, car repairs, insurance, trips and one-off purchases, averaged over the months.")
+                       help: "Taxes, car repairs, insurance, trips and one-off purchases, averaged over the months. Right-click for the transactions.")
+                .modifier(ShowsBaselineTransactions(name: "Big bills", period: "\(String(b.year)) so far", entries: bigBills(b), setup: setup, store: store))
             MetricTile(title: "Left over from income", value: money(s.leftOver),
                        caption: s.afterTax > 0 ? "\(pct(s.leftOver / s.afterTax, 0)) of after-tax income" : "", tint: s.leftOver < 0 ? .orange : .primary,
                        help: "After-tax income less living costs.")
@@ -162,7 +222,9 @@ struct SpendingBaselineTab: View {
 
     private func split(_ b: SpendingBaseline) -> some View {
         let s = b.summary
-        return Box(title: "Everyday Spending and Big Bills", symbol: "calendar", help: "Living costs split into a normal month and the big, irregular bills. Open Big bills to see each one.") {
+        let period = "\(String(b.year)) so far"
+        let daily = everyday(b)
+        return Box(title: "Everyday Spending and Big Bills", symbol: "calendar", help: "Living costs split into a normal month and the big, irregular bills. Open Everyday spending for its categories and Big bills for each bill; right-click either, or a category, for the transactions.") {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Spacer()
@@ -172,13 +234,31 @@ struct SpendingBaselineTab: View {
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 HStack {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("Everyday spending").padding(.leading, 16)
+                        opener("everyday", "Everyday spending")
                         Text("Each bill under \(money(s.bigBillLimit)): groceries, gas, utilities, the phone, shopping, eating out")
                             .font(.caption).foregroundStyle(.secondary).padding(.leading, 16)
                     }
                     Spacer()
                     Text(money(s.everyday)).monospacedDigit().frame(width: 90, alignment: .trailing)
                     Text(money(s.everydayMonthly)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                }
+                .contentShape(Rectangle())
+                .modifier(ShowsBaselineTransactions(name: "Everyday spending", period: period, entries: daily, setup: setup, store: store))
+                if opened.contains("everyday") {
+                    VStack(alignment: .leading, spacing: 1) {
+                        if data == nil { Text("Reading the entries…").foregroundStyle(.tertiary) }
+                        ForEach(byCategory(daily, b), id: \.name) { c in
+                            HStack {
+                                Text("\(c.name) (\(c.entries.count))")
+                                Spacer()
+                                Text(money(c.amount)).monospacedDigit().frame(width: 90, alignment: .trailing)
+                                Text(money(c.monthly)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                            }
+                            .contentShape(Rectangle())
+                            .modifier(ShowsBaselineTransactions(name: "Everyday spending: \(c.name)", period: period, entries: c.entries, setup: setup, store: store))
+                        }
+                    }
+                    .font(.callout).foregroundStyle(.secondary).padding(.leading, 36)
                 }
                 HStack {
                     VStack(alignment: .leading, spacing: 0) {
@@ -190,6 +270,8 @@ struct SpendingBaselineTab: View {
                     Text(money(s.bigBills)).monospacedDigit().frame(width: 90, alignment: .trailing)
                     Text(money(s.bigBillsMonthly)).monospacedDigit().frame(width: 80, alignment: .trailing)
                 }
+                .contentShape(Rectangle())
+                .modifier(ShowsBaselineTransactions(name: "Big bills", period: period, entries: bigBills(b), setup: setup, store: store))
                 if opened.contains("bills") {
                     VStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(b.bills.enumerated()), id: \.offset) { _, x in
@@ -360,6 +442,25 @@ struct SpendingBaselineTab: View {
             .frame(maxWidth: 780, alignment: .leading)
             Text("Not here: health insurance, retirement contributions and anything else taken out of pay before it reaches checking. Health coverage in retirement is a new cost that today's spending doesn't show.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Right-click: Show N Transactions…, in the window Spending Analysis's other figures open.
+private struct ShowsBaselineTransactions: ViewModifier {
+    var name: String
+    var period: String
+    var entries: [SpendingEntry]
+    var setup: SpendingSetup
+    var store: PortStore
+
+    func body(content: Content) -> some View {
+        // Selectable text would open the text's own menu instead.
+        content.textSelection(.disabled).contextMenu {
+            Button("Show \(entries.count) \(entries.count == 1 ? "Transaction" : "Transactions")…") {
+                SpendingTransactionsWindow.open(name, period: period, entries: entries, setup: setup, store: store)
+            }
+            .disabled(entries.isEmpty)
         }
     }
 }

@@ -60,7 +60,7 @@ struct SpendingAnalysisView: View {
             .sheet(isPresented: $linkSettings) { FamilyLinkSheet() }
             if let setup {
                 switch tab {
-                case "retirement": SpendingBaselineTab(year: year)
+                case "retirement": SpendingBaselineTab(year: year, data: data, setup: setup, store: store)
                 case "curve": SpendingCurveTab(setup: setup, data: data) { tab = "family" }
                 case "deepdive":
                     if let data {

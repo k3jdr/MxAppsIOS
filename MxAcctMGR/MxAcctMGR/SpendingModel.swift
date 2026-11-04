@@ -992,7 +992,7 @@ nonisolated enum SpendingClient {
                                          as: SpendingAnalysisData.self)
     }
     static func baseline(year: Int) async throws -> SpendingBaseline {
-        try await AccountsClient.request("GET", "/spending/baseline?year=\(year)", as: SpendingBaseline.self)
+        try await AccountsClient.request("GET", "/spending/baseline?year=\(year)&entries=1", as: SpendingBaseline.self)
     }
     static func saveMember(_ id: Int, _ body: [String: Any]) async throws -> SpendingSetup {
         try await AccountsClient.request("PUT", "/spending/members/\(id)", body: signed(body), as: SpendingSetup.self)

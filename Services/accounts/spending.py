@@ -29,8 +29,9 @@
     PUT    /spending/tags/<source>/<entryId>       one entry's own {category, driver, memberId, event, notes, by}
                                                    (source bank, card or ledger); nothing set removes the tag. With
                                                    merge: true only the fields sent change, the rest of its tag stays
-    GET    /spending/baseline?year=                the household statement, tied to the change in checking, and what each
-                                                   living cost does in retirement (V062)
+    GET    /spending/baseline?year=&entries=       the household statement, tied to the change in checking, and what each
+                                                   living cost does in retirement (V062); with entries=1, each everyday
+                                                   entry
     GET    /spending/analysis?start=&end=&priorStart=&priorEnd=
                                                    every spending dollar of both periods (srm.v_spending_entry) from
                                                    the registers included (V038), each category's inflation between
@@ -821,7 +822,10 @@ def baseline(conn, q):
                         "allMoneyOut": total["income_tax"] + total["improvement"] + total["principal"] + total["living"]},
             "lines": [{"key": k, "title": t, "amount": total[k], "merchants": lines[k]} for k, t in BASELINE_LINES],
             "moneyBack": [m for m in lines["living"] if m["amount"] < 0],
-            "bills": [{"date": r["txn_date"], "name": r["name"], "register": r["register"],
+            # With entries=1 (MxAcctMGR's transactions windows), each everyday entry and the part of it that is a living cost.
+            "everydayEntries": [{"source": r["source"], "entryId": r["entry_id"], "amount": living(r)} for r in everyday]
+                               if q.get("entries") else None,
+            "bills": [{"source": r["source"], "entryId": r["entry_id"], "date": r["txn_date"], "name": r["name"], "register": r["register"],
                        "category": names.get(r["category_code"], "Not assigned"), "retirement": r["retirement"], "amount": living(r)}
                       for r in big],
             "retirement": retirement, "partial": partial}
