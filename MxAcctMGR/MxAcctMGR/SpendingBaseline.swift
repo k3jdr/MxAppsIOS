@@ -32,6 +32,17 @@ struct SpendingBaseline: Decodable {
         var earned, incomeTax, afterTax, living, leftOver, improvement, principal: Double
         var principalEstimated: Int
         var taxRefunds, otherIncome, cardsUnpaid, moved, change, difference, cardUnallocated, monthlyLiving, allMoneyOut: Double
+        /// Living costs split into each bill under bigBillLimit and the big ones, so far and a month.
+        var everyday, everydayMonthly, bigBills, bigBillsMonthly, bigBillLimit: Double
+    }
+    /// A living cost of bigBillLimit or more in one entry.
+    struct Bill: Decodable {
+        var date: String
+        var name: String
+        var register: String
+        var category: String
+        var retirement: String?
+        var amount: Double
     }
     struct Merchant: Decodable, Identifiable {
         var name: String
@@ -49,6 +60,7 @@ struct SpendingBaseline: Decodable {
         var code: String?
         var name: String
         var amount: Double
+        var monthly: Double
         var merchants: [Merchant]
         var id: String { code ?? "" }
     }
@@ -57,6 +69,7 @@ struct SpendingBaseline: Decodable {
         var title: String
         var help: String
         var amount: Double
+        var monthly: Double
         var share: Double
         var categories: [Category]
         var id: String { code }
@@ -70,7 +83,11 @@ struct SpendingBaseline: Decodable {
     var months: Double
     var checkingThrough: String?
     var cardsThrough: String?
+    /// The months a monthly figure divides each register's spending by.
+    var checkingMonths: Double?
+    var cardMonths: Double?
     var summary: Summary
+    var bills: [Bill]
     var lines: [Line]
     var moneyBack: [Merchant]
     var retirement: [Label]
@@ -91,7 +108,7 @@ struct SpendingBaselineTab: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 if let b = base {
-                    Text("Today's real spending, the starting point for what retirement will cost: \(String(b.year)) so far, with checking through \(shortDay(b.checkingThrough)) and the cards through \(shortDay(b.cardsThrough)). Monthly figures count the \(b.months.formatted(.number.precision(.fractionLength(1)))) months to the earlier date.")
+                    Text("Today's real spending, the starting point for what retirement will cost: \(String(b.year)) so far, with checking through \(shortDay(b.checkingThrough)) and the cards through \(shortDay(b.cardsThrough)). A month is checking's spending over its \(months(b.checkingMonths ?? b.months)) months plus the cards' over their \(months(b.cardMonths ?? b.months)).")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -106,6 +123,7 @@ struct SpendingBaselineTab: View {
                         .font(.callout).foregroundStyle(.orange)
                 }
                 tiles(b)
+                split(b)
                 statement(b)
                 retirement(b)
             } else if busy {
@@ -126,13 +144,80 @@ struct SpendingBaselineTab: View {
         return HStack(spacing: 10) {
             MetricTile(title: "After-tax income", value: money(s.afterTax), caption: "take-home pay less income taxes",
                        help: "What was earned, after the income taxes paid from checking. Pay already has its withholding taken out.")
-            MetricTile(title: "Living costs", value: money(s.living), caption: "\(money(s.monthlyLiving)) a month",
-                       help: "What it cost to live: not income taxes, home improvements or mortgage principal.")
+            MetricTile(title: "Living costs", value: money(s.living), caption: "\(money(s.monthlyLiving)) a month, about \(money(s.monthlyLiving * 12)) a year",
+                       help: "What it cost to live: not income taxes, home improvements or mortgage principal. A year at this pace is rough until the year is whole.")
+            MetricTile(title: "Everyday spending", value: money(s.everydayMonthly), caption: "a month: each bill under \(money(s.bigBillLimit))",
+                       help: "Living costs less the big bills: a normal month.")
+            MetricTile(title: "Big bills", value: money(s.bigBillsMonthly), caption: "a month: \(b.bills.count) bill\(b.bills.count == 1 ? "" : "s") of \(money(s.bigBillLimit)) or more",
+                       help: "Taxes, car repairs, insurance, trips and one-off purchases, averaged over the months.")
             MetricTile(title: "Left over from income", value: money(s.leftOver),
                        caption: s.afterTax > 0 ? "\(pct(s.leftOver / s.afterTax, 0)) of after-tax income" : "", tint: s.leftOver < 0 ? .orange : .primary,
                        help: "After-tax income less living costs.")
-            MetricTile(title: "A year at this pace", value: money(s.monthlyLiving * 12), caption: "living costs",
-                       help: "The monthly average times twelve. Bills that come once a year make this rough until the year is whole.")
+        }
+    }
+
+    private func months(_ m: Double) -> String { m.formatted(.number.precision(.fractionLength(1))) }
+
+    // MARK: Everyday and big bills
+
+    private func split(_ b: SpendingBaseline) -> some View {
+        let s = b.summary
+        return Box(title: "Everyday Spending and Big Bills", symbol: "calendar", help: "Living costs split into a normal month and the big, irregular bills. Open Big bills to see each one.") {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Spacer()
+                    Text("So far").frame(width: 90, alignment: .trailing)
+                    Text("A month").frame(width: 80, alignment: .trailing)
+                }
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                HStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Everyday spending").padding(.leading, 16)
+                        Text("Each bill under \(money(s.bigBillLimit)): groceries, gas, utilities, the phone, shopping, eating out")
+                            .font(.caption).foregroundStyle(.secondary).padding(.leading, 16)
+                    }
+                    Spacer()
+                    Text(money(s.everyday)).monospacedDigit().frame(width: 90, alignment: .trailing)
+                    Text(money(s.everydayMonthly)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        opener("bills", "Big bills (\(b.bills.count))")
+                        Text("Each \(money(s.bigBillLimit)) or more: property and school taxes, car repairs and insurance, trips, one-off purchases")
+                            .font(.caption).foregroundStyle(.secondary).padding(.leading, 16)
+                    }
+                    Spacer()
+                    Text(money(s.bigBills)).monospacedDigit().frame(width: 90, alignment: .trailing)
+                    Text(money(s.bigBillsMonthly)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                }
+                if opened.contains("bills") {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(Array(b.bills.enumerated()), id: \.offset) { _, x in
+                            HStack {
+                                Text("\(shortDay(x.date)) · \(x.name)").lineLimit(1)
+                                Text("(\(x.category))").foregroundStyle(.tertiary)
+                                Spacer()
+                                Text(money(x.amount)).monospacedDigit().frame(width: 90, alignment: .trailing)
+                                Text("").frame(width: 80)
+                            }
+                        }
+                    }
+                    .font(.callout).foregroundStyle(.secondary).padding(.leading, 36)
+                }
+                VStack(spacing: 2) {
+                    Divider()
+                    HStack {
+                        Text("Living costs").fontWeight(.semibold)
+                        Spacer()
+                        Text(money(s.living)).monospacedDigit().fontWeight(.semibold).frame(width: 90, alignment: .trailing)
+                        Text(money(s.monthlyLiving)).monospacedDigit().fontWeight(.semibold).frame(width: 80, alignment: .trailing)
+                    }
+                    Divider()
+                }
+            }
+            .frame(maxWidth: 780, alignment: .leading)
+            Text("A normal month is the everyday figure. The big bills come in lumps, but most come back in some form in retirement (taxes, cars, insurance, trips), so a retirement budget needs both: an everyday amount and an allowance for them.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -249,7 +334,7 @@ struct SpendingBaselineTab: View {
                             Spacer()
                             Text(money(r.amount)).monospacedDigit().frame(width: 90, alignment: .trailing)
                             Text(pct(r.share, 0)).monospacedDigit().frame(width: 50, alignment: .trailing)
-                            Text(money(r.amount / b.months)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                            Text(money(r.monthly)).monospacedDigit().frame(width: 80, alignment: .trailing)
                         }
                         if opened.contains("r:" + r.code) {
                             ForEach(r.categories) { c in
@@ -260,7 +345,7 @@ struct SpendingBaselineTab: View {
                                         Spacer()
                                         Text(money(c.amount)).monospacedDigit().frame(width: 90, alignment: .trailing)
                                         Text("").frame(width: 50)
-                                        Text(money(c.amount / b.months)).monospacedDigit().frame(width: 80, alignment: .trailing)
+                                        Text(money(c.monthly)).monospacedDigit().frame(width: 80, alignment: .trailing)
                                     }
                                     if opened.contains(key) { merchants(c.merchants, indent: 20).padding(.trailing, 146) }
                                 }

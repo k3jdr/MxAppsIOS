@@ -719,6 +719,9 @@ RETIREMENT = {
     "work": ("Ends with work", "Stops when work does"),
     "one_time": ("One-time", "Won't repeat, so it isn't part of a normal year"),
 }
+# A living cost this big, in one entry, is a big bill: the irregular ones (taxes, car repairs, trips, purchases) that an
+# everyday month doesn't show.
+BIG_BILL = 1000.0
 STATEMENT_LINES = ("earned", "tax_refund", "other_income", "improvement", "card_payment")
 # Each line's title, in the statement's order.
 BASELINE_LINES = (("earned", "Take-home pay"), ("income_tax", "Income taxes paid from checking"), ("living", "Living costs"),
@@ -771,7 +774,8 @@ def baseline(conn, q):
     other = total["tax_refund"] + total["other_income"]
     tied = left - total["improvement"] - total["principal"] + other + unpaid - total["moved"]
 
-    # How far the registers go: a card's newest entry, as cards lag checking.
+    # How far the registers go: a card's newest entry, as cards lag checking. A monthly figure divides each register's
+    # spending by its own months.
     covered = {}
     for r in fetch(conn, "SELECT source, register, min(txn_date) AS first, max(txn_date) AS last FROM srm.v_statement_entry GROUP BY 1, 2"):
         if keep(r):
@@ -782,6 +786,12 @@ def baseline(conn, q):
         newest[source] = max(newest.get(source, start), last)
     through = min(newest.values()) if newest else end
     months = max(((through - start).days + 1) / 30.4375, 1 / 30.4375)
+    span = {s: max(((d - start).days + 1) / 30.4375, 1 / 30.4375) for s, d in newest.items()}
+
+    def monthly(entries, amount):
+        return sum(amount(r) / span.get(r["source"], months) for r in entries)
+    big = sorted((r for r in of("living") if living(r) >= BIG_BILL), key=lambda r: -living(r))
+    everyday = [r for r in of("living") if living(r) < BIG_BILL]
     partial = [{"register": reg, "first": c["first"]} for (_, reg), c in covered.items() if c["first"] > start + dt.timedelta(days=31)]
     partial += [{"register": reg, "first": None} for (_, reg), c in covered.items() if c["last"] < start]
 
@@ -792,22 +802,28 @@ def baseline(conn, q):
         by = {}
         for r in mine:
             by.setdefault(r["category_code"], []).append(r)
-        categories = [{"code": k, "name": names.get(k, "Not assigned"), "amount": sum(living(r) for r in v), "merchants": _sums(v, living)}
-                      for k, v in by.items()]
-        retirement.append({"code": code, "title": title, "help": help_text, "amount": amount,
+        categories = [{"code": k, "name": names.get(k, "Not assigned"), "amount": sum(living(r) for r in v),
+                       "monthly": monthly(v, living), "merchants": _sums(v, living)} for k, v in by.items()]
+        retirement.append({"code": code, "title": title, "help": help_text, "amount": amount, "monthly": monthly(mine, living),
                            "share": amount / total["living"] if total["living"] else 0.0,
                            "categories": sorted(categories, key=lambda c: -c["amount"])})
     return {"year": year, "start": start, "end": end, "through": through, "months": months,
             "checkingThrough": newest.get("bank"), "cardsThrough": newest.get("card"),
+            "checkingMonths": span.get("bank"), "cardMonths": span.get("card"),
             "summary": {"earned": total["earned"], "incomeTax": total["income_tax"], "afterTax": after_tax, "living": total["living"],
                         "leftOver": left, "improvement": total["improvement"], "principal": total["principal"],
                         "principalEstimated": sum(1 for r in rows if r["principal_estimated"]),
                         "taxRefunds": total["tax_refund"], "otherIncome": total["other_income"], "cardsUnpaid": unpaid,
                         "moved": total["moved"], "change": change, "difference": round(tied - change, 2),
-                        "cardUnallocated": total["card_unallocated"], "monthlyLiving": total["living"] / months,
+                        "cardUnallocated": total["card_unallocated"], "monthlyLiving": monthly(of("living"), living),
+                        "everyday": sum(living(r) for r in everyday), "everydayMonthly": monthly(everyday, living),
+                        "bigBills": sum(living(r) for r in big), "bigBillsMonthly": monthly(big, living), "bigBillLimit": BIG_BILL,
                         "allMoneyOut": total["income_tax"] + total["improvement"] + total["principal"] + total["living"]},
             "lines": [{"key": k, "title": t, "amount": total[k], "merchants": lines[k]} for k, t in BASELINE_LINES],
             "moneyBack": [m for m in lines["living"] if m["amount"] < 0],
+            "bills": [{"date": r["txn_date"], "name": r["name"], "register": r["register"],
+                       "category": names.get(r["category_code"], "Not assigned"), "retirement": r["retirement"], "amount": living(r)}
+                      for r in big],
             "retirement": retirement, "partial": partial}
 
 

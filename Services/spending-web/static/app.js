@@ -621,13 +621,21 @@ function baselineTab() {
     return h + `<div class="loading">Reading the registers…</div>`;
   }
   const s = b.summary, line = k => b.lines.find(l => l.key === k);
-  h += `<p class="notice">Today's real spending, the starting point for what retirement will cost: ${b.year} so far, with checking through ${day(b.checkingThrough)} and the cards through ${day(b.cardsThrough)}. Monthly figures count the ${b.months.toFixed(1)} months to the earlier date.</p>`;
+  h += `<p class="notice">Today's real spending, the starting point for what retirement will cost: ${b.year} so far, with checking through ${day(b.checkingThrough)} and the cards through ${day(b.cardsThrough)}. A month is checking's spending over its ${(b.checkingMonths ?? b.months).toFixed(1)} months plus the cards' over their ${(b.cardMonths ?? b.months).toFixed(1)}.</p>`;
   if (b.partial.length) h += `<p class="notice warn">Not a whole year: ${esc(b.partial.map(p => p.first ? `${p.register} starts ${day(p.first)}` : `${p.register} has nothing this year`).join("; "))}, so these figures miss what came before.</p>`;
   h += `<div class="tiles">
     ${tile("After-tax income", money(s.afterTax), "take-home pay less income taxes", "What was earned, after the income taxes paid from checking. Pay already has its withholding taken out.")}
-    ${tile("Living costs", money(s.living), `${money(s.monthlyLiving)} a month`, "What it cost to live: not income taxes, home improvements or mortgage principal.")}
-    ${tile("Left over from income", money(s.leftOver), s.afterTax > 0 ? `${pct(s.leftOver / s.afterTax, 0)} of after-tax income` : "", "After-tax income less living costs.", s.leftOver < 0 ? "var(--warn)" : "")}
-    ${tile("A year at this pace", money(s.monthlyLiving * 12), "living costs", "The monthly average times twelve. Bills that come once a year make this rough until the year is whole.")}</div>`;
+    ${tile("Living costs", money(s.living), `${money(s.monthlyLiving)} a month, about ${money(s.monthlyLiving * 12)} a year`, "What it cost to live: not income taxes, home improvements or mortgage principal. A year at this pace is rough until the year is whole.")}
+    ${tile("Everyday spending", money(s.everydayMonthly), `a month: each bill under ${money(s.bigBillLimit)}`, "Living costs less the big bills: a normal month.")}
+    ${tile("Big bills", money(s.bigBillsMonthly), `a month: ${b.bills.length} bill${b.bills.length === 1 ? "" : "s"} of ${money(s.bigBillLimit)} or more`, "Taxes, car repairs, insurance, trips and one-off purchases, averaged over the months.")}
+    ${tile("Left over from income", money(s.leftOver), s.afterTax > 0 ? `${pct(s.leftOver / s.afterTax, 0)} of after-tax income` : "", "After-tax income less living costs.", s.leftOver < 0 ? "var(--warn)" : "")}</div>`;
+  const bills = S.baseOpen.has("bills") ? b.bills.map(x => `<tr class="sub"><td class="l muted">${day(x.date)} · ${esc(x.name)} <span class="muted">(${esc(x.category)})</span></td><td class="muted">${money(x.amount)}</td><td></td></tr>`).join("") : "";
+  h += box("Everyday Spending and Big Bills", `<div class="scroll"><table><tr><th class="l"></th><th>So far</th><th>A month</th></tr>
+      <tr><td class="l">Everyday spending<div class="muted small">Each bill under ${money(s.bigBillLimit)}: groceries, gas, utilities, the phone, shopping, eating out</div></td><td>${money(s.everyday)}</td><td>${money(s.everydayMonthly)}</td></tr>
+      <tr><td class="l">${baseOpener("bills", `Big bills (${b.bills.length})`)}<div class="muted small">Each ${money(s.bigBillLimit)} or more: property and school taxes, car repairs and insurance, trips, one-off purchases</div></td><td>${money(s.bigBills)}</td><td>${money(s.bigBillsMonthly)}</td></tr>${bills}
+      <tr class="total"><td class="l">Living costs</td><td>${money(s.living)}</td><td>${money(s.monthlyLiving)}</td></tr></table></div>
+      <p class="hint">A normal month is the everyday figure. The big bills come in lumps, but most come back in some form in retirement (taxes, cars, insurance, trips), so a retirement budget needs both: an everyday amount and an allowance for them.</p>`,
+    { help: "Living costs split into a normal month and the big, irregular bills" });
   const row = (key, title, amount, sign = 1) => `<tr><td class="l">${baseOpener(key, title)}</td><td>${money(sign * amount)}</td></tr>${baseDetail(key, line(key).merchants)}`;
   const sum = (title, amount) => `<tr class="total"><td class="l">${esc(title)}</td><td>${money(amount)}</td></tr>`;
   const plain = (title, amount, tip) => `<tr><td class="l" title="${esc(tip)}">${esc(title)}</td><td>${money(amount)}</td></tr>`;
@@ -643,9 +651,9 @@ function baselineTab() {
       ${s.principalEstimated ? `Principal is estimated on ${s.principalEstimated} payment${s.principalEstimated === 1 ? "" : "s"} whose mortgage statement isn't in yet.` : ""}
       ${b.moneyBack.some(m => m.amount <= -500) ? `Living costs are after money that came back: ${esc(b.moneyBack.filter(m => m.amount <= -500).map(m => `${m.name} ${money(-m.amount)}`).join(", "))}.` : ""}</p>`,
     { help: "Where this year's money came from and went, tied to the change in checking" });
-  const cats = r => S.baseOpen.has("r:" + r.code) ? r.categories.map(c => `<tr class="sub"><td class="l muted">${baseOpener(`c:${r.code}:${c.code}`, c.name)}</td><td class="muted">${money(c.amount)}</td><td></td><td class="muted">${money(c.amount / b.months)}</td></tr>${S.baseOpen.has(`c:${r.code}:${c.code}`) ? c.merchants.map(m => `<tr class="sub sub2"><td class="l muted">${esc(m.name)}${m.entries > 1 ? ` (${m.entries})` : ""}</td><td class="muted">${money(m.amount)}</td><td colspan="2"></td></tr>`).join("") : ""}`).join("") : "";
+  const cats = r => S.baseOpen.has("r:" + r.code) ? r.categories.map(c => `<tr class="sub"><td class="l muted">${baseOpener(`c:${r.code}:${c.code}`, c.name)}</td><td class="muted">${money(c.amount)}</td><td></td><td class="muted">${money(c.monthly ?? c.amount / b.months)}</td></tr>${S.baseOpen.has(`c:${r.code}:${c.code}`) ? c.merchants.map(m => `<tr class="sub sub2"><td class="l muted">${esc(m.name)}${m.entries > 1 ? ` (${m.entries})` : ""}</td><td class="muted">${money(m.amount)}</td><td colspan="2"></td></tr>`).join("") : ""}`).join("") : "";
   h += box("What Carries Into Retirement", `<div class="scroll"><table><tr><th class="l">Living costs that…</th><th>So far</th><th>Share</th><th>A month</th></tr>
-      ${b.retirement.filter(r => Math.abs(r.amount) >= 0.5).map(r => `<tr title="${esc(r.help)}"><td class="l">${baseOpener("r:" + r.code, r.title)}<div class="muted small">${esc(r.help)}</div></td><td>${money(r.amount)}</td><td>${pct(r.share, 0)}</td><td>${money(r.amount / b.months)}</td></tr>${cats(r)}`).join("")}
+      ${b.retirement.filter(r => Math.abs(r.amount) >= 0.5).map(r => `<tr title="${esc(r.help)}"><td class="l">${baseOpener("r:" + r.code, r.title)}<div class="muted small">${esc(r.help)}</div></td><td>${money(r.amount)}</td><td>${pct(r.share, 0)}</td><td>${money(r.monthly ?? r.amount / b.months)}</td></tr>${cats(r)}`).join("")}
       <tr class="total"><td class="l">Living costs</td><td>${money(s.living)}</td><td></td><td>${money(s.monthlyLiving)}</td></tr></table></div>
       <p class="hint">Not here: health insurance, retirement contributions and anything else taken out of pay before it reaches checking. Health coverage in retirement is a new cost that today's spending doesn't show.</p>`,
     { help: "Each living cost by what it does when work stops. Use Note to tell John when one is in the wrong place." });

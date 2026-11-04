@@ -911,7 +911,9 @@ from one year to the next and forecasts what the children's ages bring. Everythi
 * **Retirement.** The baseline retirement spending is compared with (V062), the same figures as the family page. The
   **Household Statement** runs from take-home pay through income taxes, living costs, home improvements, mortgage
   principal, other money in and money moved to the change in checking, and says whether it ties to the cent. Each line
-  opens to show its merchants. A mortgage payment splits into interest, a living cost, and principal, from the loan's
+  opens to show its merchants. **Everyday Spending and Big Bills** splits the living costs into each bill under $1,000
+  (a normal month) and the big ones (taxes, car repairs, insurance, trips, one-off purchases), each listed. A month
+  divides checking's spending by its own months and the cards' by theirs, as the cards lag. A mortgage payment splits into interest, a living cost, and principal, from the loan's
   statements (estimated from the nearest statement until one is in). **What Carries Into Retirement** splits the living
   costs by what each does when work stops: Continues, Depends on the house, Ends with the kids, Ends with work or
   One-time. A category says this for its spending (Target Categories ▸ Edit…), a merchant can override it, and an entry

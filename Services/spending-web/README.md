@@ -32,7 +32,7 @@ MxAcctMGR's **Send Family Link** (Spending Analysis) sends it by Mail or Message
 
 ## What the page has
 
-**Retirement** opens first: the household statement, tied to the change in checking, and the living costs by what each does in retirement (V062), with the same figures as MxAcctMGR's Retirement tab. It shows take-home pay, so anyone with the link sees it. The other tabs are Overview (the attribution), Deep Dive, Forward Curve, Year-End Tax (with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
+**Retirement** opens first: the household statement, tied to the change in checking, everyday spending and the big bills of $1,000 or more, and the living costs by what each does in retirement (V062), with the same figures as MxAcctMGR's Retirement tab. It shows take-home pay, so anyone with the link sees it. The other tabs are Overview (the attribution), Deep Dive, Forward Curve, Year-End Tax (with ⬇︎ Download CSV, the same file MxAcctMGR's Export CSV… saves), Entries, Rules, Family & Lifecycle, Sources and My Notes. They show
 the same calculations as MxAcctMGR: `static/app.js` ports SpendingEngine's attribution and forward curve
 (`SpendingModel.swift`), and the Deep Dive charts a category's lifecycle triggers ahead. Rules shows the expense
 account, merchant and statement text rules read-only, with both years' spending and *Suggest a change* on each;
