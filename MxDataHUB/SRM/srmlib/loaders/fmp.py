@@ -19,6 +19,12 @@ class PlanLimit(Exception):
     pass
 
 
+class KeyRejected(RuntimeError):
+    """FMP refused the API key (HTTP 401, "Invalid API KEY"). Every call would fail the same way, so the load stops
+    and is recorded as failed: not an HTTPError, so the loaders' per-symbol `except HTTPError` (a reject, then the
+    next symbol) can't turn a wrong key into a "succeeded" load with nothing read."""
+
+
 # One budget for every FMP client in the process: loaders that run FMP steps back to back (listed-derivatives:
 # profiles, then prices) would otherwise each allow a full minute's calls in the same minute and trip FMP's limit.
 # The plan allows 750 a minute (2026-10-24); 600 leaves room for the accounts service, which uses the same key.
@@ -27,7 +33,7 @@ LIMITER = RateLimiter(600, 60)
 
 class FMP:
     def __init__(self, cfg, run):
-        self.key = cfg.api_key("fmp")
+        self.key, self.key_source = cfg.api_key_and_source("fmp")
         if not self.key:
             raise SystemExit("No FMP API key: set FMP_API_KEY, or add it to the Keychain (service SRM-api, account fmp)")
         self.run = run
@@ -42,6 +48,9 @@ class FMP:
             # limit): back off 5, 10, 20 and 40 seconds, past a full minute, before treating it as the plan's.
             return http(f"{BASE}{endpoint}?{query}", limiter=self.limiter, retries=4)
         except HTTPError as e:
+            if e.status == 401:
+                raise KeyRejected(f"FMP refused the API key from {self.key_source} (HTTP 401 at {endpoint}): "
+                                  f"{e.body.strip()[:200]}") from None
             if e.status == 402:
                 raise PlanLimit(f"{endpoint} is not on the FMP plan")
             if e.status == 429 or "limit" in e.body.lower():

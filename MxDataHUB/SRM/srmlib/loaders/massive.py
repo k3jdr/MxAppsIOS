@@ -67,7 +67,7 @@ def parse(data):
 
 
 def run(conn, cfg, args):
-    access, secret = cfg.api_key("massive-s3-access"), cfg.api_key("massive-s3-secret")
+    (access, source), secret = cfg.api_key_and_source("massive-s3-access"), cfg.api_key("massive-s3-secret")
     if not (access and secret):
         raise SystemExit("No Massive Flat Files keys: add Keychain items SRM-api / massive-s3-access and massive-s3-secret")
     today = datetime.date.today()
@@ -84,7 +84,8 @@ def run(conn, cfg, args):
                      if (today - datetime.timedelta(days=n)).weekday() < 5)
         run.api_calls += 1
         if s3.get(ENDPOINT, BUCKET, DAY_FILE.format(d=probe), access, secret) is None:
-            raise RuntimeError(f"Massive Flat Files: {probe}'s day file isn't readable — check the keys and the plan")
+            raise RuntimeError(f"Massive Flat Files: {probe}'s day file isn't readable with the keys from {source} "
+                               "— check the keys and the plan")
         by_ticker = listings(cur)
         log(f"  Massive day files from {start} to {today - datetime.timedelta(days=1)}; {len(by_ticker):,} U.S. listings")
         days = loaded = unmatched_total = 0

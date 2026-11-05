@@ -23,6 +23,7 @@ import ipaddress
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -130,10 +131,25 @@ class Config:
         return (found, "config.local.json") if found else (None, "~/.pgpass or none")
 
     def api_key(self, name):
+        return self.api_key_and_source(name)[0]
+
+    def api_key_and_source(self, name):
+        """The API key and where it came from on this computer (never the key itself), e.g. "the Credential Manager
+        (SRM-api:fmp) on K3JDR-DSKTOP-11": the security master is loaded from more than one computer, each with its
+        own copy of the keys, so a refused key says whose copy it was."""
         env = {"openfigi": "OPENFIGI_API_KEY", "fmp": "FMP_API_KEY", "massive": "MASSIVE_API_KEY",
                "massive-s3-access": "MASSIVE_S3_ACCESS_KEY", "massive-s3-secret": "MASSIVE_S3_SECRET_KEY"}[name]
-        return (os.environ.get(env) or keychain("SRM-api", name)
-                or self.local.get("api_keys", {}).get(name.replace("-", "_")))
+        here = f" on {platform.node() or 'this computer'}"
+        if os.environ.get(env):
+            return os.environ[env], f"the environment ({env}){here}"
+        found = keychain("SRM-api", name)
+        if found:
+            item = f"SRM-api:{name}" if sys.platform == "win32" else f"SRM-api / {name}"
+            return found, f"the {SECRET_STORE} ({item}){here}"
+        found = self.local.get("api_keys", {}).get(name.replace("-", "_"))
+        if found:
+            return found, f"config.local.json (api_keys.{name.replace('-', '_')}){here}"
+        return None, None
 
     def connect(self):
         kwargs = dict(host=self.host, port=self.port, user=self.user, dbname=self.dbname,

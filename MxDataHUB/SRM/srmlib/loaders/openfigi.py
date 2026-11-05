@@ -107,13 +107,18 @@ def preferred_cusips(conn, cur, cfg, run, todo):
         log(f"  {len(need)} preferred shares without a CUSIP and no FMP key to find one: left out")
         found = {}
     else:
-        from .fmp import FMP, PlanLimit      # here: openfigi runs without FMP too
+        from .fmp import FMP, KeyRejected, PlanLimit      # here: openfigi runs without FMP too
         api, found, ids = FMP(cfg, run), {}, []
         log(f"  {len(need)} preferred shares without a CUSIP: asking FMP's profile")
         for security_id, _, _, ticker, _, _ in need:
             try:
                 data = api.get("profile", symbol=fmp_symbol(ticker))
             except PlanLimit as e:
+                log("  " + str(e))
+                break
+            except KeyRejected as e:
+                # Optional here: the OpenFIGI mapping goes on, but the load is partial, not succeeded.
+                run.status, run.message = "partial", f"preferred shares' CUSIPs not looked up: {e}"[:2000]
                 log("  " + str(e))
                 break
             except HTTPError as e:

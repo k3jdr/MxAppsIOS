@@ -68,6 +68,10 @@ cmdkey /generic:SRM-postgres:postgres@192.168.0.223/srm /user:postgres /pass
 cmdkey /generic:SRM-api:fmp /user:fmp /pass
 ```
 
+Each computer that runs the loaders keeps its own copy of the keys. A key FMP refuses (HTTP 401) fails the load, and
+so does a Massive key that can't read a known day's file. Either way the message names the store and the computer
+the key came from, e.g. `the Credential Manager (SRM-api:fmp) on K3JDR-DSKTOP-11`.
+
 Downloads are cached in `SRM_CACHE_DIR`, else `~/Library/Caches/com.k3jdr.MxDataHUB.loaders`
 (`%LOCALAPPDATA%\MxDataHUB\loaders-cache` on Windows). There, MxAppsRCP's `MxDataHUB\schedule\srm-refresh.cmd` runs
 the Data Refresh on a schedule (Task Scheduler).
