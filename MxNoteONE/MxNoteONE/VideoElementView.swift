@@ -156,7 +156,8 @@ final class VideoControlBar: NSView {
         timeLabel.frame = NSRect(x: x, y: (h - timeLabel.frame.height) / 2, width: timeLabel.frame.width, height: timeLabel.frame.height)
         x = timeLabel.frame.maxX + 8
         let volumeWidth: CGFloat = 56
-        volume.frame = NSRect(x: bounds.width - volumeWidth - 6, y: (h - 16) / 2, width: volumeWidth, height: 16)
+        // Clear of the container's resize edge.
+        volume.frame = NSRect(x: bounds.width - volumeWidth - ElementView.edgeWidth - 2, y: (h - 16) / 2, width: volumeWidth, height: 16)
         muteButton.frame = NSRect(x: volume.frame.minX - size - 2, y: (h - size) / 2, width: size, height: size)
         transcriptButton.frame = NSRect(x: muteButton.frame.minX - size - 2, y: (h - size) / 2, width: size, height: size)
         let room = transcriptButton.frame.minX - 8 - x

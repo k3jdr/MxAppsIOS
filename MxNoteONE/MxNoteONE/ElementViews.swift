@@ -3,7 +3,9 @@
 //  MxNoteONE
 //
 //  Containers on the page. Each has a bar along the top for dragging
-//  (and a context menu) and a handle on the right edge for resizing.
+//  (and a context menu) and a handle on the right edge for resizing: a strip
+//  10 pt wide, grabbable whether or not the frame is showing (as a table's
+//  column border is), over which the content leaves the pointer alone.
 //  Text containers grow as you type; pictures keep their proportions;
 //  attachments open with a double-click; recordings play in place; tables
 //  are edited cell by cell.
@@ -33,6 +35,8 @@ final class ClosureMenuItem: NSMenuItem {
 
 class ElementView: NSView {
     static let gripHeight: CGFloat = 10
+    /// The resize strip along the right edge (content near the edge keeps clear of it).
+    static let edgeWidth: CGFloat = 10
 
     weak var canvas: PageCanvasView?
     var element: PageElement
@@ -80,7 +84,8 @@ class ElementView: NSView {
 
     func layoutParts() {
         grip.frame = NSRect(x: 0, y: 0, width: bounds.width, height: Self.gripHeight)
-        resizeHandle.frame = NSRect(x: bounds.width - 6, y: Self.gripHeight, width: 6, height: max(0, bounds.height - Self.gripHeight))
+        resizeHandle.frame = NSRect(x: bounds.width - Self.edgeWidth, y: Self.gripHeight, width: Self.edgeWidth,
+                                    height: max(0, bounds.height - Self.gripHeight))
         layoutContent()
     }
 
@@ -132,7 +137,8 @@ class ElementView: NSView {
         window?.invalidateCursorRects(for: resizeHandle)
     }
 
-    /// Where the pointer shows the container's frame: all of it (a text box: over its text — not its blank side).
+    /// Where the pointer shows the container's frame: all of it (a text box: over its text — not its blank side —
+    /// and then all of it). The right edge shows it too.
     var hoverRegion: NSRect { bounds }
 
     override func updateTrackingAreas() {
@@ -145,7 +151,8 @@ class ElementView: NSView {
     }
 
     private func updateHover(_ event: NSEvent) {
-        isHovered = hoverRegion.contains(convert(event.locationInWindow, from: nil))
+        let p = convert(event.locationInWindow, from: nil)
+        isHovered = hoverRegion.contains(p) || resizeHandle.frame.contains(p)
     }
 
     override func mouseEntered(with event: NSEvent) { updateHover(event) }
@@ -280,20 +287,25 @@ final class GripView: NSView {
     }
 }
 
-/// The right edge of a container.
+/// The right edge of a container: drag it to change the width. It's there whether or not the frame shows (the
+/// pointer over it shows the frame), as a table's column border is.
 final class ResizeHandleView: NSView {
     weak var owner: ElementView?
 
     override var isFlipped: Bool { true }
 
+    /// Not on exported pages (and not before the container is on one).
+    private var isActive: Bool { owner.map { !$0.isExport } ?? false }
+
     override func draw(_ dirtyRect: NSRect) {
         guard let owner, owner.showsChrome else { return }
         NSColor(white: 0.6, alpha: 1).setFill()
-        NSBezierPath(roundedRect: NSRect(x: bounds.midX - 1, y: bounds.midY - 8, width: 2, height: 16), xRadius: 1, yRadius: 1).fill()
+        // The mark sits by the frame line, where the edge is.
+        NSBezierPath(roundedRect: NSRect(x: bounds.maxX - 4, y: bounds.midY - 8, width: 2, height: 16), xRadius: 1, yRadius: 1).fill()
     }
 
     override func resetCursorRects() {
-        if owner?.showsChrome == true { addCursorRect(bounds, cursor: .resizeLeftRight) }
+        if isActive { addCursorRect(bounds, cursor: .resizeLeftRight) }
     }
 
     override func updateTrackingAreas() {
@@ -303,7 +315,7 @@ final class ResizeHandleView: NSView {
     }
 
     override func cursorUpdate(with event: NSEvent) {
-        if owner?.showsChrome == true { NSCursor.resizeLeftRight.set() }
+        if isActive { NSCursor.resizeLeftRight.set() }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -418,10 +430,17 @@ final class NoteTextView: NSTextView {
         return true
     }
 
+    /// Whether the pointer is this text's to set: over it, and in a text box not covered there (by the box's resize
+    /// edge, or a container on top). Table cells keep to their own test (the grid sets the pointer around them).
+    private func pointerIsMine(_ event: NSEvent) -> Bool {
+        owner == nil ? pointerInside(event) : isUnderPointer(event)
+    }
+
     override func mouseMoved(with event: NSEvent) {
         // The window sends every move to the text view being typed in; outside it, neither the pointer nor the
-        // link card is its business (another text box under the pointer looks after both).
-        guard pointerInside(event) else { return }
+        // link card is its business (another text box under the pointer looks after both), and over the box's
+        // resize edge the edge's ↔ stays instead of the two taking turns.
+        guard pointerIsMine(event) else { return }
         super.mouseMoved(with: event)
         if let cursor = cursorHandler?(event) { return cursor.set() }
         showLinkCursor(event)
@@ -429,7 +448,7 @@ final class NoteTextView: NSTextView {
     }
 
     override func cursorUpdate(with event: NSEvent) {
-        guard pointerInside(event) else { return }
+        guard pointerIsMine(event) else { return }
         if let cursor = cursorHandler?(event) { return cursor.set() }
         if !showLinkCursor(event) { super.cursorUpdate(with: event) }
     }
@@ -588,10 +607,11 @@ final class TextElementView: ElementView, NSTextViewDelegate {
             && !storage.containsAttachments(in: NSRange(location: 0, length: storage.length))
     }
 
-    /// The frame shows when the pointer is over the text (or the box is being edited or selected): a short line
-    /// leaves the rest of the box's width looking like the empty page it is.
+    /// The frame shows when the pointer comes over the text (or the box is being edited or selected): a short line
+    /// leaves the rest of the box's width looking like the empty page it is. Once showing, it stays while the pointer
+    /// is anywhere in the box, so it can be followed out to the right edge to resize the box.
     override var hoverRegion: NSRect {
-        guard !isEditing, !isSelected, let lm = textView.layoutManager, let tc = textView.textContainer else { return bounds }
+        guard !isEditing, !isSelected, !isHovered, let lm = textView.layoutManager, let tc = textView.textContainer else { return bounds }
         let right = textView.frame.minX + textView.textContainerOrigin.x + lm.usedRect(for: tc).maxX + 16
         return NSRect(x: 0, y: 0, width: min(bounds.width, max(40, right)), height: bounds.height)
     }
