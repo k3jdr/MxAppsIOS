@@ -179,6 +179,7 @@ struct MainCommands: Commands {
             Menu("Line Spacing") {
                 LineSpacingMenuItems()
             }
+            Button("Join Lines") { TextFormatter.joinLines() }
             Divider()
             Button("Format as Code") { TextFormatter.formatAsCode() }
                 .keyboardShortcut("c", modifiers: [.command, .option])

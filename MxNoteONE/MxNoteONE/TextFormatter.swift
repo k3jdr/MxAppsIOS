@@ -966,6 +966,14 @@ enum TextFormatter {
         return true
     }
 
+    /// Format ▸ Join Lines: lines a PDF broke at its column's edge become paragraphs again (see JoinLines) — the
+    /// selected lines, or the whole text box with nothing selected.
+    static func joinLines() {
+        guard let tv = target else { return NSSound.beep() }
+        if tv.window?.firstResponder !== tv { tv.window?.makeFirstResponder(tv) }
+        JoinLines.joinSelection(in: tv)
+    }
+
     /// Paste as Plain Text (⌥⇧⌘V): the text takes on the style where it goes.
     static func pastePlainText() {
         if let tv = target, tv.window?.firstResponder === tv {
@@ -989,7 +997,8 @@ enum TextFormatter {
     }
 
     /// Right-click items for a text box or cell: Paste Options, and for a link Edit / Open / Copy Address / Remove.
-    static func editMenuItems(for tv: NSTextView, at charIndex: Int) -> [NSMenuItem] {
+    /// `keepingLineBreaks` (text boxes, which join a PDF's wrapped lines when pasting): Paste Keeping Line Breaks too.
+    static func editMenuItems(for tv: NSTextView, at charIndex: Int, keepingLineBreaks: Bool = false) -> [NSMenuItem] {
         var items: [NSMenuItem] = []
         let ns = tv.string as NSString
         if charIndex >= 0, charIndex < ns.length, let found = link(around: NSRange(location: charIndex, length: 0), in: tv) {
@@ -1018,6 +1027,14 @@ enum TextFormatter {
         let options = NSMenu()
         options.addItem(ClosureMenuItem("Paste with Formatting") { tv.window?.makeFirstResponder(tv); tv.pasteAsRichText(nil) })
         options.addItem(ClosureMenuItem("Paste as Plain Text") { tv.window?.makeFirstResponder(tv); tv.pasteAsPlainText(nil) })
+        if keepingLineBreaks, let note = tv as? NoteTextView {
+            options.addItem(ClosureMenuItem("Paste Keeping Line Breaks") {
+                note.window?.makeFirstResponder(note)
+                note.joinsPastedLines = false
+                defer { note.joinsPastedLines = true }
+                note.pasteAsRichText(nil)
+            })
+        }
         paste.submenu = options
         paste.isEnabled = NSPasteboard.general.availableType(from: [.string, .rtf, .rtfd, .html]) != nil
         items.append(paste)

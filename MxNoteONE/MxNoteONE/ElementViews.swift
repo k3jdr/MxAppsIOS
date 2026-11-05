@@ -328,16 +328,36 @@ final class NoteTextView: NSTextView {
     /// selects them).
     var textDragHandler: ((NSEvent) -> Bool)?
 
-    /// Called with the range of text a paste put in (table cells: the pasted paragraphs lose their spacing).
+    /// Called with the range of text a paste put in (table cells: the pasted paragraphs lose their spacing; text
+    /// boxes: lines a PDF wrapped are joined).
     var didPaste: ((NSRange) -> Void)?
+    /// Off while Paste Keeping Line Breaks pastes (text boxes join a PDF's wrapped lines otherwise).
+    var joinsPastedLines = true
+    private var pasting = false
 
     override func paste(_ sender: Any?) {
         if pasteHandler?() == true { return }
         // A link on the clipboard links the selected words (or goes in with its target's name).
         if TextFormatter.pasteLink(into: self) { return }
+        reportingPaste { super.paste(sender) }
+    }
+
+    override func pasteAsPlainText(_ sender: Any?) {
+        reportingPaste { super.pasteAsPlainText(sender) }
+    }
+
+    override func pasteAsRichText(_ sender: Any?) {
+        reportingPaste { super.pasteAsRichText(sender) }
+    }
+
+    /// Runs a paste and tells didPaste what it put in (once, if one paste command calls another).
+    private func reportingPaste(_ paste: () -> Void) {
+        guard !pasting else { return paste() }
+        pasting = true
+        defer { pasting = false }
         let start = selectedRange().location
         let kept = (textStorage?.length ?? 0) - selectedRange().length
-        super.paste(sender)
+        paste()
         didPaste?(NSRange(location: start, length: max(0, (textStorage?.length ?? 0) - kept)))
     }
 
@@ -507,6 +527,11 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         tv.textContainer?.replaceLayoutManager(NoteLayoutManager())
         tv.owner = self
         tv.delegate = self
+        // Text from a PDF: its lines join into paragraphs that reach the box's right edge.
+        tv.didPaste = { [weak tv] range in
+            guard let tv, tv.joinsPastedLines else { return }
+            JoinLines.joinPasted(range, in: tv)
+        }
         tv.frame = NSRect(x: 0, y: Self.gripHeight, width: frame.width, height: 24)
         tv.isRichText = true
         tv.importsGraphics = true
@@ -683,15 +708,22 @@ final class TextElementView: ElementView, NSTextViewDelegate {
         let paragraph = ns.substring(to: range.location).components(separatedBy: "\n").count - 1
         let text = ns.substring(with: range)
         let elementID = element.id
-        TextFormatter.insertAfterSpelling(TextFormatter.editMenuItems(for: view, at: charIndex) + [
-            .separator(),
+        var own: [NSMenuItem] = [
             ClosureMenuItem("Copy Link to this Paragraph") {
                 NotebookStore.shared.copyParagraphLink(ref, element: elementID, paragraph: paragraph, cell: nil, text: text)
             },
             ClosureMenuItem("Copy Link to this Page") { NotebookStore.shared.copyLink(ref) },
             ClosureMenuItem("Format as Code") { TextFormatter.formatAsCode() },
-            .separator(),
-        ], into: menu)
+        ]
+        if JoinLines.canJoin(in: view) {
+            own.append(ClosureMenuItem("Join Lines") { [weak view] in
+                guard let view else { return }
+                view.window?.makeFirstResponder(view)
+                JoinLines.joinSelection(in: view)
+            })
+        }
+        TextFormatter.insertAfterSpelling(TextFormatter.editMenuItems(for: view, at: charIndex, keepingLineBreaks: true)
+                                          + [.separator()] + own + [.separator()], into: menu)
         return menu
     }
 

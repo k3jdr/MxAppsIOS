@@ -298,6 +298,16 @@ Section and New Section Group. Right-click a page for its own menu.
   (⌥⇧⌘V) takes on the style where it goes; **Paste with Formatting** keeps the copied fonts, colours and styles. With
   table cells selected, Paste as Plain Text fills them from tab-separated text without formatting; on the page it makes
   a new text box in the default style.
+- **Text from a PDF** (or an email wrapped at 72 characters) ends every line with a paragraph break, so its lines
+  stop where the PDF's column did, short of the text box's right edge. Pasting into a text box (or onto the page)
+  joins them back into paragraphs that wrap at the box's edge: a line joins the next when it's full and the next
+  carries the sentence on, so blank lines, list and numbered items, headings, new sentences after a full stop and
+  short lines (names, an address) stay as they were, and a numbered item's wrapped lines keep its indent. A word
+  hyphenated across the break joins without the hyphen when it's one word (compul- sive), and keeps it otherwise
+  (self- esteem). Code is never joined. ⌘Z right after the paste puts the line breaks back (a second ⌘Z takes the
+  paste away), and right-click ▸ Paste Options ▸ **Paste Keeping Line Breaks** pastes the text as it was.
+  **Format ▸ Join Lines** (or right-click ▸ Join Lines) does the same for text already on a page: the selected
+  lines, or the whole text box with nothing selected; lines you select join even if they aren't full.
 - **Templates**: To Do List, Meeting Notes, Project Overview, Lecture Notes (Cornell), Daily Journal, Weekly Planner, Decision Log.
 - Everything saves automatically. Undo / Redo covers typing, formatting, moving, resizing, inserting, deleting and ink,
   and table changes (sorting, moving rows, inserting / deleting rows and columns, shading, merging, column widths,
@@ -880,7 +890,7 @@ turn off (or rebind) the two "Move … a space" shortcuts. MxNoteONE notices the
 ## Spelling
 
 Misspelled words are underlined in text boxes, page titles and table cells. Right-click one for suggestions,
-Ignore Spelling and Learn Spelling; in text boxes the app's own items (links, Format as Code) come after them.
+Ignore Spelling and Learn Spelling; in text boxes the app's own items (links, Format as Code, Join Lines) come after them.
 Table cells formatted as code aren't checked.
 
 **F7** (fn F7 on a Mac keyboard), or Edit ▸ Check Spelling, checks spelling as in Office: in the text being typed in

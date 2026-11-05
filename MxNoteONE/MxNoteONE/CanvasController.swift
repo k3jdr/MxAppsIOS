@@ -907,7 +907,7 @@ final class CanvasController: NSObject {
     /// Paste as Plain Text on the page: a new text box with the clipboard's text in the default style.
     func pastePlainText() {
         guard ref != nil, let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return NSSound.beep() }
-        createTextElement(at: nextInsertionPoint(), text: NSAttributedString(string: text, attributes: TextFormatter.defaultAttributes))
+        createTextElement(at: nextInsertionPoint(), text: Self.joiningWrappedLines(NSAttributedString(string: text, attributes: TextFormatter.defaultAttributes)))
     }
 
     func paste(at point: NSPoint? = nil) {
@@ -950,8 +950,14 @@ final class CanvasController: NSObject {
             return
         }
         if let text = (pb.readObjects(forClasses: [NSAttributedString.self]) as? [NSAttributedString])?.first, text.length > 0 {
-            createTextElement(at: p, text: text)
+            createTextElement(at: p, text: Self.joiningWrappedLines(text))
         }
+    }
+
+    /// Text pasted onto the page from a PDF: its lines joined into paragraphs, so they reach the new box's right edge.
+    private static func joiningWrappedLines(_ text: NSAttributedString) -> NSAttributedString {
+        let joins = JoinLines.joins(in: text, range: NSRange(location: 0, length: text.length), pasted: true)
+        return joins.isEmpty ? text : JoinLines.applying(joins, to: text)
     }
 
     /// A new table from pasted cells, its columns fitted to their contents.
