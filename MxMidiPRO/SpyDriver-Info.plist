@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- MxMidiPRO Spy: a CoreMIDI driver (CFPlugIn) that sees every packet sent to any MIDI destination.
+	     The bundle identifier is the driver's persistent ID in the MIDI setup, and MxMidiPRO finds the spy's
+	     device by it (MIDIEngine.spyDriverID). ECDE9574-… is kMIDIDriverTypeID; 2177A4CC-… is our factory. -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFPlugInDynamicRegistration</key>
+	<string>NO</string>
+	<key>CFPlugInFactories</key>
+	<dict>
+		<key>2177A4CC-5C78-4A43-939B-A3DCA2A524D1</key>
+		<string>MxMidiSpyFactory</string>
+	</dict>
+	<key>CFPlugInTypes</key>
+	<dict>
+		<key>ECDE9574-0FE4-11D4-BB1A-0050E4CEA526</key>
+		<array>
+			<string>2177A4CC-5C78-4A43-939B-A3DCA2A524D1</string>
+		</array>
+	</dict>
+	<key>NSHumanReadableCopyright</key>
+	<string>MxAppsIOS</string>
+</dict>
+</plist>
