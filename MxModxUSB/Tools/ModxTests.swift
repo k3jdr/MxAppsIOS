@@ -199,6 +199,54 @@ struct ModxTests {
         tampered.blocks[0].data += " 00"
         check(file.messages(for: tampered) == nil, "a block of the wrong size isn't sent")
 
+        print("\nLive Set: Performance names and workspace banks")
+        check(ModxPresetPerformances.names.count == 2227 && ModxPresetPerformances.names.first == "CFX + FM EP",
+              "2,227 preset Performances (firmware 2.50), No. 1 “CFX + FM EP”")
+        check(ModxPerformanceNames.preset(lsb: 3, number: 97) == "Ocean Pad",
+              "Preset 4 #97 is “Ocean Pad” (what the MODX shows for Best of MODX 1, slot 6, whose slot name is “SYN PAD”)")
+        let names = ModxPerformanceNames()
+        if live.slots.count == 2 {
+            check(names.name(of: live.slots[0])?.name == "CFX + FM EP 2" && names.name(of: live.slots[1])?.name == "Creation",
+                  "slots 1 and 2 recall “CFX + FM EP 2” and “Creation”, as the Data List's Live Set List says")
+            var oneSlot = live.slots[1]
+            oneSlot.bankMSB = 63
+            var voice = live.slots[1]
+            voice.bankMSB = 0
+            check(names.name(of: oneSlot)?.name == "Creation" && names.name(of: voice) == nil,
+                  "a One Part slot (MSB 63) names its Performance too; other banks aren't Performances")
+        }
+        check(ModxPerformanceNames.preset(lsb: 32, number: 1) == nil && ModxPerformanceNames.preset(lsb: 0, number: 129) == nil
+              && ModxPerformanceNames.preset(lsb: 17, number: 128) == nil,
+              "no preset name for User banks, numbers past 128, or past the list's end (Preset 18 #128)")
+        var learned = ModxPerformanceNames()
+        check(learned.learn(lsb: 32, number: 5, name: "My Pad") && learned.name(lsb: 32, number: 5)! == ("My Pad", .seen)
+              && !learned.learn(lsb: 32, number: 5, name: "My Pad"),
+              "a User Performance's name is learned once, as seen")
+        check(!learned.learn(lsb: 3, number: 97, name: "Ocean Pad") && learned.seen.count == 1,
+              "a preset's own name isn't stored again")
+        check(learned.learn(lsb: 3, number: 97, name: "Renamed") && learned.name(lsb: 3, number: 97)?.name == "Renamed"
+              && learned.learn(lsb: 3, number: 97, name: "Ocean Pad") && learned.name(lsb: 3, number: 97)! == ("Ocean Pad", .preset),
+              "a name seen on the MODX wins over the list, and seeing the list's name again drops it")
+        let workspaceURL = URL(fileURLWithPath: "/tmp/Test.modxworkspace")
+        if let bank = ModxWorkspaceLiveSet(url: workspaceURL, file: file) {
+            let sendable = bank.file.sections.first.flatMap { bank.file.messages(for: $0) }
+            check(bank.liveSet.bankName == "Preset" && bank.liveSet.slots.count == 2 && bank.fileName == "Test"
+                  && bank.file.sections.map(\.id) == ["liveSet"] && sendable?.count == 5
+                  && sendable?.first?.0 == .liveSetBulk && sendable?.last?.0 == ModxAddress(0x0F, 0x51, 0x00),
+                  "a workspace's Live Set bank: its slots, and only that section to send (header, 3 blocks, footer)")
+        } else { check(false, "a workspace's Live Set bank") }
+        var noLiveSet = file
+        noLiveSet.sections.removeAll { $0.id == "liveSet" }
+        check(ModxWorkspaceLiveSet(url: workspaceURL, file: noLiveSet) == nil, "a workspace without a Live Set offers no bank")
+        check(file.summary.contains { $0.rows.contains { $0.last == "Creation (slot “SYN PAD w/ Auto SK”) · Preset 4 #115" } },
+              "the readable summary names a slot's Performance and its slot name")
+        check(ModxLink.liveSetSelect(page: 0, slot: 9, channel: 0) == [[0xB0, 0x00, 0x3E], [0xB0, 0x20, 0x00], [0xC0, 0x09]]
+              && ModxLink.liveSetSelect(page: 15, slot: 15, channel: 3) == [[0xB3, 0x00, 0x3E], [0xB3, 0x20, 0x0F], [0xC3, 0x0F]]
+              && ModxLink.liveSetSelect(page: 16, slot: 0, channel: 0) == nil && ModxLink.liveSetSelect(page: 0, slot: 0, channel: 16) == nil,
+              "choosing a slot: Live Set Select — Bank Select MSB 62, LSB page, Program Change slot — and nothing out of range")
+        check(UMP.messageWords([0xB0, 0x00, 0x3E]) == [0x20B0_003E] && UMP.messageWords([0xC0, 0x09]) == [0x20C0_0900],
+              "as MIDI 1.0 channel-voice packets on group 1")
+
         print(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) FAILED.")
         exit(failures == 0 ? 0 : 1)
     }

@@ -55,6 +55,14 @@ final class ModxModel {
 
     // Live Set and user data
     var liveSet: ModxLiveSet?
+    /// Names of the Performances Live Set slots recall: the preset list, and User and Library Performances' names as
+    /// seen on the MODX (kept between launches).
+    var performanceNames = ModxModel.loadSeenNames()
+    /// Live Set banks in workspace files, for the Live Set screen's bank menu; newest first.
+    var workspaceLiveSets: [ModxWorkspaceLiveSet] = []
+    var liveSetRefreshing = false
+    /// The Live Set slot just chosen from the app, until the MODX has loaded its Performance.
+    private(set) var selectingSlot: Int?
     var curves: [ModxUserCurve] = []
     var tuningNames: [String] = []
 
@@ -83,7 +91,8 @@ final class ModxModel {
     /// The latest bytes of every block read from the MODX, by address: what the screens show, what edits change and
     /// what a workspace saves.
     var store: [ModxAddress: ModxBlock] = [:]
-    /// Off at every launch: nothing is sent to the MODX until the player unlocks changes.
+    /// Off at every launch: no setting is sent to the MODX until the player unlocks changes (playing a Live Set
+    /// slot, which only chooses what the MODX plays, doesn't need it).
     var editsUnlocked = false
     var undoStack: [ModxEdit] = []
     var editStatus: String?
@@ -102,6 +111,8 @@ final class ModxModel {
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var timers: [Timer] = []
     @ObservationIgnored private var lastPoll = Date.distantPast
+    @ObservationIgnored private var bankMSB: UInt8 = 64
+    @ObservationIgnored private var programChangesSeen = 0
     @ObservationIgnored private var bankLSB: UInt8 = 0
 
     init() {
@@ -293,19 +304,97 @@ final class ModxModel {
     }
 
     /// A Performance change noticed on the panel: Program Change on Port 1, or a new name in the light poll.
-    private func performanceMayHaveChanged() {
+    /// `chosen`: the Bank Select and Program Change the MODX sent, if that's how the change was noticed. `selected`: the
+    /// Live Set slot chosen from the app, when the MODX didn't answer with a Program Change of its own.
+    private func performanceMayHaveChanged(chosen: (msb: UInt8, lsb: UInt8, number: Int)? = nil,
+                                           selected: (slot: ModxLiveSlot, nameBefore: String)? = nil) {
         guard lastRead != nil else { readEverything(); return }   // the first full read isn't finished: start it over
         reloadTask?.cancel()
-        undoStack.removeAll { $0.target.isEditBuffer }   // the edit buffer now holds another Performance
+        // The edit buffer now holds another Performance (the Live Set's edit buffer stays as it was).
+        undoStack.removeAll {
+            switch $0.target { case .liveSetBank, .liveSetPage, .liveSetSlot: false; default: $0.target.isEditBuffer }
+        }
         reloadTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
             guard let self, !Task.isCancelled else { return }
             self.loading = true
             await self.loadPerformance()
+            // A whole Performance (MSB 64) now loaded under its own name: Live Set slots recalling it show that name.
+            // (MSB 63 changes one Part only, so the name then is still the old Performance's.)
+            if let chosen, chosen.msb == 64, !Task.isCancelled, !self.common.name.isEmpty {
+                self.learnPerformanceName(lsb: chosen.lsb, number: chosen.number, name: self.common.name)
+            }
             self.loading = false
             self.lastRead = Date()
             self.status = "Read “\(self.common.name)”."
+            if let selected, !Task.isCancelled { self.confirmSelection(selected.slot, nameBefore: selected.nameBefore) }
+            self.selectingSlot = nil
         }
+    }
+
+    // MARK: Choosing a Live Set slot
+
+    /// Why the MODX won't take a Live Set Select now, or nil if it will.
+    var liveSetSelectProblem: String? {
+        guard connected else { return "Connect the MODX first." }
+        guard let system, liveSet != nil else { return "The MODX hasn't been read yet." }
+        if system[0x14] == 0 || system[0x15] == 0 {
+            return "The MODX is set not to receive Bank Select and Program Change: switch both on (UTILITY ▸ Settings ▸ MIDI I/O) to choose slots from here."
+        }
+        return nil
+    }
+
+    /// Whether changes made here to the Performance are still only in the MODX's edit buffer: choosing a slot
+    /// replaces the Performance, and they're lost.
+    var hasUnstoredPerformanceEdits: Bool {
+        undoStack.contains {
+            switch $0.target { case .liveSetBank, .liveSetPage, .liveSetSlot: false; default: $0.target.isEditBuffer }
+        }
+    }
+
+    /// Chooses a slot of the MODX's Live Set, as touching it on the MODX does: the MODX loads the slot's Performance.
+    /// The app then reads the Performance, at once if the MODX answers with its Bank Select and Program Change, or
+    /// after a moment if it doesn't.
+    func selectLiveSetSlot(_ slot: ModxLiveSlot) {
+        guard liveSetSelectProblem == nil, !slot.isEmpty, selectingSlot == nil, let system else { return }
+        // Single channel mode: the MIDI I/O Channel; Multi: Part 1's channel (the Data List's receive rules).
+        let channel: UInt8 = system[0x30] == 1 ? min(system[0x31], 15) : 0
+        let nameBefore = common.name
+        let programChanges = programChangesSeen
+        selectingSlot = slot.id
+        selection = nil   // until the MODX shows it took the slot
+        status = "Choosing page \(slot.page + 1), slot \(slot.slot + 1) on the MODX…"
+        Task { [weak self] in
+            guard let self else { return }
+            guard await self.link.selectLiveSetSlot(page: slot.page, slot: slot.slot, channel: channel) else {
+                self.selectingSlot = nil
+                self.status = "Couldn't reach the MODX."
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            if self.programChangesSeen == programChanges {
+                self.performanceMayHaveChanged(selected: (slot, nameBefore))
+            }
+            try? await Task.sleep(for: .seconds(8))
+            if self.selectingSlot == slot.id { self.selectingSlot = nil }   // in case no read finished
+        }
+    }
+
+    /// After choosing a slot when the MODX sent no Program Change back: whether it now plays the slot's Performance.
+    private func confirmSelection(_ slot: ModxLiveSlot, nameBefore: String) {
+        let name = common.name
+        let known = performanceNames.name(of: slot)
+        // The MODX took the slot if it now plays the Performance the slot names, or anything other than before.
+        let took = !name.isEmpty && (name == known?.name || name != nameBefore)
+        let place = "page \(slot.page + 1), slot \(slot.slot + 1)"
+        guard took else {
+            status = "Sent \(place) to the MODX; it still plays “\(name)”."
+            return
+        }
+        selection = (slot.bankLSB, slot.number)
+        // A User or Library Performance's name, now known (never a preset's from this guess: the list has those).
+        if slot.bankMSB == 64, known?.source != .preset { learnPerformanceName(lsb: slot.bankLSB, number: slot.number, name: name) }
+        status = "Chose \(place): “\(name)”."
     }
 
     /// The MODX sends Program Change when a Performance is chosen if "Receive/Transmit Program Change" is on (the
@@ -349,6 +438,7 @@ final class ModxModel {
                 liveDraft.notes.remove(Int(m.data1))
             case 0xB0:
                 liveDraft.controllers[Int(m.data1)] = m.data2
+                if m.data1 == 0 { bankMSB = m.data2 }
                 if m.data1 == 32 { bankLSB = m.data2 }
                 if m.data1 == 123 || m.data1 == 120 { liveDraft.notes.removeAll() }
             case 0xD0:
@@ -356,8 +446,9 @@ final class ModxModel {
             case 0xE0:
                 liveDraft.pitchBend = Int(m.data2) << 7 | Int(m.data1)
             case 0xC0:
+                programChangesSeen += 1
                 selection = (bankLSB, Int(m.data1) + 1)
-                performanceMayHaveChanged()
+                performanceMayHaveChanged(chosen: (bankMSB, bankLSB, Int(m.data1) + 1))
             default:
                 break
             }
@@ -421,12 +512,14 @@ final class ModxModel {
     var partsInUse: [ModxPart] { parts.filter(\.inUse) }
 
     /// The Live Set slot holding the current Performance: the one with the bank and number last selected on the
-    /// MODX, or else one named like the Performance (slot names are the player's own, so often they differ).
+    /// MODX, or else one whose Performance has the current one's name (or, failing that, a slot named like it).
     var currentSlot: ModxLiveSlot? {
         if let selection, let slot = liveSet?.slots.first(where: { $0.bankLSB == selection.lsb && $0.number == selection.number }) {
             return slot
         }
-        return liveSet?.slots.first { !common.name.isEmpty && $0.name == common.name }
+        guard !common.name.isEmpty else { return nil }
+        return liveSet?.slots.first { performanceNames.name(of: $0)?.name == common.name }
+            ?? liveSet?.slots.first { $0.name == common.name }
     }
 
     var superKnobControl: UInt8 { system?[0x17] ?? 95 }

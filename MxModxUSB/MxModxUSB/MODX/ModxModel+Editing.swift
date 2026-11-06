@@ -168,8 +168,11 @@ extension ModxModel {
             for b in blocks where [0x41, 0x42, 0x43, 0x44, 0x46].contains(b.address.mid) { compare(b, &differences) }
             keep(blocks)
         }
+        var liveSetRefused = false
         if liveSetBulk, let blocks = await link.bulk(.liveSetBulk, bulkInterval: bulkInterval) {
+            let before = differences.count
             for b in blocks { compare(b, &differences) }
+            liveSetRefused = differences.count > before
         }
         if curveBulk, let blocks = await link.bulk(.curveBulk, bulkInterval: bulkInterval) {
             for b in blocks { compare(b, &differences) }
@@ -178,6 +181,11 @@ extension ModxModel {
         editStatus = differences.isEmpty
             ? "The MODX has the change" + (targets.contains(where: \.isEditBuffer) ? " (in its edit buffer: store it on the MODX to keep it)." : ".")
             : "The MODX didn't take: \(differences.joined(separator: ", ")). The screen now shows what it holds."
+        // On a MODX7 (firmware 2.50) a page name sent to the factory Live Set bank, "Preset", was answered but not kept:
+        // that bank seems not to take changes.
+        if liveSetRefused, store[ModxTarget.liveSetBank.base]?.text(0, 20) == "Preset" {   // the name the MODX holds
+            editStatus! += " The preset Live Set bank may not take changes: choose a User bank on the MODX, then Refresh."
+        }
     }
 
     private func compare(_ fresh: ModxBlock, _ differences: inout [String]) {
@@ -314,8 +322,11 @@ extension ModxModel {
         if !partRows.isEmpty { groups.append(.init(title: "Parts", rows: partRows)) }
         let live = ModxLiveSet(blocks: blocks("liveSet"))
         if !live.slots.isEmpty {
-            groups.append(.init(title: "Live Set “\(live.bankName)”", rows: live.slots.filter { !$0.isEmpty }.map {
-                ["Page \($0.page + 1) \(live.pageNames[$0.page])", "Slot \($0.slot + 1)", "\($0.name) · \($0.bankName) #\($0.number)"]
+            let names = ModxPerformanceNames()   // the preset list (names seen on the MODX belong to the app, not the file)
+            groups.append(.init(title: "Live Set “\(live.bankName)”", rows: live.slots.filter { !$0.isEmpty }.map { slot in
+                let performance = names.name(of: slot)?.name
+                let shown = performance.map { $0 == slot.name ? $0 : "\($0) (slot “\(slot.name)”)" } ?? slot.name
+                return ["Page \(slot.page + 1) \(live.pageNames[slot.page])", "Slot \(slot.slot + 1)", "\(shown) · \(slot.bankName) #\(slot.number)"]
             }))
         }
         return groups
@@ -336,6 +347,7 @@ extension ModxModel {
                 try file.write(url)
                 workspace = file
                 workspaceURL = url
+                noteWorkspace(url, file)
                 editStatus = "Saved \(url.lastPathComponent)."
             } catch {
                 NSAlert(error: error).runModal()
@@ -353,16 +365,19 @@ extension ModxModel {
 
     func openWorkspace(_ url: URL) {
         do {
-            workspace = try ModxWorkspaceFile.read(url)
+            let file = try ModxWorkspaceFile.read(url)
+            workspace = file
             workspaceURL = url
+            noteWorkspace(url, file)
         } catch {
             NSAlert(error: error).runModal()
         }
     }
 
-    /// For each section of the open workspace: whether the MODX (as last read) holds the same bytes.
-    func sameAsMODX(_ section: ModxWorkspaceFile.Section) -> Bool? {
-        guard let workspace, let blocks = workspace.blocks(of: section), !blocks.isEmpty else { return nil }
+    /// For a section of a workspace (the open one unless another is given): whether the MODX, as last read, holds the
+    /// same bytes; nil if the app hasn't read those blocks.
+    func sameAsMODX(_ section: ModxWorkspaceFile.Section, in file: ModxWorkspaceFile? = nil) -> Bool? {
+        guard let workspace = file ?? workspace, let blocks = workspace.blocks(of: section), !blocks.isEmpty else { return nil }
         var any = false
         for b in blocks {
             guard let local = store[b.address] else { continue }
@@ -372,9 +387,10 @@ extension ModxModel {
         return any ? true : nil
     }
 
-    /// Sends the chosen groups of the open workspace to the MODX as Bulk Dumps, then reads them back to compare.
-    func sendWorkspace(groups: Set<String>) async -> String {
-        guard let workspace, editsUnlocked, connected else { return "Unlock changes and connect the MODX first." }
+    /// Sends the chosen groups of a workspace (the open one unless another is given) to the MODX as Bulk Dumps, then
+    /// reads them back to compare.
+    func sendWorkspace(_ file: ModxWorkspaceFile? = nil, groups: Set<String>) async -> String {
+        guard let workspace = file ?? workspace, editsUnlocked, connected else { return "Unlock changes and connect the MODX first." }
         var report: [String] = []
         for group in ModxWorkspaceFile.groups where groups.contains(group.id) {
             for section in workspace.sections where group.sections(section.id) {
@@ -410,7 +426,7 @@ extension ModxModel {
         workspaceBusy = nil
         for target in [ModxTarget.system, .sequencer, .common, .liveSetBank, .curve(0), .microTuningName(0)] { rederive(target) }
         for p in 0..<16 { rederive(.part(p)) }
-        let differing = sentSections.filter { sameAsMODX($0) == false }.map(\.title)
+        let differing = sentSections.filter { sameAsMODX($0, in: workspace) == false }.map(\.title)
         undoStack.removeAll()
         let skipped = !report.isEmpty
         report.insert(!differing.isEmpty ? "The MODX reads differently in: \(differing.joined(separator: ", "))."

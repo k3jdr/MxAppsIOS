@@ -9,8 +9,10 @@ It also **changes** them: with changes unlocked, the System, Sequencer, Performa
 micro-tuning settings can be edited, and each change goes to the MODX as you make it and is read back to confirm it. A **MODX7 workspace** file (`.modxworkspace`) saves everything
 the MODX makes available over USB and sends it back.
 
-**Until you unlock changes it only reads.** The MODX is sent requests — Identity Request, Dump Request, Parameter
-Request — which make it report, and nothing on the instrument changes. It never sends a Program Change or a note.
+**Until you unlock changes no setting is changed.** The MODX is sent requests (Identity Request, Dump Request,
+Parameter Request) that make it report. The one exception is playing a Live Set slot: clicking a slot sends the
+MODX's Live Set Select, as touching the slot on the MODX does, and the MODX loads that slot's Performance. The app
+never sends a note.
 
 Eighth app in the MxAppsIOS family. SwiftUI, CoreMIDI, IOKit and Core Audio; no package dependencies; not sandboxed.
 
@@ -21,7 +23,14 @@ Eighth app in the MxAppsIOS family. SwiftUI, CoreMIDI, IOKit and Core Audio; no 
 ```
 
 builds the Release app, installs it in `/Applications` (the previous copy goes to `/tmp`), checks its signature and
-opens it (log: `build-install.log`). Or open `MxModxUSB.xcodeproj` in Xcode and Run.
+opens it (log: `build-install.log`). Then
+
+```bash
+~/MyCodeGIT/MxAppsIOS/MxModxUSB/Tools/package.sh
+```
+
+packages that Release build as `build/MxModxUSB-<version>.dmg`, with an Applications shortcut. It's signed for
+development only, not notarized, so it's for Macs under this Apple Developer team. Or open `MxModxUSB.xcodeproj` in Xcode and Run.
 
 Connect the MODX by USB (TO HOST) and turn it on; MxModxUSB finds it by itself and reads everything in about 15
 seconds, the first screen in about one. On the MODX, **MIDI IN/OUT** should be **USB** (Utility ▸ Settings ▸ MIDI
@@ -33,7 +42,7 @@ I/O) — with it set to MIDI the instrument talks through its 5-pin jacks instea
 | --- | --- |
 | **Overview** | A dark panel like the MODX's own: model and firmware; a display with the current Performance's name, tempo, Parts in use with their categories, and its place in the Live Set; lamps for USB, the three MIDI ports, USB audio, the MIDI clock (measured, in BPM) and Active Sensing; the pitch and mod wheels, Super Knob and eight assignable knobs (named as in the Performance, moving as you turn them); the keyboard lighting the keys you play, with each Part's key range drawn above it. Cards below: the Parts, Keyboard & MIDI settings, Sound (volume, tune, effects), the connection. |
 | **Performance** | Common values (tempo, volume, pan, knob and slider function, portamento, swing, unit multiply, USB monitor volume); effects (Reverb, Variation, Insertion for the A/D Part, Master Effect, by name); the assignable knobs with their names, values and controller numbers, the foot controllers and Super Knob; a table of the Parts: name, category, type (AWM2 with its active elements, Drum, FM-X), on/keyboard/mute, key and velocity range, volume and pan, reverb and variation sends, output, mono/poly, note shift and what each receives. *Show unused Parts* lists all 16. Unlocked, the Common values, effects and knobs are edited in place, and a Part opens in its own sheet (double-click it, or **Edit Part…**) with every setting the Part has. |
-| **Live Set** | The current Live Set bank: its 16 pages and each page's 16 slots in their own colours, with the Performance (bank and number) and volume each recalls. The slot last chosen on the MODX is marked CURRENT. Unlocked, the bank and page names can be edited, and clicking a slot opens its name, colour, Performance, volume and switch. |
+| **Live Set** | Laid out like the MODX's own Live Set screen. The top row has the **Bank** and **Page** names, each a drop-down: the bank menu offers the MODX's bank and every Live Set bank kept in a workspace file, the page menu the bank's 16 pages. While changes are unlocked you can also type in either box to rename the MODX's bank or page. **Refresh** is at the far right. Below are the page's 16 slots in their own colours, each **named by the Performance it recalls, as the MODX shows it** ("Ocean Pad", not the slot's stored name "SYN PAD"), with its bank, number and volume. The slot playing on the MODX is marked CURRENT. **Clicking a slot plays it on the MODX**, as touching it there does. Its **ⓘ** button (or a right-click) opens its settings, editable when unlocked, with a **Play This Slot** button. In a workspace's bank a click just shows the settings. |
 | **System Settings** | Every System and Sequencer setting, grouped — Tone Generator, Keyboard, Controllers, MIDI, Audio, Power On, Panel, Sequencer & Click — each with its address in the Data List, and each editable when unlocked. |
 | **User Data** | The 32 user velocity curves, drawn, and the 8 micro-tuning user tables with their names and the cents of each note. Unlocked, clicking a curve opens its name, type and eight points; table names and notes are edited in place. |
 | **Workspace** | Save a workspace from the MODX, open one, see what it holds and how each part compares with the MODX, and send chosen parts back (below). |
@@ -101,6 +110,45 @@ effect at once. A file saved from another model or firmware is flagged.
 Two block sizes differ from the Data List, and the app goes by the instrument: the MODX7 dumps the **Sequencer**
 block as 21 bytes (the Data List says 22) and each **Live Set slot** as 30 (it says 26).
 
+## The Live Set screen
+
+**Slot names.** The MODX shows each Live Set slot by the name of the Performance it recalls. The slot's own stored
+name is something else: in the preset bank it's a description ("SYN PAD", "E.PIANO RD"). Over USB the MODX reports
+only the current Performance's name, so the app takes the names from two places:
+
+- **Preset Performances** come from the Performance List in Yamaha's MODX Data List: 2,227 names for firmware 2.50,
+  in `ModxPresetPerformances.swift`. Bank Select MSB 63 or 64, LSB 0–31 (Preset 1–32) and Program 0–127 give
+  Performance number LSB × 128 + Program + 1. That was checked against all 256 slots of the preset Live Set bank,
+  whose Performance names the Data List's Live Set List also gives.
+- **User and Library Performances** are learned. When one is chosen on the MODX (it sends Bank Select MSB 64 and a
+  Program Change) and the app reads its name, the app remembers it for that bank and number, between launches too.
+  Until then a slot shows its own stored name in italics, and its tooltip says why. MSB 63 (one Part) changes only
+  a Part, so nothing is learned from it.
+
+**Bank menu.** The MODX can't be switched to another Live Set bank over USB, and it reports only the bank in use.
+So the menu lists that bank first, then the Live Set bank of every workspace file the app finds. It looks at the
+open workspace, recent workspace files and `~/Documents` (two folders deep), and **Choose a Workspace File…** adds
+any other. Picking a workspace's bank shows it (a strip says which file, when it was saved, and from which MODX),
+and **Send to MODX…** puts it into the MODX's Live Set edit buffer, then reads it back and compares. **Show the
+MODX's Bank** goes back.
+
+**Playing a slot** sends Live Set Select: Bank Select MSB 62, LSB = page (0–15), Program Change = slot (0–15). It
+goes on the channel the MODX takes Performance changes on: Part 1's (1) in MIDI I/O Mode Multi, the MIDI I/O
+Channel in Single. The MODX then loads the slot's Performance. It sends no Program Change back for this, so the app
+reads the Performance after a moment and moves CURRENT once the name shows the MODX took the slot. Requests wait
+1.5 s while it loads. Nothing is sent unless *Receive/Transmit Bank Select* and *Program Change* are on (UTILITY ▸
+Settings ▸ MIDI I/O); the screen says so otherwise. If the Performance has changes made here that aren't stored,
+the app asks first, because playing another slot replaces it. Tested on a MODX7 (firmware 2.50): slots 10, 14 and 6
+of Best of MODX 1, clicked from the app, played on the MODX.
+
+**Refresh** reads the MODX's Live Set again and looks for workspace files again. Use it after choosing another
+bank on the MODX, which sends nothing over USB. If the bank has changed, Live Set undos are dropped, since they
+would now write into the wrong slots.
+
+**Renaming** sends each character as its own Parameter Change and reads the Live Set back. On a MODX7 (firmware
+2.50) a page name sent to the factory bank, **"Preset"**, was answered but not kept. That bank seems not to take
+changes, so the app says so when that happens. A User bank is the place to edit.
+
 ## The three USB MIDI ports
 
 | Port | Role |
@@ -154,11 +202,14 @@ If the message ever appears again, MIDI Activity ▸ Requests to the MODX shows 
 | `MxModxUSB/MODX/ModxParameters.swift` | Every editable setting: block, offset, encoding, range, how it's shown, which Parts have it, warnings; the effect types each slot can hold. |
 | `MxModxUSB/MODX/ModxModel.swift` | The order things are read in, re-reading when the Performance changes, and the live state of keys, wheels, knobs and clock. |
 | `MxModxUSB/MODX/ModxModel+Editing.swift` | Changes: sending, reading back, undo; saving, opening and sending workspaces. |
-| `MxModxUSB/MODX/ModxWorkspace.swift` | The workspace file: its sections and blocks, the readable summary, reading and writing. |
+| `MxModxUSB/MODX/ModxWorkspace.swift` | The workspace file: its sections and blocks, the readable summary, reading and writing; a file's Live Set bank (`ModxWorkspaceLiveSet`). |
+| `MxModxUSB/MODX/ModxModel+LiveSet.swift` | The Live Set screen's data: slots' Performance names, learning names, finding workspace banks, Refresh, sending a bank. |
+| `MxModxUSB/MODX/ModxPerformanceNames.swift` | A slot's Performance name: the preset list by bank and number, and names seen on the MODX. |
+| `MxModxUSB/MODX/ModxPresetPerformances.swift` | The 2,227 preset Performance names, generated from the Data List by `Tools/make-preset-names.swift`. |
 | `MxModxUSB/Device/USBDeviceInfo.swift`, `AudioDeviceInfo.swift` | The USB device and interfaces from the I/O Registry; the audio interface from Core Audio. |
 | `MxModxUSB/MIDI/MIDIBytes.swift` | MIDI bytes in and out of Universal MIDI Packets; the byte parser (MxMidiPRO's). |
-| `MxModxUSB/Views/` | `ContentView` (sidebar), `OverviewView` (the instrument panel and cards), `DetailViews` (Performance, Live Set, System, User Data), `EditorViews` (the editing rows, Part sheet, slot and curve editors, the strip), `WorkspaceView`, `DeviceViews` (USB · MIDI · Audio, MIDI Activity), `Style` (cards, lamps, dials, wheels, keyboard). |
-| `Tools/` | `build-tools.sh` and `ModxTests.swift` (the decoding tests), `make-icon.swift` (draws the icon). |
+| `MxModxUSB/Views/` | `ContentView` (sidebar), `OverviewView` (the instrument panel and cards), `DetailViews` (Performance, System, User Data), `LiveSetViews` (the Live Set screen, its name drop-downs, slots), `EditorViews` (the editing rows, Part sheet, slot and curve editors, the strip), `WorkspaceView`, `DeviceViews` (USB · MIDI · Audio, MIDI Activity), `Style` (cards, lamps, dials, wheels, keyboard). |
+| `Tools/` | `build-tools.sh` and `ModxTests.swift` (the decoding tests), `make-icon.swift` (draws the icon), `make-preset-names.swift` (regenerates the preset Performance names from a Data List PDF), `package.sh` (the DMG). |
 
 ## Testing
 
@@ -171,8 +222,10 @@ checks the decoding against replies a MODX7 really sent (11/6/26, Performance "C
 knobs and effects, Part 1, two Live Set slots, a user curve, the allowed and refused requests, and the SysEx
 packing; and for changes: Parameter Change and Bulk Dump messages (a block rebuilt byte for byte), value encodings
 (tempo, tune, bits, names), the effect-type rules, which changes and bulk blocks may be sent (names only one
-character at a time, the device's block sizes), and a workspace's round trip, summary and sending order. 43 checks;
-no MODX is needed.
+character at a time, the device's block sizes), and a workspace's round trip, summary and sending order; and for
+the Live Set screen: the preset names (Preset 4 #97 is "Ocean Pad"; the two fixture slots recall what the Data
+List's Live Set List says), learned names and their precedence, and a workspace's Live Set bank and what it sends; and the
+Live Set Select messages a slot click sends. 56 checks; no MODX is needed.
 
 ## Not covered (yet)
 
@@ -182,5 +235,7 @@ no MODX is needed.
   edited one by one.
 - **Storing** a Performance or Live Set in the MODX's user memory is left to its STORE button.
 - **Which Performance is current** is known only after one is chosen on the MODX while the app is open (the MODX
-  doesn't report its bank and number when asked); until then the Live Set's CURRENT mark falls back to a slot named
-  like the Performance.
+  doesn't report its bank and number when asked). Until then the Live Set's CURRENT mark falls back to a slot whose
+  Performance has the current one's name.
+- **User and Library Performance names** show only once each has been chosen on the MODX while the app runs.
+- **Other Live Set banks on the MODX** can't be listed or chosen over USB: choose one on the MODX, then Refresh.

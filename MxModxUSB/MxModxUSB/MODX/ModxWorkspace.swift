@@ -127,3 +127,39 @@ struct ModxWorkspaceFile: Codable, Equatable {
         try encoder.encode(self).write(to: url, options: .atomic)
     }
 }
+
+/// A Live Set bank kept in a workspace file: what the Live Set screen's bank menu offers beside the MODX's own bank.
+struct ModxWorkspaceLiveSet: Identifiable, Equatable {
+    let url: URL
+    let savedAt: Date
+    let model: String
+    let firmware: String
+    let liveSet: ModxLiveSet
+    /// The file cut down to its Live Set section, ready for sending.
+    let file: ModxWorkspaceFile
+
+    var id: URL { url }
+    var fileName: String { url.deletingPathExtension().lastPathComponent }
+
+    /// The file's Live Set bank, nil if it has none or its blocks don't check out.
+    init?(url: URL, file: ModxWorkspaceFile) {
+        guard let section = file.sections.first(where: { $0.id == "liveSet" }), let blocks = file.blocks(of: section),
+              file.messages(for: section) != nil else { return nil }
+        let liveSet = ModxLiveSet(blocks: blocks)
+        guard !liveSet.slots.isEmpty else { return nil }
+        self.url = url
+        savedAt = file.savedAt
+        model = file.model
+        firmware = file.firmware
+        self.liveSet = liveSet
+        var only = file
+        only.sections = [section]
+        only.summary = []
+        self.file = only
+    }
+
+    init?(url: URL) {
+        guard let file = try? ModxWorkspaceFile.read(url) else { return nil }
+        self.init(url: url, file: file)
+    }
+}

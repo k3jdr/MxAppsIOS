@@ -522,9 +522,10 @@ enum ModxParams {
     /// A 20-character name (Live Set bank and pages, micro-tuning tables).
     static let name: [ModxParam] = [p("name", "Name", "Name", 0x00, .text(20), 0...0, .text)]
 
-    /// A Live Set slot, 04/05 ps 00 (26 bytes).
+    /// A Live Set slot, 04/05 ps 00 (26 bytes in the Data List, 30 as a MODX7 dumps it). The MODX shows a slot by the
+    /// name of the Performance it recalls; Slot Name is the slot's own (in the preset bank, a description: "SYN PAD").
     static let slot: [ModxParam] = [
-        p("slot.name", "Slot", "Name", 0x00, .text(20), 0...0, .text),
+        p("slot.name", "Slot", "Slot Name", 0x00, .text(20), 0...0, .text),
         p("slot.color", "Slot", "Color", 0x14, .byte, 0...15, .names(ModxNames.slotColors)),
         p("slot.type", "Slot", "Recalls", 0x15, .byte, 63...64, .choices([(63, "One Part (bank MSB 63)"), (64, "Performance (bank MSB 64)")])),
         p("slot.bank", "Slot", "Bank", 0x16, .byte, 0...79,

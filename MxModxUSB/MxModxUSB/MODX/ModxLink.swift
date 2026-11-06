@@ -280,6 +280,33 @@ final class ModxLink {
         return true
     }
 
+    /// Live Set Select, as touching a slot on the MODX does: Bank Select MSB 62, LSB = page (0–15), Program Change =
+    /// slot (0–15), on the channel the MODX takes Performance changes on (Data List: "Live Set Page 1 … 16, 62, 0 … 15,
+    /// Receive only"). The MODX then loads the slot's Performance, so requests wait as after its own Program Change.
+    /// The only channel messages MxModxUSB sends.
+    static func liveSetSelect(page: Int, slot: Int, channel: UInt8) -> [[UInt8]]? {
+        guard (0..<16).contains(page), (0..<16).contains(slot), channel < 16 else { return nil }
+        return [[0xB0 | channel, 0x00, 0x3E], [0xB0 | channel, 0x20, UInt8(page)], [0xC0 | channel, UInt8(slot)]]
+    }
+
+    @discardableResult
+    func selectLiveSetSlot(page: Int, slot: Int, channel: UInt8) async -> Bool {
+        guard let messages = Self.liveSetSelect(page: page, slot: slot, channel: channel) else { return false }
+        await acquire()
+        defer { release() }
+        while isConnected, Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+        guard isConnected else { return false }
+        for message in messages { send(words: UMP.messageWords(message)) }
+        holdRequests(for: Self.settleAfterSelect)
+        nextID += 1
+        onRecord?(ModxRequestRecord(id: nextID, time: Date(), request: "Live Set Select page \(page + 1), slot \(slot + 1)",
+                                    bytes: messages.map { $0.map { String(format: "%02X", $0) }.joined(separator: " ") }.joined(separator: "  "),
+                                    outcome: "sent", problem: false))
+        return true
+    }
+
     /// Sends Bulk Dump messages one after another (a workspace section: header, blocks, footer), `pause` apart.
     @discardableResult
     func sendBulk(_ blocks: [(ModxAddress, [UInt8])], label: String, pause: TimeInterval = 0.03,
@@ -360,9 +387,13 @@ final class ModxLink {
     }
 
     private func send(_ message: [UInt8]) {
+        send(words: UMP.sysexWords(message))
+    }
+
+    private func send(words: [UInt32]) {
         guard isConnected else { return }
         requestsSent += 1
-        var words = UMP.sysexWords(message)
+        var words = words
         let size = 64 + words.count * 4
         let raw = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: 8)
         defer { raw.deallocate() }

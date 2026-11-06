@@ -113,14 +113,22 @@ struct NameField: View {
     let model: ModxModel
     let param: ModxParam
     let target: ModxTarget
+    /// Without its border and at the width it's given (inside a NameCombo).
+    var plain = false
     @State private var text = ""
     @State private var committed = ""
     @FocusState private var focused: Bool
 
+    @ViewBuilder private var field: some View {
+        if plain {
+            TextField("Name", text: $text).textFieldStyle(.plain)
+        } else {
+            TextField("Name", text: $text).textFieldStyle(.roundedBorder).frame(width: 190)
+        }
+    }
+
     var body: some View {
-        TextField("Name", text: $text)
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 190)
+        field
             .focused($focused)
             .onAppear { text = model.text(param, target) ?? ""; committed = text }
             .onChange(of: model.text(param, target)) { _, new in
@@ -243,6 +251,10 @@ struct SlotEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Page \(page + 1), Slot \(slot + 1)").font(.headline)
+            if let s = model.liveSet?.slots.first(where: { $0.page == page && $0.slot == slot }) {
+                ValueRow(name: "Performance", value: model.performanceName(for: s).map { $0.source == .seen ? "\($0.name) (as last seen)" : $0.name }
+                         ?? "Not known — choose the slot on the MODX once")
+            }
             ForEach(ModxParams.slot) { ParamRow(model: model, param: $0, target: .liveSetSlot(page: page, slot: slot), showAddress: false) }
             Text("Goes to the MODX's Live Set edit buffer: store the Live Set on the MODX to keep it.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -312,3 +324,4 @@ struct EditBanner: View {
         }
     }
 }
+
