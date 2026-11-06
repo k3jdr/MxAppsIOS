@@ -4,8 +4,9 @@
 //
 //  Containers on the page. Each has a bar along the top for dragging
 //  (and a context menu) and a handle on the right edge for resizing: a strip
-//  10 pt wide, grabbable whether or not the frame is showing (as a table's
-//  column border is), over which the content leaves the pointer alone.
+//  10 pt wide inside the frame and 6 pt past it over the blank page,
+//  grabbable whether or not the frame is showing (as a table's column border
+//  is), over which the content leaves the pointer alone.
 //  Text containers grow as you type; pictures keep their proportions;
 //  attachments open with a double-click; recordings play in place; tables
 //  are edited cell by cell.
@@ -37,12 +38,18 @@ class ElementView: NSView {
     static let gripHeight: CGFloat = 10
     /// The resize strip along the right edge (content near the edge keeps clear of it).
     static let edgeWidth: CGFloat = 10
+    /// How far the resize strip reaches past the right edge, over the blank page beside it (the page hands it those
+    /// clicks).
+    static let edgeReach: CGFloat = 6
 
     weak var canvas: PageCanvasView?
     var element: PageElement
     var isSelected = false { didSet { refreshChrome() } }
     var isHovered = false { didSet { if oldValue != isHovered { refreshChrome() } } }
     var isEditing = false { didSet { refreshChrome() } }
+    /// The pointer is on the strip just past the right edge (the page tracks it there): the frame shows, as it does
+    /// over the edge inside.
+    var isNearEdge = false { didSet { if oldValue != isNearEdge { refreshChrome() } } }
     let grip = GripView()
     let resizeHandle = ResizeHandleView()
     private var tracking: NSTrackingArea?
@@ -51,7 +58,7 @@ class ElementView: NSView {
 
     var minWidth: CGFloat { 60 }
     var isExport: Bool { canvas?.isExport ?? false }
-    var showsChrome: Bool { !isExport && (isSelected || isHovered || isEditing) }
+    var showsChrome: Bool { !isExport && (isSelected || isHovered || isEditing || isNearEdge) }
     var controller: CanvasController? { canvas?.controller }
 
     init(element: PageElement) {
@@ -75,6 +82,13 @@ class ElementView: NSView {
 
     var contentFrame: NSRect {
         NSRect(x: 0, y: Self.gripHeight, width: bounds.width, height: max(0, bounds.height - Self.gripHeight))
+    }
+
+    /// The part of the resize strip past the right edge, in the page's coordinates (none on an exported page).
+    var outerEdge: NSRect {
+        guard !isExport, !resizeHandle.isHidden else { return .zero }
+        return NSRect(x: frame.maxX, y: frame.minY + Self.gripHeight, width: Self.edgeReach,
+                      height: max(0, frame.height - Self.gripHeight))
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -288,7 +302,8 @@ final class GripView: NSView {
 }
 
 /// The right edge of a container: drag it to change the width. It's there whether or not the frame shows (the
-/// pointer over it shows the frame), as a table's column border is.
+/// pointer over it shows the frame), as a table's column border is. It reaches a little past the frame too: the page
+/// hands this view clicks on its blank side just past the edge (PageCanvasView.hitTest).
 final class ResizeHandleView: NSView {
     weak var owner: ElementView?
 

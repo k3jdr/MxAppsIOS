@@ -45,13 +45,19 @@ enum PointerGuard {
         }
     }
 
-    /// The arrow again when an I-beam is showing over something that isn't text.
+    /// The arrow again when an I-beam is showing over something that isn't text (the resize pointer over a
+    /// container's edge).
     static func check(_ window: NSWindow?) {
         let current = NSCursor.current
         guard current == NSCursor.iBeam || current == NSCursor.iBeamCursorForVerticalLayout else { return }
         guard let window = window ?? NSApp.keyWindow, let content = window.contentView else { return }
         let p = window.mouseLocationOutsideOfEventStream
         if let frame = content.superview, var view = frame.hitTest(frame.convert(p, from: nil)) {
+            // A container's resize edge (inside the frame or on the page just past it) has its own pointer.
+            if view is ResizeHandleView {
+                NSCursor.resizeLeftRight.set()
+                return
+            }
             while true {
                 if view is NSTextView || view is NSTextField || view is SetsOwnPointer { return }
                 guard let up = view.superview else { break }
