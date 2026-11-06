@@ -402,6 +402,80 @@ final class PageCanvasView: NSView {
         underline.stroke()
     }
 
+    // MARK: The edge just past a container
+
+    /// Tracks the pointer over the page, for the strips just past containers' right edges.
+    private var edgeTracking: NSTrackingArea?
+
+    /// The container whose strip past its right edge the pointer is on: it shows its frame.
+    private weak var edgeHover: ElementView? {
+        didSet {
+            guard oldValue !== edgeHover else { return }
+            oldValue?.isNearEdge = false
+            edgeHover?.isNearEdge = true
+        }
+    }
+
+    /// The container whose resize strip reaches a point past its right edge.
+    private func edgeOwner(at point: NSPoint) -> ElementView? {
+        guard showsPage, !isExport else { return nil }
+        return elementViews.last { $0.outerEdge.contains(point) }
+    }
+
+    /// The blank page just past a container's right edge is that container's resize edge. Another container (or the
+    /// title) there keeps its clicks, and so does the ink layer while drawing.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard hit === self else { return hit }
+        return edgeOwner(at: convert(point, from: superview))?.resizeHandle ?? hit
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let edgeTracking { removeTrackingArea(edgeTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        edgeTracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateEdgeHover(event)
+        super.mouseMoved(with: event)
+    }
+
+    /// Whether an enter or exit is the page's own (a view inside that doesn't handle its own passes them up).
+    private func isEdgeTracking(_ event: NSEvent) -> Bool {
+        guard let edgeTracking else { return false }
+        return event.trackingArea === edgeTracking
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if isEdgeTracking(event) { updateEdgeHover(event) } else { super.mouseEntered(with: event) }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if isEdgeTracking(event) { edgeHover = nil } else { super.mouseExited(with: event) }
+    }
+
+    /// The frame and the resize pointer on the strip past a container's edge; the arrow again leaving it for the page.
+    private func updateEdgeHover(_ event: NSEvent) {
+        let wasOnEdge = edgeHover != nil
+        guard pointerInside(event), let superview else {
+            edgeHover = nil
+            return
+        }
+        let p = convert(event.locationInWindow, from: nil)
+        let hit = hitTest(convert(p, to: superview))
+        if let handle = hit as? ResizeHandleView, let owner = handle.owner, owner.outerEdge.contains(p) {
+            edgeHover = owner
+            NSCursor.resizeLeftRight.set()
+        } else {
+            edgeHover = nil
+            if wasOnEdge, hit === self { NSCursor.arrow.set() }
+        }
+    }
+
     // MARK: Mouse and keys
 
     override func mouseDown(with event: NSEvent) {
