@@ -155,9 +155,29 @@ struct ModxTests {
               && ModxLink.isWritable(ModxAddress(0x31, 0x01, 0x24), data: [100]),
               "Performance Volume, Touch Panel Sound and Part 2 Volume may be changed")
         check(!ModxLink.isWritable(ModxAddress(0x00, 0x00, 0x07), data: [80]) && !ModxLink.isWritable(ModxAddress(0x30, 0x40, 0x14), data: [1])
-              && !ModxLink.isWritable(ModxAddress(0x41, 0x00, 0x00), data: [1]) && !ModxLink.isWritable(.common.with(low: 0x2C), data: [0x5A])
+              && !ModxLink.isWritable(ModxAddress(0x41, 0x00, 0x05), data: [1]) && !ModxLink.isWritable(.common.with(low: 0x2C), data: [0x5A])
               && !ModxLink.isWritable(.common.with(low: 0x03), data: [0x07]),
-              "refused: transpose out of range, a reserved byte, element data, half a two-byte value, a control character")
+              "refused: transpose out of range, a reserved byte, a reserved element byte, half a two-byte value, a control character")
+        check(ModxLink.isWritable(ModxAddress(0x48, 0x00, 0x4F), data: [7]) && !ModxLink.isWritable(ModxAddress(0x48, 0x00, 0x4F), data: [88])
+              && ModxLink.isWritable(ModxAddress(0x49, 0x10, 0x1A), data: [99]) && !ModxLink.isWritable(ModxAddress(0x49, 0x10, 0x1A), data: [100])
+              && !ModxLink.isWritable(ModxAddress(0x49, 0x10, 0x00), data: [0]) && !ModxLink.isWritable(ModxAddress(0x48, 0x00, 0x51), data: [0])
+              && !ModxLink.isWritable(ModxAddress(0x49, 0x80, 0x1A), data: [10]),
+              "FM-X: algorithm 1–88 and operator 2's level 0–99 may be sent; reserved bytes and a ninth operator may not")
+        check(ModxLink.isWritable(ModxAddress(0x41, 0x11, 0x03), data: [0x10, 0x4D]) && ModxLink.isWritable(ModxAddress(0x42, 0x11, 0x01), data: [0x01, 0x7F])
+              && !ModxLink.isWritable(ModxAddress(0x41, 0x11, 0x49), data: [0x08]) && ModxLink.isWritable(ModxAddress(0x31, 0x62, 0x00), data: [0])
+              && !ModxLink.isWritable(ModxAddress(0x31, 0x62, 0x01), data: [0]),
+              "AWM2: Part 2 element 2's waveform (2125 Saw) and cutoff 255; not a coarse tune below −48; the Part Arp Switch, not the byte after it")
+        var fmPart = ModxPart(index: 0), awmPart = ModxPart(index: 1)
+        fmPart.type = .fmx; awmPart.type = .awm2
+        let level = ModxParams.fmOperator.first { $0.key == "op.level" }!, cutoff = ModxParams.elementFilter.first { $0.key == "ef.cutoff" }!
+        check(level.applies(to: fmPart) && !level.applies(to: awmPart) && cutoff.applies(to: awmPart) && !cutoff.applies(to: fmPart),
+              "FM-X settings only for an FM-X Part, AWM2 element settings only for an AWM2 Part")
+        let algorithms = ModxFMAlgorithms.known
+        check(algorithms.count == 8 && algorithms.values.allSatisfy { a in a.positions.count == 8 && a.feedback == 1
+                  && a.edges.allSatisfy { a.positions[$0.from]!.row == a.positions[$0.to]!.row + 1 || a.positions[$0.to]!.row == 0 } }
+              && algorithms[1]!.carriers == Array(1...8) && algorithms[8]!.carriers == Array(2...8) && algorithms[6]!.carriers == [2, 4, 5, 6, 7, 8]
+              && algorithms[2]!.modulates(3) == [4],
+              "FM-X algorithms 1–8 as the Algorithm Chart draws them: 8 operators, feedback on 1, modulators above their targets")
         check(ModxLink.isWritable(.common.with(low: 0x03), data: [0x41]) && ModxLink.isWritable(ModxAddress(0x04, 0x01, 0x13), data: [0x20])
               && !ModxLink.isWritable(.common.with(low: 0x00), data: Array(repeating: 0x41, count: 20)),
               "names go one character at a time (Name 4 of the Performance, Name 20 of a slot), never as one 20-byte change")
@@ -240,6 +260,36 @@ struct ModxTests {
         check(ModxWorkspaceLiveSet(url: workspaceURL, file: noLiveSet) == nil, "a workspace without a Live Set offers no bank")
         check(file.summary.contains { $0.rows.contains { $0.last == "Creation (slot “SYN PAD w/ Auto SK”) · Preset 4 #115" } },
               "the readable summary names a slot's Performance and its slot name")
+        print("\nTutorials")
+        for engine in ModxEngine.allCases {
+            let lessons = engine.lessons
+            var problems: [String] = []
+            var count = 0
+            for lesson in lessons where !lesson.lessonOnly {
+                for s in lesson.settings(engine) {
+                    count += 1
+                    let target = s.target(part: 3)
+                    guard let param = s.param else { problems.append("\(lesson.id): no setting \(s.key)"); continue }
+                    guard let bytes = param.bytes(for: s.value, current: [UInt8](repeating: 0, count: 128)) else {
+                        problems.append("\(lesson.id): \(s.key) = \(s.value) out of range"); continue
+                    }
+                    let address = target.base.with(low: target.base.low + UInt8(param.offset))
+                    if !ModxLink.isWritable(address, data: bytes) { problems.append("\(lesson.id): \(s.key) at \(address) not writable") }
+                    if ModxParams.find(address, size: bytes.count)?.1.key != s.key { problems.append("\(lesson.id): \(s.key) found as another setting") }
+                }
+                for control in lesson.controls where control.param == nil { problems.append("\(lesson.id): no control \(control.key)") }
+                if engine == .fmx, let a = lesson.algorithm, ModxFMAlgorithms.known[a] == nil { problems.append("\(lesson.id): algorithm \(a) not drawn") }
+            }
+            check(problems.isEmpty && Set(lessons.map(\.id)).count == lessons.count && lessons.first?.lessonOnly == true,
+                  "\(engine.title): \(lessons.count) lessons, \(count) settings, each one the MODX accepts at its address\(problems.isEmpty ? "" : " — \(problems.prefix(4))")")
+        }
+        var awm = ModxPart(index: 3)
+        awm.type = .awm2
+        let fmOnly = ModxTutorials.fmBase(algorithm: 8).compactMap { $0.param }.filter { $0.restriction == .fmxOnly }
+        check(!fmOnly.isEmpty && fmOnly.allSatisfy { !$0.applies(to: awm) }
+              && ModxTutorials.fmLessons[2].settings(.fmx).contains { $0.key == "op.level" && $0.block == .op(0) && $0.value == 45 }
+              && ModxTutorials.fmLessons[2].settings(.fmx).filter { $0.key == "op.level" && $0.block == .op(0) }.count == 1,
+              "a lesson's own settings replace the plain sound's (one operator 1 level, the lesson's 45); FM-X settings never on an AWM2 Part")
         check(ModxLink.liveSetSelect(page: 0, slot: 9, channel: 0) == [[0xB0, 0x00, 0x3E], [0xB0, 0x20, 0x00], [0xC0, 0x09]]
               && ModxLink.liveSetSelect(page: 15, slot: 15, channel: 3) == [[0xB3, 0x00, 0x3E], [0xB3, 0x20, 0x0F], [0xC3, 0x0F]]
               && ModxLink.liveSetSelect(page: 16, slot: 0, channel: 0) == nil && ModxLink.liveSetSelect(page: 0, slot: 0, channel: 16) == nil,

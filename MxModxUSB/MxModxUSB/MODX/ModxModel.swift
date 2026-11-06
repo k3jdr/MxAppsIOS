@@ -61,6 +61,14 @@ final class ModxModel {
     /// Live Set banks in workspace files, for the Live Set screen's bank menu; newest first.
     var workspaceLiveSets: [ModxWorkspaceLiveSet] = []
     var liveSetRefreshing = false
+
+    // Tutorials (ModxModel+Tutorial.swift)
+    /// The FM-X or AWM2 Part a tutorial is using, with a copy of it as it was.
+    var tutorial: ModxTutorialSession?
+    var tutorialBusy: String?
+    var tutorialReport: String?
+    /// The engine whose tutorial the report is about (nil: about any, like a Performance change).
+    var tutorialEngine: ModxEngine?
     /// The Live Set slot just chosen from the app, until the MODX has loaded its Performance.
     private(set) var selectingSlot: Int?
     var curves: [ModxUserCurve] = []
@@ -270,9 +278,11 @@ final class ModxModel {
             || (0x50...0x5F).contains(a.high)
     }
 
-    /// A Part's whole bulk: every block of it into the store, and its type (AWM2, Drum, FM-X) and elements.
-    func readPartBulk(_ p: Int) async {
-        guard let blocks = await link.bulk(.performancePartBulk(p), bulkInterval: bulkInterval) else { return }
+    /// A Part's whole bulk: every block of it into the store, and its type (AWM2, Drum, FM-X) and elements. Returns
+    /// the blocks in the order the MODX sent them.
+    @discardableResult
+    func readPartBulk(_ p: Int) async -> [ModxBlock]? {
+        guard let blocks = await link.bulk(.performancePartBulk(p), bulkInterval: bulkInterval) else { return nil }
         keep(blocks)
         if let block = blocks.first(where: { $0.address == ModxAddress.part(p) }) { parts[p].read(block: block) }
         do {
@@ -287,6 +297,7 @@ final class ModxModel {
                 parts[p].elementsOn = blocks.filter { $0.address.high & 0xF0 == 0x50 && $0[0] == 1 }.count
             }
         }
+        return blocks
     }
 
     /// Puts blocks into the store (the newest bytes of each address win).
@@ -310,6 +321,11 @@ final class ModxModel {
                                            selected: (slot: ModxLiveSlot, nameBefore: String)? = nil) {
         guard lastRead != nil else { readEverything(); return }   // the first full read isn't finished: start it over
         reloadTask?.cancel()
+        if tutorial != nil {
+            tutorial = nil
+            tutorialEngine = nil
+            tutorialReport = "Another Performance was chosen on the MODX, so the tutorial's changes went with the one before. Start again with a Part of this one."
+        }
         // The edit buffer now holds another Performance (the Live Set's edit buffer stays as it was).
         undoStack.removeAll {
             switch $0.target { case .liveSetBank, .liveSetPage, .liveSetSlot: false; default: $0.target.isEditBuffer }

@@ -4,7 +4,9 @@
 //  Every setting MxModxUSB can show and change, defined once: which block it lives in, its offset, how its bytes
 //  encode the value, the values the MODX accepts and how each reads. Taken from the MODX Data List (modx_en_dl_d0):
 //  System and Sequencer (p. 194–195), Performance Common (p. 197), Reverb/Variation/Insertion (p. 197–198), Effect
-//  Type List (p. 144–145), Performance Part (p. 207–208), Live Set (p. 196), Curve and Micro Tuning (p. 195).
+//  Type List (p. 144–145), Performance Part (p. 207–208), Live Set (p. 196), Curve and Micro Tuning (p. 195); the
+//  voice blocks the tutorials use — AWM2 Element (p. 217–218), FM-X Part Common and Operator (p. 219–220) — are in
+//  ModxVoiceParameters.swift.
 //
 //  The table is also the allow-list for writing: MxModxUSB sends a Parameter Change only for an address and size
 //  defined here, and only a value inside its range.
@@ -18,6 +20,21 @@ enum ModxTarget: Hashable, Codable {
     case part(Int)
     case liveSetBank, liveSetPage(Int), liveSetSlot(page: Int, slot: Int)
     case curve(Int), microTuningName(Int), microTuningTable(Int)
+    /// An FM-X Part's common block (48 0p 00) and its operators (49 op 00, o = 0 … 7).
+    case fmCommon(Int), fmOperator(part: Int, op: Int)
+    /// An AWM2 Part's elements: Element Group 1 (41 ep 00: wave, zones, level, AEG, pitch) and 2 (42 ep 00: filter,
+    /// FEG, LFO), e = 0 … 7.
+    case element(part: Int, element: Int), elementFilter(part: Int, element: Int)
+    /// A Part's arpeggio block (31 6p 00): its Part Arp Switch.
+    case partArp(Int)
+
+    /// The Part a voice block belongs to.
+    var partIndex: Int? {
+        switch self {
+        case .part(let p), .fmCommon(let p), .fmOperator(let p, _), .element(let p, _), .elementFilter(let p, _), .partArp(let p): p
+        default: nil
+        }
+    }
 
     var base: ModxAddress {
         switch self {
@@ -36,6 +53,11 @@ enum ModxTarget: Hashable, Codable {
         case .curve(let n): ModxAddress(0x01, UInt8(n), 0x00)
         case .microTuningName(let n): ModxAddress(0x00, 0x50 | UInt8(n), 0x00)
         case .microTuningTable(let n): ModxAddress(0x00, 0x30 | UInt8(n), 0x00)
+        case .fmCommon(let p): ModxAddress(0x48, UInt8(p), 0x00)
+        case .fmOperator(let p, let o): ModxAddress(0x49, UInt8(o << 4 | p), 0x00)
+        case .element(let p, let e): ModxAddress(0x41, UInt8(e << 4 | p), 0x00)
+        case .elementFilter(let p, let e): ModxAddress(0x42, UInt8(e << 4 | p), 0x00)
+        case .partArp(let p): ModxAddress(0x31, 0x60 | UInt8(p), 0x00)
         }
     }
 
@@ -54,6 +76,11 @@ enum ModxTarget: Hashable, Codable {
         case .curve: ModxParams.curve
         case .microTuningName: ModxParams.name
         case .microTuningTable: ModxParams.microTuning
+        case .fmCommon: ModxParams.fmCommon
+        case .fmOperator: ModxParams.fmOperator
+        case .element: ModxParams.element
+        case .elementFilter: ModxParams.elementFilter
+        case .partArp: ModxParams.partArp
         }
     }
 
@@ -74,6 +101,11 @@ enum ModxTarget: Hashable, Codable {
         case .curve(let n): "User Curve \(n + 1)"
         case .microTuningName(let n): "Micro-Tuning \(n + 1) name"
         case .microTuningTable(let n): "Micro-Tuning \(n + 1)"
+        case .fmCommon(let p): "Part \(p + 1) FM-X"
+        case .fmOperator(let p, let o): "Part \(p + 1) Operator \(o + 1)"
+        case .element(let p, let e): "Part \(p + 1) Element \(e + 1)"
+        case .elementFilter(let p, let e): "Part \(p + 1) Element \(e + 1) filter and LFO"
+        case .partArp(let p): "Part \(p + 1) arpeggio"
         }
     }
 
@@ -120,6 +152,8 @@ struct ModxParam: Identifiable {
 
     enum Restriction {
         case none, notDrum, drumOnly, partsBelow9
+        /// Voice blocks only a Part of that engine has (writing them to another Part's address would be refused).
+        case fmxOnly, awm2Only
     }
 
     let key: String
@@ -235,6 +269,8 @@ struct ModxParam: Identifiable {
         case .notDrum: return part.type != .drum
         case .drumOnly: return part.type == .drum
         case .partsBelow9: return part.index < 8
+        case .fmxOnly: return part.type == .fmx
+        case .awm2Only: return part.type == .awm2
         }
     }
 }
@@ -292,7 +328,7 @@ enum ModxEffects {
 }
 
 enum ModxParams {
-    private static func p(_ key: String, _ group: String, _ name: String, _ offset: Int, _ encoding: ModxParam.Encoding = .byte,
+    static func p(_ key: String, _ group: String, _ name: String, _ offset: Int, _ encoding: ModxParam.Encoding = .byte,
                           _ range: ClosedRange<Int> = 0...127, _ format: ModxParam.Format = .number(),
                           _ restriction: ModxParam.Restriction = .none, warning: String? = nil) -> ModxParam {
         ModxParam(key: key, group: group, name: name, offset: offset, encoding: encoding, range: range, format: format,
@@ -577,7 +613,11 @@ enum ModxParams {
         case 0x03: [.liveSetPage(Int(a.mid))]
         case 0x04, 0x05: [.liveSetSlot(page: Int(a.mid >> 4) + (a.high == 0x05 ? 8 : 0), slot: Int(a.mid & 0x0F))]
         case 0x30: [.common, .reverb, .variation, .insertionA, .insertionB, .masterEffect]
-        case 0x31: a.mid < 16 ? [.part(Int(a.mid))] : []
+        case 0x31: a.mid < 16 ? [.part(Int(a.mid))] : a.mid >> 4 == 6 ? [.partArp(Int(a.mid & 0x0F))] : []
+        case 0x41: a.mid >> 4 < 8 ? [.element(part: Int(a.mid & 0x0F), element: Int(a.mid >> 4))] : []
+        case 0x42: a.mid >> 4 < 8 ? [.elementFilter(part: Int(a.mid & 0x0F), element: Int(a.mid >> 4))] : []
+        case 0x48: a.mid < 16 ? [.fmCommon(Int(a.mid))] : []
+        case 0x49: a.mid >> 4 < 8 ? [.fmOperator(part: Int(a.mid & 0x0F), op: Int(a.mid >> 4))] : []
         default: []
         }
     }

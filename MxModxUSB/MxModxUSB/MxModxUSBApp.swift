@@ -4,7 +4,8 @@
 //  An overview of a Yamaha MODX7 (and MODX6/8) and everything it reports over USB: the instrument and its
 //  firmware, the current Performance and its Parts, the Live Set, System settings, user data, the USB device and
 //  its MIDI and audio interfaces, and what its keyboard and controllers are doing. With changes unlocked it edits
-//  those settings on the MODX, and MODX7 workspace files save them all and send them back.
+//  those settings on the MODX, and MODX7 workspace files save them all and send them back. FM Synthesis and AWM2
+//  Synthesis teach both engines on the MODX itself; Quick Help (the shared MxAppsIOS pane) docks at the bottom left.
 //
 
 import AppKit
@@ -23,6 +24,7 @@ struct MxModxUSBApp: App {
         }
         .defaultSize(width: 1320, height: 860)
         .commands {
+            QuickHelpCommands()
             CommandGroup(replacing: .newItem) {
                 Button("Open MODX7 Workspace…") { model.openWorkspace() }
                     .keyboardShortcut("o")
@@ -42,6 +44,9 @@ struct MxModxUSBApp: App {
                     .keyboardShortcut("r")
                     .disabled(!model.connected)
             }
+        }
+        Settings {
+            ModxSettingsView()
         }
     }
 }

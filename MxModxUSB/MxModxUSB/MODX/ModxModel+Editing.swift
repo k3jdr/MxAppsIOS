@@ -41,7 +41,7 @@ extension ModxModel {
     /// the Part (some settings aren't available for drum Parts, for Parts 9–16 …).
     func canEdit(_ param: ModxParam, _ target: ModxTarget) -> Bool {
         guard editsUnlocked, connected, data(target) != nil else { return false }
-        if case .part(let p) = target { return param.applies(to: parts[p]) }
+        if let p = target.partIndex { return param.applies(to: parts[p]) }   // FM-X blocks only on an FM-X Part, …
         return true
     }
 
@@ -124,6 +124,7 @@ extension ModxModel {
         editedTargets = []
         var differences: [String] = []
         var commonBulk = false, liveSetBulk = false, curveBulk = false
+        var voiceParts: Set<Int> = []
         for target in targets {
             switch target {
             case .common, .part:
@@ -162,6 +163,25 @@ extension ModxModel {
                 if let b = await link.dump(.microTuningName(n)) { compare(b, &differences) }
             case .microTuningTable(let n):
                 if let b = await link.dump(.microTuningTable(n)) { compare(b, &differences) }
+            case .fmCommon(let p), .fmOperator(let p, _), .element(let p, _), .elementFilter(let p, _), .partArp(let p):
+                voiceParts.insert(p)   // read back with the Part's bulk, which the MODX answers for any Part
+            }
+        }
+        for p in voiceParts.sorted() {
+            // Compare only the settings changed here: the MODX adjusts some others itself (an element's Part LFO depth
+            // ratios when its Part LFO is switched off), and those aren't refusals.
+            let local = targets.filter { $0.partIndex == p && $0 != .part(p) }.compactMap { t in store[t.base].map { (t, $0) } }
+            if let blocks = await link.bulk(.performancePartBulk(p), bulkInterval: bulkInterval) {
+                for (target, mine) in local {
+                    guard let fresh = blocks.first(where: { $0.address == target.base }) else { continue }
+                    for param in target.params where undoStack.contains(where: { $0.target == target && $0.param.offset == param.offset }) {
+                        let range = param.offset..<(param.offset + param.size)
+                        if range.upperBound <= min(mine.data.count, fresh.data.count), mine.data[range] != fresh.data[range] {
+                            differences.append(param.name)
+                        }
+                    }
+                }
+                keep(blocks)
             }
         }
         if commonBulk, let blocks = await link.bulk(.performanceCommonBulk, bulkInterval: bulkInterval) {
@@ -218,6 +238,8 @@ extension ModxModel {
             curves = store.values.filter { $0.address.high == 0x01 }.compactMap(ModxUserCurve.init(block:)).sorted { $0.number < $1.number }
         case .microTuningName, .microTuningTable:
             tuningNames = (0..<8).map { store[ModxAddress.microTuningName($0)]?.text(0, 20) ?? "" }
+        case .fmCommon, .fmOperator, .element, .elementFilter, .partArp:
+            break   // shown straight from the store
         }
     }
 

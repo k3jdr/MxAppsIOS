@@ -6,8 +6,12 @@ import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
     case overview, performance, liveSet, system, userData, workspace, connection, activity
+    case fmTutorial, awmTutorial
 
     var id: String { rawValue }
+
+    static let instrument: [AppSection] = [.overview, .performance, .liveSet, .system, .userData, .workspace, .connection, .activity]
+    static let learn: [AppSection] = [.fmTutorial, .awmTutorial]
 
     var title: String {
         switch self {
@@ -19,6 +23,24 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .workspace: "Workspace"
         case .connection: "USB · MIDI · Audio"
         case .activity: "MIDI Activity"
+        case .fmTutorial: "FM Synthesis"
+        case .awmTutorial: "AWM2 Synthesis"
+        }
+    }
+
+    /// What Quick Help says about the screen.
+    var detail: String {
+        switch self {
+        case .overview: "The MODX at a glance: the current Performance, its Parts, what the keyboard, wheels and knobs are doing, and the main settings."
+        case .performance: "The current Performance: its Common settings, effects and knobs, and its 16 Parts. Unlocked, they can be changed; double-click a Part for all its settings."
+        case .liveSet: "The Live Set as the MODX shows it: bank and page drop-downs, Refresh, and 16 slots named by their Performances. Click a slot to play it on the MODX."
+        case .system: "Every System and Sequencer setting, grouped; unlocked, each can be changed (System changes take effect at once)."
+        case .userData: "The 32 user curves and 8 micro-tuning tables."
+        case .workspace: "MODX7 workspace files: save everything from the MODX, open a file, compare it with the MODX and send parts of it back."
+        case .connection: "The USB device, its MIDI ports with every CoreMIDI property, and the USB audio interface."
+        case .activity: "What the MODX sends on each port, and every request the app has sent with what came back."
+        case .fmTutorial: "Lessons in FM synthesis played on the MODX7's FM-X engine, at the instruction level in Settings ▸ Guidance."
+        case .awmTutorial: "Lessons in AWM2 (sample-based) synthesis played on the MODX7's AWM2 engine, at the instruction level in Settings ▸ Guidance."
         }
     }
 
@@ -32,6 +54,8 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .workspace: "doc.richtext"
         case .connection: "cable.connector"
         case .activity: "waveform.path.ecg"
+        case .fmTutorial: "dot.radiowaves.left.and.right"
+        case .awmTutorial: "waveform"
         }
     }
 }
@@ -42,11 +66,22 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(AppSection.allCases, selection: $section) { item in
-                Label(item.title, systemImage: item.icon).tag(item)
+            List(selection: $section) {
+                Section("MODX7") {
+                    ForEach(AppSection.instrument) { item in
+                        Label(item.title, systemImage: item.icon).tag(item).quickHelp(item.title, item.detail, symbol: item.icon)
+                    }
+                }
+                Section("Learn") {
+                    ForEach(AppSection.learn) { item in
+                        Label(item.title, systemImage: item.icon).tag(item).quickHelp(item.title, item.detail, symbol: item.icon)
+                    }
+                }
             }
-            .navigationSplitViewColumnWidth(min: 190, ideal: 210)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 220)
             .safeAreaInset(edge: .bottom) { ConnectionBadge(model: model).padding(10) }
+            // Quick Help at the bottom left, under the connection; its ⧉ floats it in a window of its own.
+            .quickHelpDock()
         } detail: {
             VStack(spacing: 0) {
                 EditBanner(model: model)
@@ -59,8 +94,13 @@ struct ContentView: View {
                 case .workspace: WorkspaceView(model: model)
                 case .connection: ConnectionView(model: model)
                 case .activity: ActivityView(model: model)
+                case .fmTutorial: TutorialView(model: model, engine: .fmx)
+                case .awmTutorial: TutorialView(model: model, engine: .awm2)
                 }
             }
+            .quickHelpScreen((section ?? .overview).title,
+                             QuickHelpItem(title: (section ?? .overview).title, detail: (section ?? .overview).detail,
+                                           symbol: (section ?? .overview).icon))
             .navigationTitle((section ?? .overview).title)
             .toolbar {
                 ToolbarItemGroup {
@@ -72,6 +112,9 @@ struct ContentView: View {
                     .tint(model.editsUnlocked ? .orange : nil)
                     .help(model.editsUnlocked ? "Lock: stop sending changes to the MODX"
                           : "Unlock to change the MODX's settings from here (they go to the MODX as you make them)")
+                    .quickHelp(model.editsUnlocked ? "Changes Unlocked" : "Changes Locked",
+                               "While locked the app only reads the MODX (and plays Live Set slots you click). Unlocked, every setting it shows can be changed, each change going to the MODX as you make it and read back; the tutorials need it to set up their sounds. It's locked at every launch.",
+                               symbol: model.editsUnlocked ? "lock.open.fill" : "lock.fill")
                     if model.loading { ProgressView().controlSize(.small) }
                     if model.problems > 0 {
                         Button { section = .activity } label: {
@@ -84,6 +127,7 @@ struct ContentView: View {
                     Button { model.readEverything() } label: { Label("Read Again", systemImage: "arrow.clockwise") }
                         .disabled(!model.connected || model.loading)
                         .help("Read everything from the MODX again (⌘R)")
+                        .quickHelp("Read Again", "Reads everything from the MODX again: identity, System, the Performance and its Parts, the Live Set, curves and micro-tuning.", shortcut: "⌘R", symbol: "arrow.clockwise")
                 }
             }
         }
@@ -105,5 +149,8 @@ private struct ConnectionBadge: View {
         }
         .padding(10)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+        .quickHelp(model.connected ? "Connected" : "Not connected",
+                   model.connected ? "The MODX on USB, with its model and firmware (from its Identity Reply)." : "Connect the MODX by USB (TO HOST) and turn it on; the app finds it by itself.",
+                   symbol: "cable.connector")
     }
 }

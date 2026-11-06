@@ -22,6 +22,12 @@
 			path = Tools;
 			sourceTree = "<group>";
 		};
+		6E6D0B2B30A1B2C4004D5E6F /* Shared QuickHelp */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = "Shared QuickHelp";
+			path = ../Shared/QuickHelp;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,6 +45,7 @@
 				6E6D0B0830A1B2C3004D5E6F /* README.md */,
 				6E6D0B1630A1B2C3004D5E6F /* MxModxUSB */,
 				6E6D0B2A30A1B2C4004D5E6F /* Tools */,
+				6E6D0B2B30A1B2C4004D5E6F /* Shared QuickHelp */,
 				6E6D0B1530A1B2C3004D5E6F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -66,6 +73,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				6E6D0B1630A1B2C3004D5E6F /* MxModxUSB */,
+				6E6D0B2B30A1B2C4004D5E6F /* Shared QuickHelp */,
 			);
 			name = MxModxUSB;
 			productName = MxModxUSB;

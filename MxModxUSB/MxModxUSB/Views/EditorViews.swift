@@ -32,6 +32,7 @@ struct ParamRow: View {
         }
         .font(.callout)
         .help(help)
+        .quickHelp(label ?? param.name, quickHelpDetail, symbol: "slider.horizontal.3")
         .confirmationDialog("Change \(param.name)?", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } })) {
             Button("Change It") { if let v = confirming { model.set(param, target, to: v) }; confirming = nil }
             Button("Cancel", role: .cancel) { confirming = nil }
@@ -53,9 +54,19 @@ struct ParamRow: View {
         return text
     }
 
+    private var quickHelpDetail: String {
+        var parts = ["\(target.title), address \(String(format: "%02X %02X %02X", target.base.high, target.base.mid, target.base.low + UInt8(param.offset))) in the Data List."]
+        if !param.isText {
+            parts.append("Values \(param.display(param.range.lowerBound)) to \(param.display(param.range.upperBound)); now \(valueText).")
+        }
+        if let warning = param.warning { parts.append(warning) }
+        if editable { parts.append(target.isEditBuffer ? "Changes go to the MODX's edit buffer and are read back." : "Changes take effect on the MODX at once and are read back.") }
+        else { parts.append(help.contains("—") ? String(help.split(separator: "—").last ?? "").trimmingCharacters(in: .whitespaces).capitalizedFirst + "." : "") }
+        return parts.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     private var partOfTarget: ModxPart? {
-        if case .part(let p) = target { return model.parts[p] }
-        return nil
+        target.partIndex.map { model.parts[$0] }
     }
 
     private func send(_ value: Int) {
@@ -325,3 +336,8 @@ struct EditBanner: View {
     }
 }
 
+
+extension String {
+    /// The string with its first letter capitalized.
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}

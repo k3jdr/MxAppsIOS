@@ -9,12 +9,19 @@ It also **changes** them: with changes unlocked, the System, Sequencer, Performa
 micro-tuning settings can be edited, and each change goes to the MODX as you make it and is read back to confirm it. A **MODX7 workspace** file (`.modxworkspace`) saves everything
 the MODX makes available over USB and sends it back.
 
+Two tutorials teach the MODX7's sound engines **on the MODX7 itself**: **FM Synthesis** (its FM-X engine) and **AWM2
+Synthesis** (its sample engine). Each lesson builds its sound on a Part of the current Performance and you play it on
+the MODX's keyboard. Settings ▸ Guidance sets how much they teach (Full, Brief or Minimal, as in MxAcctMGR).
+**Quick Help**, the shared MxAppsIOS pane, docks at the bottom left of the window and describes whatever is under the
+pointer.
+
 **Until you unlock changes no setting is changed.** The MODX is sent requests (Identity Request, Dump Request,
 Parameter Request) that make it report. The one exception is playing a Live Set slot: clicking a slot sends the
 MODX's Live Set Select, as touching the slot on the MODX does, and the MODX loads that slot's Performance. The app
 never sends a note.
 
-Eighth app in the MxAppsIOS family. SwiftUI, CoreMIDI, IOKit and Core Audio; no package dependencies; not sandboxed.
+Eighth app in the MxAppsIOS family. SwiftUI, CoreMIDI, IOKit and Core Audio; no package dependencies (it compiles
+`../Shared/QuickHelp`); not sandboxed.
 
 ## Getting started
 
@@ -47,6 +54,8 @@ I/O) — with it set to MIDI the instrument talks through its 5-pin jacks instea
 | **User Data** | The 32 user velocity curves, drawn, and the 8 micro-tuning user tables with their names and the cents of each note. Unlocked, clicking a curve opens its name, type and eight points; table names and notes are edited in place. |
 | **Workspace** | Save a workspace from the MODX, open one, see what it holds and how each part compares with the MODX, and send chosen parts back (below). |
 | **USB · MIDI · Audio** | The USB device descriptor (vendor 0x0499, product, release, USB version, speed, configurations, class) and its interfaces (Audio Control, Audio Streaming, MIDI Streaming); each MIDI port with its role, message count, last message and every CoreMIDI property of its endpoints, port and device; the USB audio device (channels each way and their names, sample rate, latency, safety offset, buffer, whether an app is using it). |
+| **FM Synthesis**, **AWM2 Synthesis** (Learn) | The tutorials, below. |
+| **Quick Help** (bottom of the sidebar) | What's under the pointer (a setting with its address, range and current value; a control; a lesson), else the screen. Its ⧉ button floats it in a window of its own, placed at the window's bottom left; closing that window docks it again. View ▸ Quick Help (⌥⌘/) shows or hides it. |
 | **MIDI Activity** | **From the MODX**: what it sends on each port, newest first: notes, controllers, program changes, pitch bend, pressure; Clock and Active Sensing (the MODX sends both all the time) are hidden unless you ask. **Requests to the MODX**: every request the app has sent, with the time, the bytes and what came back (answered in so many ms, so many blocks, or *no answer*). An unanswered request also shows as a warning in the toolbar. |
 
 Choosing another Performance on the MODX (it sends Bank Select and Program Change) reads the new one. If the MODX
@@ -149,6 +158,54 @@ would now write into the wrong slots.
 2.50) a page name sent to the factory bank, **"Preset"**, was answered but not kept. That bank seems not to take
 changes, so the app says so when that happens. A User bank is the place to edit.
 
+## The tutorials: FM Synthesis and AWM2 Synthesis
+
+Both pages work the same way. Their sound engine is the MODX7: a lesson's sound is built on a Part of the current
+Performance and you play it on the MODX's keyboard.
+
+1. **Unlock changes**: the lessons write to the MODX.
+2. **Choose a Part** of that engine — an FM-X Part for FM, an AWM2 Part for AWM2 — and **Start with This Part**. The
+   app reads the whole Part and keeps it. If the Performance has none, the page suggests Live Set slots to play (for
+   FM, the bank's "FM …" Performances).
+3. Each lesson's **Set Up on the MODX** builds its sound: a plain starting sound for the engine (so every lesson
+   starts the same, whatever the Part was), then the lesson's own settings. It sends only what differs, as Parameter
+   Changes, and reads the Part back; the strip reports what the MODX holds. A lesson's **Change it while you play**
+   controls change the Part as you play, each change read back.
+4. **Hear only this Part** mutes the Performance's other Parts (and unmutes them as they were).
+5. **Put Part Back** sends the kept Part back as a Bulk Dump, compares it, and ends the tutorial.
+
+Everything goes to the MODX's edit buffer; nothing is stored. Choosing another Performance on the MODX ends the
+tutorial (its changes go with the old one).
+
+**Instruction level** (Settings ▸ Guidance, or the header of either page): **Full** — everything: the line under each
+title, "Why it works", "Try this", "Listen for", and the pages that only teach (What FM Is, What AWM2 Is); **Brief** —
+no "Why it works"; **Minimal** — also no line under the titles or "Listen for", and the reading pages leave the lists.
+
+**FM Synthesis** (FM-X: 8 operators, 88 algorithms): what FM is; one operator (a sine); a modulator adds harmonics;
+ratios; feedback; envelopes shape the brightness; velocity; stacks; two voices in parallel (an electric piano);
+additive drawbars; FM-X spectral forms; inharmonic ratios (a bell). The lesson's algorithm — or the Part's own, while
+a tutorial runs — is drawn as the Data List's Algorithm Chart draws it (carriers along the bottom, modulators above
+what they modulate, operator 1's feedback), each operator filled to its level. The app draws algorithms 1–8, read
+from the chart (p. 182); the others are named, with a pointer to the chart.
+
+**AWM2 Synthesis** (up to 8 elements, 6,347 waveforms): what AWM2 is; one element; waveforms (Saw 2125, P50-1 2136,
+P25-1 2134, Tri Wave 2138, Sine 2139); the filter; the filter envelope; the amplitude envelope; velocity; the LFO;
+layering two elements; key ranges (a split); velocity ranges (switching samples). A map shows the Part's 8 elements:
+on or off, waveform, level, and the keys and velocities each plays.
+
+The plain starting sounds: FM-X — the lesson's algorithm, every operator a silent sine at ratio 1 with a sustaining
+envelope, no feedback, the filter open (LPF24D at 255), no pitch EG, LFO or velocity; AWM2 — element 1 playing Saw
+through an open LPF24D, a sustaining envelope, no filter EG, LFO, EQ or velocity, the other elements off. Both switch
+the Part's arpeggio and motion sequencer off. Knobs, scenes and the Super Knob can still change the sound.
+
+**What may be written** (`ModxVoiceParameters.swift`, from the Data List): FM-X Part Common `48 0p 00` and Operator
+`49 op 00` (p. 219–220); AWM2 Element Group 1 `41 ep 00` and 2 `42 ep 00` (p. 217–218); the Part Arp Switch
+`31 6p 00`. FM-X settings go only to an FM-X Part and element settings only to an AWM2 Part. Learned on a MODX7
+(firmware 2.50): an FM-X Part stores its algorithm from 0; envelope "times" are lengths (0 is instant); the Data List
+names 19 filter types for 22 values, so only the first six are named (the lessons use LPF24D, 0); and switching an
+element's Part LFO off makes the MODX zero that element's Part LFO depth ratios itself, so read-backs compare only
+what was sent.
+
 ## The three USB MIDI ports
 
 | Port | Role |
@@ -205,10 +262,14 @@ If the message ever appears again, MIDI Activity ▸ Requests to the MODX shows 
 | `MxModxUSB/MODX/ModxWorkspace.swift` | The workspace file: its sections and blocks, the readable summary, reading and writing; a file's Live Set bank (`ModxWorkspaceLiveSet`). |
 | `MxModxUSB/MODX/ModxModel+LiveSet.swift` | The Live Set screen's data: slots' Performance names, learning names, finding workspace banks, Refresh, sending a bank. |
 | `MxModxUSB/MODX/ModxPerformanceNames.swift` | A slot's Performance name: the preset list by bank and number, and names seen on the MODX. |
+| `MxModxUSB/MODX/ModxVoiceParameters.swift` | The FM-X and AWM2 voice blocks the tutorials may write, FM-X algorithms 1–8, the basic waveforms. |
+| `MxModxUSB/MODX/ModxTutorials.swift` | The FM-X and AWM2 lessons: what each teaches at each level, the settings that make its sound, its controls. |
+| `MxModxUSB/MODX/ModxModel+Tutorial.swift` | A tutorial on the MODX: keeping the Part, setting up a lesson and reading it back, muting the others, putting the Part back. |
 | `MxModxUSB/MODX/ModxPresetPerformances.swift` | The 2,227 preset Performance names, generated from the Data List by `Tools/make-preset-names.swift`. |
 | `MxModxUSB/Device/USBDeviceInfo.swift`, `AudioDeviceInfo.swift` | The USB device and interfaces from the I/O Registry; the audio interface from Core Audio. |
 | `MxModxUSB/MIDI/MIDIBytes.swift` | MIDI bytes in and out of Universal MIDI Packets; the byte parser (MxMidiPRO's). |
-| `MxModxUSB/Views/` | `ContentView` (sidebar), `OverviewView` (the instrument panel and cards), `DetailViews` (Performance, System, User Data), `LiveSetViews` (the Live Set screen, its name drop-downs, slots), `EditorViews` (the editing rows, Part sheet, slot and curve editors, the strip), `WorkspaceView`, `DeviceViews` (USB · MIDI · Audio, MIDI Activity), `Style` (cards, lamps, dials, wheels, keyboard). |
+| `MxModxUSB/Views/` | `ContentView` (sidebar), `OverviewView` (the instrument panel and cards), `DetailViews` (Performance, System, User Data), `LiveSetViews` (the Live Set screen, its name drop-downs, slots), `EditorViews` (the editing rows, Part sheet, slot and curve editors, the strip), `WorkspaceView`, `TutorialViews` (the FM Synthesis and AWM2 Synthesis pages, the algorithm diagram, the element map), `SettingsView` (Settings ▸ Guidance), `DeviceViews` (USB · MIDI · Audio, MIDI Activity), `Style` (cards, lamps, dials, wheels, keyboard). |
+| `../Shared/QuickHelp/QuickHelp.swift` | The shared MxAppsIOS Quick Help pane (docked or floating), compiled into the app. |
 | `Tools/` | `build-tools.sh` and `ModxTests.swift` (the decoding tests), `make-icon.swift` (draws the icon), `make-preset-names.swift` (regenerates the preset Performance names from a Data List PDF), `package.sh` (the DMG). |
 
 ## Testing
@@ -225,7 +286,9 @@ packing; and for changes: Parameter Change and Bulk Dump messages (a block rebui
 character at a time, the device's block sizes), and a workspace's round trip, summary and sending order; and for
 the Live Set screen: the preset names (Preset 4 #97 is "Ocean Pad"; the two fixture slots recall what the Data
 List's Live Set List says), learned names and their precedence, and a workspace's Live Set bank and what it sends; and the
-Live Set Select messages a slot click sends. 56 checks; no MODX is needed.
+Live Set Select messages a slot click sends; and for the tutorials: which FM-X and AWM2 settings may be sent (and
+to which Part), algorithms 1–8 as the chart draws them, and every setting of every lesson — 2,761 for FM-X, 776 for
+AWM2 — at an address and value the MODX accepts. 63 checks; no MODX is needed.
 
 ## Not covered (yet)
 
