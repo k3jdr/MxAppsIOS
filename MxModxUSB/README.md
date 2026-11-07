@@ -207,9 +207,13 @@ a MODX7 (firmware 2.50) — a test sine with no Part offsets, velocity or key sc
 MODX's USB 1&2 audio and recorded from it, every 5th value timed to 1.5 ms, latency taken off, values in between
 interpolated on a log scale. Attack is silence to full; Decay and Release set a speed rather than a time (a fall
 half as far takes half as long), so they read as a full fall, level 99 to 0; past the 40 s the measurement waited
-they read "> 40 s". Decay 2, Hold and the pitch and filter envelopes, not measured, keep "of 99". The lesson's algorithm — or the Part's own, while
-a tutorial runs — is drawn as the Data List's Algorithm Chart draws it (carriers along the bottom, modulators above
-what they modulate, operator 1's feedback), each operator filled to its level. The app draws algorithms 1–8, read
+they read "> 40 s". Decay 2, Hold and the pitch and filter envelopes, not measured, keep "of 99". The algorithm panel draws the lesson's algorithm as the Data
+List's Algorithm Chart draws it (carriers along the bottom, modulators above what they modulate, operator 1's
+feedback), each operator filled to its level and showing it (0: silent — algorithm 8's lessons use operators 1 and 2
+only, the other six carriers stay at 0). Until the lesson is set up the panel shows *this lesson*: its algorithm and
+the levels Set Up will give (and says what the MODX still plays); once set up it shows the Part *on the MODX*, and
+clicking an operator switches it off (its level to 0, kept) and on again — to hear the sound with and without it,
+the harmonics a modulator adds or a drawbar's harmonic. The lessons' steps say where to try it. The app draws algorithms 1–8, read
 from the chart (p. 182); the others are named, with a pointer to the chart.
 
 **AWM2 Synthesis** (up to 8 elements, 6,347 waveforms): what AWM2 is; one element; waveforms (Saw 2125, P50-1 2136,
@@ -353,15 +357,15 @@ the Live Set screen: the preset names (Preset 4 #97 is "Ocean Pad"; the two fixt
 List's Live Set List says), learned names and their precedence, and a workspace's Live Set bank and what it sends; and the
 Live Set Select messages a slot click sends; and for the tutorials: which FM-X and AWM2 settings may be sent (and
 to which Part), algorithms 1–8 as the chart draws them, and every setting of every lesson — 2,959 for FM-X, 956 for
-AWM2 — at an address and value the MODX accepts, every lesson dry and centred, its Part on and unmuted, and what
-Hear only this Part remembers between launches; and for MIDI Songs:
+AWM2 — at an address and value the MODX accepts, every lesson dry and centred, its Part on and unmuted, what
+Hear only this Part remembers between launches, and each lesson's operator levels; and for MIDI Songs:
 variable-length times, reading a format 0 file with running status and a Note On of velocity 0, splitting it by channel and pairing its notes, tempo and metre,
 what plays (no SysEx; Program Change only if asked; Note Off before Note On), saving and reading back, the tempo map,
 the demo song, a track's channel and its mixer controllers; that every numeric FM-X setting has its unit label;
 and the measured FM-X times (values to labels, never falling as the value rises, interpolated in between); and for
 Current State: each Part's insertion effects and switches, which Parts the keys held play, what explains the sound
 (the delay that echoes a Part, not one sent straight to USB; a hard pan; a tutorial's mutes; Local Control off), which
-effects repeat notes, and the audio meter's levels on a known sine. 87 checks; no MODX is needed.
+effects repeat notes, and the audio meter's levels on a known sine. 88 checks; no MODX is needed.
 
 ## Not covered (yet)
 

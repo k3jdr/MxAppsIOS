@@ -22,6 +22,8 @@ struct ModxTutorialSession: Equatable {
     var mutes: [Int: Int] = [:]
     /// Hear only this Part is on.
     var hearingOnly = false
+    /// FM-X operators (1–8) switched off on the algorithm diagram (level 0), each with its level before.
+    var operatorsOff: [Int: Int] = [:]
     /// The lesson last set up on the MODX.
     var lesson: String?
 }
@@ -141,6 +143,7 @@ extension ModxModel {
         let changes = lesson.settings(session.engine).compactMap { s in s.param.map { (s.target(part: p), $0, s.value) } }
         tutorialReport = await applyTutorialChanges(changes, part: p, label: "“\(lesson.title)”")
         tutorial?.lesson = lesson.id
+        tutorial?.operatorsOff = [:]   // the lesson's own levels now
     }
 
     /// Sends what differs as Parameter Changes, then reads the Part back and compares.
@@ -249,6 +252,37 @@ extension ModxModel {
         }
         if !failed.isEmpty { report += " The MODX didn't take the change to \(Self.partList(failed))." }
         tutorialReport = report
+    }
+
+    /// Whether an FM-X operator (1–8) is switched off on the diagram: at level 0, with its level kept.
+    func tutorialOperatorIsOff(_ op: Int) -> Bool {
+        guard let session = tutorial, session.operatorsOff[op] != nil, let param = ModxParams.voiceParam("op.level") else { return false }
+        return value(param, .fmOperator(part: session.part, op: op - 1)) == 0
+    }
+
+    /// Switches an FM-X operator of the tutorial's Part off (its level to 0, keeping the level) or on again (the
+    /// level back): to hear the sound with and without it. A normal change: sent, read back, undoable.
+    func toggleTutorialOperator(_ op: Int) {
+        guard var session = tutorial, session.engine == .fmx, !tutorialPartChanged, (1...8).contains(op),
+              let param = ModxParams.voiceParam("op.level") else { return }
+        let target = ModxTarget.fmOperator(part: session.part, op: op - 1)
+        guard canEdit(param, target), let level = value(param, target) else {
+            tutorialReport = editsUnlocked ? "Operator \(op) can't be changed now." : "Unlock changes to switch operators off and on."
+            return
+        }
+        if level == 0, let before = session.operatorsOff[op] {
+            set(param, target, to: before)
+            session.operatorsOff[op] = nil
+            tutorialReport = "Operator \(op) is on again (level \(before))."
+        } else if level > 0 {
+            session.operatorsOff[op] = level
+            set(param, target, to: 0)
+            tutorialReport = "Operator \(op) is off (it was at level \(level)): click it again to switch it back on."
+        } else {
+            tutorialReport = "Operator \(op) is silent in this sound (level 0): the lesson doesn't use it."
+            return
+        }
+        tutorial = session
     }
 
     /// Ends the tutorial without sending the Part back: the MODX keeps what it has (a voice chosen on its screens,

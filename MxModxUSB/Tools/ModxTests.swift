@@ -384,6 +384,11 @@ struct ModxTests {
             plain.allSatisfy { key, value in settings.filter { $0.key == key && $0.block == .part }.map(\.value) == [value] }
         }
         check(plainEverywhere, "every lesson plays dry and centred, its Part switched on and unmuted: no Variation or Reverb send, insertion effects off, dry level full, pan centre")
+        let lessonLevels = Dictionary(uniqueKeysWithValues: ModxTutorials.fmLessons.map { ($0.id, $0.operatorLevels) })
+        check(lessonLevels["fm.sine"] == [0, 99, 0, 0, 0, 0, 0, 0] && lessonLevels["fm.modulator"] == [45, 99, 0, 0, 0, 0, 0, 0]
+              && lessonLevels["fm.stack"] == [0, 40, 60, 99, 0, 0, 0, 0] && lessonLevels["fm.additive"]?.prefix(5) == [82, 90, 84, 60, 55]
+              && ModxTutorials.fmLessons.filter { $0.algorithm == 8 }.allSatisfy { ($0.operatorLevels.dropFirst(2)).allSatisfy { $0 == 0 } },
+              "the algorithm panel before Set Up: each lesson's operator levels (algorithm 8 lessons use operators 1 and 2 only)")
         // Hear only this Part, after the app was quit with it on: which Parts the MODX still holds as it left them.
         var heard = (0..<16).map { ModxPart(index: $0) }
         for q in 0..<3 { heard[q].name = "Part \(q + 1)"; heard[q].partSwitch = true }

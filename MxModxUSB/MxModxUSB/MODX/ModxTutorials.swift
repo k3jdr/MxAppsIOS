@@ -89,6 +89,14 @@ struct TutorialLesson: Identifiable {
     }
 }
 
+extension TutorialLesson {
+    /// The level this lesson gives each FM-X operator (index 0 = operator 1): its own, or the plain sound's 0.
+    var operatorLevels: [Int] {
+        let all = settings(.fmx)
+        return (0..<8).map { o in all.last { $0.block == .op(o) && $0.key == "op.level" }?.value ?? 0 }
+    }
+}
+
 // MARK: - Building blocks
 
 private func part(_ key: String, _ v: Int) -> TutorialSetting { .init(block: .part, key: key, value: v) }
@@ -202,7 +210,8 @@ enum ModxTutorials {
                 "Operator 1 now modulates operator 2 at the same frequency (ratio 1:1). Its level is the modulation index: at 0 nothing changes; as it rises, sidebands at 2×, 3×, 4× … the key's frequency appear and grow, and the tone goes from sine to something like a sawtooth.",
                 "This is FM's version of opening a filter — but done by adding harmonics, not taking them away, which is why FM sounds can be so bright and clear.",
             ],
-            steps: ["Set up, then hold a note.", "Raise the modulator's level slowly from 0 to 99.", "Try the modulator's ratio at 2: the harmonics change."],
+            steps: ["Set up, then hold a note.", "Click operator 1 in the diagram to switch it off and on: a plain sine without it, harmonics with it.",
+                    "Raise the modulator's level slowly from 0 to 99.", "Try the modulator's ratio at 2: the harmonics change."],
             listen: "Low levels add warmth; around the middle it turns reedy; near the top it gets brassy and harsh.",
             algorithm: 8, setup: [op(2, "level", 99), op(1, "level", 45)],
             controls: [cOp(1, "level", "Modulator level (operator 1)"), cOp(1, "coarse", "Modulator ratio"), cOp(2, "level", "Carrier level")]),
@@ -213,7 +222,8 @@ enum ModxTutorials {
                 "The sidebands sit at the carrier's frequency plus and minus multiples of the modulator's. With carrier 1 and modulator 1 every harmonic appears; with modulator 2 they fall on 1, 3, 5 … — odd harmonics only, the hollow sound of a square wave or a clarinet.",
                 "Whole-number ratios keep everything on the harmonic series, so the sound has a clear pitch. Fine moves the ratio off a whole number: the sidebands land between harmonics and the tone turns metallic, then clangorous — the start of bells.",
             ],
-            steps: ["Set up (modulator ratio 2), and play.", "Try modulator ratios 1, 2, 3 and 4.", "Raise Fine a little, then a lot.", "Put the carrier's ratio at 2 with the modulator at 1 for another colour."],
+            steps: ["Set up (modulator ratio 2), and play.", "Try modulator ratios 1, 2, 3 and 4; at each, switch operator 1 off and on to hear what it adds.",
+                    "Raise Fine a little, then a lot.", "Put the carrier's ratio at 2 with the modulator at 1 for another colour."],
             listen: "Ratio 1 is buzzy, 2 hollow, 3 and 4 nasal; any Fine at all makes it ring like metal.",
             algorithm: 8, setup: [op(2, "level", 99), op(1, "level", 70), op(1, "coarse", 2)],
             controls: [cOp(1, "coarse", "Modulator ratio"), cOp(1, "fine", "Modulator fine"), cOp(2, "coarse", "Carrier ratio"),
@@ -236,7 +246,8 @@ enum ModxTutorials {
                 "Each operator has its own amplitude envelope. On a carrier it shapes loudness; on a modulator it shapes the modulation index — so the brightness changes over the note. Here the modulator starts strong and decays to nothing while the carrier holds: a bright attack that mellows into a sine.",
                 "This is how FM makes plucked strings, electric pianos and brass: real instruments are brightest in their first moments.",
             ],
-            steps: ["Set up and play short and long notes.", "Make the modulator's decay longer and shorter.", "Raise the modulator's sustain level (Decay 2 Level) so some brightness stays."],
+            steps: ["Set up and play short and long notes.", "Switch operator 1 off: the 'pluck' goes and a plain sine is left; switch it on again.",
+                    "Make the modulator's decay longer and shorter.", "Raise the modulator's sustain level (Decay 2 Level) so some brightness stays."],
             listen: "A quick 'pluck' of brightness at each note, fading to a soft tone — longer decay, slower fade.",
             algorithm: 8,
             setup: [op(2, "level", 99), op(1, "level", 85)] + decaying(1, time: 45),
@@ -261,7 +272,8 @@ enum ModxTutorials {
                 "Algorithm 2 chains operators 1 → 2 → 3 → 4. Here operator 1 is silent, so 2 modulates 3 and 3 modulates the carrier, 4. Operator 2 makes operator 3's own sound richer, and that richer signal modulates the carrier — the harmonics multiply.",
                 "Stacks are where FM's aggressive basses, leads and brasses come from. Keep the top of the stack low at first: a little goes a long way.",
             ],
-            steps: ["Set up and play.", "Raise operator 3 (the middle) and then operator 2 (the top).", "Change the top operator's ratio."],
+            steps: ["Set up and play.", "Switch operator 2 (the top) off and on; then operator 3 (the middle) — off, it takes the top's effect with it.",
+                    "Raise operator 3 and then operator 2.", "Change the top operator's ratio."],
             listen: "Each step up the stack adds grit and complexity, much faster than a single modulator does.",
             algorithm: 2,
             setup: [op(4, "level", 99), op(3, "level", 60), op(2, "level", 40)],
@@ -274,7 +286,8 @@ enum ModxTutorials {
                 "Algorithm 6 has two pairs: 1 → 2 and 3 → 4. Each pair is its own little FM voice, and you hear both at once. The classic FM electric piano works this way: one pair makes the 'tine' — a high, fast-decaying ratio for the metallic strike — and the other the warm body of the note.",
                 "Here operator 1 runs at ratio 14 and decays quickly (the tine); operator 3 at ratio 1 decays slowly (the body). Both carriers die away like a struck string.",
             ],
-            steps: ["Set up and play chords, softly and hard.", "Turn the tine (operator 1) up and down.", "Change the body's modulator (operator 3) level."],
+            steps: ["Set up and play chords, softly and hard.", "Switch the tine's pair (operators 1 and 2) off to hear the body alone, then switch them on and the body's (3 and 4) off.",
+                    "Turn the tine (operator 1) up and down.", "Change the body's modulator (operator 3) level."],
             listen: "A bell-like 'ping' at the start of each note over a round, decaying tone; hard notes ping more.",
             algorithm: 6,
             setup: [op(2, "level", 88), op(4, "level", 92),
@@ -290,7 +303,8 @@ enum ModxTutorials {
                 "Algorithm 1 makes all eight operators carriers. Each one is a sine at its own ratio, and you hear them added together — exactly how a tonewheel organ builds its tone from drawbars.",
                 "Here the operators sit at ratios 0.5, 1, 2, 3, 4, 5, 6 and 8 — the same footages as an organ's drawbars (16', 8', 4', 2⅔', 2', 1⅗', 1⅓' and 1'). Their levels are the drawbars.",
             ],
-            steps: ["Set up and play chords.", "Pull 'drawbars' in and out with the operator levels.", "Try only the first three for a soft organ, or all eight for a full one."],
+            steps: ["Set up and play chords.", "Switch 'drawbars' off and on in the diagram: each operator is one harmonic.",
+                    "Pull them in and out with the operator levels.", "Try only the first three for a soft organ, or all eight for a full one."],
             listen: "Every level changes the organ's registration; there's no buzz of modulation, only sines adding up.",
             algorithm: 1,
             setup: [op(1, "coarse", 0), op(2, "coarse", 1), op(3, "coarse", 2), op(4, "coarse", 3), op(5, "coarse", 4),
@@ -305,7 +319,8 @@ enum ModxTutorials {
                 "The DX7's operators were all sines. FM-X gives each operator a Spectral Form: All 1 and All 2 have every harmonic, Odd 1 and Odd 2 odd harmonics only, Res 1 and Res 2 a resonant peak. Skirt shapes how the harmonics fall away; Spectral Resonance moves the peak of the Res forms.",
                 "On a modulator a richer form multiplies the sidebands; on a carrier it's heard directly, much like an analog oscillator's wave.",
             ],
-            steps: ["Set up (the modulator is at Odd 1) and play.", "Go through the modulator's spectral forms.", "Change Skirt, and with a Res form, Spectral Resonance."],
+            steps: ["Set up (the modulator is at Odd 1) and play.", "Go through the modulator's spectral forms; switch operator 1 off now and then to compare with a plain sine.",
+                    "Change Skirt, and with a Res form, Spectral Resonance."],
             listen: "Each form gives the same modulator level a different character — hollow, buzzy or vocal.",
             algorithm: 8,
             setup: [op(2, "level", 99), op(1, "level", 60), op(1, "form", 3)],
@@ -318,7 +333,8 @@ enum ModxTutorials {
                 "Bells, chimes and gongs have partials that aren't whole multiples of their pitch. A modulator ratio that isn't a whole number does the same: here the modulator is at ratio 3 moved off by Fine, so its sidebands fall between harmonics.",
                 "Both operators decay slowly with a long release, as a struck bell does; the modulator decays a little faster, so the clang softens as the bell rings.",
             ],
-            steps: ["Set up and play single notes high on the keyboard; let them ring.", "Move Fine to retune the bell.", "Shorten the carrier's decay for a chime."],
+            steps: ["Set up and play single notes high on the keyboard; let them ring.", "Switch operator 1 off: without its inharmonic ratio the bell is a plain sine.",
+                    "Move Fine to retune the bell.", "Shorten the carrier's decay for a chime."],
             listen: "A metallic strike that rings on, with a pitch that's clear but 'not quite' — the sound of a bell.",
             algorithm: 8,
             setup: [op(2, "level", 99), op(1, "level", 72), op(1, "coarse", 3), op(1, "fine", 41)]

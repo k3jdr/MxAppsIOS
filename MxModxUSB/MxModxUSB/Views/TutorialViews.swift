@@ -195,7 +195,8 @@ private struct LessonView: View {
                 if settings.showsIntroductions { Text(lesson.goal).font(.title3).foregroundStyle(.secondary) }
                 if !lesson.lessonOnly { setUpRow }
                 if engine == .fmx, let algorithm = shownAlgorithm {
-                    AlgorithmDiagram(model: model, part: session?.part, number: algorithm)
+                    AlgorithmDiagram(number: algorithm, levels: shownLevels, live: showsMODX, off: switchedOff,
+                                     toggle: canSwitchOperators ? { model.toggleTutorialOperator($0) } : nil, note: diagramNote)
                 } else if engine == .awm2, let session, !lesson.lessonOnly {
                     ElementMap(model: model, part: session.part)
                 }
@@ -232,10 +233,44 @@ private struct LessonView: View {
         }
     }
 
-    /// The Part's own algorithm while a tutorial runs (what you hear), else the lesson's.
+    /// The diagram shows the MODX's Part (what you hear) once this lesson is set up there — or on a page that only
+    /// teaches — else the lesson's own algorithm and levels, what Set Up will build.
+    private var showsMODX: Bool {
+        guard let session, !model.tutorialPartChanged else { return false }
+        return session.lesson == lesson.id || lesson.algorithm == nil
+    }
+
     private var shownAlgorithm: Int? {
-        if let session, let param = ModxParams.voiceParam("fm.algorithm"), let v = model.value(param, .fmCommon(session.part)) { return v + 1 }
+        if showsMODX, let session, let param = ModxParams.voiceParam("fm.algorithm"), let v = model.value(param, .fmCommon(session.part)) {
+            return v + 1
+        }
         return lesson.algorithm
+    }
+
+    private var shownLevels: [Int?] {
+        guard showsMODX, let session, let param = ModxParams.voiceParam("op.level") else { return lesson.operatorLevels }
+        return (0..<8).map { model.value(param, .fmOperator(part: session.part, op: $0)) }
+    }
+
+    private var switchedOff: Set<Int> {
+        guard showsMODX else { return [] }
+        return Set((1...8).filter { model.tutorialOperatorIsOff($0) })
+    }
+
+    private var canSwitchOperators: Bool {
+        showsMODX && model.editsUnlocked && model.connected && model.tutorialBusy == nil
+    }
+
+    private var diagramNote: String {
+        if showsMODX {
+            return canSwitchOperators
+                ? "Each box shows its operator's level on the MODX (0: silent). Click an operator to switch it off and on again — hear the sound with and without it."
+                : "Each box shows its operator's level on the MODX (0: silent)." + (model.editsUnlocked ? "" : " Unlock changes to switch operators off and on.")
+        }
+        let plan = "Each box shows the level this lesson gives its operator; those at 0 stay silent."
+        guard let session else { return plan }
+        let playing = session.lesson.flatMap { id in engine.lessons.first { $0.id == id }?.title }
+        return plan + " The MODX still plays \(playing.map { "“\($0)”" } ?? "the Part as it was"): Set Up on the MODX to hear this lesson, then switch operators off and on here."
     }
 
     private var setUpRow: some View {
@@ -316,88 +351,127 @@ private struct WaveRow: View {
 }
 
 /// An FM-X algorithm as the Data List draws it: modulators above the operators they modulate, carriers along the
-/// bottom into the output, operator 1's feedback loop; each box filled by its operator's level.
+/// bottom into the output, operator 1's feedback loop. Each box is filled to its operator's level and shows it: the
+/// levels on the MODX once the lesson is set up (click a box to switch the operator off and on), else the lesson's.
 struct AlgorithmDiagram: View {
-    let model: ModxModel
-    let part: Int?
     let number: Int
+    /// Each operator's level, 0 … 99 (index 0 = operator 1); nil: not known.
+    let levels: [Int?]
+    /// The levels are the MODX's Part's now (true), or the ones the lesson will set (false).
+    let live: Bool
+    /// Operators switched off on the diagram (1–8).
+    var off: Set<Int> = []
+    /// Switches an operator off or on; nil: not now.
+    var toggle: ((Int) -> Void)? = nil
+    var note: String = ""
+
+    private static let w: CGFloat = 44, h: CGFloat = 36, dx: CGFloat = 60, dy: CGFloat = 54
 
     var body: some View {
-        Card(title: "Algorithm \(number)", systemImage: "point.3.connected.trianglepath.dotted") {
+        Card(title: "Algorithm \(number) · \(live ? "on the MODX" : "this lesson")", systemImage: "point.3.connected.trianglepath.dotted") {
             if let algorithm = ModxFMAlgorithms.known[number] {
-                diagram(algorithm)
-                    .frame(height: CGFloat((algorithm.positions.values.map(\.row).max() ?? 0) + 1) * 46 + 30)
-                Text("Carriers (outlined) are heard; the others modulate the operator below them. Operator 1 feeds back into itself. \(part == nil ? "" : "Boxes fill with each operator's level on the MODX.")")
-                    .font(.caption).foregroundStyle(.secondary)
+                let height = CGFloat((algorithm.positions.values.map(\.row).max() ?? 0) + 1) * Self.dy + 28
+                Canvas { context, _ in draw(algorithm, in: &context) }
+                    .frame(width: 24 + 8 * Self.dx + 30, height: height, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { location in
+                        guard let toggle, let op = (1...8).first(where: { Self.rect($0, algorithm).insetBy(dx: -4, dy: -4).contains(location) }) else { return }
+                        toggle(op)
+                    }
+                    .help(toggle == nil ? "" : "Click an operator to switch it off and on")
+                Text("Carriers (outlined) are heard; the others modulate the operator below them. Operator 1 feeds back into itself. " + note)
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("The Part plays algorithm \(number). The app draws algorithms 1–8; the MODX Data List's Algorithm Chart (p. 182–185) shows all 88.")
+                Text("This plays algorithm \(number). The app draws algorithms 1–8; the MODX Data List's Algorithm Chart (p. 182–185) shows all 88.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
-        .quickHelpArea("Algorithm \(number)", "How the Part's 8 operators are wired: each modulator sits above the operator it modulates; carriers along the bottom are what you hear.")
+        .quickHelpArea("Algorithm \(number)", "How the Part's 8 operators are wired: each modulator sits above the operator it modulates; carriers along the bottom are what you hear. Each box shows its operator's level (0 is silent). Once the lesson is set up on the MODX, click an operator to switch it off (its level to 0, kept) and on again: the sound with and without it.")
     }
 
-    private func level(_ op: Int) -> Double? {
-        guard let part, let param = ModxParams.voiceParam("op.level"), let v = model.value(param, .fmOperator(part: part, op: op - 1)) else { return nil }
-        return Double(v) / 99
+    private static func center(_ op: Int, _ algorithm: ModxFMAlgorithms.Algorithm) -> CGPoint {
+        let top = CGFloat(algorithm.positions.values.map(\.row).max() ?? 0)
+        let p = algorithm.positions[op]!
+        return CGPoint(x: 24 + CGFloat(p.col) * dx + w / 2, y: 8 + (top - CGFloat(p.row)) * dy + h / 2)
     }
 
-    private func diagram(_ algorithm: ModxFMAlgorithms.Algorithm) -> some View {
-        Canvas { context, size in
-            let w: CGFloat = 40, h: CGFloat = 28, dx: CGFloat = 56, dy: CGFloat = 46
-            let top = CGFloat(algorithm.positions.values.map(\.row).max() ?? 0)
-            func center(_ op: Int) -> CGPoint {
-                let p = algorithm.positions[op]!
-                return CGPoint(x: 24 + CGFloat(p.col) * dx + w / 2, y: 6 + (top - CGFloat(p.row)) * dy + h / 2)
+    private static func rect(_ op: Int, _ algorithm: ModxFMAlgorithms.Algorithm) -> CGRect {
+        let c = center(op, algorithm)
+        return CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h)
+    }
+
+    private func draw(_ algorithm: ModxFMAlgorithms.Algorithm, in context: inout GraphicsContext) {
+        let w = Self.w, h = Self.h
+        func center(_ op: Int) -> CGPoint { Self.center(op, algorithm) }
+        func level(_ op: Int) -> Int { op - 1 < levels.count ? levels[op - 1] ?? 0 : 0 }
+        let line = GraphicsContext.Shading.color(.secondary)
+        for edge in algorithm.edges {
+            let a = center(edge.from), b = center(edge.to)
+            var path = Path()
+            path.move(to: CGPoint(x: a.x, y: a.y + h / 2))
+            if a.x == b.x {
+                path.addLine(to: CGPoint(x: b.x, y: b.y - h / 2))
+            } else {
+                let mid = b.y - h / 2 - 8
+                path.addLine(to: CGPoint(x: a.x, y: mid))
+                path.addLine(to: CGPoint(x: b.x, y: mid))
+                path.addLine(to: CGPoint(x: b.x, y: b.y - h / 2))
             }
-            let line = GraphicsContext.Shading.color(.secondary)
-            for edge in algorithm.edges {
-                let a = center(edge.from), b = center(edge.to)
-                var path = Path()
-                path.move(to: CGPoint(x: a.x, y: a.y + h / 2))
-                if a.x == b.x {
-                    path.addLine(to: CGPoint(x: b.x, y: b.y - h / 2))
-                } else {
-                    let mid = b.y - h / 2 - 8
-                    path.addLine(to: CGPoint(x: a.x, y: mid))
-                    path.addLine(to: CGPoint(x: b.x, y: mid))
-                    path.addLine(to: CGPoint(x: b.x, y: b.y - h / 2))
-                }
-                context.stroke(path, with: line, lineWidth: 1.5)
+            let quiet = level(edge.from) == 0
+            context.stroke(path, with: quiet ? .color(.secondary.opacity(0.35)) : line,
+                           style: StrokeStyle(lineWidth: 1.5, dash: quiet ? [3, 3] : []))
+        }
+        let carriers = algorithm.carriers
+        if let first = carriers.first, let last = carriers.last {
+            let busY = center(first).y + h / 2 + 10
+            var bus = Path()
+            for c in carriers {
+                bus.move(to: CGPoint(x: center(c).x, y: center(c).y + h / 2))
+                bus.addLine(to: CGPoint(x: center(c).x, y: busY))
             }
-            let carriers = algorithm.carriers
-            if let first = carriers.first, let last = carriers.last {
-                let busY = center(first).y + h / 2 + 10
-                var bus = Path()
-                for c in carriers {
-                    bus.move(to: CGPoint(x: center(c).x, y: center(c).y + h / 2))
-                    bus.addLine(to: CGPoint(x: center(c).x, y: busY))
-                }
-                bus.move(to: CGPoint(x: center(first).x, y: busY))
-                bus.addLine(to: CGPoint(x: center(last).x + 22, y: busY))
-                context.stroke(bus, with: .color(Modx.accent), lineWidth: 2)
-                context.draw(Text("out").font(.caption2).foregroundColor(Modx.accent), at: CGPoint(x: center(last).x + 36, y: busY))
+            bus.move(to: CGPoint(x: center(first).x, y: busY))
+            bus.addLine(to: CGPoint(x: center(last).x + 22, y: busY))
+            context.stroke(bus, with: .color(Modx.accent), lineWidth: 2)
+            context.draw(Text("out").font(.caption2).foregroundColor(Modx.accent), at: CGPoint(x: center(last).x + 36, y: busY))
+        }
+        let fb = center(algorithm.feedback)
+        var loop = Path()
+        loop.move(to: CGPoint(x: fb.x + w / 2, y: fb.y + 4))
+        loop.addLine(to: CGPoint(x: fb.x + w / 2 + 7, y: fb.y + 4))
+        loop.addLine(to: CGPoint(x: fb.x + w / 2 + 7, y: fb.y - h / 2 - 5))
+        loop.addLine(to: CGPoint(x: fb.x, y: fb.y - h / 2 - 5))
+        loop.addLine(to: CGPoint(x: fb.x, y: fb.y - h / 2))
+        context.stroke(loop, with: line, lineWidth: 1.2)
+        for op in 1...8 {
+            let rect = Self.rect(op, algorithm)
+            let c = CGPoint(x: rect.midX, y: rect.midY)
+            let box = Path(roundedRect: rect, cornerRadius: 6)
+            let value = level(op)
+            let switchedOff = off.contains(op)
+            context.fill(box, with: .color(Color(white: 0.5).opacity(0.16)))
+            if value > 0 {
+                let fraction = CGFloat(value) / 99
+                let filled = CGRect(x: rect.minX, y: rect.maxY - rect.height * fraction, width: rect.width, height: rect.height * fraction)
+                context.fill(Path(roundedRect: filled, cornerRadius: 6), with: .color((live ? Modx.live : Modx.accent).opacity(live ? 0.55 : 0.35)))
             }
-            let fb = center(algorithm.feedback)
-            var loop = Path()
-            loop.move(to: CGPoint(x: fb.x + w / 2, y: fb.y + 4))
-            loop.addLine(to: CGPoint(x: fb.x + w / 2 + 7, y: fb.y + 4))
-            loop.addLine(to: CGPoint(x: fb.x + w / 2 + 7, y: fb.y - h / 2 - 5))
-            loop.addLine(to: CGPoint(x: fb.x, y: fb.y - h / 2 - 5))
-            loop.addLine(to: CGPoint(x: fb.x, y: fb.y - h / 2))
-            context.stroke(loop, with: line, lineWidth: 1.2)
-            for op in 1...8 {
-                let c = center(op)
-                let rect = CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h)
-                let box = Path(roundedRect: rect, cornerRadius: 5)
-                context.fill(box, with: .color(Color(white: 0.5).opacity(0.18)))
-                if let level = level(op), level > 0 {
-                    let filled = CGRect(x: rect.minX, y: rect.maxY - rect.height * level, width: rect.width, height: rect.height * level)
-                    context.fill(Path(roundedRect: filled, cornerRadius: 5), with: .color(Modx.live.opacity(0.55)))
-                }
-                if carriers.contains(op) { context.stroke(box, with: .color(Modx.accent), lineWidth: 1.6) }
-                context.draw(Text("\(op)").font(.callout.weight(.semibold)), at: c)
+            if switchedOff {
+                context.stroke(box, with: .color(.orange), style: StrokeStyle(lineWidth: 1.6, dash: [4, 3]))
+                var cross = Path()
+                cross.move(to: CGPoint(x: rect.minX + 6, y: rect.maxY - 6))
+                cross.addLine(to: CGPoint(x: rect.maxX - 6, y: rect.minY + 6))
+                context.stroke(cross, with: .color(.orange.opacity(0.6)), lineWidth: 1.2)
+            } else if carriers.contains(op) {
+                context.stroke(box, with: .color(Modx.accent), lineWidth: 1.6)
+            } else if value > 0 {
+                context.stroke(box, with: .color(.secondary.opacity(0.6)), lineWidth: 1)
             }
+            let silent = value == 0 && !switchedOff
+            context.draw(Text("\(op)").font(.callout.weight(.semibold)).foregroundColor(silent ? .secondary : .primary),
+                         at: CGPoint(x: c.x, y: c.y - 6))
+            let caption = switchedOff ? "off" : (op - 1 < levels.count && levels[op - 1] == nil ? "–" : "\(value)")
+            context.draw(Text(caption).font(.system(size: 9, weight: .medium).monospacedDigit())
+                            .foregroundColor(switchedOff ? .orange : silent ? .secondary : .primary.opacity(0.75)),
+                         at: CGPoint(x: c.x, y: c.y + 10))
         }
     }
 }
