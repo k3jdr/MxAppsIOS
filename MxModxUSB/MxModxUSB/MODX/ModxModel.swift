@@ -74,6 +74,8 @@ final class ModxModel {
     var tutorialReport: String?
     /// The engine whose tutorial the report is about (nil: about any, like a Performance change).
     var tutorialEngine: ModxEngine?
+    /// What Hear only this Part muted, kept between launches (ModxModel+Tutorial.swift).
+    var hearOnlyRecord = ModxHearOnlyRecord.load()
     /// The Live Set slot just chosen from the app, until the MODX has loaded its Performance.
     private(set) var selectingSlot: Int?
     var curves: [ModxUserCurve] = []
@@ -344,6 +346,8 @@ final class ModxModel {
                                            selected: (slot: ModxLiveSlot, nameBefore: String)? = nil) {
         guard lastRead != nil else { readEverything(); return }   // the first full read isn't finished: start it over
         reloadTask?.cancel()
+        // The MODX loaded a Performance: its Parts' Mutes are as stored, whatever Hear only this Part did before.
+        if hearOnlyRecord != nil { rememberHearOnly([:]) }
         if tutorial != nil {
             tutorial = nil
             tutorialEngine = nil

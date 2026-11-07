@@ -119,10 +119,11 @@ enum ModxTutorials {
     /// operator's envelopes and filter (Performance Part 31 0p 46–51: AEG and FEG times, sustain, FEG depth, cutoff,
     /// resonance) set to none — a pad's long release offset would otherwise stretch every lesson's envelope — and the
     /// sound dry and centred: no Variation or Reverb send, insertion effects off, dry level full, pan centre. A
-    /// Performance's delay (FM Sweeping Poly's Tempo Cross Delay) would otherwise echo every note of a lesson.
-    /// Put Part Back restores all of it.
+    /// Performance's delay (FM Sweeping Poly's Tempo Cross Delay) would otherwise echo every note of a lesson. And
+    /// the Part switched on and unmuted, so the lesson is heard. Put Part Back restores all of it.
     static let plainPart: [TutorialSetting] = [70, 71, 72, 73, 74, 75, 76, 77, 78, 80, 81].map { part("part.tone.\($0)", 64) }
-        + [part("part.variation", 0), part("part.reverb", 0), part("part.insSwitch", 0), part("part.dry", 127), part("part.pan", 64)]
+        + [part("part.variation", 0), part("part.reverb", 0), part("part.insSwitch", 0), part("part.dry", 127), part("part.pan", 64),
+           part("part.switch", 1), part("part.mute", 0)]
 
     /// FM-X: the algorithm, every operator a silent sine at ratio 1 with an organ-like envelope, no feedback, the
     /// filter open (LPF24D at 255), no pitch EG, LFO or velocity, the Part plain (no offsets, dry, centred), and its

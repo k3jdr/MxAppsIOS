@@ -378,11 +378,23 @@ struct ModxTests {
               && ModxTutorials.fmLessons[2].settings(.fmx).contains { $0.key == "op.level" && $0.block == .op(0) && $0.value == 45 }
               && ModxTutorials.fmLessons[2].settings(.fmx).filter { $0.key == "op.level" && $0.block == .op(0) }.count == 1,
               "a lesson's own settings replace the plain sound's (one operator 1 level, the lesson's 45); FM-X settings never on an AWM2 Part")
-        let plain: [String: Int] = ["part.variation": 0, "part.reverb": 0, "part.insSwitch": 0, "part.dry": 127, "part.pan": 64]
+        let plain: [String: Int] = ["part.variation": 0, "part.reverb": 0, "part.insSwitch": 0, "part.dry": 127, "part.pan": 64,
+                                    "part.switch": 1, "part.mute": 0]
         let plainEverywhere = (ModxTutorials.fmLessons.map { $0.settings(.fmx) } + ModxTutorials.awm2Lessons.map { $0.settings(.awm2) }).allSatisfy { settings in
             plain.allSatisfy { key, value in settings.filter { $0.key == key && $0.block == .part }.map(\.value) == [value] }
         }
-        check(plainEverywhere, "every lesson plays dry and centred: no Variation or Reverb send, insertion effects off, dry level full, pan centre")
+        check(plainEverywhere, "every lesson plays dry and centred, its Part switched on and unmuted: no Variation or Reverb send, insertion effects off, dry level full, pan centre")
+        // Hear only this Part, after the app was quit with it on: which Parts the MODX still holds as it left them.
+        var heard = (0..<16).map { ModxPart(index: $0) }
+        for q in 0..<3 { heard[q].name = "Part \(q + 1)"; heard[q].partSwitch = true }
+        heard[1].mute = true                     // muted by Hear only, still muted
+        heard[2].mute = false                    // muted by Hear only, but unmuted since (by hand)
+        let record = ModxHearOnlyRecord(performance: "FM Sweeping Poly", mutes: [1: 0, 2: 0, 5: 0])
+        check(record.stillChanged(performance: "FM Sweeping Poly", parts: heard) == [1: 0]
+              && record.stillChanged(performance: "Ocean Pad", parts: heard).isEmpty
+              && (try? JSONDecoder().decode(ModxHearOnlyRecord.self, from: JSONEncoder().encode(record))) == record
+              && ModxModel.partList([1]) == "Part 2" && ModxModel.partList([1, 2]) == "Parts 2 and 3" && ModxModel.partList([1, 2, 4]) == "Parts 2, 3 and 5",
+              "Hear only this Part remembers between launches which Parts it muted, and unmutes only those still muted in the same Performance")
         check(ModxLink.liveSetSelect(page: 0, slot: 9, channel: 0) == [[0xB0, 0x00, 0x3E], [0xB0, 0x20, 0x00], [0xC0, 0x09]]
               && ModxLink.liveSetSelect(page: 15, slot: 15, channel: 3) == [[0xB3, 0x00, 0x3E], [0xB3, 0x20, 0x0F], [0xC3, 0x0F]]
               && ModxLink.liveSetSelect(page: 16, slot: 0, channel: 0) == nil && ModxLink.liveSetSelect(page: 0, slot: 0, channel: 16) == nil,

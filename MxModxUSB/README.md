@@ -175,10 +175,13 @@ Performance and you play it on the MODX's keyboard.
    starts the same, whatever the Part was), then the lesson's own settings. The plain sound is also a plain Part:
    no Part offsets to the envelopes and filter, and dry and centred — no Variation or Reverb send, insertion
    effects off, dry level full, pan centre — so a Performance's delay or reverb (FM Sweeping Poly's Tempo Cross
-   Delay) doesn't echo the lesson's notes. It sends only what differs, as Parameter
+   Delay) doesn't echo the lesson's notes; and the Part switched on and unmuted, so it's heard. It sends only what differs, as Parameter
    Changes, and reads the Part back; the strip reports what the MODX holds. A lesson's **Change it while you play**
    controls change the Part as you play, each change read back.
-4. **Hear only this Part** mutes the Performance's other Parts (and unmutes them as they were).
+4. **Hear only this Part** mutes the Performance's other Parts that are playing, and unmutes them as they were;
+   the strip says what it muted and what was silent already (switched off, or muted before). It remembers which
+   Parts it muted between launches (until the Performance is chosen again on the MODX), so if the app quits with
+   it on, starting the tutorial again shows it on, and turning it off unmutes them; Current State says so too.
 5. **Put Part Back** sends the kept Part back as a Bulk Dump, compares it, and ends the tutorial.
 
 Everything goes to the MODX's edit buffer; nothing is stored. Choosing another Performance on the MODX ends the
@@ -343,15 +346,16 @@ character at a time, the device's block sizes), and a workspace's round trip, su
 the Live Set screen: the preset names (Preset 4 #97 is "Ocean Pad"; the two fixture slots recall what the Data
 List's Live Set List says), learned names and their precedence, and a workspace's Live Set bank and what it sends; and the
 Live Set Select messages a slot click sends; and for the tutorials: which FM-X and AWM2 settings may be sent (and
-to which Part), algorithms 1–8 as the chart draws them, and every setting of every lesson — 2,937 for FM-X, 936 for
-AWM2 — at an address and value the MODX accepts, and every lesson dry and centred; and for MIDI Songs:
+to which Part), algorithms 1–8 as the chart draws them, and every setting of every lesson — 2,959 for FM-X, 956 for
+AWM2 — at an address and value the MODX accepts, every lesson dry and centred, its Part on and unmuted, and what
+Hear only this Part remembers between launches; and for MIDI Songs:
 variable-length times, reading a format 0 file with running status and a Note On of velocity 0, splitting it by channel and pairing its notes, tempo and metre,
 what plays (no SysEx; Program Change only if asked; Note Off before Note On), saving and reading back, the tempo map,
 the demo song, a track's channel and its mixer controllers; that every numeric FM-X setting has its unit label;
 and the measured FM-X times (values to labels, never falling as the value rises, interpolated in between); and for
 Current State: each Part's insertion effects and switches, which Parts the keys held play, what explains the sound
 (the delay that echoes a Part, not one sent straight to USB; a hard pan; a tutorial's mutes; Local Control off), which
-effects repeat notes, and the audio meter's levels on a known sine. 86 checks; no MODX is needed.
+effects repeat notes, and the audio meter's levels on a known sine. 87 checks; no MODX is needed.
 
 ## Not covered (yet)
 

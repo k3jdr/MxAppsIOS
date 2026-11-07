@@ -97,10 +97,10 @@ struct TutorialView: View {
         } else if let session {
             Text("Part \(session.part + 1) “\(model.parts[session.part].name)” of “\(session.performance)”, kept as it was.")
                 .lineLimit(1)
-            Toggle("Hear only this Part", isOn: Binding(get: { !session.mutes.isEmpty }, set: { on in Task { await model.setTutorialSolo(on) } }))
+            Toggle("Hear only this Part", isOn: Binding(get: { session.hearingOnly }, set: { on in Task { await model.setTutorialSolo(on) } }))
                 .toggleStyle(.checkbox)
                 .disabled(model.tutorialBusy != nil)
-                .quickHelp("Hear only this Part", "Mutes the Performance's other Parts while you learn; unmutes them as they were when you turn it off or put the Part back.")
+                .quickHelp("Hear only this Part", "Mutes the Performance's other Parts that are playing while you learn, and unmutes them as they were when you turn it off or put the Part back — even after the app was quit with it on (it remembers which Parts it muted until the Performance is chosen again on the MODX).")
             Button("Put Part \(session.part + 1) Back") { Task { await model.putTutorialPartBack() } }
                 .disabled(model.tutorialBusy != nil)
                 .quickHelp("Put Part Back", "Sends the Part back to the MODX exactly as it was when the tutorial started (a Bulk Dump of the copy it kept), checks it, and ends the tutorial.")

@@ -124,7 +124,7 @@ struct ModxSignalPath: Equatable {
     var mainSounding: Bool { parts.contains { $0.sounding && $0.toMain } }
 
     /// - Parameters:
-    ///   - hearOnly: Parts a tutorial muted to hear only its own.
+    ///   - hearOnly: Parts Hear only this Part muted (a tutorial's, or an earlier launch's still muted).
     ///   - songChannels: channels (0-based) MIDI Songs is playing now.
     init(parts modxParts: [ModxPart], store: [ModxAddress: ModxBlock], system: ModxBlock?, tempo: Int,
          notes: Set<Int>, velocity: UInt8, songChannels: Set<Int> = [], hearOnly: Set<Int> = []) {
@@ -212,7 +212,7 @@ struct ModxSignalPath: Equatable {
         let hearOne = parts.filter(\.mutedToHearOne)
         if !hearOne.isEmpty {
             add("hearOne", .info, "speaker.slash",
-                "\(Self.partsPhrase(hearOne)) \(hearOne.count == 1 ? "is" : "are") muted by the tutorial's Hear only this Part.")
+                "\(Self.partsPhrase(hearOne)) \(hearOne.count == 1 ? "is" : "are") muted by Hear only this Part: turning it off on the FM or AWM2 Synthesis page unmutes \(hearOne.count == 1 ? "it" : "them").")
         }
         for part in parts {
             let n = "Part \(part.number)"
@@ -277,6 +277,6 @@ extension ModxModel {
             channels = Set(tracks.filter { soloing ? $0.soloed : !$0.muted }.map(\.channel))
         }
         return ModxSignalPath(parts: parts, store: store, system: system, tempo: common.tempo, notes: live.notes,
-                              velocity: live.lastVelocity, songChannels: channels, hearOnly: Set(tutorial.map { Array($0.mutes.keys) } ?? []))
+                              velocity: live.lastVelocity, songChannels: channels, hearOnly: hearOnlyMuted)
     }
 }

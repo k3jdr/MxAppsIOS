@@ -17,10 +17,41 @@ struct ModxTutorialSession: Equatable {
     let performance: String
     /// The Part's blocks as the MODX dumped them when the tutorial started.
     let snapshot: [ModxBlock]
-    /// Other Parts muted to hear only this one, with their Mute before.
+    /// Parts Hear only this Part muted, each with its Mute before (also those an earlier launch muted and the MODX
+    /// still holds muted: ModxHearOnlyRecord).
     var mutes: [Int: Int] = [:]
+    /// Hear only this Part is on.
+    var hearingOnly = false
     /// The lesson last set up on the MODX.
     var lesson: String?
+}
+
+/// What Hear only this Part muted, kept between launches: the MODX keeps those Parts muted until its Performance is
+/// chosen again, so if the app quits with Hear only on, the next launch still knows which Parts to unmute.
+struct ModxHearOnlyRecord: Codable, Equatable {
+    var performance: String
+    /// Part (0-based) → its Mute before Hear only changed it.
+    var mutes: [Int: Int]
+
+    static let defaultsKey = "hearOnlyMutes"
+
+    static func load() -> ModxHearOnlyRecord? {
+        UserDefaults.standard.data(forKey: defaultsKey).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
+    }
+
+    static func save(_ record: ModxHearOnlyRecord?) {
+        if let record, !record.mutes.isEmpty, let data = try? JSONEncoder().encode(record) {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: defaultsKey)
+        }
+    }
+
+    /// The record's Parts that are still as Hear only left them (in this Performance, their Mute not back as it was).
+    func stillChanged(performance name: String, parts: [ModxPart]) -> [Int: Int] {
+        guard performance == name else { return [:] }
+        return mutes.filter { q, before in q >= 0 && q < parts.count && parts[q].inUse && (parts[q].mute ? 1 : 0) != before }
+    }
 }
 
 extension ModxModel {
@@ -39,8 +70,40 @@ extension ModxModel {
             return
         }
         tutorialEngine = engine
-        tutorial = ModxTutorialSession(engine: engine, part: p, performance: common.name, snapshot: blocks)
-        tutorialReport = "Part \(p + 1) is kept as it was: Put Part Back restores it."
+        var session = ModxTutorialSession(engine: engine, part: p, performance: common.name, snapshot: blocks)
+        // Parts an earlier Hear only this Part muted and the MODX still holds muted: this one unmutes them.
+        let leftover = hearOnlyRecord?.stillChanged(performance: common.name, parts: parts) ?? [:]
+        session.mutes = leftover
+        session.hearingOnly = !leftover.isEmpty
+        rememberHearOnly(leftover)
+        tutorial = session
+        var report = "Part \(p + 1) is kept as it was: Put Part Back restores it."
+        if !leftover.isEmpty {
+            report += " \(Self.partList(leftover.keys.sorted())) \(leftover.count == 1 ? "is" : "are") still muted by Hear only this Part from before: turn it off to unmute \(leftover.count == 1 ? "it" : "them")."
+        }
+        if parts[p].mute || !parts[p].partSwitch {
+            report += " Part \(p + 1) itself is \(parts[p].mute ? "muted" : "switched off") on the MODX: Set Up on the MODX switches it on and unmutes it."
+        }
+        tutorialReport = report
+    }
+
+    /// "Part 2", "Parts 2 and 3", "Parts 2, 3 and 5" (0-based in).
+    static func partList(_ parts: [Int]) -> String {
+        let numbers = parts.map { String($0 + 1) }
+        guard numbers.count > 1 else { return "Part \(numbers.first ?? "")" }
+        return "Parts " + numbers.dropLast().joined(separator: ", ") + " and " + numbers.last!
+    }
+
+    /// Keeps (or forgets) what Hear only this Part muted, between launches.
+    func rememberHearOnly(_ mutes: [Int: Int]) {
+        hearOnlyRecord = mutes.isEmpty ? nil : ModxHearOnlyRecord(performance: common.name, mutes: mutes)
+        ModxHearOnlyRecord.save(hearOnlyRecord)
+    }
+
+    /// Parts muted by Hear only this Part now: the tutorial's, or an earlier launch's still held by the MODX.
+    var hearOnlyMuted: Set<Int> {
+        if let tutorial { return Set(tutorial.mutes.keys.filter { $0 < parts.count && parts[$0].mute }) }
+        return Set((hearOnlyRecord?.stillChanged(performance: common.name, parts: parts) ?? [:]).filter { $0.value == 0 }.keys)
     }
 
     /// Sets up a lesson's sound on the tutorial's Part.
@@ -105,36 +168,69 @@ extension ModxModel {
         return "Sent \(label), but the MODX holds \(notes.count == 1 ? "one setting" : "\(notes.count) settings") differently — \(notes.prefix(4).joined(separator: "; "))\(notes.count > 4 ? " …" : ""). The screen shows what it holds."
     }
 
-    /// Mutes the Performance's other Parts in use, or unmutes them as they were.
+    /// On: mutes every other Part of the Performance that's switched on and playing, keeping each one's Mute before
+    /// (between launches too). Off: puts each Part it muted back as it was. Each change is read back; the report says
+    /// what was muted, what was silent already, and anything the MODX didn't take.
     func setTutorialSolo(_ solo: Bool) async {
         guard var session = tutorial, editsUnlocked, connected, tutorialBusy == nil,
               let mute = ModxParams.part.first(where: { $0.key == "part.mute" }) else { return }
         tutorialBusy = solo ? "Muting the other Parts…" : "Unmuting the other Parts…"
         defer { tutorialBusy = nil }
-        let others = solo ? partsInUse.map(\.index).filter { $0 != session.part && !parts[$0].mute }.map { ($0, 1) }
-            : session.mutes.map { ($0.key, $0.value) }
-        for (q, value) in others {
+        let own = session.part
+        let changes: [(part: Int, value: Int)] = solo
+            ? partsInUse.map(\.index).filter { $0 != own && parts[$0].partSwitch && !parts[$0].mute }.map { ($0, 1) }
+            : session.mutes.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+        var done: [Int] = [], failed: [Int] = []
+        for (q, value) in changes {
             let address = ModxTarget.part(q).base.with(low: UInt8(mute.offset))
-            if solo { session.mutes[q] = parts[q].mute ? 1 : 0 }
-            guard ModxLink.isWritable(address, data: [UInt8(value)]), await link.change(address, data: [UInt8(value)]) else { continue }
+            guard ModxLink.isWritable(address, data: [UInt8(value)]), await link.change(address, data: [UInt8(value)]) else {
+                failed.append(q); continue
+            }
+            if solo, session.mutes[q] == nil { session.mutes[q] = 0 }
             if let read = await link.parameter(address)?.first, var block = store[ModxTarget.part(q).base] {
                 var data = block.data
                 data[mute.offset] = read
                 block = ModxBlock(address: block.address, data: data, checksumOK: true)
                 store[block.address] = block
                 parts[q].read(block: block)
+                if Int(read) == value { done.append(q) } else { failed.append(q) }
+            } else {
+                done.append(q)
             }
         }
-        if !solo { session.mutes = [:] }
+        if solo {
+            session.hearingOnly = true
+        } else {
+            session.mutes = session.mutes.filter { failed.contains($0.key) }
+            session.hearingOnly = !session.mutes.isEmpty
+        }
         tutorial = session
-        tutorialReport = solo ? (others.isEmpty ? "No other Part is playing." : "Only Part \(session.part + 1) plays now.")
-            : "The other Parts play again."
+        rememberHearOnly(session.mutes)
+
+        var report: String
+        let silent = partsInUse.map(\.index).filter { $0 != own && !done.contains($0) && !failed.contains($0) }
+        if solo {
+            report = done.isEmpty ? (silent.isEmpty ? "No other Part is in use: only Part \(own + 1) plays." : "Only Part \(own + 1) plays.")
+                : "Only Part \(own + 1) plays now: \(Self.partList(done)) muted."
+            let off = silent.filter { !parts[$0].partSwitch }, already = silent.filter { parts[$0].partSwitch && parts[$0].mute }
+            if !off.isEmpty { report += " \(Self.partList(off)) \(off.count == 1 ? "is" : "are") switched off." }
+            if !already.isEmpty { report += " \(Self.partList(already)) \(already.count == 1 ? "was" : "were") muted already." }
+            if parts[own].mute || !parts[own].partSwitch {
+                report += " Part \(own + 1) itself is \(parts[own].mute ? "muted" : "switched off"): Set Up on the MODX switches it on and unmutes it."
+            }
+        } else {
+            report = done.isEmpty ? "No Part needed unmuting." : "The other Parts play again: \(Self.partList(done)) unmuted."
+            let stillMuted = silent.filter { parts[$0].partSwitch && parts[$0].mute }
+            if !stillMuted.isEmpty { report += " \(Self.partList(stillMuted)) \(stillMuted.count == 1 ? "stays" : "stay") muted, as \(stillMuted.count == 1 ? "it was" : "they were") before." }
+        }
+        if !failed.isEmpty { report += " The MODX didn't take the change to \(Self.partList(failed))." }
+        tutorialReport = report
     }
 
     /// Sends the Part back as it was when the tutorial started, and ends the tutorial.
     func putTutorialPartBack() async {
         guard let session = tutorial, editsUnlocked, connected, tutorialBusy == nil else { return }
-        if !session.mutes.isEmpty { await setTutorialSolo(false) }
+        if !session.mutes.isEmpty || session.hearingOnly { await setTutorialSolo(false) }
         let p = session.part
         tutorialBusy = "Putting Part \(p + 1) back…"
         defer { tutorialBusy = nil }
