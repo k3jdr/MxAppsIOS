@@ -1,6 +1,7 @@
 // ModxTests.swift — checks MxModxUSB's decoding against replies a MODX7 (firmware 2.50) really sent over USB on
 // 11/6/26 (Performance "CFX + FM EP 2", Live Set bank "Preset"). Tools/build-tools.sh builds it; no MODX needed.
 
+import AVFoundation
 import CoreMIDI
 import Foundation
 
@@ -388,6 +389,65 @@ struct ModxTests {
               "choosing a slot: Live Set Select — Bank Select MSB 62, LSB page, Program Change slot — and nothing out of range")
         check(UMP.messageWords([0xB0, 0x00, 0x3E]) == [0x20B0_003E] && UMP.messageWords([0xC0, 0x09]) == [0x20C0_0900],
               "as MIDI 1.0 channel-voice packets on group 1")
+
+        // Current State: the signal path, from a Performance like FM Sweeping Poly in a tutorial (Part 1 a pad panned
+        // hard left, sending to a Tempo Cross Delay; Part 2 muted to hear Part 1 alone) plus a bass straight to USB.
+        func stateBlock(_ a: ModxAddress, _ size: Int, _ values: [Int: UInt8]) -> ModxBlock {
+            var data = [UInt8](repeating: 0, count: size)
+            for (offset, value) in values { data[offset] = value }
+            return ModxBlock(address: a, data: data, checksumOK: true)
+        }
+        var pad = ModxPart(index: 0); pad.name = "FM Sweeping Poly"; pad.type = .fmx; pad.partSwitch = true; pad.keyboardControl = true
+        pad.pan = 1; pad.variationSend = 32
+        var choir = ModxPart(index: 1); choir.name = "PAD/CHOIR"; choir.partSwitch = true; choir.keyboardControl = true; choir.mute = true
+        var bass = ModxPart(index: 2); bass.name = "Bass"; bass.partSwitch = true; bass.keyboardControl = true; bass.output = 9; bass.noteHigh = 59
+        bass.variationSend = 40
+        let stateStore: [ModxAddress: ModxBlock] = [
+            ModxAddress(0x30, 0x42, 0x00): stateBlock(ModxAddress(0x30, 0x42, 0x00), 72, [0: 0x02, 1: 0x10, 0x44: 96, 0x45: 64, 0x47: 1]),
+            ModxAddress(0x30, 0x41, 0x00): stateBlock(ModxAddress(0x30, 0x41, 0x00), 71, [0: 0x01, 1: 0x00, 0x44: 64, 0x45: 64, 0x46: 1]),
+            ModxAddress(0x31, 0x00, 0x00): stateBlock(ModxAddress(0x31, 0x00, 0x00), 121, [0x26: 3, 0x3B: 1, 0x74: 1]),
+            ModxAddress(0x31, 0x20, 0x00): stateBlock(ModxAddress(0x31, 0x20, 0x00), 68, [0: 0x0C, 1: 0x00]),
+            ModxAddress(0x31, 0x30, 0x00): stateBlock(ModxAddress(0x31, 0x30, 0x00), 68, [0: 0x03, 1: 0x10]),
+            ModxAddress(0x31, 0x22, 0x00): stateBlock(ModxAddress(0x31, 0x22, 0x00), 68, [0: 0x02, 1: 0x28]),
+        ]
+        let allParts = [pad, choir, bass] + (3..<16).map { ModxPart(index: $0) }
+        let localOn = stateBlock(ModxAddress(0x00, 0x00, 0x00), 60, [0x09: 1])
+        let state = ModxSignalPath(parts: allParts, store: stateStore, system: localOn, tempo: 90, notes: [48, 72], velocity: 100, hearOnly: [1])
+        let p1 = state.parts[0], p3 = state.parts[2]
+        check(state.parts.count == 3 && p1.insertionA.name == "Ring Modulator" && p1.insertionA.on && p1.insertionB.name == "2 Modulator"
+              && p1.insertionB.on && p1.insertionConnection == "Ins A → B" && p1.motionSeq && !p3.insertionA.on && p3.insertionA.name == "Tempo Delay Stereo",
+              "Current State: each Part's insertion effects (31 2p, 31 3p) with their switches and connection")
+        check(p1.heldNotes == [48, 72] && p3.heldNotes == [48] && state.parts[1].heldNotes == [48, 72] && !state.parts[1].sounding && p1.sounding
+              && p3.usbChannels == [2, 3] && !p3.toMain && state.variation.name == "Tempo Cross Delay" && state.variationReturn == 96 && state.variation.on,
+              "the keys held play the Parts whose limits take them; a muted Part doesn't sound; USB 1&2 is the MODX's audio channels 3–4")
+        let findings = Dictionary(uniqueKeysWithValues: state.findings.map { ($0.id, $0.text) })
+        check(findings["keys"] == "The keys play Parts 1 and 3."
+              && findings["echo0"] == "Part 1 echoes: it sends 32 to the Variation, Tempo Cross Delay (return 96), which repeats its notes in time with the tempo (90 BPM)."
+              && findings["pan0"] == "Part 1 is panned hard left (L63)." && findings["hearOne"]?.hasPrefix("Part 2 (PAD/CHOIR) is muted by") == true
+              && findings["mute1"] == nil && findings["usb2"]?.contains("straight to USB 1&2") == true && findings["echo2"] == nil && findings["insA2"] == nil,
+              "what you'll hear: the delay that echoes Part 1 (not the bass, which skips it), the hard pan, the tutorial's mutes, the Part only the Mac hears")
+        let localOff = ModxSignalPath(parts: allParts, store: stateStore, system: stateBlock(ModxAddress(0x00, 0x00, 0x00), 60, [0x09: 0]),
+                                      tempo: 90, notes: [60], velocity: 90)
+        check(localOff.findings.first?.id == "local" && localOff.keyParts.isEmpty && localOff.parts.allSatisfy { $0.heldNotes.isEmpty },
+              "with Local Control off the keys play no Part, and the page says so first")
+        check(ModxSignalPath.Effect(value: 0x0210).kind == .repeats && ModxSignalPath.Effect(value: 0x0100).kind == .reverb
+              && ModxSignalPath.Effect(value: 0x0C78).kind == .repeats && ModxSignalPath.Effect(value: 0x0730).kind == .repeats
+              && ModxSignalPath.Effect(value: 0x0D00).kind == .other && ModxSignalPath.Effect(value: 0).kind == .none
+              && ModxSignalPath.pan(1) == "L63" && ModxSignalPath.pan(64) == "C" && ModxSignalPath.pan(127) == "R63",
+              "delays, Comp Distortion Delay and Beat Repeat count as repeating notes; pan reads L63 … C … R63")
+        let collector = ModxAudioMeter.Collector()
+        collector.reset(channels: 2, rate: 44100)
+        if let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2),
+           let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 2646) {
+            buffer.frameLength = 2646
+            for c in 0..<2 { for i in 0..<2646 { buffer.floatChannelData![c][i] = 0.5 * sin(Float(i) * 2 * .pi * 441 / 44100) } }
+            collector.add(buffer)
+        }
+        let levels = collector.take()
+        check(levels.peaks.count == 2 && abs(levels.peaks[0] - 0.5) < 0.001 && abs(levels.rms[0] - 0.3536) < 0.002 && levels.history.count == 3
+              && abs(ModxAudioMeter.decibels(0.5) - -6.02) < 0.01 && ModxAudioMeter.decibels(0) == ModxAudioMeter.floor
+              && collector.take().peaks == [0, 0],
+              "the audio meter: a −6 dBFS sine reads peak 0.5 and RMS 0.354, three 20 ms steps in 60 ms, and the next reading starts afresh")
 
         print(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) FAILED.")
         exit(failures == 0 ? 0 : 1)

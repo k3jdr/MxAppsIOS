@@ -5,17 +5,18 @@
 import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case overview, performance, liveSet, system, userData, workspace, connection, activity
+    case overview, state, performance, liveSet, system, userData, workspace, connection, activity
     case fmTutorial, awmTutorial, songs
 
     var id: String { rawValue }
 
-    static let instrument: [AppSection] = [.overview, .performance, .liveSet, .system, .userData, .workspace, .connection, .activity]
+    static let instrument: [AppSection] = [.overview, .state, .performance, .liveSet, .system, .userData, .workspace, .connection, .activity]
     static let learn: [AppSection] = [.fmTutorial, .awmTutorial, .songs]
 
     var title: String {
         switch self {
         case .overview: "Overview"
+        case .state: "Current State"
         case .performance: "Performance"
         case .liveSet: "Live Set"
         case .system: "System Settings"
@@ -33,6 +34,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .overview: "The MODX at a glance: the current Performance, its Parts, what the keyboard, wheels and knobs are doing, and the main settings."
+        case .state: "What the MODX is doing now, as its signal path: the keys into the Parts, each Part through its insertion effects to the Variation, Reverb and main mix or straight to USB, lit while it plays; what explains the sound (an echo, a muted Part); its USB audio levels; and every value behind it."
         case .performance: "The current Performance: its Common settings, effects and knobs, and its 16 Parts. Unlocked, they can be changed; double-click a Part for all its settings."
         case .liveSet: "The Live Set as the MODX shows it: bank and page drop-downs, Refresh, and 16 slots named by their Performances. Click a slot to play it on the MODX."
         case .system: "Every System and Sequencer setting, grouped; unlocked, each can be changed (System changes take effect at once)."
@@ -49,6 +51,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .overview: "pianokeys"
+        case .state: "flowchart"
         case .performance: "square.stack.3d.up"
         case .liveSet: "square.grid.4x3.fill"
         case .system: "gearshape.2"
@@ -90,6 +93,7 @@ struct ContentView: View {
                 EditBanner(model: model)
                 switch section ?? .overview {
                 case .overview: OverviewView(model: model)
+                case .state: StateView(model: model)
                 case .performance: PerformanceView(model: model)
                 case .liveSet: LiveSetView(model: model)
                 case .system: SystemView(model: model)

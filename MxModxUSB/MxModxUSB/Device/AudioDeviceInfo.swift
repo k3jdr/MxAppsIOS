@@ -26,6 +26,8 @@ struct AudioDeviceInfo: Equatable {
     var outputSafetyOffset = 0
     var bufferFrames = 0
     var isRunning = false
+    /// Core Audio's ID for the device, while it's connected (the audio meter opens it by this).
+    var deviceID: AudioDeviceID = 0
 
     static func find() -> AudioDeviceInfo? {
         for device in devices() {
@@ -33,6 +35,7 @@ struct AudioDeviceInfo: Equatable {
             guard name.hasPrefix("MODX") else { continue }
             var info = AudioDeviceInfo()
             info.name = name
+            info.deviceID = device
             info.manufacturer = string(device, kAudioObjectPropertyManufacturer) ?? ""
             info.uid = string(device, kAudioDevicePropertyDeviceUID) ?? ""
             info.modelUID = string(device, kAudioDevicePropertyModelUID) ?? ""

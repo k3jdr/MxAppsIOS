@@ -64,6 +64,8 @@ final class ModxModel {
 
     /// The MIDI Songs page: its song, editing and playing on the MODX (ModxSongStudio.swift).
     @ObservationIgnored let studio = ModxSongStudio()
+    /// The MODX's USB audio as levels, while the Current State page listens (Device/ModxAudioMeter.swift).
+    @ObservationIgnored let meter = ModxAudioMeter()
 
     // Tutorials (ModxModel+Tutorial.swift)
     /// The FM-X or AWM2 Part a tutorial is using, with a copy of it as it was.
@@ -161,6 +163,7 @@ final class ModxModel {
             readEverything()
         } else if !connected {
             studio.stop()
+            meter.stop()
             status = link.endpoints.device == 0 ? "No MODX on USB. Connect it and turn it on." : "The MODX's ports are offline."
             identity = nil
         }
@@ -230,6 +233,21 @@ final class ModxModel {
     }
 
     var bulkInterval: TimeInterval { Double(system?[0x1F] ?? 1) * 0.05 }
+
+    /// Reads the current Performance and its Parts again (the Current State page's Read Again): settings changed on
+    /// the MODX's own screens aren't sent to the app, so they show only when read. A tutorial carries on.
+    func readPerformanceAgain() {
+        guard connected, !loading else { return }
+        reloadTask?.cancel()
+        reloadTask = Task { [weak self] in
+            guard let self else { return }
+            self.loading = true
+            await self.loadPerformance()
+            self.loading = false
+            self.lastRead = Date()
+            self.status = "Read “\(self.common.name)” again."
+        }
+    }
 
     /// The current Performance: name and Common values first, then the Parts, then the detail bulks.
     func loadPerformance() async {
