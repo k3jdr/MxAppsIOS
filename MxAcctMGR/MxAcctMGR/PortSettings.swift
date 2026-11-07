@@ -254,6 +254,9 @@ struct PortSettingsView: View {
             BankingSettings()
                 .tabItem { Label("Banking", systemImage: "building.columns") }
                 .tag("banking")
+            MarketMoveSettingsView()
+                .tabItem { Label("Market", systemImage: "chart.line.downtrend.xyaxis") }
+                .tag("market")
         }
         .frame(width: 800)
     }

@@ -218,7 +218,11 @@ struct StepPage<Content: View>: View {
                     Text(subtitle).heading(.pageSubtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if store.screen.group == .mine { MyPortfolioBar(store: store) }
+            if store.screen.group == .mine {
+                // A large market move by Settings ▸ Market's thresholds (MarketMove.swift); not on the page it opens.
+                if store.screen != .marketMove { MarketMoveBanner(store: store) }
+                MyPortfolioBar(store: store)
+            }
             if !lesson.isEmpty, PortSettings.shared.showsLessons {
                 LessonCard(store: store, id: store.screen.rawValue, title: lessonTitle, points: lesson)
             }

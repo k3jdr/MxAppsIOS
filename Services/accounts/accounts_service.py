@@ -49,6 +49,13 @@ Reads and writes MxDataHUB's security master (PostgreSQL schema srm, migration V
     GET  /market/series?ids=DGS1MO,DGS10&from=&format=csv   their values as CSV laid out as FRED's fredgraph.csv
                                          (observation_date, one column per series); format=ohlc with one id: as Cboe's
                                          history file (DATE,OPEN,HIGH,LOW,CLOSE with MM/DD/YYYY dates)
+    GET  /market/day?date=&account=      MxAcctMGR's Today's Market Move (market_move.py): one trading day measured —
+                                         breadth, the 11 sector SPDRs (return, relative volume, z, contribution to the
+                                         S&P 500), cap vs. equal weight and the top contributors, yields, VIX, dollar,
+                                         oil, gold, credit, style spreads, the descriptive patterns a down day
+                                         resembles, and the account's exposure (default MY_PORTFOLIO). No date: today
+                                         from Massive's snapshot (15 minutes delayed) once the market has opened, else
+                                         the last trading day. Massive key: Keychain SRM-api / massive
     /spending/...                        household spending attribution (V037, spending.py): the family, categories,
                                          merchants' allocation (V052), lifecycle triggers and per-entry tags;
                                          GET /spending/analysis gives every spending dollar of two periods with each
@@ -86,6 +93,7 @@ import bank
 import cards
 import expenses
 import loans
+import market_move
 import secure
 import spending
 
@@ -149,6 +157,7 @@ DESCRIBE = {
         {"method": "GET", "path": "/security-types", "summary": "The security types"},
         {"method": "GET", "path": "/fundamentals/quarters", "summary": "One company's quarterly revenue, operating cash flow, capex, depreciation and free cash flow, newest first (security master, else FMP)"},
         {"method": "POST", "path": "/securities/lookup", "summary": "Securities by ticker: name, type, listing, market cap (Earnings by Day's FMP-only rows)"},
+        {"method": "GET", "path": "/market/day", "summary": "Today's Market Move: a trading day measured — breadth, sector SPDRs (return, relative volume, z, contribution), concentration, yields, VIX, cross-asset and style spreads, descriptive patterns, an account's exposure"},
         {"method": "GET", "path": "/market/series", "summary": "VIX family, Treasury yields and recessions from the security master (CSV as FRED / Cboe lay them out)"},
         {"method": "POST", "path": "/links/query", "summary": "Links on securities' tickers and names, by security id or ticker"},
         {"method": "PUT", "path": "/links/{securityId}/{field}", "summary": "Add or change the link on a ticker or name"},
@@ -164,6 +173,7 @@ class SRM:
         from srmlib.common import Config   # noqa: E402  (SRM's connection settings and secrets)
         self.Config = Config
         self._fmp_key = None
+        self._massive_key = None
 
     def connect(self):
         return self.Config().connect()
@@ -172,6 +182,11 @@ class SRM:
         if not self._fmp_key:
             self._fmp_key = self.Config().api_key("fmp")
         return self._fmp_key
+
+    def massive_key(self):
+        if not self._massive_key:
+            self._massive_key = self.Config().api_key("massive")
+        return self._massive_key
 
 
 def fetch(conn, sql, params=()):
@@ -1431,6 +1446,8 @@ class Handler(BaseHTTPRequestHandler):
                     out = account_versions(conn, parts[1])
                 elif len(parts) == 3 and parts[0] == "accounts" and parts[2] in ("close", "reopen") and method == "POST":
                     out = set_closed(conn, parts[1], body, parts[2] == "close")
+                elif parts == ["market", "day"] and method == "GET":
+                    out = market_move.day_report(conn, Handler.srm.massive_key(), fmp, q)
                 elif parts == ["market", "series"] and method == "GET":
                     out = market_series(conn, q)
                     if isinstance(out, str):

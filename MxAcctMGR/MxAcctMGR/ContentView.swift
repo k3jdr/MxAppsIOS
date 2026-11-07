@@ -177,6 +177,7 @@ struct ContentView: View {
         case .morningBriefing: MorningBriefingView(store: store)
         case .earningsCalendar: EarningsCalendarView(store: store)
         case .earningsDay: EarningsDayView(store: store)
+        case .marketMove: MarketMoveView(store: store)
         case .vix: VIXView(store: store)
         case .compute: ComputeView(store: store)
         case .reportWalkthrough: ReportView(store: store, report: store.currentReport)
@@ -230,6 +231,8 @@ struct ContentView: View {
         // Mac for its securities go there once it answers.
         SecurityLinks.shared.use(AccountsLinkBackend())
         Task { await SecurityLinks.shared.load() }
+        // Today's market read, kept current for the banner on the Investments pages (MarketMove.swift).
+        MarketMoveStore.shared.start()
         let defaults = UserDefaults.standard
         if let s = defaults.string(forKey: "screen").flatMap(Screen.init(rawValue:)) { store.screen = s }
         if let d = defaults.string(forKey: "earningsDate"), d.count == 10 { store.earnings.date = d; store.earnings.anchor = d }

@@ -8,7 +8,7 @@ news cost over the long run.
 > **Educational only.** Every security, price, benchmark and account — My Portfolio and the samples — is real data
 > from the security master (MxDataHUB's `srm` schema), with risk estimated from real daily prices by the analytics
 > service; the earnings screens show real companies' reports as Nasdaq.com and FMP publish them. The report
-> walkthroughs and the Morning Briefing's market panels (all but its economic calendar and earnings) are scenarios — made-up numbers in the shape of real releases,
+> walkthroughs and the Morning Briefing's market panels (all but its Treasury yields, VIX, economic calendar and earnings) are scenarios — made-up numbers in the shape of real releases,
 > labelled as such — and a walkthrough about one company uses the account's own stock with invented numbers. Nothing in
 > MxAcctMGR is investment, tax or financial advice, a forecast, or a recommendation to buy or sell anything. The
 > status bar says so on every screen.
@@ -32,7 +32,7 @@ One window (`MxAcctMGR`, 1440 × 900 by default):
 
 | Area | What it holds |
 | --- | --- |
-| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Spending Analysis — why the family's spending changed and the children's forward curve; Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a merchant with its last four digits, a note on hover and its link; Loan Accounts — mortgages and vehicle loans, their lenders' billing statements read from the PDFs, a forecast of every payment to payoff and each year's interest for Year-End Tax; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Categories — the one list of categories across every account, the merchants in them, the card companies' categories mapped to them and the spending drivers; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (the Morning Briefing and 6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
+| **Sidebar — the guide** | Four groups, each collapsible: **Banking** (Spending Analysis — why the family's spending changed and the children's forward curve; Checking Accounts — the shared check register, cleared by PNC downloads, each entry's target a merchant with its last four digits, a note on hover and its link; Loan Accounts — mortgages and vehicle loans, their lenders' billing statements read from the PDFs, a forecast of every payment to payoff and each year's interest for Year-End Tax; Cash Ledger — stand-alone scratch pads for planning a project (a pool renovation's deposits and payments, a home office build-out), each item on a budget line, the arithmetic without the reconciliation, not in Spending Analysis; Target Categories — the one list of categories across every account, the merchants in them, the card companies' categories mapped to them and the spending drivers; Secure Accounts — the products and services you hold an account with, their subscriptions' payment and renewal); **Investments** (the Morning Briefing, Today's Market Move and 6 steps on your own account, My Portfolio); Knowledge Library (reports, earnings, CBOE Volatility Index (VIX), Compute Hyperscalers Tracking, the Why lessons and the sample portfolios); Reporting (SRM Table, Layer 3 Services); right-click any page for a link of its own with hover text. Welcome and Choose Your Path are in the Guide menu. |
 | **Quick Help** (bottom of the sidebar) | The shared MxAppsIOS Quick Help pane (`Shared/QuickHelp`): what's under the pointer — a metric, a column, a chart, a limit, a reaction — then what's selected (the account), then the screen. Its ⧉ button floats it in a window of its own; closing that window docks it again. |
 | **Toolbar** | **‹ ›** beside the title — **Back** and **Forward** through the places you've visited, as in a browser and in MxNoteONE (hold either for the places before or after; see *Back and Forward* below). **Account** — the sample (or My Portfolio) the report walkthroughs and the Morning Briefing work on; the Investments steps always use My Portfolio. **Engine** — *Layer 3 services* (the default) or *Built-in (Swift)*. |
 | **Screen** | A title, a collapsible yellow **"Why this step"** lesson (remembered per screen), the step's controls and results, and **Previous / Next** step along the guide. Settings sets the headings' fonts and how much of the teaching shows. |
@@ -67,12 +67,12 @@ page). The page and section text is read through accessibility (`Shared/Copy/Pag
 
 | Menu | Items |
 | --- | --- |
-| **MxAcctMGR** | **Settings…** ⌘, — **Text**: a font name, size and style for each kind of text that takes room — **Headings** (page titles, page introductions, headings, subheadings, names, figures) and **Numbers and Tables** (registers and tables, whose rows follow their text's height; the earnings calendar, whose day cells shrink or grow with it; IDs and codes; calculation results) — each section with **Step Down** / **Step Up** (every kind a point smaller or larger) and **Restore Defaults**; **Banking**: what the checking register's New entry starts with (kind — Debit at first —, check number, date); **Guidance**: the instruction level — **Full** (everything), **Brief** (no "Why this step" lessons) or **Minimal** (also no line under the titles, and the lesson-only pages — Welcome, Choose Your Path, Why Optimize?, Why Attribution?, Active vs Passive — leave the sidebar, the Guide menu and Previous / Next Step) |
+| **MxAcctMGR** | **Settings…** ⌘, — **Text**: a font name, size and style for each kind of text that takes room — **Headings** (page titles, page introductions, headings, subheadings, names, figures) and **Numbers and Tables** (registers and tables, whose rows follow their text's height; the earnings calendar, whose day cells shrink or grow with it; IDs and codes; calculation results) — each section with **Step Down** / **Step Up** (every kind a point smaller or larger) and **Restore Defaults**; **Banking**: what the checking register's New entry starts with (kind — Debit at first —, check number, date); **Market**: Today's Market Move's banner (on or off, the S&P 500 moves that make it notable and major) and its noise filter (the |z| and relative volume a sector needs to be flagged), with Restore Defaults; **Guidance**: the instruction level — **Full** (everything), **Brief** (no "Why this step" lessons) or **Minimal** (also no line under the titles, and the lesson-only pages — Welcome, Choose Your Path, Why Optimize?, Why Attribution?, Active vs Passive — leave the sidebar, the Guide menu and Previous / Next Step) |
 | **Edit** | (the standard items) · **Copy Page Text** ⌥⇧⌘C — the whole page as text · **Link…** ⌘K — add or edit the link on the selected company (Earnings by Day) or holding (My Holdings): its symbol, or its name when the pointer rests there |
 | **Go** | **Back** ⌘[ · **Forward** ⌘] · **History** ▸ (the places before and after, the current one ticked) · Previous Step ⌥⌘↑ · Next Step ⌥⌘↓ (along the guide) |
 | **Guide** | Welcome ⌘0 · Choose Your Path · Investments steps 1–6 ⌥⌘1–⌥⌘6 · Learn the Why ▸ · Spending Analysis · SRM Table · Sample Portfolios ⇧⌘L · Layer 3 Services ⌥⌘L |
 | **Portfolio** | Account ▸ (every sample and My Portfolio) · Optimize My Portfolio / Build My Index Tracker ⌘R (step 4, by My approach) · Run Attribution ⇧⌘A · Engine ▸ · Copy Account to My Portfolio · Reset My Portfolio |
-| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · CNBC Live (its own window) · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report, and Compute Hyperscalers Tracking ⌥⌘U in Tier 6 below Semiconductor Sales · Simulate the Long Run ⌘↩ |
+| **Reports** | Report Library ⌥⌘R · Morning Briefing ⌥⌘M · CNBC Live (its own window) · Today's Market Move ⌥⌘T · Earnings Calendar ⌥⌘E · Earnings Today ⇧⌥⌘E · CBOE Volatility Index (VIX) ⌥⌘V · The Five Most Important (CPI, Jobs, FOMC, Earnings, ISM Manufacturing) ⌃⌘1–⌃⌘5 · one submenu per tier (Tier 1–6) with every report, and Compute Hyperscalers Tracking ⌥⌘U in Tier 6 below Semiconductor Sales · Simulate the Long Run ⌘↩ |
 | **View** | Quick Help ⌥⌘/ · Float / Dock Quick Help (shared `QuickHelpCommands`) |
 
 ### Back and Forward
@@ -99,19 +99,67 @@ the foot of each step.
 
 ### Investments path
 
-The clear path for your own account: the Morning Briefing, then six steps (the sidebar's **Investments** section, called My Portfolio before 2026-10-25). All of
+The clear path for your own account: the Morning Briefing and Today's Market Move, then six steps (the sidebar's **Investments** section, called My Portfolio before 2026-10-25). All of
 Investments works on **My Portfolio** (the toolbar's Account picker is fixed to it), and a bar at the top of each page shows
 the account and sets **My approach** — *Active* or *Passive index* — its account type, and **Start From a Sample**
 (copy any sample's holdings, lots and benchmark) or reset to the account as saved in the security master.
 
-* **Morning Briefing** — ten panels: an illustrative morning's overnight markets, Treasury yield changes (with the
-  2Y–10Y and 3M–10Y spreads), an economic surprise index, Fed funds futures probabilities, weekly fund flows, credit
-  spreads and the VIX; the **real** economic calendar (below); today's **real** earnings releases (the six largest
+* **Morning Briefing** — ten panels: the **real** Treasury yields (3-month to 30-year, the Treasury's daily par
+  yields through FMP, with each one's change in basis points and the 2Y–10Y and 3M–10Y spreads) and the **real** VIX
+  (its tile from Today's Market Move's latest read, its panel the last 20 Cboe closes) — both fall back to the
+  illustrative morning when the accounts service doesn't answer; an illustrative morning's overnight markets, economic
+  surprise index, Fed funds futures probabilities, weekly fund flows and credit spreads; the **real** economic calendar
+  (below); today's **real** earnings releases (the six largest
   from Earnings by Day, marked "you hold"); an analyst-ratings panel that
   says no source is loaded yet — with what My Portfolio would be worth if it opened with the futures (each
   holding's real market and rate betas). Each panel says what it measures and how a long-term investor
   might use it. Its earnings panel links to today's real list (Earnings by Day). **Watch CNBC Live**, above the
-  tiles, opens CNBC Live.
+  tiles, opens CNBC Live; **Today's Market Move** beside it opens the measured read of the latest trading day. On a
+  big day the Market Move banner shows above the tiles, as on every Investments page (below).
+* **Today's Market Move** (under Morning Briefing in the sidebar, Reports ▸ Today's Market Move ⌥⌘T; `MarketMove.swift`) — one trading day measured, sector first: what moved, how broadly,
+  which sectors, how unusual it was against each one's own recent history, and your exposure — what moved, never why,
+  and never what to do. Today from Massive's full-market snapshot once the market has opened (15 minutes delayed),
+  refreshed every five minutes while it's open; any trading day in the last two years with ‹ › (the trading day
+  before and after), Latest, or a date and Show. Its blocks:
+  1. **The move** — the S&P 500, Nasdaq-100, Dow, Russell 2000, equal-weighted S&P 500, total U.S. market and
+     international stocks through their ETFs: return, **z** (the return ÷ its own 20-day volatility) and volume ÷ its
+     20-day average; tiles for the S&P 500, the share of stocks moving with it, the largest sector contribution, the VIX
+     and your account; how often SPY moved as much in the trading calendar and when it last did.
+  2. **Breadth** — stocks down and up, the share of volume in decliners, and new 52-week lows and highs (and how many
+     closed beyond the old range) for every U.S.-listed common stock, REIT and ADR, NYSE-listed, Nasdaq-listed and
+     the S&P 500's members; a reading: a 90% day (80%+ of stocks and 90%+ of volume one way), broad, narrow (the
+     index down 1%+ with under 60% of its members down) or mixed. Computed from every stock's bar, not the exchanges'
+     official statistics, which only paid feeds carry.
+  3. **Sectors** — the 11 Select Sector SPDRs: return, z, volume against the 20-day average, weight in the S&P 500 and
+     **contribution** to its move (each member's weight at the previous close × its return, by the security master's
+     FMP sectors, so the contributions add up to the index's move), members down; **flagged** only when |z| ≥ 1.5 and
+     volume ≥ 1.5× (Settings ▸ Market), the others plain; contributions as bars.
+  4. **Concentration** — cap-weighted (SPY) against equal-weighted (RSP), and the ten members that contributed most
+     with their share of the move.
+  5. **Cross-asset** — 2- and 10-year Treasury yields (bp, the 10-year's z), the VIX (from, change, z, regime),
+     short, intermediate and long Treasuries, investment-grade and high-yield credit, the dollar, oil and gold
+     (SHY, IEF, TLT, LQD, HYG, UUP, USO, GLD); then **which pattern a down day resembles** — rate-driven, risk-off
+     rotation (growth scare), commodity-led, narrow (led by a few large stocks) or across-the-board selling — each with
+     its conditions ticked and how many are met: descriptions of what moved together, never causes.
+  6. **Style** — growth vs. value (IWF − IWD), small vs. large (IWM − SPY), equal vs. cap weight (RSP − SPY), high
+     yield vs. Treasuries and vs. investment grade, each with its z.
+  7. **How the noise is filtered** — the rules as used: flags need both thresholds; every comparison is against the
+     security's own last 20 trading days; during the session volume is compared with the share of a day's volume SPY
+     normally trades by that minute (its last five sessions); no headline or release is matched to the move.
+  8. **Your exposure** — My Portfolio at its latest prices: each holding moved by its own return or, for an index
+     fund, the ETF that tracks the same index (Vanguard's VTI, BND, VXUS, BNDX); the stock funds' sectors from their
+     holdings (Vanguard's month-end holdings in the security master), with the U.S. fund's sectors' share of the day's
+     change; the international fund moves with VXUS (foreign markets aren't in the U.S. bars), and about a third of its
+     holdings have no sector.
+
+  **The banner**: while the app runs, the latest day is read again every five minutes while the market is open and
+  every half hour otherwise; when the S&P 500 moves 1% or more (Settings ▸ Market), the VIX rises 20% or more or the
+  10-year yield moves 10 bp, a banner tops every other Investments page, the Morning Briefing included — orange, or red past 2% (or
+  1% with 80%+ of stocks moving the same way or a 2.5σ index move) — with the move, the share of stocks, the sectors
+  flagged and your account's estimate; **Read the Move** opens the page, ✕ closes it for the day. Data: the accounts
+  service's `GET /market/day` (`Services/accounts/market_move.py`) — Massive's REST API with SRM's key (the snapshot,
+  grouped daily bars for past days, SPY's daily and minute bars), FMP's Treasury yields and VIX quote, and the security
+  master's S&P 500 weights, sectors, security types, 52-week ranges and fund look-through.
 * **Economic calendar** (Morning Briefing's panel 3 and its Next big event tile; `EconomicCalendar.swift`) — the next
   ten high-impact U.S. releases from today on, each with its day, time (U.S. Eastern), estimate and prior reading, and
   the actual once it's out; a release with a walkthrough opens it. FMP's own `impact` rating picks them, and a release
@@ -1082,7 +1130,7 @@ service catalog and view). Sandboxed with outgoing network connections (for the 
 configuration is compiled with `-O`: the optimizers and the simulator are numeric loops that are ~75× slower
 unoptimised.
 
-Launch arguments for demos and tests: `-srmAccount CODE` (My Portfolio's security-master account), `-addSecurities YES` (open Add Securities), `-screen myImprove` (any `Screen` case), `-sample SAMPLE_EMPLOYER_STOCK` (a sample's
+Launch arguments for demos and tests: `-srmAccount CODE` (My Portfolio's security-master account), `-addSecurities YES` (open Add Securities), `-screen myImprove` (any `Screen` case), `-screen marketMove -marketDate 2025-04-04` (Today's Market Move on a day), `-sample SAMPLE_EMPLOYER_STOCK` (a sample's
 code), and for a walkthrough `-screen reportWalkthrough -report cpi -reportStep 5 -reaction sell-all` (step 5 runs the simulation; report ids: jobs, cpi, ppi, fomc, gdp, ism-manufacturing, ism-services, retail-sales, earnings, revisions, cot, fund-flows, auctions, yield-curve, semiconductors, banks, housing, energy). `-quickHelpVisible NO`
 hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-20 -earningsSymbol META` (the day, and a company selected) and `-screen earningsCalendar -earningsMode Week` (the calendar shows `-earningsDate`'s month or week); `-holding VTI` selects a holding in My Holdings. Debug builds only:
 `-linkEdit symbol` (or `name`) opens the Link dialog for the selected company or holding, and `-linkHoverTest ID`
@@ -1106,7 +1154,8 @@ hides Quick Help. Earnings screens: `-screen earningsDay -earningsDate 2026-10-2
 | `Optimizer.swift`, `Attribution.swift`, `ServiceClient.swift` | The built-in optimizers, the attribution result, and the Layer 3 service client |
 | `ServicesCheck.swift` | The Layer 3 services MxAcctMGR uses that aren't running: the alert at launch that names them, and the sidebar row and toolbar picker that stay red while any is down |
 | `BehaviorLab.swift`, `MarketReports.swift`, `ReportLibrary.swift` | The long-horizon simulator; the report model, tiers and drivers with the jobs, earnings and yield-curve reports; the other fifteen reports and the shared reactions |
-| `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live button) |
+| `ReportsHubViews.swift` | Report Library and Morning Briefing (with its Watch CNBC Live and Today's Market Move buttons; real yields and VIX from Today's Market Move and Cboe) |
+| `MarketMove.swift` | Today's Market Move: the accounts service's `/market/day` answer, its client, the store that keeps the latest day current (`MarketMoveStore.shared`), Settings ▸ Market (`MarketMoveSettings`), the banner on the Investments pages and the page |
 | `EconomicCalendar.swift` | The Morning Briefing's economic calendar: FMP's scheduled releases through the accounts service, one row per release, kept current while the page shows |
 | `LiveVideo.swift` | CNBC Live: the window's controller (`LiveVideo.shared`) — its streams, Keep on Top, the frame and divider it keeps, Fill Sign-In from Secure Accounts (the password after Touch ID) — and the window with its web view, beside the news; pages' new windows (a TV provider's sign-in) open in the app |
 | `MarketNews.swift` | CNBC Live's Market News: the panel and its controller (`MarketNews.shared`), with its source menu, and Massive's news feed, asked with the Massive API key in Secure Accounts |

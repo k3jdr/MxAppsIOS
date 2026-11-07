@@ -213,10 +213,14 @@ struct MorningBriefingView: View {
         let preMarket = MarketReport.accountMove(p, market: Briefing.futuresMove, rate: Briefing.futuresRate)
         let calendar = EconomicCalendar.shared
         let today = EconomicEvents.today()
-        StepPage(store: store, subtitle: "\(Briefing.date): the ten things many institutional PMs review before the open.", lessonTitle: "How to read a morning briefing", lesson: [
+        // The real yields and VIX, from Today's Market Move's latest read (MarketMove.swift).
+        let market = MarketMoveStore.shared.latest
+        let realYields = market?.crossAsset.yields.curve.flatMap { c in c.contains { $0.yield != nil } ? c : nil }
+        let realVIX = market?.crossAsset.vix.available == true ? market?.crossAsset.vix : nil
+        StepPage(store: store, subtitle: "\(MoveFormat.longDay(today)): the ten things many institutional PMs review before the open.", lessonTitle: "How to read a morning briefing", lesson: [
             "A briefing answers three questions: what happened overnight, what is scheduled today, and how investors are positioned and feeling.",
             "Professionals use it to manage risk around events in the next hours and days. For a long-term account, it is context — what you'll read about today — not a to-do list.",
-            "The market panels are an illustrative morning in the shape of a real one; your account, the economic calendar and today's earnings list are real (security master, FMP and Nasdaq.com). Point at a panel for what it measures and how a long-term investor might use it.",
+            "Treasury yields, the VIX, the economic calendar, today's earnings list and your account are real (the Treasury through FMP, Cboe, FMP, Nasdaq.com and the security master). Overnight markets, the surprise index, Fed funds futures, analyst ratings, fund flows and credit spreads are an illustrative morning in the shape of a real one (Wednesday 2026-10-21), marked so. Point at a panel for what it measures and how a long-term investor might use it.",
         ]) {
             // CNBC's live video in a window of its own, beside or over the briefing (LiveVideo.swift).
             HStack(spacing: 10) {
@@ -225,6 +229,9 @@ struct MorningBriefingView: View {
                     .help("Open CNBC's live video in a window of its own: move it, resize it, keep it on top while you read")
                 Text("In its own window — move it, resize it or keep it on top; it opens where you left it, and closing it stops the video.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button { store.go(.marketMove) } label: { Label("Today's Market Move", systemImage: "chart.line.downtrend.xyaxis") }
+                    .help("The latest trading day measured: breadth, sectors, concentration, cross-asset, style and your exposure")
             }
             HStack(spacing: 10) {
                 MetricTile(title: "Your account before the open", value: money(preMarket), caption: "if it moved with S&P futures (\(signedPct(Briefing.futuresMove, 1)))",
@@ -232,7 +239,13 @@ struct MorningBriefingView: View {
                 MetricTile(title: "Next big event", value: calendar.next?.shortName ?? "—",
                            caption: calendar.next.map { [$0.dayTitle(today: today) + ", " + $0.timeTitle + " ET", $0.figures].filter { !$0.isEmpty }.joined(separator: " · ") } ?? "",
                            tint: .orange, help: "The next high-impact U.S. release on the economic calendar, from FMP.")
-                MetricTile(title: "VIX", value: String(format: "%.1f", Briefing.vix.last!), caption: "+2.8 today, long-run average ≈ 19", tint: .orange, help: "The market's expected 30-day volatility of the S&P 500, from option prices; it rises when investors pay up for protection.")
+                if let v = realVIX, let level = v.level {
+                    MetricTile(title: "VIX", value: String(format: "%.1f", level),
+                               caption: "\(MoveFormat.r(v.change, 0)) on \(market.map { MoveFormat.shortDay($0.date) } ?? "the last day") · \(v.regime ?? ""), long-run average ≈ 19",
+                               tint: .orange, help: "The market's expected 30-day volatility of the S&P 500, from option prices; it rises when investors pay up for protection. Real: \(v.source ?? "Cboe").")
+                } else {
+                    MetricTile(title: "VIX (illustrative)", value: String(format: "%.1f", Briefing.vix.last!), caption: "+2.8 today, long-run average ≈ 19", tint: .orange, help: "The market's expected 30-day volatility of the S&P 500, from option prices; it rises when investors pay up for protection. Illustrative until the accounts service answers.")
+                }
                 MetricTile(title: "Fed: odds of a cut next meeting", value: "62%", caption: "from fed funds futures", help: "Probabilities implied by fed funds futures prices.")
             }
             AdaptiveColumns(minimum: 420, spacing: 14, rowSpacing: 14) {
@@ -242,13 +255,30 @@ struct MorningBriefingView: View {
                         HStack { Text(row.0); Spacer(); Text(signedPct(row.1 / 100, 1)).monospacedDigit().foregroundStyle(Color.signed(row.1)) }.font(.callout)
                     }
                 }
-                panel(2, "Treasury yields", "percent", "Where interest rates stand across maturities and how they changed overnight, with the two most watched spreads.",
+                panel(2, "Treasury yields", "percent", "Where interest rates stand across maturities and how they changed from the trading day before, with the two most watched spreads.",
                       "Yields drive bond prices, mortgage rates and stock valuations. Watch the trend over months, not the day's basis points.") {
-                    ForEach(Briefing.yields, id: \.0) { y in
-                        HStack { Text(y.0); Spacer(); Text(String(format: "%.2f%%", y.1)).monospacedDigit(); Text(String(format: "%+.2f", y.2)).monospacedDigit().foregroundStyle(Color.signed(y.2)).frame(width: 50, alignment: .trailing) }.font(.callout)
+                    if let curve = realYields, let y = market?.crossAsset.yields {
+                        ForEach(curve) { point in
+                            HStack {
+                                Text(point.maturity); Spacer()
+                                Text(point.yield.map { String(format: "%.2f%%", $0) } ?? "—").monospacedDigit()
+                                Text(MoveFormat.bp(point.changeBp)).monospacedDigit().foregroundStyle(Color.signed(point.changeBp ?? 0)).frame(width: 60, alignment: .trailing)
+                            }.font(.callout)
+                        }
+                        Divider()
+                        let ten = y.point("year10")?.yield, two = y.point("year2")?.yield, three = y.point("month3")?.yield
+                        Text([ten.flatMap { t in two.map { String(format: "2Y–10Y spread %+.2f", t - $0) } },
+                              ten.flatMap { t in three.map { String(format: "3M–10Y spread %+.2f", t - $0) } }].compactMap { $0 }.joined(separator: " · ")
+                             + " (positive: not inverted)").font(.caption).foregroundStyle(.secondary)
+                        Text("The Treasury's daily par yields on \(y.date.map(MoveFormat.shortDay) ?? "—") against \(y.previousDate.map(MoveFormat.shortDay) ?? "the day before"), through FMP.")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(Briefing.yields, id: \.0) { y in
+                            HStack { Text(y.0); Spacer(); Text(String(format: "%.2f%%", y.1)).monospacedDigit(); Text(String(format: "%+.2f", y.2)).monospacedDigit().foregroundStyle(Color.signed(y.2)).frame(width: 50, alignment: .trailing) }.font(.callout)
+                        }
+                        Divider()
+                        Text("Illustrative until the accounts service answers: 2Y–10Y spread +0.43 · 3M–10Y spread +0.31 (positive: not inverted)").font(.caption).foregroundStyle(.secondary)
                     }
-                    Divider()
-                    Text("2Y–10Y spread +0.43 · 3M–10Y spread +0.31 (positive: not inverted)").font(.caption).foregroundStyle(.secondary)
                 }
                 panel(3, "Economic calendar", "calendar", "Scheduled releases with the economists' consensus and the prior reading. The surprise versus consensus is what moves prices.",
                       "Knowing what's scheduled explains the day's moves before they happen. Open any report's walkthrough from here.") {
@@ -333,13 +363,26 @@ struct MorningBriefingView: View {
                 }
                 panel(10, "VIX volatility index", "waveform.path.ecg", "The market's expected volatility over the next 30 days, from S&P 500 option prices — the 'fear gauge'.",
                       "A high VIX means big daily swings are expected; it has usually been highest near market lows, when selling feels most urgent.") {
-                    Chart(Array(Briefing.vix.enumerated()), id: \.offset) { i, v in
-                        LineMark(x: .value("Day", i), y: .value("VIX", v)).foregroundStyle(.orange)
-                        RuleMark(y: .value("Average", 19)).foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
+                    let closes = Array(VIXStore.shared.vix.suffix(20))
+                    if closes.count >= 5 {
+                        Chart(closes) { p in
+                            LineMark(x: .value("Day", p.date), y: .value("VIX", p.close)).foregroundStyle(.orange)
+                            RuleMark(y: .value("Average", 19)).foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
+                        }
+                        .chartXAxis(.hidden)
+                        .frame(height: 120)
+                        Text("The last 20 closes (Cboe)" + (realVIX?.level.map { String(format: "; latest %.1f", $0) } ?? "") + ". Dashed: the long-run average.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Chart(Array(Briefing.vix.enumerated()), id: \.offset) { i, v in
+                            LineMark(x: .value("Day", i), y: .value("VIX", v)).foregroundStyle(.orange)
+                            RuleMark(y: .value("Average", 19)).foregroundStyle(.secondary.opacity(0.5)).lineStyle(StrokeStyle(dash: [3, 3]))
+                        }
+                        .chartXAxis(.hidden)
+                        .chartYScale(domain: 10...25)
+                        .frame(height: 120)
+                        Text("Illustrative until Cboe's history is read.").font(.caption).foregroundStyle(.secondary)
                     }
-                    .chartXAxis(.hidden)
-                    .chartYScale(domain: 10...25)
-                    .frame(height: 120)
                     Button("The real VIX, since 1990") { store.go(.vix) }
                         .buttonStyle(.link)
                         .help("Knowledge Library ▸ VIX: real data from Cboe")
@@ -349,6 +392,8 @@ struct MorningBriefingView: View {
         .task { if store.earnings.days[EarningsDates.today()] == nil { _ = await store.earnings.load([EarningsDates.today()]) } }
         .task(id: store.portfolio.holdings.map(\.ticker)) { await store.ensureHoldingRisk() }
         .task { await EconomicCalendar.shared.keepCurrent() }
+        .task { await VIXStore.shared.load() }
+        .task { if MarketMoveStore.shared.latest == nil { await MarketMoveStore.shared.refreshLatest() } }
     }
 
 

@@ -15,7 +15,7 @@ enum Screen: String, CaseIterable, Identifiable {
     // menu opens them.
     case spending, checking, cards, loans, expenseLedgers, targetCategories, secureAccounts
     case welcome, choosePath
-    case morningBriefing, myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
+    case morningBriefing, marketMove, myPortfolio, myBenchmark, myRisk, myImprove, myTrades, myAttribution
     case reportLibrary, earningsCalendar, earningsDay, vix, compute, reportWalkthrough
     case whyOptimize, whyAttribution, activeVsPassive, samples
     case securities, services
@@ -34,7 +34,7 @@ enum Screen: String, CaseIterable, Identifiable {
         switch self {
         case .spending, .checking, .cards, .loans, .expenseLedgers, .targetCategories, .secureAccounts: .accounts
         case .welcome, .choosePath: .start
-        case .morningBriefing, .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
+        case .morningBriefing, .marketMove, .myPortfolio, .myBenchmark, .myRisk, .myImprove, .myTrades, .myAttribution: .mine
         case .reportLibrary, .earningsCalendar, .earningsDay, .vix, .compute, .reportWalkthrough,
              .whyOptimize, .whyAttribution, .activeVsPassive, .samples: .reports
         case .securities, .services: .library
@@ -64,6 +64,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .morningBriefing: "Morning Briefing"
         case .earningsCalendar: "Earnings Calendar"
         case .earningsDay: "Earnings by Day"
+        case .marketMove: "Today's Market Move"
         case .vix: "CBOE Volatility Index (VIX)"
         case .compute: "Compute Hyperscalers Tracking"
         case .reportWalkthrough: "Report Walkthrough"
@@ -105,6 +106,7 @@ enum Screen: String, CaseIterable, Identifiable {
         case .morningBriefing: "sunrise"
         case .earningsCalendar: "calendar"
         case .earningsDay: "list.bullet.rectangle"
+        case .marketMove: "chart.line.downtrend.xyaxis"
         case .vix: "waveform.path.ecg.rectangle"
         case .compute: "cpu"
         case .reportWalkthrough: "newspaper"

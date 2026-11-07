@@ -130,6 +130,8 @@ struct MxAcctMGRApp: App {
                     .keyboardShortcut("e", modifiers: [.command, .option])
                 Button("Earnings Today") { store.openEarningsDay(EarningsDates.today()) }
                     .keyboardShortcut("e", modifiers: [.command, .option, .shift])
+                Button("Today's Market Move") { store.go(.marketMove) }
+                    .keyboardShortcut("t", modifiers: [.command, .option])
                 Button("CBOE Volatility Index (VIX)") { store.go(.vix) }
                     .keyboardShortcut("v", modifiers: [.command, .option])
                 Divider()
