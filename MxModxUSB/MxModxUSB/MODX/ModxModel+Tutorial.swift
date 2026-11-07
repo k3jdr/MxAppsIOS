@@ -106,12 +106,36 @@ extension ModxModel {
         return Set((hearOnlyRecord?.stillChanged(performance: common.name, parts: parts) ?? [:]).filter { $0.value == 0 }.keys)
     }
 
-    /// Sets up a lesson's sound on the tutorial's Part.
+    /// The tutorial's Part no longer plays a voice of its engine: its voice was changed on the MODX's own screens
+    /// (the MODX doesn't tell the app; a read finds it), so the lessons can't use it.
+    var tutorialPartChanged: Bool {
+        guard let session = tutorial else { return false }
+        let type = parts[session.part].type
+        return type != .unknown && type != session.engine.partType   // unknown: being read again (Read Again)
+    }
+
+    /// What the strip says when the tutorial's Part changed.
+    var tutorialPartChangedText: String {
+        guard let session = tutorial else { return "" }
+        let part = parts[session.part]
+        let voice = part.type == .unknown ? "another voice" : "\(part.type == .awm2 ? "an" : "a") \(part.type.rawValue) voice"
+        return "Part \(session.part + 1) now plays “\(part.name)”, \(voice), so the \(session.engine.engineName) lessons can't use it."
+    }
+
+    /// Sets up a lesson's sound on the tutorial's Part. The Part is read first: if its voice was changed on the
+    /// MODX's own screens since, nothing is sent (and what's sent is compared with what the MODX holds now).
     func setUpLesson(_ lesson: TutorialLesson) async {
         guard let session = tutorial, editsUnlocked, connected, tutorialBusy == nil else { return }
         let p = session.part
+        tutorialBusy = "Checking Part \(p + 1) on the MODX…"
+        let read = await readPartBulk(p)
+        tutorialBusy = nil
+        guard read != nil else {
+            tutorialReport = "Couldn't read Part \(p + 1) from the MODX, so nothing was sent."
+            return
+        }
         guard parts[p].type == session.engine.partType else {
-            tutorialReport = "Part \(p + 1) isn't \(session.engine.engineName) any more."
+            tutorialReport = tutorialPartChangedText + " Nothing was sent. Put Part \(p + 1) Back brings back the \(session.engine.engineName) Part of “\(session.performance)”; End Tutorial keeps what the MODX has."
             return
         }
         let changes = lesson.settings(session.engine).compactMap { s in s.param.map { (s.target(part: p), $0, s.value) } }
@@ -225,6 +249,16 @@ extension ModxModel {
         }
         if !failed.isEmpty { report += " The MODX didn't take the change to \(Self.partList(failed))." }
         tutorialReport = report
+    }
+
+    /// Ends the tutorial without sending the Part back: the MODX keeps what it has (a voice chosen on its screens,
+    /// or the last lesson's sound). Parts Hear only this Part muted are unmuted first.
+    func endTutorial() async {
+        guard let session = tutorial, tutorialBusy == nil else { return }
+        if editsUnlocked, connected, !session.mutes.isEmpty || session.hearingOnly { await setTutorialSolo(false) }
+        tutorial = nil
+        tutorialReport = "The tutorial ended; Part \(session.part + 1) stays as the MODX has it."
+            + (tutorialReport?.hasPrefix("The other Parts play again") == true ? " " + tutorialReport! : "")
     }
 
     /// Sends the Part back as it was when the tutorial started, and ends the tutorial.

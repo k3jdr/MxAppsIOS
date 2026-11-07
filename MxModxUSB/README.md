@@ -182,7 +182,13 @@ Performance and you play it on the MODX's keyboard.
    the strip says what it muted and what was silent already (switched off, or muted before). It remembers which
    Parts it muted between launches (until the Performance is chosen again on the MODX), so if the app quits with
    it on, starting the tutorial again shows it on, and turning it off unmutes them; Current State says so too.
-5. **Put Part Back** sends the kept Part back as a Bulk Dump, compares it, and ends the tutorial.
+5. **Put Part Back** sends the kept Part back as a Bulk Dump, compares it, and ends the tutorial — also when the
+   Part's voice was changed on the MODX meanwhile (an FM-X Part sent back over an AWM2 voice: checked on a MODX7).
+
+If the Part's voice is changed on the MODX's own screens during a tutorial (the MODX doesn't tell the app), Set Up
+finds it — it reads the Part before sending anything — and sends nothing; the strip says what the Part plays now,
+with **Put Part Back** and **End Tutorial** (which keeps what the MODX has), and the lesson's controls say why they
+don't apply.
 
 Everything goes to the MODX's edit buffer; nothing is stored. Choosing another Performance on the MODX ends the
 tutorial (its changes go with the old one).

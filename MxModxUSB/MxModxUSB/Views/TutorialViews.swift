@@ -94,6 +94,15 @@ struct TutorialView: View {
             Text("The lessons set up their sounds on the MODX: unlock changes to let them.")
             Button("Unlock Changes") { model.editsUnlocked = true }
                 .quickHelp("Unlock Changes", "Lets the app send changes to the MODX — the same as the lock in the toolbar. Lesson sounds go to the MODX's edit buffer, never into its memory.")
+        } else if let session, model.tutorialPartChanged {
+            Text(model.tutorialPartChangedText).foregroundStyle(.orange).lineLimit(2)
+                .quickHelp("The Part changed", "The Part's voice was changed on the MODX's own screens (the MODX doesn't tell the app, so it showed when the app read the Part). Put Part Back sends back the Part the tutorial kept; End Tutorial keeps the new voice, and you can start again with another Part.", symbol: "exclamationmark.triangle")
+            Button("Put Part \(session.part + 1) Back") { Task { await model.putTutorialPartBack() } }
+                .disabled(model.tutorialBusy != nil)
+                .quickHelp("Put Part Back", "Sends the Part back to the MODX exactly as it was when the tutorial started (a Bulk Dump of the copy it kept), checks it, and ends the tutorial.")
+            Button("End Tutorial") { Task { await model.endTutorial() } }
+                .disabled(model.tutorialBusy != nil)
+                .quickHelp("End Tutorial", "Ends the tutorial and keeps the Part as the MODX has it now; Parts muted by Hear only this Part are unmuted.")
         } else if let session {
             Text("Part \(session.part + 1) “\(model.parts[session.part].name)” of “\(session.performance)”, kept as it was.")
                 .lineLimit(1)
@@ -237,10 +246,12 @@ private struct LessonView: View {
                 Label("Set Up on the MODX", systemImage: "arrow.down.to.line")
             }
             .buttonStyle(.borderedProminent)
-            .disabled(session == nil || !model.editsUnlocked || model.tutorialBusy != nil)
+            .disabled(session == nil || !model.editsUnlocked || model.tutorialBusy != nil || model.tutorialPartChanged)
             .quickHelp("Set Up on the MODX", "Builds this lesson's sound on the tutorial's Part: the \(engine.engineName) settings it needs, starting from a plain sound, sent as Parameter Changes to the MODX's edit buffer and read back. Then play the MODX.")
             if session == nil {
                 Text("Start with a Part above first.").font(.callout).foregroundStyle(.secondary)
+            } else if model.tutorialPartChanged {
+                Text("The Part isn't \(engine.engineName) now: see above.").font(.callout).foregroundStyle(.orange)
             } else if session?.lesson == lesson.id {
                 Label("Set up — play the MODX", systemImage: "speaker.wave.2.fill").font(.callout).foregroundStyle(.green)
             }
@@ -249,7 +260,11 @@ private struct LessonView: View {
 
     private var controls: some View {
         Card(title: "Change it while you play", systemImage: "slider.horizontal.3") {
-            if let session {
+            if let session, model.tutorialPartChanged {
+                ForEach(lesson.controls) { Text("• \($0.label)").foregroundStyle(.secondary) }
+                Text("Part \(session.part + 1) isn't \(engine.engineName) now, so these settings don't apply to it.")
+                    .font(.caption).foregroundStyle(.orange)
+            } else if let session {
                 ForEach(lesson.controls) { control in
                     if let param = control.param {
                         let target = TutorialSetting(block: control.block, key: control.key, value: 0).target(part: session.part)
@@ -260,8 +275,9 @@ private struct LessonView: View {
                         }
                     }
                 }
-                Text("Each change goes to Part \(session.part + 1) on the MODX as you make it, and is read back.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(model.editsUnlocked ? "Each change goes to Part \(session.part + 1) on the MODX as you make it, and is read back."
+                     : "Changes are locked: unlock them (the lock in the toolbar) to move these.")
+                    .font(.caption).foregroundStyle(model.editsUnlocked ? .secondary : Color.orange)
             } else {
                 ForEach(lesson.controls) { Text("• \($0.label)").foregroundStyle(.secondary) }
                 Text("Start with a Part above to change these on the MODX.").font(.caption).foregroundStyle(.secondary)
