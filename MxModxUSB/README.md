@@ -187,8 +187,14 @@ no "Why it works"; **Minimal** — also no line under the titles or "Listen for"
 **FM Synthesis** (FM-X: 8 operators, 88 algorithms): what FM is; one operator (a sine); a modulator adds harmonics;
 ratios; feedback; envelopes shape the brightness; velocity; stacks; two voices in parallel (an electric piano);
 additive drawbars; FM-X spectral forms; inharmonic ratios (a bell). Every number beside a control carries its unit or scale: the
-Data List gives most FM-X values no physical unit, so levels, times and depths read "45 of 99", sensitivities and
-offsets "+3 of ±7", ratios "×2 ratio", the algorithm "8 of 88". The lesson's algorithm — or the Part's own, while
+Data List gives most FM-X values no physical unit, so levels and depths read "45 of 99", sensitivities and
+offsets "+3 of ±7", ratios "×2 ratio", the algorithm "8 of 88". The operators' Attack, Decay 1 and Release times read
+in milliseconds or seconds ("40 ≈ 100 ms", "60 ≈ 1.0 s"): Yamaha publishes no time table, so they were measured on
+a MODX7 (firmware 2.50) — a test sine with no Part offsets, velocity or key scaling or effects, Part 1 sent to the
+MODX's USB 1&2 audio and recorded from it, every 5th value timed to 1.5 ms, latency taken off, values in between
+interpolated on a log scale. Attack is silence to full; Decay and Release set a speed rather than a time (a fall
+half as far takes half as long), so they read as a full fall, level 99 to 0; past the 40 s the measurement waited
+they read "> 40 s". Decay 2, Hold and the pitch and filter envelopes, not measured, keep "of 99". The lesson's algorithm — or the Part's own, while
 a tutorial runs — is drawn as the Data List's Algorithm Chart draws it (carriers along the bottom, modulators above
 what they modulate, operator 1's feedback), each operator filled to its level. The app draws algorithms 1–8, read
 from the chart (p. 182); the others are named, with a pointer to the chart.
@@ -335,8 +341,9 @@ to which Part), algorithms 1–8 as the chart draws them, and every setting of e
 AWM2 — at an address and value the MODX accepts; and for MIDI Songs: variable-length times, reading a format 0
 file with running status and a Note On of velocity 0, splitting it by channel and pairing its notes, tempo and metre,
 what plays (no SysEx; Program Change only if asked; Note Off before Note On), saving and reading back, the tempo map,
-the demo song, a track's channel and its mixer controllers; and that every numeric FM-X setting has its unit label.
-75 checks; no MODX is needed.
+the demo song, a track's channel and its mixer controllers; that every numeric FM-X setting has its unit label;
+and the measured FM-X times (values to labels, never falling as the value rises, interpolated in between).
+79 checks; no MODX is needed.
 
 ## Not covered (yet)
 

@@ -169,6 +169,14 @@ struct ModxParam: Identifiable {
     /// What the number counts, shown beside it: the scale for the MODX's unitless values ("of 99", "of ±7"), or a
     /// unit ("ratio").
     var unit: String? = nil
+    /// Measured seconds for a time setting, shown as "≈ 120 ms" / "≈ 4.5 s" instead of the scale.
+    var timing: ModxTiming? = nil
+
+    /// The label beside a value: its measured time, or its unit or scale.
+    func unitLabel(_ value: Int?) -> String? {
+        if let timing, let value { return timing.label(value) }
+        return unit
+    }
 
     var id: String { key }
 
@@ -333,9 +341,10 @@ enum ModxEffects {
 enum ModxParams {
     static func p(_ key: String, _ group: String, _ name: String, _ offset: Int, _ encoding: ModxParam.Encoding = .byte,
                           _ range: ClosedRange<Int> = 0...127, _ format: ModxParam.Format = .number(),
-                          _ restriction: ModxParam.Restriction = .none, warning: String? = nil, unit: String? = nil) -> ModxParam {
+                          _ restriction: ModxParam.Restriction = .none, warning: String? = nil, unit: String? = nil,
+                          timing: ModxTiming? = nil) -> ModxParam {
         ModxParam(key: key, group: group, name: name, offset: offset, encoding: encoding, range: range, format: format,
-                  restriction: restriction, warning: warning, unit: unit)
+                  restriction: restriction, warning: warning, unit: unit, timing: timing)
     }
 
     private static let gains = ["-6 dB", "0 dB", "+6 dB", "+12 dB"]

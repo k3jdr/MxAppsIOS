@@ -46,10 +46,10 @@ struct ParamRow: View {
         }
     }
 
-    /// The value's unit or scale, beside it ("of 99", "ratio").
+    /// The value's unit or scale, beside it ("of 99", "ratio"), or the time it stands for ("≈ 390 ms").
     @ViewBuilder private var unitLabel: some View {
-        if let unit = param.unit, !param.isText {
-            Text(unit).font(.caption).foregroundStyle(.secondary).fixedSize()
+        if let unit = param.unitLabel(current), !param.isText {
+            Text(unit).font(.caption).monospacedDigit().foregroundStyle(.secondary).fixedSize()
         }
     }
 
@@ -68,7 +68,12 @@ struct ParamRow: View {
 
     private var quickHelpDetail: String {
         var parts = ["\(target.title), address \(String(format: "%02X %02X %02X", target.base.high, target.base.mid, target.base.low + UInt8(param.offset))) in the Data List."]
-        if !param.isText {
+        if let timing = param.timing {
+            let low = param.range.lowerBound, high = param.range.upperBound
+            let now = current.map { " (\(timing.label($0)))" } ?? ""
+            parts.append("Values \(param.display(low)) (\(timing.label(low))) to \(param.display(high)) (\(timing.label(high))); now \(valueText)\(now).")
+            parts.append(timing.note)
+        } else if !param.isText {
             let unit = param.unit.map { " " + $0 } ?? ""
             parts.append("Values \(param.display(param.range.lowerBound)) to \(param.display(param.range.upperBound))\(unit); now \(valueText)\(unit).")
         }
@@ -122,7 +127,7 @@ struct ParamRow: View {
                     Text(valueText).monospacedDigit()
                     unitLabel
                 }
-                .frame(minWidth: param.unit == nil ? 64 : 92, alignment: .trailing)
+                .frame(minWidth: param.unit == nil && param.timing == nil ? 64 : 116, alignment: .trailing)
                 Stepper("", value: binding, in: param.range).labelsHidden()
             }
         }

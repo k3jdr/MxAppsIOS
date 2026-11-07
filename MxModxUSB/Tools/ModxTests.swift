@@ -334,6 +334,20 @@ struct ModxTests {
               && ModxParams.fmOperator.first { $0.key == "op.level" }!.unit == "of 99"
               && ModxParams.fmOperator.first { $0.key == "op.levelVel" }!.unit == "of ±7",
               "every numeric FM-X setting has a unit label (53): levels “of 99”, sensitivities “of ±7”, ratios “×3”")
+        let attack = ModxTiming.fmAttack, decay = ModxTiming.fmDecay, release = ModxTiming.fmRelease
+        check(attack.label(0) == "< 3 ms" && attack.label(40) == "≈ 100 ms" && attack.label(50) == "≈ 310 ms"
+              && attack.label(60) == "≈ 1.0 s" && attack.label(85) == "≈ 16 s" && attack.label(97) == "> 32 s" && attack.label(99) == "> 40 s",
+              "FM-X attack times as measured on the MODX7: 0 under 3 ms, 40 ≈ 100 ms, 60 ≈ 1 s, 99 over 40 s")
+        check(decay.label(40) == "≈ 390 ms" && release.label(50) == "≈ 1.1 s" && release.label(0) == "< 3 ms" && decay.label(95) == "> 80 s",
+              "decay and release labelled as a full fall, twice the 99→50 time measured (decay 40 ≈ 390 ms, as timed to level 0)")
+        let rising = (0...99).map { decay.seconds($0) ?? .infinity }
+        check(zip(rising, rising.dropFirst()).allSatisfy { $0 <= $1 } && (0...99).allSatisfy { !attack.label($0).isEmpty }
+              && (decay.seconds(42)! > decay.seconds(40)! && decay.seconds(42)! < decay.seconds(45)!),
+              "times never fall as the value rises, and values between those measured are interpolated")
+        check(["op.aegAttack", "op.aegDecay1", "op.aegRelease"].allSatisfy { k in ModxParams.fmOperator.first { $0.key == k }!.timing != nil }
+              && ModxParams.fmOperator.first { $0.key == "op.aegAttack" }!.unitLabel(40) == "≈ 100 ms"
+              && ModxParams.fmOperator.first { $0.key == "op.level" }!.unitLabel(40) == "of 99",
+              "the lessons' attack, decay and release times show milliseconds or seconds; other settings keep their unit")
         for engine in ModxEngine.allCases {
             let lessons = engine.lessons
             var problems: [String] = []

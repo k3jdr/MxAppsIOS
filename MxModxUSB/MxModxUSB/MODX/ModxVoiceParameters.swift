@@ -70,10 +70,10 @@ extension ModxParams {
             p("op.aegDecay1Level", "Amplitude EG", "Decay 1 Level", 0x11, .byte, 0...99, .number(), r, unit: "of 99"),
             p("op.aegDecay2Level", "Amplitude EG", "Decay 2 Level (sustain)", 0x12, .byte, 0...99, .number(), r, unit: "of 99"),
             p("op.aegReleaseLevel", "Amplitude EG", "Release Level", 0x13, .byte, 0...99, .number(), r, unit: "of 99"),
-            p("op.aegAttack", "Amplitude EG", "Attack Time", 0x14, .byte, 0...99, .number(), r, unit: "of 99"),
-            p("op.aegDecay1", "Amplitude EG", "Decay 1 Time", 0x15, .byte, 0...99, .number(), r, unit: "of 99"),
+            p("op.aegAttack", "Amplitude EG", "Attack Time", 0x14, .byte, 0...99, .number(), r, unit: "of 99", timing: .fmAttack),
+            p("op.aegDecay1", "Amplitude EG", "Decay 1 Time", 0x15, .byte, 0...99, .number(), r, unit: "of 99", timing: .fmDecay),
             p("op.aegDecay2", "Amplitude EG", "Decay 2 Time", 0x16, .byte, 0...99, .number(), r, unit: "of 99"),
-            p("op.aegRelease", "Amplitude EG", "Release Time", 0x17, .byte, 0...99, .number(), r, unit: "of 99"),
+            p("op.aegRelease", "Amplitude EG", "Release Time", 0x17, .byte, 0...99, .number(), r, unit: "of 99", timing: .fmRelease),
             p("op.aegHold", "Amplitude EG", "Hold Time", 0x18, .byte, 0...99, .number(), r, unit: "of 99"),
             p("op.aegKeyFollow", "Amplitude EG", "Time Key Follow", 0x19, .byte, 0...7, .number(), r, unit: "of 7"),
             p("op.pegInitial", "Pitch EG", "PEG Initial Level", 0x0C, .byte, 0...100, .offset(50), r, unit: "of ±50"),
@@ -231,4 +231,89 @@ enum ModxFMAlgorithms {
                               edges: [(1, 2)], feedback: 1))
         return Dictionary(uniqueKeysWithValues: list.map { ($0.number, $0) })
     }()
+}
+
+/// FM-X operator envelope times in seconds, measured on a MODX7 (firmware 2.50): Yamaha publishes no table — the
+/// values are deliberately non-linear — so MxModxUSB timed them. A test sine on an FM-X Part (no Part offsets, no
+/// velocity or key scaling, no effects; Part 1 sent to the MODX's USB 1&2 audio) played A4, and the MODX's own USB
+/// audio was recorded and timed in 1.5 ms steps, latency (15 ms) taken off. Attack: silence to within 1 dB of full.
+/// Decay and Release set a speed, not a time: the level falls steadily, so a fall half as far takes half as long
+/// (checked: 99→75 took half of 99→50, and 99→0 twice as long) — so the label is a full fall, level 99 to 0, from
+/// the time measured for 99 to 50. Between the values measured (every 5) times are interpolated on a log scale;
+/// past the last one timed (40 s) the label says "more than".
+struct ModxTiming: Equatable {
+    enum Kind: Equatable { case rise, fall }
+    let kind: Kind
+    /// Value → seconds measured (nil: still going after 40 s).
+    let measured: [Int: Double?]
+    /// What a measured time stands for: 1 (it's the label), or 2 (a 99→50 fall, labelled as a full fall).
+    let scale: Double
+
+    static let limit = 40.0
+
+    /// The time a value stands for, in seconds; nil beyond what was measured.
+    func seconds(_ value: Int) -> Double? {
+        let points = measured.keys.sorted()
+        guard let first = points.first else { return nil }
+        // Measured times rise with the value; small ones are within the measurement's noise, so keep them rising.
+        var steady: [(Int, Double?)] = []
+        var highest = 0.0
+        for v in points {
+            guard let t = measured[v] ?? nil else { steady.append((v, nil)); continue }
+            highest = max(highest, t)
+            steady.append((v, highest))
+        }
+        let v = max(first, min(points.last!, value))
+        guard let upper = steady.firstIndex(where: { $0.0 >= v }) else { return nil }
+        let (b, tb) = steady[upper]
+        if b == v { return tb.map { $0 * scale } }
+        let (a, ta) = steady[upper - 1]
+        guard let ta, let tb else { return nil }
+        let f = Double(v - a) / Double(b - a)
+        let t = ta <= 0 ? ta + (tb - ta) * f : exp(log(ta) + (log(tb) - log(ta)) * f)
+        return min(max(t, ta), tb) * scale   // no rounding below or above the measured neighbours
+    }
+
+    /// "≈ 100 ms", "≈ 3.8 s", "< 3 ms", "> 40 s".
+    func label(_ value: Int) -> String {
+        if let t = seconds(value) { return Self.format(t) }
+        // Past the last value timed: at least as long as it, or as the 40 s the measurement waited.
+        let below = measured.filter { $0.key < value && $0.value != nil }.max { $0.key < $1.key }
+        let firstUntimed = measured.filter { $0.value == nil }.keys.min() ?? Int.max
+        let atLeast = value >= firstUntimed ? Self.limit : (below?.value ?? Self.limit)
+        return "> " + Self.format(atLeast * scale).dropFirst(2)
+    }
+
+    static func format(_ t: Double) -> String {
+        if t < 0.003 { return "< 3 ms" }
+        if t < 0.01 { return "≈ \(Int(t * 1000 + 0.5)) ms" }
+        if t < 1 { return "≈ \(Int(significant(t * 1000))) ms" }
+        if t < 10 { return String(format: "≈ %.1f s", t) }
+        return "≈ \(Int(significant(t))) s"
+    }
+
+    /// Two significant figures.
+    private static func significant(_ x: Double) -> Double {
+        let magnitude = pow(10, floor(log10(x)) - 1)
+        return (x / magnitude).rounded() * magnitude
+    }
+
+    var note: String {
+        kind == .rise ? "Measured on a MODX7: the time from silence to full level."
+            : "Measured on a MODX7: the time for a full fall, level 99 to 0. It sets a speed, not a time, so a shorter fall takes proportionally less (99 to 50 takes half)."
+    }
+
+    // Times measured on a MODX7, firmware 2.50 (seconds; decays and releases from level 99 to 50).
+    static let fmAttack = ModxTiming(kind: .rise, measured: [
+        0: 0, 5: 0, 10: 0, 15: 0.0028, 20: 0.0049, 25: 0.0137, 30: 0.0263, 35: 0.0476, 40: 0.1010, 45: 0.1748,
+        50: 0.3070, 55: 0.5161, 60: 1.0275, 65: 1.6798, 70: 2.8643, 75: 4.9569, 80: 8.2081, 85: 15.6874, 90: 22.6566,
+        95: 31.7777, 99: nil], scale: 1)
+    static let fmDecay = ModxTiming(kind: .fall, measured: [
+        0: 0.0013, 5: 0.0039, 10: 0.0029, 15: 0.0077, 20: 0.0179, 25: 0.0346, 30: 0.0590, 35: 0.0963, 40: 0.1934,
+        45: 0.3315, 50: 0.5754, 55: 0.9603, 60: 1.9211, 65: 3.1465, 70: 5.3243, 75: 9.2328, 80: 15.3757, 85: 30.7488,
+        90: nil, 95: nil, 99: nil], scale: 2)
+    static let fmRelease = ModxTiming(kind: .fall, measured: [
+        0: 0, 5: 0, 10: 0, 15: 0.0106, 20: 0.0161, 25: 0.0298, 30: 0.0540, 35: 0.0934, 40: 0.1940, 45: 0.3269,
+        50: 0.5714, 55: 0.9546, 60: 1.9171, 65: 3.1435, 70: 5.3176, 75: 9.2286, 80: 15.3807, 85: 30.7460,
+        90: nil, 95: nil, 99: nil], scale: 2)
 }
