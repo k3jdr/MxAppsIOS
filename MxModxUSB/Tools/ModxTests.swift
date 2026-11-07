@@ -326,6 +326,14 @@ struct ModxTests {
               "a track's channel moves all its events; the mixer's volume and pan replace or add a controller at the start")
 
         print("\nTutorials")
+        let numericFM = (ModxParams.fmCommon + ModxParams.fmOperator).filter { param in
+            switch param.format { case .names, .choices, .onOff, .note, .effect, .text: false; case .custom: !["op.lsBreak", "fm.filterType"].contains(param.key); default: true }
+        }
+        let coarse = ModxParams.fmOperator.first { $0.key == "op.coarse" }!
+        check(numericFM.count == 53 && numericFM.allSatisfy { $0.unit != nil } && coarse.display(0) == "×0.5" && coarse.display(3) == "×3"
+              && ModxParams.fmOperator.first { $0.key == "op.level" }!.unit == "of 99"
+              && ModxParams.fmOperator.first { $0.key == "op.levelVel" }!.unit == "of ±7",
+              "every numeric FM-X setting has a unit label (53): levels “of 99”, sensitivities “of ±7”, ratios “×3”")
         for engine in ModxEngine.allCases {
             let lessons = engine.lessons
             var problems: [String] = []

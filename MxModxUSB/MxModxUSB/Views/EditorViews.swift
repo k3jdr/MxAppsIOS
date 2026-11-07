@@ -24,7 +24,12 @@ struct ParamRow: View {
         HStack(alignment: .center, spacing: 8) {
             Text(label ?? param.name).foregroundStyle(.secondary).lineLimit(1)
             Spacer(minLength: 10)
-            if editable { editor } else { Text(valueText).fontWeight(.medium).textSelection(.enabled) }
+            if editable { editor } else {
+                HStack(spacing: 4) {
+                    Text(valueText).fontWeight(.medium).textSelection(.enabled)
+                    unitLabel
+                }
+            }
             if showAddress {
                 Text(String(format: "%02X %02X %02X", target.base.high, target.base.mid, param.offset))
                     .font(.caption2.monospaced()).foregroundStyle(.tertiary)
@@ -38,6 +43,13 @@ struct ParamRow: View {
             Button("Cancel", role: .cancel) { confirming = nil }
         } message: {
             Text(param.warning ?? "")
+        }
+    }
+
+    /// The value's unit or scale, beside it ("of 99", "ratio").
+    @ViewBuilder private var unitLabel: some View {
+        if let unit = param.unit, !param.isText {
+            Text(unit).font(.caption).foregroundStyle(.secondary).fixedSize()
         }
     }
 
@@ -57,7 +69,8 @@ struct ParamRow: View {
     private var quickHelpDetail: String {
         var parts = ["\(target.title), address \(String(format: "%02X %02X %02X", target.base.high, target.base.mid, target.base.low + UInt8(param.offset))) in the Data List."]
         if !param.isText {
-            parts.append("Values \(param.display(param.range.lowerBound)) to \(param.display(param.range.upperBound)); now \(valueText).")
+            let unit = param.unit.map { " " + $0 } ?? ""
+            parts.append("Values \(param.display(param.range.lowerBound)) to \(param.display(param.range.upperBound))\(unit); now \(valueText)\(unit).")
         }
         if let warning = param.warning { parts.append(warning) }
         if editable { parts.append(target.isEditBuffer ? "Changes go to the MODX's edit buffer and are read back." : "Changes take effect on the MODX at once and are read back.") }
@@ -105,7 +118,11 @@ struct ParamRow: View {
                            in: Double(param.range.lowerBound)...Double(param.range.upperBound))
                         .frame(width: 110).controlSize(.mini)
                 }
-                Text(valueText).monospacedDigit().frame(minWidth: 64, alignment: .trailing)
+                HStack(spacing: 4) {
+                    Text(valueText).monospacedDigit()
+                    unitLabel
+                }
+                .frame(minWidth: param.unit == nil ? 64 : 92, alignment: .trailing)
                 Stepper("", value: binding, in: param.range).labelsHidden()
             }
         }

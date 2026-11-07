@@ -186,7 +186,9 @@ no "Why it works"; **Minimal** — also no line under the titles or "Listen for"
 
 **FM Synthesis** (FM-X: 8 operators, 88 algorithms): what FM is; one operator (a sine); a modulator adds harmonics;
 ratios; feedback; envelopes shape the brightness; velocity; stacks; two voices in parallel (an electric piano);
-additive drawbars; FM-X spectral forms; inharmonic ratios (a bell). The lesson's algorithm — or the Part's own, while
+additive drawbars; FM-X spectral forms; inharmonic ratios (a bell). Every number beside a control carries its unit or scale: the
+Data List gives most FM-X values no physical unit, so levels, times and depths read "45 of 99", sensitivities and
+offsets "+3 of ±7", ratios "×2 ratio", the algorithm "8 of 88". The lesson's algorithm — or the Part's own, while
 a tutorial runs — is drawn as the Data List's Algorithm Chart draws it (carriers along the bottom, modulators above
 what they modulate, operator 1's feedback), each operator filled to its level. The app draws algorithms 1–8, read
 from the chart (p. 182); the others are named, with a pointer to the chart.
@@ -333,7 +335,8 @@ to which Part), algorithms 1–8 as the chart draws them, and every setting of e
 AWM2 — at an address and value the MODX accepts; and for MIDI Songs: variable-length times, reading a format 0
 file with running status and a Note On of velocity 0, splitting it by channel and pairing its notes, tempo and metre,
 what plays (no SysEx; Program Change only if asked; Note Off before Note On), saving and reading back, the tempo map,
-the demo song, a track's channel and its mixer controllers. 74 checks; no MODX is needed.
+the demo song, a track's channel and its mixer controllers; and that every numeric FM-X setting has its unit label.
+75 checks; no MODX is needed.
 
 ## Not covered (yet)
 

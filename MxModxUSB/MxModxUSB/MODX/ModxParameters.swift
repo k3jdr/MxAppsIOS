@@ -166,6 +166,9 @@ struct ModxParam: Identifiable {
     var restriction: Restriction = .none
     /// Asked before the change is sent (e.g. a setting that would end the USB connection).
     var warning: String?
+    /// What the number counts, shown beside it: the scale for the MODX's unitless values ("of 99", "of ±7"), or a
+    /// unit ("ratio").
+    var unit: String? = nil
 
     var id: String { key }
 
@@ -330,9 +333,9 @@ enum ModxEffects {
 enum ModxParams {
     static func p(_ key: String, _ group: String, _ name: String, _ offset: Int, _ encoding: ModxParam.Encoding = .byte,
                           _ range: ClosedRange<Int> = 0...127, _ format: ModxParam.Format = .number(),
-                          _ restriction: ModxParam.Restriction = .none, warning: String? = nil) -> ModxParam {
+                          _ restriction: ModxParam.Restriction = .none, warning: String? = nil, unit: String? = nil) -> ModxParam {
         ModxParam(key: key, group: group, name: name, offset: offset, encoding: encoding, range: range, format: format,
-                  restriction: restriction, warning: warning)
+                  restriction: restriction, warning: warning, unit: unit)
     }
 
     private static let gains = ["-6 dB", "0 dB", "+6 dB", "+12 dB"]
