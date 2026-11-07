@@ -115,16 +115,20 @@ private func decaying(_ n: Int, time: Int, to level: Int = 0, release: Int = 40)
 enum ModxTutorials {
     // MARK: Plain sounds
 
-    /// The Part's own offsets to every element's or operator's envelopes and filter (Performance Part 31 0p 46–51:
-    /// AEG and FEG times, sustain, FEG depth, cutoff, resonance), set to none — a pad's long release offset would
-    /// otherwise stretch every lesson's envelope.
-    static let neutralPartOffsets: [TutorialSetting] = [70, 71, 72, 73, 74, 75, 76, 77, 78, 80, 81].map { part("part.tone.\($0)", 64) }
+    /// The Part as a plain instrument, whatever the Performance does with it: its own offsets to every element's or
+    /// operator's envelopes and filter (Performance Part 31 0p 46–51: AEG and FEG times, sustain, FEG depth, cutoff,
+    /// resonance) set to none — a pad's long release offset would otherwise stretch every lesson's envelope — and the
+    /// sound dry and centred: no Variation or Reverb send, insertion effects off, dry level full, pan centre. A
+    /// Performance's delay (FM Sweeping Poly's Tempo Cross Delay) would otherwise echo every note of a lesson.
+    /// Put Part Back restores all of it.
+    static let plainPart: [TutorialSetting] = [70, 71, 72, 73, 74, 75, 76, 77, 78, 80, 81].map { part("part.tone.\($0)", 64) }
+        + [part("part.variation", 0), part("part.reverb", 0), part("part.insSwitch", 0), part("part.dry", 127), part("part.pan", 64)]
 
     /// FM-X: the algorithm, every operator a silent sine at ratio 1 with an organ-like envelope, no feedback, the
-    /// filter open (LPF24D at 255), no pitch EG, LFO or velocity, no Part offsets, and the Part's arpeggio and motion
-    /// sequencer off.
+    /// filter open (LPF24D at 255), no pitch EG, LFO or velocity, the Part plain (no offsets, dry, centred), and its
+    /// arpeggio and motion sequencer off.
     static func fmBase(algorithm: Int) -> [TutorialSetting] {
-        var s = neutralPartOffsets + [part("part.msSwitch", 0), arp(0), fm("algorithm", algorithm - 1), fm("feedback", 0), fm("pitchVel", 64),
+        var s = plainPart + [part("part.msSwitch", 0), arp(0), fm("algorithm", algorithm - 1), fm("feedback", 0), fm("pitchVel", 64),
                  fm("randomPitch", 0), fm("filterType", 0), fm("cutoff", 255), fm("cutoffVel", 64), fm("resonance", 0),
                  fm("fegDepth", 64), fm("lfoPitch", 0), fm("lfoAmp", 0), fm("lfoFilter", 0)]
         s += (0..<5).map { fm("peg\($0)", 50) }
@@ -158,7 +162,7 @@ enum ModxTutorials {
     }
 
     static let awmBase: [TutorialSetting] =
-        neutralPartOffsets + [part("part.msSwitch", 0), arp(0)] + awmElement(1, wave: 2125) + (2...8).map { el($0, "switch", 0) }
+        plainPart + [part("part.msSwitch", 0), arp(0)] + awmElement(1, wave: 2125) + (2...8).map { el($0, "switch", 0) }
 
     // MARK: FM-X lessons
 

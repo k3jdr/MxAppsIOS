@@ -171,7 +171,10 @@ Performance and you play it on the MODX's keyboard.
    app reads the whole Part and keeps it. If the Performance has none, the page suggests Live Set slots to play (for
    FM, the bank's "FM …" Performances).
 3. Each lesson's **Set Up on the MODX** builds its sound: a plain starting sound for the engine (so every lesson
-   starts the same, whatever the Part was), then the lesson's own settings. It sends only what differs, as Parameter
+   starts the same, whatever the Part was), then the lesson's own settings. The plain sound is also a plain Part:
+   no Part offsets to the envelopes and filter, and dry and centred — no Variation or Reverb send, insertion
+   effects off, dry level full, pan centre — so a Performance's delay or reverb (FM Sweeping Poly's Tempo Cross
+   Delay) doesn't echo the lesson's notes. It sends only what differs, as Parameter
    Changes, and reads the Part back; the strip reports what the MODX holds. A lesson's **Change it while you play**
    controls change the Part as you play, each change read back.
 4. **Hear only this Part** mutes the Performance's other Parts (and unmutes them as they were).
@@ -337,13 +340,13 @@ character at a time, the device's block sizes), and a workspace's round trip, su
 the Live Set screen: the preset names (Preset 4 #97 is "Ocean Pad"; the two fixture slots recall what the Data
 List's Live Set List says), learned names and their precedence, and a workspace's Live Set bank and what it sends; and the
 Live Set Select messages a slot click sends; and for the tutorials: which FM-X and AWM2 settings may be sent (and
-to which Part), algorithms 1–8 as the chart draws them, and every setting of every lesson — 2,761 for FM-X, 776 for
-AWM2 — at an address and value the MODX accepts; and for MIDI Songs: variable-length times, reading a format 0
-file with running status and a Note On of velocity 0, splitting it by channel and pairing its notes, tempo and metre,
+to which Part), algorithms 1–8 as the chart draws them, and every setting of every lesson — 2,937 for FM-X, 936 for
+AWM2 — at an address and value the MODX accepts, and every lesson dry and centred; and for MIDI Songs:
+variable-length times, reading a format 0 file with running status and a Note On of velocity 0, splitting it by channel and pairing its notes, tempo and metre,
 what plays (no SysEx; Program Change only if asked; Note Off before Note On), saving and reading back, the tempo map,
 the demo song, a track's channel and its mixer controllers; that every numeric FM-X setting has its unit label;
 and the measured FM-X times (values to labels, never falling as the value rises, interpolated in between).
-79 checks; no MODX is needed.
+80 checks; no MODX is needed.
 
 ## Not covered (yet)
 

@@ -377,6 +377,11 @@ struct ModxTests {
               && ModxTutorials.fmLessons[2].settings(.fmx).contains { $0.key == "op.level" && $0.block == .op(0) && $0.value == 45 }
               && ModxTutorials.fmLessons[2].settings(.fmx).filter { $0.key == "op.level" && $0.block == .op(0) }.count == 1,
               "a lesson's own settings replace the plain sound's (one operator 1 level, the lesson's 45); FM-X settings never on an AWM2 Part")
+        let plain: [String: Int] = ["part.variation": 0, "part.reverb": 0, "part.insSwitch": 0, "part.dry": 127, "part.pan": 64]
+        let plainEverywhere = (ModxTutorials.fmLessons.map { $0.settings(.fmx) } + ModxTutorials.awm2Lessons.map { $0.settings(.awm2) }).allSatisfy { settings in
+            plain.allSatisfy { key, value in settings.filter { $0.key == key && $0.block == .part }.map(\.value) == [value] }
+        }
+        check(plainEverywhere, "every lesson plays dry and centred: no Variation or Reverb send, insertion effects off, dry level full, pan centre")
         check(ModxLink.liveSetSelect(page: 0, slot: 9, channel: 0) == [[0xB0, 0x00, 0x3E], [0xB0, 0x20, 0x00], [0xC0, 0x09]]
               && ModxLink.liveSetSelect(page: 15, slot: 15, channel: 3) == [[0xB3, 0x00, 0x3E], [0xB3, 0x20, 0x0F], [0xC3, 0x0F]]
               && ModxLink.liveSetSelect(page: 16, slot: 0, channel: 0) == nil && ModxLink.liveSetSelect(page: 0, slot: 0, channel: 16) == nil,
