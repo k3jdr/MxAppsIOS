@@ -11,14 +11,16 @@ the MODX makes available over USB and sends it back.
 
 Two tutorials teach the MODX7's sound engines **on the MODX7 itself**: **FM Synthesis** (its FM-X engine) and **AWM2
 Synthesis** (its sample engine). Each lesson builds its sound on a Part of the current Performance and you play it on
-the MODX's keyboard. Settings ▸ Guidance sets how much they teach (Full, Brief or Minimal, as in MxAcctMGR).
+the MODX's keyboard. **MIDI Songs** opens, edits, plays and saves Standard MIDI Files — a very small Logic Pro with
+tracks, a piano roll, a mixer, mute and solo, and no instruments of its own: every note plays on the MODX7. Settings ▸
+Guidance sets how much they teach (Full, Brief or Minimal, as in MxAcctMGR).
 **Quick Help**, the shared MxAppsIOS pane, docks at the bottom left of the window and describes whatever is under the
 pointer.
 
 **Until you unlock changes no setting is changed.** The MODX is sent requests (Identity Request, Dump Request,
-Parameter Request) that make it report. The one exception is playing a Live Set slot: clicking a slot sends the
-MODX's Live Set Select, as touching the slot on the MODX does, and the MODX loads that slot's Performance. The app
-never sends a note.
+Parameter Request) that make it report. Two things play the MODX without unlocking: clicking a Live Set slot sends
+its Live Set Select, as touching the slot on the MODX does; and MIDI Songs plays a song's notes and controllers, as
+a sequencer would.
 
 Eighth app in the MxAppsIOS family. SwiftUI, CoreMIDI, IOKit and Core Audio; no package dependencies (it compiles
 `../Shared/QuickHelp`); not sandboxed.
@@ -55,6 +57,7 @@ I/O) — with it set to MIDI the instrument talks through its 5-pin jacks instea
 | **Workspace** | Save a workspace from the MODX, open one, see what it holds and how each part compares with the MODX, and send chosen parts back (below). |
 | **USB · MIDI · Audio** | The USB device descriptor (vendor 0x0499, product, release, USB version, speed, configurations, class) and its interfaces (Audio Control, Audio Streaming, MIDI Streaming); each MIDI port with its role, message count, last message and every CoreMIDI property of its endpoints, port and device; the USB audio device (channels each way and their names, sample rate, latency, safety offset, buffer, whether an app is using it). |
 | **FM Synthesis**, **AWM2 Synthesis** (Learn) | The tutorials, below. |
+| **MIDI Songs** (Learn) | Songs played on the MODX, below. |
 | **Quick Help** (bottom of the sidebar) | What's under the pointer (a setting with its address, range and current value; a control; a lesson), else the screen. Its ⧉ button floats it in a window of its own, placed at the window's bottom left; closing that window docks it again. View ▸ Quick Help (⌥⌘/) shows or hides it. |
 | **MIDI Activity** | **From the MODX**: what it sends on each port, newest first: notes, controllers, program changes, pitch bend, pressure; Clock and Active Sensing (the MODX sends both all the time) are hidden unless you ask. **Requests to the MODX**: every request the app has sent, with the time, the bytes and what came back (answered in so many ms, so many blocks, or *no answer*). An unanswered request also shows as a warning in the toolbar. |
 
@@ -206,6 +209,40 @@ names 19 filter types for 22 values, so only the first six are named (the lesson
 element's Part LFO off makes the MODX zero that element's Part LFO depth ratios itself, so read-backs compare only
 what was sent.
 
+## MIDI Songs
+
+A very small Logic Pro for the MODX7, with lessons beside it (at the Guidance level). It has **no instruments**: each
+track plays one MIDI channel, and in the MODX's MIDI I/O Mode Multi, channel n plays Part n of the current
+Performance — the Performance is the band, the song the score. The page warns if the MODX is in Single mode.
+
+- **Songs**: New ▸ **Demo Song** writes eight bars (C–Am–F–G, 100 BPM) for the Parts the MODX is playing — chords,
+  bass and melody on the first three non-drum Parts, drums on a drum Part if there is one; **Empty Song**; **Open…**
+  any Standard MIDI File (format 0, 1 or 2; tracks with several channels are split into one track per channel, as
+  Logic does on import); **Save** writes format 1 (a conductor track with name, time signature and tempo map, then a
+  track per song track). Events the page doesn't edit — other controllers, pitch bend, text, SysEx — are kept.
+- **Control bar**: Go to Start, Play / Stop (Space), position (bar.beat.sixteenth and time), tempo, time signature,
+  **Send Program Changes** (off by default: a file's Bank Select and Program Change would replace the Parts' sounds),
+  **Panic** (All Notes Off and Sustain off on all 16 channels).
+- **Tracks**: name, channel (with the MODX Part it plays), **M**ute and **S**olo (live, releasing the notes they
+  silence; tracks that won't sound are dimmed), add (+) and delete (right-click); a timeline of each track's notes and
+  a ruler that moves the playhead.
+- **Piano Roll** (the selected track): click an empty place to add a note (as long as the grid), drag a note to move
+  it, drag its right end to lengthen it, Shift-click for several, Delete; velocity, Quantize, Transpose ±1 / ±12,
+  grid 1/4 – 1/32 or off, zoom. Each click plays the note on the MODX. Every edit is undoable (Edit ▸ Undo, ⌘Z).
+- **Mixer**: a strip per track — pan (Controller 10) and a volume fader (Controller 7), sent to the MODX at once and
+  saved at the start of the song — with mute and solo. No audio, so no effects or meters: the MODX does the rest.
+
+**Playing** sends the song's channel messages to the MODX's USB Port 1 only — never anywhere else, never its SysEx —
+each timestamped up to 120 ms ahead by a timer of its own (`ModxSongPlayer`), so the window can be busy without the
+music stumbling. Starting mid-song first sends each track's latest controllers and pitch bend. While a song plays
+the app sends the MODX no SysEx of its own (`ModxLink.songPlaying`): no request can land inside a song's stream, and
+the app catches up when it stops. Stop unschedules what was sent ahead, releases every sounding note, and sends All
+Notes Off and Sustain off on the song's channels. Volume, pan and other controllers move the Parts in the MODX's
+edit buffer, as from any sequencer; choosing the Performance again on the MODX puts them back.
+
+Checked on a collection of 22 MIDI files (up to 18 tracks, 13,000 notes, 81 tempo changes, 7/8, one in format 0):
+each read, saved and read back with the same tracks, channels and notes.
+
 ## The three USB MIDI ports
 
 | Port | Role |
@@ -267,8 +304,13 @@ If the message ever appears again, MIDI Activity ▸ Requests to the MODX shows 
 | `MxModxUSB/MODX/ModxModel+Tutorial.swift` | A tutorial on the MODX: keeping the Part, setting up a lesson and reading it back, muting the others, putting the Part back. |
 | `MxModxUSB/MODX/ModxPresetPerformances.swift` | The 2,227 preset Performance names, generated from the Data List by `Tools/make-preset-names.swift`. |
 | `MxModxUSB/Device/USBDeviceInfo.swift`, `AudioDeviceInfo.swift` | The USB device and interfaces from the I/O Registry; the audio interface from Core Audio. |
+| `MxModxUSB/MIDI/MIDIFile.swift` | Standard MIDI Files: reading (formats 0, 1, 2; running status, meta events, SysEx) and writing format 1. |
+| `MxModxUSB/MIDI/MIDISong.swift` | A song: tracks of notes and other events, the tempo map, splitting by channel, saving, what plays, the demo song. |
+| `MxModxUSB/MODX/ModxSongPlayer.swift` | Plays a song to the MODX's Port 1 with CoreMIDI timestamps, from a queue of its own; mute and solo while playing. |
+| `MxModxUSB/MODX/ModxSongStudio.swift` | The MIDI Songs page's song: open, save, edit (undoable), transport, mute and solo, mixer, preview. |
+| `MxModxUSB/MODX/ModxSongLessons.swift` | The MIDI Songs lessons. |
 | `MxModxUSB/MIDI/MIDIBytes.swift` | MIDI bytes in and out of Universal MIDI Packets; the byte parser (MxMidiPRO's). |
-| `MxModxUSB/Views/` | `ContentView` (sidebar), `OverviewView` (the instrument panel and cards), `DetailViews` (Performance, System, User Data), `LiveSetViews` (the Live Set screen, its name drop-downs, slots), `EditorViews` (the editing rows, Part sheet, slot and curve editors, the strip), `WorkspaceView`, `TutorialViews` (the FM Synthesis and AWM2 Synthesis pages, the algorithm diagram, the element map), `SettingsView` (Settings ▸ Guidance), `DeviceViews` (USB · MIDI · Audio, MIDI Activity), `Style` (cards, lamps, dials, wheels, keyboard). |
+| `MxModxUSB/Views/` | `ContentView` (sidebar), `OverviewView` (the instrument panel and cards), `DetailViews` (Performance, System, User Data), `LiveSetViews` (the Live Set screen, its name drop-downs, slots), `EditorViews` (the editing rows, Part sheet, slot and curve editors, the strip), `WorkspaceView`, `TutorialViews` (the FM Synthesis and AWM2 Synthesis pages, the algorithm diagram, the element map), `SongViews` (MIDI Songs: control bar, tracks, piano roll, mixer, lessons), `SettingsView` (Settings ▸ Guidance), `DeviceViews` (USB · MIDI · Audio, MIDI Activity), `Style` (cards, lamps, dials, wheels, keyboard). |
 | `../Shared/QuickHelp/QuickHelp.swift` | The shared MxAppsIOS Quick Help pane (docked or floating), compiled into the app. |
 | `Tools/` | `build-tools.sh` and `ModxTests.swift` (the decoding tests), `make-icon.swift` (draws the icon), `make-preset-names.swift` (regenerates the preset Performance names from a Data List PDF), `package.sh` (the DMG). |
 
@@ -288,9 +330,16 @@ the Live Set screen: the preset names (Preset 4 #97 is "Ocean Pad"; the two fixt
 List's Live Set List says), learned names and their precedence, and a workspace's Live Set bank and what it sends; and the
 Live Set Select messages a slot click sends; and for the tutorials: which FM-X and AWM2 settings may be sent (and
 to which Part), algorithms 1–8 as the chart draws them, and every setting of every lesson — 2,761 for FM-X, 776 for
-AWM2 — at an address and value the MODX accepts. 63 checks; no MODX is needed.
+AWM2 — at an address and value the MODX accepts; and for MIDI Songs: variable-length times, reading a format 0
+file with running status and a Note On of velocity 0, splitting it by channel and pairing its notes, tempo and metre,
+what plays (no SysEx; Program Change only if asked; Note Off before Note On), saving and reading back, the tempo map,
+the demo song, a track's channel and its mixer controllers. 74 checks; no MODX is needed.
 
 ## Not covered (yet)
+
+- **MIDI Songs**: recording from the MODX's keyboard, editing controllers and pitch bend (they're kept and played,
+  not drawn), a tempo map editor (the tempo field sets the first tempo), loops, and sending MIDI Clock to the MODX
+  (its arpeggios and motion sequences follow its own tempo).
 
 - **Element, drum-key and FM operator detail**: the app counts a Part's active elements and keys but doesn't list
   or edit waveforms or operator settings (the Part bulk holds them, and a workspace saves and restores them).

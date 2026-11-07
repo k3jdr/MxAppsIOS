@@ -7,5 +7,5 @@ OUT="${1:-$HERE/build/tools}"
 mkdir -p "$OUT"
 SRC="$HERE/MxModxUSB"
 swiftc -O -parse-as-library "$HERE/Tools/ModxTests.swift" "$SRC"/MODX/*.swift "$SRC"/Device/*.swift \
-    "$SRC/MIDI/MIDIBytes.swift" -framework CoreMIDI -framework CoreAudio -o "$OUT/modx-tests"
+    "$SRC"/MIDI/*.swift -framework CoreMIDI -framework CoreAudio -o "$OUT/modx-tests"
 echo "Built $OUT/modx-tests"

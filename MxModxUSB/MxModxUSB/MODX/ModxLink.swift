@@ -188,6 +188,13 @@ final class ModxLink {
     private static let gapAfterSysex: TimeInterval = 0.12
 
     /// Holds requests back for a while (the model calls this when the player is changing things on the MODX).
+    /// While a song plays (MIDI Songs), no request or change goes out: the song's channel messages have Port 1 to
+    /// themselves, so none can land inside a SysEx message. Requests wait and go when it stops.
+    var songPlaying = false
+
+    /// The MODX's Port 1, the only place a song is played to (0 when it isn't connected).
+    var instrumentDestination: MIDIEndpointRef { isConnected ? endpoints.destinations[0] : 0 }
+
     func holdRequests(for seconds: TimeInterval) {
         quietUntil = max(quietUntil, Date().addingTimeInterval(seconds))
     }
@@ -223,7 +230,7 @@ final class ModxLink {
         }
         await acquire()
         defer { release() }
-        while isConnected, Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
+        while isConnected, songPlaying || Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
             try? await Task.sleep(for: .milliseconds(40))
         }
         guard isConnected else { return .timeout }
@@ -266,7 +273,7 @@ final class ModxLink {
         }
         await acquire()
         defer { release() }
-        while isConnected, Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
+        while isConnected, songPlaying || Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
             try? await Task.sleep(for: .milliseconds(40))
         }
         guard isConnected else { return false }
@@ -294,7 +301,7 @@ final class ModxLink {
         guard let messages = Self.liveSetSelect(page: page, slot: slot, channel: channel) else { return false }
         await acquire()
         defer { release() }
-        while isConnected, Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
+        while isConnected, songPlaying || Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
             try? await Task.sleep(for: .milliseconds(40))
         }
         guard isConnected else { return false }
@@ -317,7 +324,7 @@ final class ModxLink {
         }
         await acquire()
         defer { release() }
-        while isConnected, Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
+        while isConnected, songPlaying || Date() < quietUntil || Date().timeIntervalSince(lastSysex) < Self.gapAfterSysex {
             try? await Task.sleep(for: .milliseconds(40))
         }
         guard isConnected else { return false }

@@ -62,6 +62,9 @@ final class ModxModel {
     var workspaceLiveSets: [ModxWorkspaceLiveSet] = []
     var liveSetRefreshing = false
 
+    /// The MIDI Songs page: its song, editing and playing on the MODX (ModxSongStudio.swift).
+    @ObservationIgnored let studio = ModxSongStudio()
+
     // Tutorials (ModxModel+Tutorial.swift)
     /// The FM-X or AWM2 Part a tutorial is using, with a copy of it as it was.
     var tutorial: ModxTutorialSession?
@@ -132,6 +135,7 @@ final class ModxModel {
             if self.requests.count > 1500 { self.requests.removeFirst(self.requests.count - 1500) }
             if record.problem { self.problems += 1 }
         }
+        studio.model = self
         link.start()
         refreshHost()
         AudioDeviceInfo.watchDevices { [weak self] in
@@ -156,6 +160,7 @@ final class ModxModel {
         if connected && !was {
             readEverything()
         } else if !connected {
+            studio.stop()
             status = link.endpoints.device == 0 ? "No MODX on USB. Connect it and turn it on." : "The MODX's ports are offline."
             identity = nil
         }

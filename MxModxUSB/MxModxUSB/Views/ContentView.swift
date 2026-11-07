@@ -6,12 +6,12 @@ import SwiftUI
 
 enum AppSection: String, CaseIterable, Identifiable {
     case overview, performance, liveSet, system, userData, workspace, connection, activity
-    case fmTutorial, awmTutorial
+    case fmTutorial, awmTutorial, songs
 
     var id: String { rawValue }
 
     static let instrument: [AppSection] = [.overview, .performance, .liveSet, .system, .userData, .workspace, .connection, .activity]
-    static let learn: [AppSection] = [.fmTutorial, .awmTutorial]
+    static let learn: [AppSection] = [.fmTutorial, .awmTutorial, .songs]
 
     var title: String {
         switch self {
@@ -25,6 +25,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .activity: "MIDI Activity"
         case .fmTutorial: "FM Synthesis"
         case .awmTutorial: "AWM2 Synthesis"
+        case .songs: "MIDI Songs"
         }
     }
 
@@ -41,6 +42,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .activity: "What the MODX sends on each port, and every request the app has sent with what came back."
         case .fmTutorial: "Lessons in FM synthesis played on the MODX7's FM-X engine, at the instruction level in Settings ▸ Guidance."
         case .awmTutorial: "Lessons in AWM2 (sample-based) synthesis played on the MODX7's AWM2 engine, at the instruction level in Settings ▸ Guidance."
+        case .songs: "MIDI songs on the MODX7: open, edit and save Standard MIDI Files with tracks, a piano roll, a mixer, mute and solo — every note played by the MODX, with lessons at the Guidance level."
         }
     }
 
@@ -56,6 +58,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .activity: "waveform.path.ecg"
         case .fmTutorial: "dot.radiowaves.left.and.right"
         case .awmTutorial: "waveform"
+        case .songs: "music.note.list"
         }
     }
 }
@@ -96,6 +99,7 @@ struct ContentView: View {
                 case .activity: ActivityView(model: model)
                 case .fmTutorial: TutorialView(model: model, engine: .fmx)
                 case .awmTutorial: TutorialView(model: model, engine: .awm2)
+                case .songs: SongView(model: model)
                 }
             }
             .quickHelpScreen((section ?? .overview).title,

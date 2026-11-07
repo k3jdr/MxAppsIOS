@@ -260,6 +260,71 @@ struct ModxTests {
         check(ModxWorkspaceLiveSet(url: workspaceURL, file: noLiveSet) == nil, "a workspace without a Live Set offers no bank")
         check(file.summary.contains { $0.rows.contains { $0.last == "Creation (slot “SYN PAD w/ Auto SK”) · Preset 4 #115" } },
               "the readable summary names a slot's Performance and its slot name")
+
+        print("\nMIDI songs")
+        check(SMF.vlq(0) == [0] && SMF.vlq(127) == [0x7F] && SMF.vlq(128) == [0x81, 0x00] && SMF.vlq(0x0FFF_FFFF) == [0xFF, 0xFF, 0xFF, 0x7F],
+              "variable-length delta times: 0, 127, 128, the largest")
+        // Format 0, 96 ticks a quarter: 100 BPM, 3/4, a name; on channel 1 a C3 (60) for a quarter, then E3 by
+        // running status, ended by a Note On of velocity 0; on channel 2 a program change, a controller and a G2.
+        let format0: [UInt8] = Array("MThd".utf8) + [0, 0, 0, 6, 0, 0, 0, 1, 0, 96] + Array("MTrk".utf8)
+        var body: [UInt8] = [0x00, 0xFF, 0x03, 0x04] + Array("Demo".utf8)
+        body += [0x00, 0xFF, 0x51, 0x03, 0x09, 0x27, 0xC0]   // 600,000 µs = 100 BPM
+        body += [0x00, 0xFF, 0x58, 0x04, 0x03, 0x02, 0x18, 0x08]   // 3/4
+        body += [0x00, 0x90, 60, 100, 0x60, 0x80, 60, 64]   // C3, a quarter
+        body += [0x00, 0x90, 64, 90, 0x30, 64, 0]   // E3 by running status, off by velocity 0 after an eighth
+        body += [0x00, 0xC1, 5, 0x00, 0xB1, 7, 80, 0x00, 0x91, 55, 70, 0x81, 0x40, 0x81, 55, 0]   // ch 2: PC, CC7, G2 (192 ticks)
+        body += [0x00, 0xF0, 0x05, 0x7E, 0x7F, 0x09, 0x01, 0xF7]   // a GM System On (kept, never played)
+        body += [0x00, 0xFF, 0x2F, 0x00]
+        let fileBytes = format0 + [0, 0, 0, UInt8(body.count)] + body
+        if let smf = try? SMF.parse(Data(fileBytes)) {
+            let song = MIDISong(smf: smf, name: "file")
+            check(smf.format == 0 && smf.division == 96 && smf.tracks.count == 1 && smf.tracks[0].count == 13,
+                  "reads a format 0 file: 96 ticks a quarter, one track of 13 events (running status included)")
+            check(song.tracks.count == 2 && song.tracks.map(\.channel) == [0, 1] && song.tracks[0].name == "Demo · Ch 1"
+                  && song.tracks[0].notes.map { [$0.tick, $0.length, $0.key, $0.velocity] } == [[0, 96, 60, 100], [96, 48, 64, 90]]
+                  && song.tracks[1].notes.map { [$0.tick, $0.length, $0.key] } == [[144, 192, 55]],
+                  "splits it by channel into 2 tracks and pairs the notes (a Note On of velocity 0 ends one)")
+            check(abs(song.bpm - 100) < 0.01 && song.beatsPerBar == 3 && song.beatUnit == 4 && song.tracks[1].program == 6
+                  && song.tracks[1].controller(7) == nil && song.tracks[1].events.contains { $0.tick == 144 && $0.data == [7, 80] }
+                  && song.tracks[0].events.contains { $0.status == 0xF0 },
+                  "tempo 100, 3/4, the second track's program 6 and its volume change at tick 144 (not a start volume); the SysEx kept")
+            let events = song.playEvents(sendProgramChanges: false)
+            check(!events.contains { $0.bytes[0] & 0xF0 == 0xC0 || $0.bytes[0] == 0xF0 }
+                  && song.playEvents(sendProgramChanges: true).contains { $0.bytes == [0xC1, 5] }
+                  && events.first.map { $0.bytes == [0x90, 60, 100] } == true
+                  && events.firstIndex { $0.bytes == [0x80, 60, 64] }! < events.firstIndex { $0.bytes == [0x90, 64, 90] }!,
+                  "plays no SysEx, and Program Change only if asked; at one tick the Note Off before the Note On")
+            if let back = try? SMF.parse(song.smf.encode()) {
+                let again = MIDISong(smf: back, name: "again")
+                check(back.format == 1 && back.tracks.count == 3 && again.name == "file" && again.tracks.count == 2
+                      && again.tracks.map { $0.notes.map { [$0.tick, $0.length, $0.key, $0.velocity] } } == song.tracks.map { $0.notes.map { [$0.tick, $0.length, $0.key, $0.velocity] } }
+                      && abs(again.bpm - 100) < 0.01 && again.beatsPerBar == 3 && again.tracks[1].program == 6
+                      && again.tracks[1].events.contains { $0.tick == 144 && $0.kind == 0xB0 && $0.data == [7, 80] },
+                      "saves format 1 (a conductor track and 2 tracks) and reads back the same notes, tempo, metre, volume and program")
+            } else { check(false, "the saved file reads back") }
+        } else { check(false, "reads a format 0 file") }
+        check((try? SMF.parse(Data("RIFF....".utf8))) == nil, "refuses a file that isn't MIDI")
+        var timed = MIDISong()
+        timed.division = 480
+        timed.tempos = [TempoChange(tick: 0, microsPerQuarter: 500_000), TempoChange(tick: 960, microsPerQuarter: 1_000_000)]
+        check(abs(timed.seconds(atTick: 960) - 1.0) < 1e-9 && abs(timed.seconds(atTick: 1440) - 2.0) < 1e-9
+              && timed.tick(atSeconds: 2.0) == 1440 && timed.tick(atSeconds: 0.5) == 480 && timed.position(0) == "1.1.1"
+              && timed.position(timed.ticksPerBar + timed.ticksPerBeat + 120) == "2.2.2",
+              "the tempo map: two beats at 120 BPM take a second, the next beat at 60 another; bar.beat.sixteenth")
+        let demo = MIDISong.demo(parts: [(0, false, "Piano"), (1, false, "Bass"), (2, false, "Lead"), (9, true, "Drums")])
+        check(demo.tracks.map(\.name) == ["Chords", "Bass", "Melody", "Drums"] && demo.tracks.map(\.channel) == [0, 1, 2, 9]
+              && demo.bars == 8 && abs(demo.bpm - 100) < 0.01 && demo.tracks.allSatisfy { $0.controller(7) != nil },
+              "the demo song: chords, bass, melody and drums on the Performance's Parts, 8 bars at 100 BPM, each with a volume")
+        check(MIDISong.demo(parts: [(3, false, "Pad")]).tracks.map(\.channel) == [3, 3, 3],
+              "with a single Part, every demo track plays it")
+        var track = SongTrack(name: "T", channel: 0)
+        track.events = [SMF.Event(tick: 0, status: 0xB0, data: [7, 90]), SMF.Event(tick: 10, status: 0xE0, data: [0, 64])]
+        track.setChannel(4)
+        track.setController(7, 70)
+        track.setController(10, 20)
+        check(track.events.allSatisfy { $0.status & 0x0F == 4 } && track.volume == 70 && track.pan == 20 && track.events.count == 3,
+              "a track's channel moves all its events; the mixer's volume and pan replace or add a controller at the start")
+
         print("\nTutorials")
         for engine in ModxEngine.allCases {
             let lessons = engine.lessons
